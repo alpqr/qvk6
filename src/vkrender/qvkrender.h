@@ -38,10 +38,23 @@
 #define QVKRENDER_H
 
 #include <QtVkRender/qtvkrglobal.h>
+#include <QVector4D>
+#include <QVector2D>
+#include <QSize>
 
 QT_BEGIN_NAMESPACE
 
 class QVkRenderPrivate;
+
+struct QVkClearValue
+{
+    QVkClearValue(const QVector4D &rgba_) : rgba(rgba_) { }
+    QVkClearValue(float d_, uint32_t s_) : d(d_), s(s_), isDepthStencil(true) { }
+    QVector4D rgba;
+    float d = 1;
+    uint32_t s = 0;
+    bool isDepthStencil = false;
+};
 
 class Q_VKR_EXPORT QVkRender
 {
@@ -54,6 +67,9 @@ public:
 
     QVkRender(const InitParams &params);
     ~QVkRender();
+
+    void beginPass(VkCommandBuffer cb, VkRenderPass rp, VkFramebuffer fb, const QSize &size, const QVkClearValue *clearValues, int n);
+    void endPass(VkCommandBuffer cb);
 
 private:
     QVkRenderPrivate *d;

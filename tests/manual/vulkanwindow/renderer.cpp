@@ -82,33 +82,17 @@ void Renderer::releaseResources()
 
 void Renderer::startNextFrame()
 {
-    // ### to be removed
-#if 1
-    VkDevice dev = m_window->device();
-    QVulkanDeviceFunctions *devFuncs = m_window->vulkanInstance()->deviceFunctions(dev);
-    const QSize sz = m_window->swapChainImageSize();
+    const QVkClearValue clearValues[2] = {
+        QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
+        QVkClearValue(1.0f, 0)
+    };
+    m_r->beginPass(m_window->currentCommandBuffer(),
+                   m_window->defaultRenderPass(),
+                   m_window->currentFramebuffer(),
+                   m_window->swapChainImageSize(),
+                   clearValues, 2);
 
-    VkClearColorValue clearColor = { 0, 0, 0, 1 };
-    VkClearDepthStencilValue clearDS = { 1, 0 };
-    VkClearValue clearValues[3];
-    memset(clearValues, 0, sizeof(clearValues));
-    clearValues[0].color = clearValues[2].color = clearColor;
-    clearValues[1].depthStencil = clearDS;
-
-    VkRenderPassBeginInfo rpBeginInfo;
-    memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
-    rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = m_window->defaultRenderPass();
-    rpBeginInfo.framebuffer = m_window->currentFramebuffer();
-    rpBeginInfo.renderArea.extent.width = sz.width();
-    rpBeginInfo.renderArea.extent.height = sz.height();
-    rpBeginInfo.clearValueCount = m_window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-    rpBeginInfo.pClearValues = clearValues;
-    VkCommandBuffer cmdBuf = m_window->currentCommandBuffer();
-    devFuncs->vkCmdBeginRenderPass(cmdBuf, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    devFuncs->vkCmdEndRenderPass(cmdBuf);
-#endif
+    m_r->endPass(m_window->currentCommandBuffer());
 
     m_window->frameReady();
     m_window->requestUpdate(); // render continuously, throttled by the presentation rate

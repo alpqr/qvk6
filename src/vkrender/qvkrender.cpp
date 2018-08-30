@@ -184,4 +184,33 @@ void QVkRenderPrivate::destroy()
     vmaDestroyAllocator(allocator);
 }
 
+void QVkRender::beginPass(VkCommandBuffer cb, VkRenderPass rp, VkFramebuffer fb, const QSize &size, const QVkClearValue *clearValues, int n)
+{
+    VkRenderPassBeginInfo rpBeginInfo;
+    memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
+    rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rpBeginInfo.renderPass = rp;
+    rpBeginInfo.framebuffer = fb;
+    rpBeginInfo.renderArea.extent.width = size.width();
+    rpBeginInfo.renderArea.extent.height = size.height();
+    rpBeginInfo.clearValueCount = n;
+    QVarLengthArray<VkClearValue, 4> cvs;
+    for (int i = 0; i < n; ++i) {
+        VkClearValue cv;
+        if (clearValues[i].isDepthStencil)
+            cv.depthStencil = { clearValues[i].d, clearValues[i].s };
+        else
+            cv.color = { clearValues[i].rgba.x(), clearValues[i].rgba.y(), clearValues[i].rgba.z(), clearValues[i].rgba.w() };
+        cvs.append(cv);
+    }
+    rpBeginInfo.pClearValues = cvs.data();
+
+    d->df->vkCmdBeginRenderPass(cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void QVkRender::endPass(VkCommandBuffer cb)
+{
+    d->df->vkCmdEndRenderPass(cb);
+}
+
 QT_END_NAMESPACE

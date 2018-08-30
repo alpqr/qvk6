@@ -38,6 +38,7 @@
 #define QTVKRGLOBAL_H
 
 #include <QtCore/qglobal.h>
+#include <QtGui/qvulkaninstance.h> // this is where vulkan.h gets pulled in
 
 QT_BEGIN_NAMESPACE
 

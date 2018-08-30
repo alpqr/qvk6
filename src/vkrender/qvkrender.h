@@ -34,15 +34,29 @@
 **
 ****************************************************************************/
 
-#ifndef QVKR_H
-#define QVKR_H
+#ifndef QVKRENDER_H
+#define QVKRENDER_H
 
 #include <QtVkRender/qtvkrglobal.h>
 
 QT_BEGIN_NAMESPACE
 
+class QVkRenderPrivate;
+
 class Q_VKR_EXPORT QVkRender
 {
+public:
+    struct InitParams {
+        QVulkanInstance *inst;
+        VkPhysicalDevice physDev;
+        VkDevice dev;
+    };
+
+    QVkRender(const InitParams &params);
+    ~QVkRender();
+
+private:
+    QVkRenderPrivate *d;
 };
 
 QT_END_NAMESPACE

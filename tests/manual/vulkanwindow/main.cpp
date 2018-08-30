@@ -27,19 +27,14 @@
  ****************************************************************************/
 
 #include <QGuiApplication>
-#include <QVulkanWindow>
 #include <QLoggingCategory>
+#include "renderer.h"
 
 class VulkanWindow : public QVulkanWindow
 {
 public:
-    QVulkanWindowRenderer *createRenderer() override;
+    QVulkanWindowRenderer *createRenderer() override { return new Renderer(this); }
 };
-
-QVulkanWindowRenderer *VulkanWindow::createRenderer()
-{
-    return nullptr;
-}
 
 int main(int argc, char **argv)
 {

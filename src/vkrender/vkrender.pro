@@ -13,3 +13,5 @@ HEADERS += \
 
 SOURCES += \
     qvkrender.cpp
+
+include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)

@@ -9087,7 +9087,7 @@ void VmaBlockMetadata_Linear::CleanupAfterFree()
 ////////////////////////////////////////////////////////////////////////////////
 // class VmaDeviceMemoryBlock
 
-VmaDeviceMemoryBlock::VmaDeviceMemoryBlock(VmaAllocator hAllocator) :
+VmaDeviceMemoryBlock::VmaDeviceMemoryBlock(VmaAllocator) :
     m_pMetadata(VMA_NULL),
     m_MemoryTypeIndex(UINT32_MAX),
     m_Id(0),

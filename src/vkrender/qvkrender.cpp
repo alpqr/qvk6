@@ -39,6 +39,9 @@
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
 #define VMA_RECORDING_ENABLED 0
+#ifdef QT_DEBUG
+#define VMA_DEBUG_INITIALIZE_ALLOCATIONS 1
+#endif
 #include "vk_mem_alloc.h"
 #include "qvkrender_p.h"
 

@@ -42,12 +42,12 @@
 //
 
 #include "qvkrender.h"
-#include "vk_mem_alloc.h"
 
 QT_BEGIN_NAMESPACE
 
 class QVulkanFunctions;
 class QVulkanDeviceFunctions;
+class QWindow;
 
 class QVkRenderPrivate
 {
@@ -55,12 +55,31 @@ public:
     void create();
     void destroy();
 
+    bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QVkRender::SurfaceImportFlags flags, QVkSwapChain *swapChain);
+    void releaseSwapChain(QVkSwapChain *swapChain);
+
+    VkFormat optimalDepthStencilFormat();
+    bool createDefaultRenderPass();
+
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;
     VkDevice dev;
+    VkCommandPool cmdPool;
+    VkQueue gfxQueue;
     VmaAllocator allocator;
     QVulkanFunctions *f;
     QVulkanDeviceFunctions *df;
+
+    PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
+    PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
+    PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
+    PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
+    PFN_vkQueuePresentKHR vkQueuePresentKHR;
+    PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = nullptr;
+    PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
+
+    VkFormat dsFormat = VK_FORMAT_UNDEFINED;
+    VkRenderPass defaultRenderPass = VK_NULL_HANDLE;
 };
 
 QT_END_NAMESPACE

@@ -63,6 +63,8 @@ void Renderer::initResources()
     params.inst = m_window->vulkanInstance();
     params.physDev = m_window->physicalDevice();
     params.dev = m_window->device();
+    params.cmdPool = m_window->graphicsCommandPool();
+    params.gfxQueue = m_window->graphicsQueue();
     m_r = new QVkRender(params);
 }
 
@@ -82,17 +84,17 @@ void Renderer::releaseResources()
 
 void Renderer::startNextFrame()
 {
+    QVkRenderTarget rt;
+    QVkCommandBuffer cb;
+    m_r->importVulkanWindowCurrentFrame(m_window, &rt, &cb);
+
     const QVkClearValue clearValues[2] = {
         QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
         QVkClearValue(1.0f, 0)
     };
-    m_r->beginPass(m_window->currentCommandBuffer(),
-                   m_window->defaultRenderPass(),
-                   m_window->currentFramebuffer(),
-                   m_window->swapChainImageSize(),
-                   clearValues, 2);
+    m_r->beginPass(&rt, &cb, clearValues);
 
-    m_r->endPass(m_window->currentCommandBuffer());
+    m_r->endPass(&cb);
 
     m_window->frameReady();
     m_window->requestUpdate(); // render continuously, throttled by the presentation rate

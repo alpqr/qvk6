@@ -59,7 +59,7 @@ public:
     void releaseSwapChain(QVkSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();
-    bool createDefaultRenderPass();
+    bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil);
 
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;
@@ -79,7 +79,8 @@ public:
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
 
     VkFormat dsFormat = VK_FORMAT_UNDEFINED;
-    VkRenderPass defaultRenderPass = VK_NULL_HANDLE;
+    VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
 };
 
 QT_END_NAMESPACE

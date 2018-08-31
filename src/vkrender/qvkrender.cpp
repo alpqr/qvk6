@@ -187,11 +187,6 @@ void QVkRenderPrivate::create()
 
 void QVkRenderPrivate::destroy()
 {
-    if (defaultRenderPass) {
-        df->vkDestroyRenderPass(dev, defaultRenderPass, nullptr);
-        defaultRenderPass = VK_NULL_HANDLE;
-    }
-
     vmaDestroyAllocator(allocator);
 }
 
@@ -217,9 +212,7 @@ void QVkRender::releaseRenderTarget(QVkRenderTarget *rt)
     rt;
 }
 
-static VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
-static VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-static VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+static const VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
 VkFormat QVkRender::optimalDepthStencilFormat() const
 {
@@ -253,7 +246,7 @@ VkFormat QVkRenderPrivate::optimalDepthStencilFormat()
     return dsFormat;
 }
 
-bool QVkRenderPrivate::createDefaultRenderPass()
+bool QVkRenderPrivate::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil)
 {
     VkAttachmentDescription attDesc[3];
     memset(attDesc, 0, sizeof(attDesc));
@@ -298,12 +291,12 @@ bool QVkRenderPrivate::createDefaultRenderPass()
     subPassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subPassDesc.colorAttachmentCount = 1;
     subPassDesc.pColorAttachments = &colorRef;
-    subPassDesc.pDepthStencilAttachment = &dsRef;
+    subPassDesc.pDepthStencilAttachment = hasDepthStencil ? &dsRef : nullptr;
 
     VkRenderPassCreateInfo rpInfo;
     memset(&rpInfo, 0, sizeof(rpInfo));
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpInfo.attachmentCount = 2;
+    rpInfo.attachmentCount = hasDepthStencil ? 2 : 1;
     rpInfo.pAttachments = attDesc;
     rpInfo.subpassCount = 1;
     rpInfo.pSubpasses = &subPassDesc;
@@ -311,10 +304,10 @@ bool QVkRenderPrivate::createDefaultRenderPass()
 //    if (msaa) {
 //        colorRef.attachment = 2;
 //        subPassDesc.pResolveAttachments = &resolveRef;
-//        rpInfo.attachmentCount = 3;
+//        rpInfo.attachmentCount = 3; // or 2
 //    }
 
-    VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, &defaultRenderPass);
+    VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, rp);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create renderpass: %d", err);
         return false;
@@ -323,27 +316,53 @@ bool QVkRenderPrivate::createDefaultRenderPass()
     return true;
 }
 
-bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags, QVkTexture *depthStencil, QVkSwapChain *outSwapChain)
+bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
+                              SurfaceImportFlags flags, QVkTexture *depthStencil,
+                              QVkSwapChain *outSwapChain)
 {
     // Can be called multiple times without a call to releaseSwapChain - this
     // is typical when a window is resized.
 
+    if (!d->vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
+        d->vkGetPhysicalDeviceSurfaceCapabilitiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(
+            d->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
+        d->vkGetPhysicalDeviceSurfaceFormatsKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>(
+            d->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceFormatsKHR"));
+        if (!d->vkGetPhysicalDeviceSurfaceCapabilitiesKHR || !d->vkGetPhysicalDeviceSurfaceFormatsKHR) {
+            qWarning("Physical device surface queries not available");
+            return false;
+        }
+    }
+
+    uint32_t formatCount = 0;
+    d->vkGetPhysicalDeviceSurfaceFormatsKHR(d->physDev, surface, &formatCount, nullptr);
+    QVector<VkSurfaceFormatKHR> formats(formatCount);
+    if (formatCount)
+        d->vkGetPhysicalDeviceSurfaceFormatsKHR(d->physDev, surface, &formatCount, formats.data());
+
+    // Pick the preferred format, if there is one.
+    if (!formats.isEmpty() && formats[0].format != VK_FORMAT_UNDEFINED) {
+        d->colorFormat = formats[0].format;
+        d->colorSpace = formats[0].colorSpace;
+    }
+
     if (!d->recreateSwapChain(surface, pixelSize, flags, outSwapChain))
         return false;
 
-    if (!d->defaultRenderPass)
-        d->createDefaultRenderPass();
+    outSwapChain->hasDepthStencil = flags.testFlag(ImportWithDepthStencil);
+
+    d->createDefaultRenderPass(&outSwapChain->rp, outSwapChain->hasDepthStencil);
 
     for (int i = 0; i < outSwapChain->bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(outSwapChain->imageRes[i]);
 
         VkImageView views[3] = { image.imageView,
-                                 flags.testFlag(ImportWithDepthStencil) ? depthStencil->imageView : VK_NULL_HANDLE,
+                                 outSwapChain->hasDepthStencil ? depthStencil->imageView : VK_NULL_HANDLE,
                                  VK_NULL_HANDLE }; // ### will be 3 with MSAA
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = d->defaultRenderPass;
+        fbInfo.renderPass = outSwapChain->rp;
         fbInfo.attachmentCount = flags.testFlag(ImportWithDepthStencil) ? 2 : 1;
         fbInfo.pAttachments = views;
         fbInfo.width = outSwapChain->pixelSize.width();
@@ -375,17 +394,6 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
         vkQueuePresentKHR = reinterpret_cast<PFN_vkQueuePresentKHR>(f->vkGetDeviceProcAddr(dev, "vkQueuePresentKHR"));
         if (!vkCreateSwapchainKHR || !vkDestroySwapchainKHR || !vkGetSwapchainImagesKHR || !vkAcquireNextImageKHR || !vkQueuePresentKHR) {
             qWarning("Swapchain functions not available");
-            return false;
-        }
-    }
-
-    if (!vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(
-            inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
-        vkGetPhysicalDeviceSurfaceFormatsKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>(
-            inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceFormatsKHR"));
-        if (!vkGetPhysicalDeviceSurfaceCapabilitiesKHR || !vkGetPhysicalDeviceSurfaceFormatsKHR) {
-            qWarning("Physical device surface queries not available");
             return false;
         }
     }
@@ -426,6 +434,8 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
     swapChain->supportsReadback = (surfaceCaps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
     if (swapChain->supportsReadback)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+    qDebug("Creating new swap chain of %d buffers, size %dx%d", reqBufferCount, bufferSize.width, bufferSize.height);
 
     VkSwapchainKHR oldSwapChain = swapChain->sc;
     VkSwapchainCreateInfoKHR swapChainInfo;
@@ -589,6 +599,11 @@ void QVkRenderPrivate::releaseSwapChain(QVkSwapChain *swapChain)
         }
     }
 
+    if (swapChain->rp) {
+        df->vkDestroyRenderPass(dev, swapChain->rp, nullptr);
+        swapChain->rp = VK_NULL_HANDLE;
+    }
+
     vkDestroySwapchainKHR(dev, swapChain->sc, nullptr);
     swapChain->sc = VK_NULL_HANDLE;
 }
@@ -750,7 +765,7 @@ void QVkRender::beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues)
 {
     QVkRenderTarget rt;
     rt.fb = sc->imageRes[sc->currentImage].fb;
-    rt.rp = d->defaultRenderPass;
+    rt.rp = sc->rp;
     rt.pixelSize = sc->pixelSize;
     rt.attCount = sc->hasDepthStencil ? 2 : 1; // 3 or 2 with msaa
 

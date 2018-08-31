@@ -266,9 +266,9 @@ void VWindow::render()
         return;
     }
 
-//    m_r->beginPass(&m_sc, clearValues);
+    m_r->beginPass(&m_sc, clearValues);
 
-//    m_r->endPass(&m_sc);
+    m_r->endPass(&m_sc);
 
     m_r->endFrame(&m_sc);
 

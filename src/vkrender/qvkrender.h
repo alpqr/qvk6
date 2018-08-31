@@ -115,6 +115,7 @@ struct QVkSwapChain
 
     uint32_t currentImage = 0;
     uint32_t currentFrame = 0;
+    VkRenderPass rp = VK_NULL_HANDLE;
 };
 
 struct QVkRenderTarget

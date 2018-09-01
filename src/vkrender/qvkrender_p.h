@@ -60,6 +60,8 @@ public:
 
     VkFormat optimalDepthStencilFormat();
     bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil);
+    bool ensurePipelineCache();
+    VkShaderModule createShader(const QByteArray &spirv);
 
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;
@@ -67,8 +69,8 @@ public:
     VkCommandPool cmdPool;
     VkQueue gfxQueue;
     VmaAllocator allocator;
-    QVulkanFunctions *f;
-    QVulkanDeviceFunctions *df;
+    QVulkanFunctions *f = nullptr;
+    QVulkanDeviceFunctions *df = nullptr;
 
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
@@ -81,6 +83,10 @@ public:
     VkFormat dsFormat = VK_FORMAT_UNDEFINED;
     VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+
+    VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+
+    QMatrix4x4 clipCorrectMatrix;
 };
 
 QT_END_NAMESPACE

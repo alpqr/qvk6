@@ -154,6 +154,8 @@ void VKAPI_PTR wrap_vkDestroyImage(VkDevice device, VkImage image, const VkAlloc
 
 void QVkRenderPrivate::create()
 {
+    Q_ASSERT(inst && physDev && dev && cmdPool && gfxQueue);
+
     globalVulkanInstance = inst; // assume this will not change during the lifetime of the entire application
 
     f = inst->functions();
@@ -187,7 +189,20 @@ void QVkRenderPrivate::create()
 
 void QVkRenderPrivate::destroy()
 {
+    if (!df)
+        return;
+
+    df->vkDeviceWaitIdle(dev);
+
+    if (pipelineCache) {
+        df->vkDestroyPipelineCache(dev, pipelineCache, nullptr);
+        pipelineCache = VK_NULL_HANDLE;
+    }
+
     vmaDestroyAllocator(allocator);
+
+    f = nullptr;
+    df = nullptr;
 }
 
 bool QVkRender::createTexture(int whatever, QVkTexture *outTex)
@@ -334,7 +349,7 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
         }
     }
 
-    uint32_t formatCount = 0;
+    quint32 formatCount = 0;
     d->vkGetPhysicalDeviceSurfaceFormatsKHR(d->physDev, surface, &formatCount, nullptr);
     QVector<VkSurfaceFormatKHR> formats(formatCount);
     if (formatCount)
@@ -400,13 +415,13 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
 
     VkSurfaceCapabilitiesKHR surfaceCaps;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDev, surface, &surfaceCaps);
-    uint32_t reqBufferCount = QVkSwapChain::DEFAULT_BUFFER_COUNT;
+    quint32 reqBufferCount = QVkSwapChain::DEFAULT_BUFFER_COUNT;
     if (surfaceCaps.maxImageCount)
         reqBufferCount = qBound(surfaceCaps.minImageCount, reqBufferCount, surfaceCaps.maxImageCount);
 
     VkExtent2D bufferSize = surfaceCaps.currentExtent;
-    if (bufferSize.width == uint32_t(-1)) {
-        Q_ASSERT(bufferSize.height == uint32_t(-1));
+    if (bufferSize.width == quint32(-1)) {
+        Q_ASSERT(bufferSize.height == quint32(-1));
         bufferSize.width = swapChain->pixelSize.width();
         bufferSize.height = swapChain->pixelSize.height();
     } else {
@@ -467,7 +482,7 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
 
     swapChain->sc = newSwapChain;
 
-    uint32_t actualSwapChainBufferCount = 0;
+    quint32 actualSwapChainBufferCount = 0;
     err = vkGetSwapchainImagesKHR(dev, swapChain->sc, &actualSwapChainBufferCount, nullptr);
     if (err != VK_SUCCESS || actualSwapChainBufferCount < 2) {
         qWarning("Failed to get swapchain images: %d (count=%d)", err, actualSwapChainBufferCount);
@@ -543,11 +558,6 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
 void QVkRender::releaseSwapChain(QVkSwapChain *swapChain)
 {
     d->releaseSwapChain(swapChain);
-}
-
-QVkCommandBuffer *QVkRender::currentFrameCommandBuffer(QVkSwapChain *swapChain)
-{
-    return &swapChain->imageRes[swapChain->currentImage].cmdBuf;
 }
 
 void QVkRenderPrivate::releaseSwapChain(QVkSwapChain *swapChain)
@@ -711,10 +721,9 @@ QVkRender::FrameOpResult QVkRender::endFrame(QVkSwapChain *sc)
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = &frame.imageSem;
     }
-    if (1) {
-        submitInfo.signalSemaphoreCount = 1;
-        submitInfo.pSignalSemaphores = &frame.drawSem;
-    }
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &frame.drawSem;
+
     VkPipelineStageFlags psf = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     submitInfo.pWaitDstStageMask = &psf;
 
@@ -814,6 +823,260 @@ void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkCl
 void QVkRender::endPass(QVkCommandBuffer *cb)
 {
     d->df->vkCmdEndRenderPass(cb->cb);
+}
+
+QMatrix4x4 QVkRender::openGLCorrectionMatrix() const
+{
+    if (d->clipCorrectMatrix.isIdentity()) {
+        // NB the ctor takes row-major
+        d->clipCorrectMatrix = QMatrix4x4(1.0f, 0.0f, 0.0f, 0.0f,
+                                          0.0f, -1.0f, 0.0f, 0.0f,
+                                          0.0f, 0.0f, 0.5f, 0.5f,
+                                          0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    return d->clipCorrectMatrix;
+}
+
+VkShaderModule QVkRenderPrivate::createShader(const QByteArray &spirv)
+{
+    VkShaderModuleCreateInfo shaderInfo;
+    memset(&shaderInfo, 0, sizeof(shaderInfo));
+    shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    shaderInfo.codeSize = spirv.size();
+    shaderInfo.pCode = reinterpret_cast<const quint32 *>(spirv.constData());
+    VkShaderModule shaderModule;
+    VkResult err = df->vkCreateShaderModule(dev, &shaderInfo, nullptr, &shaderModule);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create shader module: %d", err);
+        return VK_NULL_HANDLE;
+    }
+    return shaderModule;
+}
+
+bool QVkRenderPrivate::ensurePipelineCache()
+{
+    if (pipelineCache)
+        return true;
+
+    VkPipelineCacheCreateInfo pipelineCacheInfo;
+    memset(&pipelineCacheInfo, 0, sizeof(pipelineCacheInfo));
+    pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    VkResult err = df->vkCreatePipelineCache(dev, &pipelineCacheInfo, nullptr, &pipelineCache);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create pipeline cache: %d", err);
+        return false;
+    }
+    return true;
+}
+
+static VkShaderStageFlagBits toVkShaderStageType(QVkGraphicsShaderStage::Type type)
+{
+    switch (type) {
+    case QVkGraphicsShaderStage::Vertex:
+        return VK_SHADER_STAGE_VERTEX_BIT;
+    case QVkGraphicsShaderStage::Fragment:
+        return VK_SHADER_STAGE_FRAGMENT_BIT;
+    case QVkGraphicsShaderStage::Geometry:
+        return VK_SHADER_STAGE_GEOMETRY_BIT;
+    case QVkGraphicsShaderStage::TessellationControl:
+        return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+    case QVkGraphicsShaderStage::TessellationEvaluation:
+        return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+    default:
+        Q_UNREACHABLE();
+        return VK_SHADER_STAGE_VERTEX_BIT;
+    }
+}
+
+static VkFormat toVkAttributeFormat(QVkVertexInputLayout::Attribute::Format format)
+{
+    switch (format) {
+    case QVkVertexInputLayout::Attribute::Float4:
+        return VK_FORMAT_R32G32B32A32_SFLOAT;
+    case QVkVertexInputLayout::Attribute::Float3:
+        return VK_FORMAT_R32G32B32_SFLOAT;
+    case QVkVertexInputLayout::Attribute::Float2:
+        return VK_FORMAT_R32G32_SFLOAT;
+    case QVkVertexInputLayout::Attribute::Float:
+        return VK_FORMAT_R32_SFLOAT;
+    case QVkVertexInputLayout::Attribute::UNormByte4:
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    case QVkVertexInputLayout::Attribute::UNormByte2:
+        return VK_FORMAT_R8G8_UNORM;
+    case QVkVertexInputLayout::Attribute::UNormByte:
+        return VK_FORMAT_R8_UNORM;
+    default:
+        Q_UNREACHABLE();
+        return VK_FORMAT_R32G32B32A32_SFLOAT;
+    }
+}
+
+bool QVkRender::buildGraphicsPipelineState(QVkGraphicsPipelineState *ps)
+{
+    if (!d->ensurePipelineCache())
+        return false;
+
+//    VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+//    memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
+//    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+//    pipelineLayoutInfo.setLayoutCount = 1;
+//    pipelineLayoutInfo.pSetLayouts = &descSetLayout;
+//    err = d->df->vkCreatePipelineLayout(d->dev, &pipelineLayoutInfo, nullptr, &d->pipelineLayout);
+//    if (err != VK_SUCCESS)
+//        qWarning("Failed to create pipeline layout: %d", err);
+
+    VkGraphicsPipelineCreateInfo pipelineInfo;
+    memset(&pipelineInfo, 0, sizeof(pipelineInfo));
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+    QVarLengthArray<VkShaderModule, 4> shaders;
+    QVarLengthArray<VkPipelineShaderStageCreateInfo, 4> shaderStageCreateInfos;
+    for (const QVkGraphicsShaderStage &shaderStage : ps->shaderStages) {
+        VkShaderModule shader = d->createShader(shaderStage.spirv);
+        if (shader) {
+            shaders.append(shader);
+            VkPipelineShaderStageCreateInfo info = {
+                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                nullptr,
+                0,
+                toVkShaderStageType(shaderStage.type),
+                shader,
+                shaderStage.entryPoint,
+                nullptr
+            };
+            shaderStageCreateInfos.append(info);
+        }
+    }
+    pipelineInfo.stageCount = shaderStageCreateInfos.count();
+    pipelineInfo.pStages = shaderStageCreateInfos.constData();
+
+    QVarLengthArray<VkVertexInputBindingDescription, 4> vertexBindings;
+    for (int i = 0, ie = ps->vertexInputLayout.bindings.count(); i != ie; ++i) {
+        const QVkVertexInputLayout::Binding &binding(ps->vertexInputLayout.bindings[i]);
+        VkVertexInputBindingDescription bindingInfo = {
+            uint32_t(i),
+            binding.stride,
+            binding.classification == QVkVertexInputLayout::Binding::PerVertex ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE
+        };
+        vertexBindings.append(bindingInfo);
+    }
+    QVarLengthArray<VkVertexInputAttributeDescription, 4> vertexAttributes;
+    for (const QVkVertexInputLayout::Attribute &attribute : ps->vertexInputLayout.attributes) {
+        VkVertexInputAttributeDescription attributeInfo = {
+            uint32_t(attribute.location),
+            uint32_t(attribute.binding),
+            toVkAttributeFormat(attribute.format),
+            attribute.offset
+        };
+        vertexAttributes.append(attributeInfo);
+    }
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo;
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.pNext = nullptr;
+    vertexInputInfo.flags = 0;
+    vertexInputInfo.vertexBindingDescriptionCount = vertexBindings.count();
+    vertexInputInfo.pVertexBindingDescriptions = vertexBindings.constData();
+    vertexInputInfo.vertexAttributeDescriptionCount = vertexAttributes.count();
+    vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.constData();
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+
+    // Preseve our sanity and do not allow baked-in viewports and such since
+    // other APIs may not support this, and it is not very helpful with
+    // typical Qt Quick / Qt 3D content anyway.
+    VkDynamicState dynEnable[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }; // ### add others when we start supporting them
+    VkPipelineDynamicStateCreateInfo dynamicInfo;
+    memset(&dynamicInfo, 0, sizeof(dynamicInfo));
+    dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicInfo.dynamicStateCount = sizeof(dynEnable) / sizeof(VkDynamicState);
+    dynamicInfo.pDynamicStates = dynEnable;
+    pipelineInfo.pDynamicState = &dynamicInfo;
+
+    VkPipelineViewportStateCreateInfo viewportInfo;
+    memset(&viewportInfo, 0, sizeof(viewportInfo));
+    viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportInfo.viewportCount = 1;
+    viewportInfo.scissorCount = 1;
+    pipelineInfo.pViewportState = &viewportInfo;
+
+    // ###
+
+    VkResult err = d->df->vkCreateGraphicsPipelines(d->dev, d->pipelineCache, 1, &pipelineInfo, nullptr, &ps->pipeline);
+
+    for (VkShaderModule shader : shaders)
+        d->df->vkDestroyShaderModule(d->dev, shader, nullptr);
+
+    if (err != VK_SUCCESS)
+        qWarning("Failed to create graphics pipeline: %d", err);
+
+    return err == VK_SUCCESS;
+}
+
+void QVkRender::cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, const QVkBuffer &vb, quint32 offset)
+{
+    const VkDeviceSize ofs = offset;
+    d->df->vkCmdBindVertexBuffers(cb->cb, binding, 1, &vb.buffer, &ofs);
+}
+
+void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer> &vb, const QVector<quint32> &offset)
+{
+    QVarLengthArray<VkBuffer, 4> bufs;
+    QVarLengthArray<VkDeviceSize, 4> ofs;
+    for (int i = 0, ie = vb.count(); i != ie; ++i) {
+        bufs.append(vb[i].buffer);
+        ofs.append(offset[i]);
+    }
+    d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+}
+
+void QVkRender::cmdSetIndexBuffer(QVkCommandBuffer *cb, const QVkBuffer &ib, quint32 offset, IndexFormat format)
+{
+    const VkIndexType type = format == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    d->df->vkCmdBindIndexBuffer(cb->cb, ib.buffer, offset, type);
+}
+
+void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, const QVkGraphicsPipelineState &ps)
+{
+    Q_ASSERT(ps.pipeline);
+    d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps.pipeline);
+}
+
+static VkViewport toVkViewport(const QVkViewport &viewport)
+{
+    VkViewport vp;
+    vp.x = viewport.r.x();
+    vp.y = viewport.r.y();
+    vp.width = viewport.r.width();
+    vp.height = viewport.r.height();
+    vp.minDepth = viewport.minDepth;
+    vp.maxDepth = viewport.maxDepth;
+    return vp;
+}
+
+void QVkRender::cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport)
+{
+    VkViewport vp = toVkViewport(viewport);
+    d->df->vkCmdSetViewport(cb->cb, 0, 1, &vp);
+}
+
+static VkRect2D toVkScissor(const QVkScissor &scissor)
+{
+    VkRect2D s;
+    s.offset.x = scissor.r.x();
+    s.offset.y = scissor.r.y();
+    s.extent.width = scissor.r.width();
+    s.extent.height = scissor.r.height();
+    return s;
+}
+
+void QVkRender::cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor)
+{
+    VkRect2D s = toVkScissor(scissor);
+    d->df->vkCmdSetScissor(cb->cb, 0, 1, &s);
+}
+
+void QVkRender::cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
+{
+    d->df->vkCmdDraw(cb->cb, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 QT_END_NAMESPACE

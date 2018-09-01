@@ -243,7 +243,7 @@ void VWindow::render()
     if (!m_hasSwapChain)
         return;
 
-    if (m_sc.pixelSize != size() * devicePixelRatio()) {
+    if (m_sc.sizeInPixels() != size() * devicePixelRatio()) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;

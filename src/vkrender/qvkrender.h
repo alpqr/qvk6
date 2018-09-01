@@ -41,26 +41,106 @@
 #include <QVector4D>
 #include <QVector2D>
 #include <QSize>
+#include <QMatrix4x4>
 
 QT_BEGIN_NAMESPACE
 
 class QVkRenderPrivate;
 class QVulkanWindow;
 
+#define Q_VK_RES_PRIVATE private: \
+    friend class QVkRender; \
+    friend class QVkRenderPrivate;
+
 struct QVkClearValue
 {
     QVkClearValue(const QVector4D &rgba_) : rgba(rgba_) { }
-    QVkClearValue(float d_, uint32_t s_) : d(d_), s(s_), isDepthStencil(true) { }
+    QVkClearValue(float d_, quint32 s_) : d(d_), s(s_), isDepthStencil(true) { }
     QVector4D rgba;
     float d = 1;
-    uint32_t s = 0;
+    quint32 s = 0;
     bool isDepthStencil = false;
+};
+
+struct QVkViewport
+{
+    QRectF r;
+    float minDepth = 0.0f;
+    float maxDepth = 1.0f;
+};
+
+struct QVkScissor
+{
+    QRectF r;
+};
+
+// should be mappable to D3D12_INPUT_ELEMENT_DESC + D3D12_VERTEX_BUFFER_VIEW...
+struct QVkVertexInputLayout
+{
+    struct Binding {
+        enum Classification {
+            PerVertex,
+            PerInstance
+        };
+        quint32 stride = 0; // if another api needs this in setVertexBuffer (d3d12), make the cb store a ptr to the current ps and look up the stride via that
+        Classification classification = PerVertex;
+    };
+
+    struct Attribute {
+        enum Format {
+            Float4,
+            Float3,
+            Float2,
+            Float,
+            UNormByte4,
+            UNormByte2,
+            UNormByte
+            // ### more?
+        };
+        int binding = 0;
+        int location = 0;
+        Format format = Float4;
+        quint32 offset = 0;
+        const char *semanticName = nullptr; // POSITION, COLOR, TEXCOORD, ...
+        int semanticIndex = 0; // matters for TEXCOORD
+    };
+
+    QVector<Binding> bindings; // aka slot (d3d12)
+    QVector<Attribute> attributes;
+};
+
+struct QVkGraphicsShaderStage
+{
+    enum Type {
+        Vertex,
+        Fragment,
+        Geometry,
+        TessellationControl, // Hull
+        TessellationEvaluation // Domain
+    };
+
+    Type type = Vertex;
+    QByteArray spirv;
+    const char *entryPoint = "main";
+};
+
+struct QVkGraphicsPipelineState
+{
+    QVector<QVkGraphicsShaderStage> shaderStages;
+    QVkVertexInputLayout vertexInputLayout;
+
+    // ###
+
+Q_VK_RES_PRIVATE
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
 };
 
 typedef void * QVkAlloc;
 
 struct QVkBuffer
 {
+Q_VK_RES_PRIVATE
     QVkAlloc allocation = nullptr;
     VkBuffer buffer = VK_NULL_HANDLE;
     // ### going to be a tad more complicated than this due to multiple frames in flight
@@ -68,6 +148,7 @@ struct QVkBuffer
 
 struct QVkTexture
 {
+Q_VK_RES_PRIVATE
     QVkAlloc allocation = nullptr;
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
@@ -80,11 +161,16 @@ struct QVkSampler
 
 struct QVkCommandBuffer
 {
+Q_VK_RES_PRIVATE
     VkCommandBuffer cb = VK_NULL_HANDLE;
 };
 
 struct QVkSwapChain
 {
+    QVkCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
+    QSize sizeInPixels() const { return pixelSize; }
+
+Q_VK_RES_PRIVATE
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
     static const int FRAME_LAG = 2;
@@ -113,13 +199,14 @@ struct QVkSwapChain
         bool imageSemWaitable = false;
     } frameRes[FRAME_LAG];
 
-    uint32_t currentImage = 0;
-    uint32_t currentFrame = 0;
+    quint32 currentImage = 0;
+    quint32 currentFrame = 0;
     VkRenderPass rp = VK_NULL_HANDLE;
 };
 
 struct QVkRenderTarget
 {
+Q_VK_RES_PRIVATE
     VkFramebuffer fb = VK_NULL_HANDLE;
     VkRenderPass rp = VK_NULL_HANDLE;
     QSize pixelSize;
@@ -150,6 +237,11 @@ public:
         FrameOpDeviceLost
     };
 
+    enum IndexFormat {
+        IndexUInt16,
+        IndexUInt32
+    };
+
     QVkRender(const InitParams &params);
     ~QVkRender();
 
@@ -175,11 +267,11 @@ public:
              endFrame (this queues the Present, begin/endFrame manages double buffering internally)
 
       3. render to a texture:
-        3.1 as part of normal frame:
+        3.1 as part of normal frame as described in #1 or #2:
           createTexture
           createRenderTarget
           ...
-          cb = currentFrameCommandBuffer(sc)
+          [cb = sc.currentFrameCommandBuffer() if #2]
           beginPass(rt, cb, ...)
           ...
           endPass(cb)
@@ -194,7 +286,6 @@ public:
 
     bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags, QVkTexture *depthStencil, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
-    QVkCommandBuffer *currentFrameCommandBuffer(QVkSwapChain *swapChain);
     FrameOpResult beginFrame(QVkSwapChain *sc);
     FrameOpResult endFrame(QVkSwapChain *sc);
     void beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues);
@@ -203,6 +294,26 @@ public:
     void importVulkanWindowCurrentFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb);
     void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
     void endPass(QVkCommandBuffer *cb);
+
+    bool buildGraphicsPipelineState(QVkGraphicsPipelineState *ps);
+    //bool buildComputePipelineState(QVkComputePipelineState *ps);
+
+    // must be built first
+    void cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, const QVkGraphicsPipelineState &ps);
+    //void cmdSetComputePipelineState(const QVkComputePipelineState &ps);
+
+    // pipeline must be set first
+    void cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, const QVkBuffer &vb, quint32 offset);
+    void cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer> &vb, const QVector<quint32> &offset);
+    void cmdSetIndexBuffer(QVkCommandBuffer *cb, const QVkBuffer &ib, quint32 offset, IndexFormat format);
+
+    void cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
+    void cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);
+
+    void cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance);
+
+    // make Y up and viewport.min/maxDepth 0/1
+    QMatrix4x4 openGLCorrectionMatrix() const;
 
 private:
     QVkRenderPrivate *d;

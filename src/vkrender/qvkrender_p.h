@@ -65,6 +65,7 @@ public:
     VkShaderModule createShader(const QByteArray &spirv);
 
     void prepareNewFrame();
+    void finishFrame();
     void executeDeferredReleases(bool goingDown = false);
 
     QVulkanInstance *inst;
@@ -92,7 +93,9 @@ public:
 
     QMatrix4x4 clipCorrectMatrix;
 
-    int currentFrameIndex = 0; // 0..FRAMES_IN_FLIGHT-1
+    int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1
+    bool inFrame = false;
+    int finishedFrameCount = 0;
 
     struct DeferredReleaseEntry {
         enum Type {
@@ -100,7 +103,7 @@ public:
             Buffer
         };
         Type type;
-        int lastActiveFrameIndex; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
+        int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
         union {
             struct {
                 VkPipeline pipeline;

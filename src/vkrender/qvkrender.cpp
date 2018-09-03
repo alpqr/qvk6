@@ -283,7 +283,7 @@ bool QVkRenderPrivate::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthSt
 //    }
 
     VkAttachmentReference colorRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-    VkAttachmentReference resolveRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+//    VkAttachmentReference resolveRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
     VkAttachmentReference dsRef = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
     VkSubpassDescription subPassDesc;
@@ -357,7 +357,7 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
         QVkSwapChain::ImageResources &image(outSwapChain->imageRes[i]);
 
         VkImageView views[3] = { image.imageView,
-                                 outSwapChain->hasDepthStencil ? depthStencil->imageView : VK_NULL_HANDLE,
+                                 outSwapChain->hasDepthStencil ? depthStencil->d[0].imageView : VK_NULL_HANDLE,
                                  VK_NULL_HANDLE }; // ### will be 3 with MSAA
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
@@ -679,7 +679,7 @@ QVkRender::FrameOpResult QVkRender::beginFrame(QVkSwapChain *sc)
         return FrameOpError;
     }
 
-    d->currentFrameIndex = sc->currentFrame;
+    d->currentFrameSlot = sc->currentFrame;
     d->prepareNewFrame();
 
     return FrameOpSuccess;
@@ -687,6 +687,8 @@ QVkRender::FrameOpResult QVkRender::beginFrame(QVkSwapChain *sc)
 
 QVkRender::FrameOpResult QVkRender::endFrame(QVkSwapChain *sc)
 {
+    d->finishFrame();
+
     QVkSwapChain::FrameResources &frame(sc->frameRes[sc->currentFrame]);
     QVkSwapChain::ImageResources &image(sc->imageRes[sc->currentImage]);
 
@@ -788,13 +790,15 @@ void QVkRender::beginFrame(QVulkanWindow *window)
 {
     Q_UNUSED(window);
 
-    d->currentFrameIndex = window->currentFrame();
+    d->currentFrameSlot = window->currentFrame();
     d->prepareNewFrame();
 }
 
 void QVkRender::endFrame(QVulkanWindow *window)
 {
     Q_UNUSED(window);
+
+    d->finishFrame();
 }
 
 void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues)
@@ -813,7 +817,7 @@ void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkCl
         if (clearValues[i].isDepthStencil)
             cv.depthStencil = { clearValues[i].d, clearValues[i].s };
         else
-            cv.color = { clearValues[i].rgba.x(), clearValues[i].rgba.y(), clearValues[i].rgba.z(), clearValues[i].rgba.w() };
+            cv.color = { { clearValues[i].rgba.x(), clearValues[i].rgba.y(), clearValues[i].rgba.z(), clearValues[i].rgba.w() } };
         cvs.append(cv);
     }
     rpBeginInfo.pClearValues = cvs.data();
@@ -838,18 +842,34 @@ QMatrix4x4 QVkRender::openGLCorrectionMatrix() const
     return d->clipCorrectMatrix;
 }
 
-bool QVkRender::createBuffer(QVkBuffer *buf, int size)
+VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
 {
-    // ###
+    int u = 0;
+    if (usage.testFlag(QVkBuffer::VertexBuffer))
+        u |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    if (usage.testFlag(QVkBuffer::IndexBuffer))
+        u |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+    if (usage.testFlag(QVkBuffer::UniformBuffer))
+        u |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+    return VkBufferUsageFlagBits(u);
+}
+
+bool QVkRender::createBuffer(QVkBuffer *buf, int size, const void *data)
+{
+    Q_ASSERT(!buf->isStatic() || data);
 
     VkBufferCreateInfo bufferInfo;
     memset(&bufferInfo, 0, sizeof(bufferInfo));
     bufferInfo.sType = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
     bufferInfo.size = size;
-    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    bufferInfo.usage = toVkBufferUsage(buf->usage);
 
     VmaAllocationCreateInfo allocInfo;
     memset(&allocInfo, 0, sizeof(allocInfo));
+
+    // Some day we may consider using GPU_ONLY for static buffers and
+    // issue a transfer from a temporary CPU_ONLY staging buffer. But
+    // for now treat everything as "often changing".
     allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
     VkResult err = VK_SUCCESS;
@@ -862,16 +882,45 @@ bool QVkRender::createBuffer(QVkBuffer *buf, int size)
             if (err != VK_SUCCESS)
                 break;
             buf->d[i].allocation = allocation;
+            if (data) {
+                void *p = nullptr;
+                err = vmaMapMemory(d->allocator, allocation, &p);
+                if (err != VK_SUCCESS)
+                    break;
+                memcpy(p, data, size);
+                vmaUnmapMemory(d->allocator, allocation);
+            }
         }
     }
 
     if (err == VK_SUCCESS) {
-        buf->lastActiveFrameIndex = -1;
+        buf->lastActiveFrameSlot = -1;
         return true;
     } else {
         qWarning("Failed to create buffer: %d", err);
         return false;
     }
+}
+
+void QVkRender::updateBuffer(QVkBuffer *buf, int offset, int size, const void *data)
+{
+    Q_ASSERT(d->inFrame);
+    Q_ASSERT(!buf->isStatic());
+    Q_ASSERT(offset + size <= buf->size);
+
+    const int idx = d->currentFrameSlot;
+    void *p = nullptr;
+    VmaAllocation a = toVmaAllocation(buf->d[idx].allocation);
+    VkResult err = vmaMapMemory(d->allocator, a, &p);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to map buffer: %d", err);
+        return;
+    }
+    memcpy(static_cast<char *>(p) + offset, data, size);
+    vmaUnmapMemory(d->allocator, a);
+    vmaFlushAllocation(d->allocator, a, offset, size);
+
+    buf->d[idx].updates.append(QVkBuffer::UpdateRecord(offset, data, size));
 }
 
 VkShaderModule QVkRenderPrivate::createShader(const QByteArray &spirv)
@@ -1043,7 +1092,7 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
         d->df->vkDestroyShaderModule(d->dev, shader, nullptr);
 
     if (err == VK_SUCCESS) {
-        ps->lastActiveFrameIndex = -1;
+        ps->lastActiveFrameSlot = -1;
         return true;
     } else {
         qWarning("Failed to create graphics pipeline: %d", err);
@@ -1051,39 +1100,47 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     }
 }
 
-void QVkRender::cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset)
+void QVkRender::cmdSetBuffers(QVkCommandBuffer *cb, const QVkBufferList &buffers)
 {
-    vb->lastActiveFrameIndex = d->currentFrameIndex;
-    const int idx = vb->isStatic() ? 0 : d->currentFrameIndex;
-    const VkDeviceSize ofs = offset;
-    d->df->vkCmdBindVertexBuffers(cb->cb, binding, 1, &vb->d[idx].buffer, &ofs);
-}
+    // ###
+    //  for each buffer:
+    //    clear updates at index currentFrameSlot
+    //    apply recorded changes from the previous F-1 frames:
+    //      if (N >= F - 1)
+    //        for (int delta = F - 1; delta >= 1; --delta)
+    //          index = (N - delta) % F
+    //          ...
 
-void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb, const QVector<quint32> &offset)
-{
-    QVarLengthArray<VkBuffer, 4> bufs;
-    QVarLengthArray<VkDeviceSize, 4> ofs;
-    for (int i = 0, ie = vb.count(); i != ie; ++i) {
-        vb[i]->lastActiveFrameIndex = d->currentFrameIndex;
-        const int idx = vb[i]->isStatic() ? 0 : d->currentFrameIndex;
-        bufs.append(vb[i]->d[idx].buffer);
-        ofs.append(offset[i]);
+    if (buffers.indexBuffer.buf) {
+        QVkBuffer *ib = buffers.indexBuffer.buf;
+        ib->lastActiveFrameSlot = d->currentFrameSlot;
+        const int idx = ib->isStatic() ? 0 : d->currentFrameSlot;
+        const VkIndexType type = buffers.indexBuffer.format == QVkBufferList::IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+        d->df->vkCmdBindIndexBuffer(cb->cb, ib->d[idx].buffer, buffers.indexBuffer.offset, type);
     }
-    d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
-}
 
-void QVkRender::cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format)
-{
-    ib->lastActiveFrameIndex = d->currentFrameIndex;
-    const int idx = ib->isStatic() ? 0 : d->currentFrameIndex;
-    const VkIndexType type = format == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-    d->df->vkCmdBindIndexBuffer(cb->cb, ib->d[idx].buffer, offset, type);
+    if (buffers.vertexBufferCount > 0) {
+        QVarLengthArray<VkBuffer, 4> bufs;
+        QVarLengthArray<VkDeviceSize, 4> ofs;
+        for (int i = 0; i < buffers.vertexBufferCount; ++i) {
+            QVkBuffer *vb = buffers.vertexBuffers[i].buf;
+            vb->lastActiveFrameSlot = d->currentFrameSlot;
+            const int idx = vb->isStatic() ? 0 : d->currentFrameSlot;
+            bufs.append(vb->d[idx].buffer);
+            ofs.append(buffers.vertexBuffers[i].offset);
+        }
+        d->df->vkCmdBindVertexBuffers(cb->cb, 0, buffers.vertexBufferCount, bufs.constData(), ofs.constData());
+    }
+
+    if (buffers.uniformBufferCount > 0) {
+        // ###
+    }
 }
 
 void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPipelineState *ps)
 {
     Q_ASSERT(ps->pipeline);
-    ps->lastActiveFrameIndex = d->currentFrameIndex;
+    ps->lastActiveFrameSlot = d->currentFrameSlot;
     d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
 }
 
@@ -1128,20 +1185,30 @@ void QVkRender::cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 insta
 
 void QVkRenderPrivate::prepareNewFrame()
 {
+    Q_ASSERT(!inFrame);
+    inFrame = true;
+
     executeDeferredReleases();
 }
 
-static inline bool isResourceUsedByInFlightFrames(int lastActiveFrameIndex, int currentFrameIndex)
+void QVkRenderPrivate::finishFrame()
 {
-    return lastActiveFrameIndex >= 0
-            && currentFrameIndex <= (lastActiveFrameIndex + QVK_FRAMES_IN_FLIGHT - 1) % QVK_FRAMES_IN_FLIGHT;
+    Q_ASSERT(inFrame);
+    inFrame = false;
+    ++finishedFrameCount;
+}
+
+static inline bool isResourceUsedByInFlightFrames(int lastActiveFrameSlot, int currentFrameSlot)
+{
+    return lastActiveFrameSlot >= 0
+            && currentFrameSlot <= (lastActiveFrameSlot + QVK_FRAMES_IN_FLIGHT - 1) % QVK_FRAMES_IN_FLIGHT;
 }
 
 void QVkRenderPrivate::executeDeferredReleases(bool goingDown)
 {
     for (int i = releaseQueue.count() - 1; i >= 0; --i) {
         const QVkRenderPrivate::DeferredReleaseEntry &e(releaseQueue[i]);
-        if (goingDown || !isResourceUsedByInFlightFrames(e.lastActiveFrameIndex, currentFrameIndex)) {
+        if (goingDown || !isResourceUsedByInFlightFrames(e.lastActiveFrameSlot, currentFrameSlot)) {
             switch (e.type) {
             case QVkRenderPrivate::DeferredReleaseEntry::PipelineState:
                 if (e.pipelineState.pipeline)
@@ -1167,7 +1234,7 @@ void QVkRender::scheduleRelease(QVkGraphicsPipelineState *ps)
 
     QVkRenderPrivate::DeferredReleaseEntry e;
     e.type = QVkRenderPrivate::DeferredReleaseEntry::PipelineState;
-    e.lastActiveFrameIndex = ps->lastActiveFrameIndex;
+    e.lastActiveFrameSlot = ps->lastActiveFrameSlot;
 
     e.pipelineState.pipeline = ps->pipeline;
     e.pipelineState.layout = ps->layout;
@@ -1187,7 +1254,7 @@ void QVkRender::scheduleRelease(QVkBuffer *buf)
 
     QVkRenderPrivate::DeferredReleaseEntry e;
     e.type = QVkRenderPrivate::DeferredReleaseEntry::Buffer;
-    e.lastActiveFrameIndex = buf->lastActiveFrameIndex;
+    e.lastActiveFrameSlot = buf->lastActiveFrameSlot;
 
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         e.buffer[i].buffer = buf->d[i].buffer;

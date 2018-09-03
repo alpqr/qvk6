@@ -42,6 +42,7 @@
 #include <QVector2D>
 #include <QSize>
 #include <QMatrix4x4>
+#include <QVector>
 
 QT_BEGIN_NAMESPACE
 
@@ -93,7 +94,6 @@ struct QVkVertexInputLayout
             UNormByte4,
             UNormByte2,
             UNormByte
-            // ### more?
         };
         int binding = 0;
         int location = 0;
@@ -135,12 +135,10 @@ struct QVkGraphicsPipelineState
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
 
-    // ###
-
 Q_VK_RES_PRIVATE(QVkGraphicsPipelineState)
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
-    int lastActiveFrameIndex = -1;
+    int lastActiveFrameSlot = -1;
 };
 
 typedef void * QVkAlloc;
@@ -152,28 +150,47 @@ struct QVkBuffer
         DynamicType
     };
 
-    enum Usage {
-
+    enum UsageFlag {
+        VertexBuffer = 1 << 0,
+        IndexBuffer = 1 << 1,
+        UniformBuffer = 1 << 2
     };
+    Q_DECLARE_FLAGS(UsageFlags, UsageFlag)
 
     Type type = DynamicType;
+    UsageFlags usage = VertexBuffer;
+    int size = 0;
+
     bool isStatic() const { return type == StaticType; }
 
 Q_VK_RES_PRIVATE(QVkBuffer)
+    struct UpdateRecord {
+        UpdateRecord() { }
+        UpdateRecord(int o, const void *p, int size)
+            : offset(o), data(static_cast<const char *>(p), size)
+        { }
+        int offset;
+        QByteArray data;
+    };
     struct {
         VkBuffer buffer = VK_NULL_HANDLE;
         QVkAlloc allocation = nullptr;
+        QVector<UpdateRecord> updates;
     } d[QVK_FRAMES_IN_FLIGHT];
-    int lastActiveFrameIndex = -1;
+    int lastActiveFrameSlot = -1;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkBuffer::UsageFlags)
 
 struct QVkTexture
 {
 Q_VK_RES_PRIVATE(QVkTexture)
-    QVkAlloc allocation = nullptr;
-    VkImage image = VK_NULL_HANDLE;
-    VkImageView imageView = VK_NULL_HANDLE;
-    // ### for now
+    struct {
+        VkImage image = VK_NULL_HANDLE;
+        QVkAlloc allocation = nullptr;
+        VkImageView imageView = VK_NULL_HANDLE;
+    } d[QVK_FRAMES_IN_FLIGHT];
+    int lastActiveFrameSlot = -1;
 };
 
 struct QVkSampler
@@ -233,6 +250,35 @@ Q_VK_RES_PRIVATE(QVkRenderTarget)
     int attCount = 0;
 };
 
+struct QVkBufferList
+{
+    static const int MAX_VERTEX_BINDINGS = 8;
+    static const int MAX_UNIFORM_BINDINGS = 8;
+
+    enum IndexFormat {
+        IndexUInt16,
+        IndexUInt32
+    };
+
+    struct {
+        IndexFormat format = IndexUInt16;
+        quint32 offset = 0;
+        QVkBuffer *buf = nullptr;
+    } indexBuffer;
+
+    struct {
+        quint32 offset = 0;
+        QVkBuffer *buf = nullptr;
+    } vertexBuffers[MAX_VERTEX_BINDINGS];
+    int vertexBufferCount = 0;
+
+    struct {
+        quint32 offset = 0;
+        QVkBuffer *buf = nullptr;
+    } uniformBuffers[MAX_UNIFORM_BINDINGS];
+    int uniformBufferCount = 0;
+};
+
 class Q_VKR_EXPORT QVkRender
 {
 public:
@@ -255,11 +301,6 @@ public:
         FrameOpError,
         FrameOpSwapChainOutOfDate,
         FrameOpDeviceLost
-    };
-
-    enum IndexFormat {
-        IndexUInt16,
-        IndexUInt32
     };
 
     QVkRender(const InitParams &params);
@@ -313,7 +354,13 @@ public:
     bool createGraphicsPipelineState(QVkGraphicsPipelineState *ps);
     //bool createComputePipelineState(QVkComputePipelineState *ps);
 
-    bool createBuffer(QVkBuffer *buf, int size);
+    // Buffers are immutable like other resources but (for non-static
+    // buffers) the underlying data can change. (its size cannot)
+    // Having multiple frames in flight is handled transparently, with
+    // multiple allocations, recording updates, etc. internally.
+    bool createBuffer(QVkBuffer *buf, int size, const void *data = nullptr);
+    void updateBuffer(QVkBuffer *buf, int offset, int size, const void *data); // must be within begin-endFrame!
+
     //    bool createTexture(int whatever, QVkTexture *outTex);
     //    bool createRenderTarget(QVkTexture *color, QVkTexture *ds, QVkRenderTarget *outRt);
 
@@ -336,14 +383,11 @@ public:
     void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
     void endPass(QVkCommandBuffer *cb);
 
-    // must be built first
     void cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPipelineState *ps);
     //void cmdSetComputePipelineState(QVkComputePipelineState *ps);
 
     // pipeline must be set first
-    void cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset);
-    void cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb, const QVector<quint32> &offset);
-    void cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format);
+    void cmdSetBuffers(QVkCommandBuffer *cb, const QVkBufferList &buffers);
 
     void cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
     void cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);

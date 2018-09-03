@@ -48,9 +48,7 @@ QT_BEGIN_NAMESPACE
 class QVkRenderPrivate;
 class QVulkanWindow;
 
-#define Q_VK_RES_PRIVATE private: \
-    friend class QVkRender; \
-    friend class QVkRenderPrivate;
+static const int QVK_FRAMES_IN_FLIGHT = 2;
 
 struct QVkClearValue
 {
@@ -124,6 +122,14 @@ struct QVkGraphicsShaderStage
     const char *entryPoint = "main";
 };
 
+#define Q_VK_RES_PRIVATE(Class) \
+public: \
+    Class() { } \
+private: \
+    Q_DISABLE_COPY(Class) \
+    friend class QVkRender; \
+    friend class QVkRenderPrivate;
+
 struct QVkGraphicsPipelineState
 {
     QVector<QVkGraphicsShaderStage> shaderStages;
@@ -131,24 +137,39 @@ struct QVkGraphicsPipelineState
 
     // ###
 
-Q_VK_RES_PRIVATE
+Q_VK_RES_PRIVATE(QVkGraphicsPipelineState)
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
+    int lastActiveFrameIndex = -1;
 };
 
 typedef void * QVkAlloc;
 
 struct QVkBuffer
 {
-Q_VK_RES_PRIVATE
-    QVkAlloc allocation = nullptr;
-    VkBuffer buffer = VK_NULL_HANDLE;
-    // ### going to be a tad more complicated than this due to multiple frames in flight
+    enum Type {
+        StaticType,
+        DynamicType
+    };
+
+    enum Usage {
+
+    };
+
+    Type type = DynamicType;
+    bool isStatic() const { return type == StaticType; }
+
+Q_VK_RES_PRIVATE(QVkBuffer)
+    struct {
+        VkBuffer buffer = VK_NULL_HANDLE;
+        QVkAlloc allocation = nullptr;
+    } d[QVK_FRAMES_IN_FLIGHT];
+    int lastActiveFrameIndex = -1;
 };
 
 struct QVkTexture
 {
-Q_VK_RES_PRIVATE
+Q_VK_RES_PRIVATE(QVkTexture)
     QVkAlloc allocation = nullptr;
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
@@ -161,7 +182,7 @@ struct QVkSampler
 
 struct QVkCommandBuffer
 {
-Q_VK_RES_PRIVATE
+Q_VK_RES_PRIVATE(QVkCommandBuffer)
     VkCommandBuffer cb = VK_NULL_HANDLE;
 };
 
@@ -170,10 +191,9 @@ struct QVkSwapChain
     QVkCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
     QSize sizeInPixels() const { return pixelSize; }
 
-Q_VK_RES_PRIVATE
+Q_VK_RES_PRIVATE(QVkSwapChain)
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
-    static const int FRAME_LAG = 2;
 
     QSize pixelSize;
     bool supportsReadback = false;
@@ -197,16 +217,16 @@ Q_VK_RES_PRIVATE
         VkSemaphore drawSem = VK_NULL_HANDLE;
         bool imageAcquired = false;
         bool imageSemWaitable = false;
-    } frameRes[FRAME_LAG];
+    } frameRes[QVK_FRAMES_IN_FLIGHT];
 
-    quint32 currentImage = 0;
-    quint32 currentFrame = 0;
+    quint32 currentImage = 0; // index in imageRes
+    quint32 currentFrame = 0; // index in frameRes
     VkRenderPass rp = VK_NULL_HANDLE;
 };
 
 struct QVkRenderTarget
 {
-Q_VK_RES_PRIVATE
+Q_VK_RES_PRIVATE(QVkRenderTarget)
     VkFramebuffer fb = VK_NULL_HANDLE;
     VkRenderPass rp = VK_NULL_HANDLE;
     QSize pixelSize;
@@ -279,10 +299,29 @@ public:
         TBD. everything is subject to change.
       */
 
-    bool createTexture(int whatever, QVkTexture *outTex);
-    void releaseTexture(QVkTexture *tex);
-    bool createRenderTarget(QVkTexture *color, QVkTexture *ds, QVkRenderTarget *outRt);
-    void releaseRenderTarget(QVkRenderTarget *rt);
+    /*
+       The underlying graphics resources are created when calling create* and
+       put on the release queue by scheduleRelease (so this is safe even when
+       the resource is used by the still executing/pending frame(s)).
+
+       The QVk* instance itself is not destroyed by the release and it is safe
+       to destroy it right away after calling scheduleRelease.
+
+       create(&res); scheduleRelease(&res); create(&res); ... is valid and can be used to recreate things (when buffer or texture size changes f.ex.)
+     */
+
+    bool createGraphicsPipelineState(QVkGraphicsPipelineState *ps);
+    //bool createComputePipelineState(QVkComputePipelineState *ps);
+
+    bool createBuffer(QVkBuffer *buf, int size);
+    //    bool createTexture(int whatever, QVkTexture *outTex);
+    //    bool createRenderTarget(QVkTexture *color, QVkTexture *ds, QVkRenderTarget *outRt);
+
+    void scheduleRelease(QVkGraphicsPipelineState *ps);
+    //void scheduleRelease(QVkComputePipelineState *ps);
+
+    void scheduleRelease(QVkBuffer *buf);
+//    void scheduleRelease(QVkTexture *tex);
 
     bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags, QVkTexture *depthStencil, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
@@ -292,20 +331,19 @@ public:
     void endPass(QVkSwapChain *sc);
 
     void importVulkanWindowCurrentFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb);
+    void beginFrame(QVulkanWindow *window);
+    void endFrame(QVulkanWindow *window);
     void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
     void endPass(QVkCommandBuffer *cb);
 
-    bool buildGraphicsPipelineState(QVkGraphicsPipelineState *ps);
-    //bool buildComputePipelineState(QVkComputePipelineState *ps);
-
     // must be built first
-    void cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, const QVkGraphicsPipelineState &ps);
-    //void cmdSetComputePipelineState(const QVkComputePipelineState &ps);
+    void cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPipelineState *ps);
+    //void cmdSetComputePipelineState(QVkComputePipelineState *ps);
 
     // pipeline must be set first
-    void cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, const QVkBuffer &vb, quint32 offset);
-    void cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer> &vb, const QVector<quint32> &offset);
-    void cmdSetIndexBuffer(QVkCommandBuffer *cb, const QVkBuffer &ib, quint32 offset, IndexFormat format);
+    void cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset);
+    void cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb, const QVector<quint32> &offset);
+    void cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format);
 
     void cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
     void cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);

@@ -249,11 +249,6 @@ void VWindow::render()
             return;
     }
 
-    const QVkClearValue clearValues[2] = {
-        QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
-        QVkClearValue(1.0f, 0)
-    };
-
     QVkRender::FrameOpResult r = m_r->beginFrame(&m_sc);
     if (r == QVkRender::FrameOpSwapChainOutOfDate) {
         recreateSwapChain();
@@ -266,6 +261,10 @@ void VWindow::render()
         return;
     }
 
+    const QVkClearValue clearValues[2] = {
+        QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
+        QVkClearValue(1.0f, 0)
+    };
     m_r->beginPass(&m_sc, clearValues);
 
     m_r->endPass(&m_sc);

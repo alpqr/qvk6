@@ -88,6 +88,8 @@ void Renderer::startNextFrame()
     QVkCommandBuffer cb;
     m_r->importVulkanWindowCurrentFrame(m_window, &rt, &cb);
 
+    m_r->beginFrame(m_window);
+
     const QVkClearValue clearValues[2] = {
         QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
         QVkClearValue(1.0f, 0)
@@ -95,6 +97,8 @@ void Renderer::startNextFrame()
     m_r->beginPass(&rt, &cb, clearValues);
 
     m_r->endPass(&cb);
+
+    m_r->endFrame(m_window);
 
     m_window->frameReady();
     m_window->requestUpdate(); // render continuously, throttled by the presentation rate

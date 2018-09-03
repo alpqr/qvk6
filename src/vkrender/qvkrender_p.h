@@ -42,6 +42,7 @@
 //
 
 #include "qvkrender.h"
+#include <QVector>
 
 QT_BEGIN_NAMESPACE
 
@@ -62,6 +63,9 @@ public:
     bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
+
+    void prepareNewFrame();
+    void executeDeferredReleases(bool goingDown = false);
 
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;
@@ -87,6 +91,28 @@ public:
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
 
     QMatrix4x4 clipCorrectMatrix;
+
+    int currentFrameIndex = 0; // 0..FRAMES_IN_FLIGHT-1
+
+    struct DeferredReleaseEntry {
+        enum Type {
+            PipelineState,
+            Buffer
+        };
+        Type type;
+        int lastActiveFrameIndex; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
+        union {
+            struct {
+                VkPipeline pipeline;
+                VkPipelineLayout layout;
+            } pipelineState;
+            struct {
+                VkBuffer buffer;
+                QVkAlloc allocation;
+            } buffer[QVK_FRAMES_IN_FLIGHT];
+        };
+    };
+    QVector<DeferredReleaseEntry> releaseQueue;
 };
 
 QT_END_NAMESPACE

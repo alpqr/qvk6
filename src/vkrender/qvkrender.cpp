@@ -889,6 +889,7 @@ bool QVkRender::createBuffer(QVkBuffer *buf, int size, const void *data)
                     break;
                 memcpy(p, data, size);
                 vmaUnmapMemory(d->allocator, allocation);
+                vmaFlushAllocation(d->allocator, allocation, 0, size);
             }
         }
     }
@@ -904,23 +905,15 @@ bool QVkRender::createBuffer(QVkBuffer *buf, int size, const void *data)
 
 void QVkRender::updateBuffer(QVkBuffer *buf, int offset, int size, const void *data)
 {
-    Q_ASSERT(d->inFrame);
     Q_ASSERT(!buf->isStatic());
     Q_ASSERT(offset + size <= buf->size);
 
-    const int idx = d->currentFrameSlot;
-    void *p = nullptr;
-    VmaAllocation a = toVmaAllocation(buf->d[idx].allocation);
-    VkResult err = vmaMapMemory(d->allocator, a, &p);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to map buffer: %d", err);
+    if (size < 1)
         return;
-    }
-    memcpy(static_cast<char *>(p) + offset, data, size);
-    vmaUnmapMemory(d->allocator, a);
-    vmaFlushAllocation(d->allocator, a, offset, size);
 
-    buf->d[idx].updates.append(QVkBuffer::UpdateRecord(offset, data, size));
+    const QByteArray u(static_cast<const char *>(data), size);
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        buf->d[i].pendingUpdates.append(QVkBuffer::PendingUpdate(offset, u));
 }
 
 VkShaderModule QVkRenderPrivate::createShader(const QByteArray &spirv)
@@ -1100,41 +1093,65 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     }
 }
 
-void QVkRender::cmdSetBuffers(QVkCommandBuffer *cb, const QVkBufferList &buffers)
+void QVkRenderPrivate::prepareBufferForUse(QVkBuffer *buf)
 {
-    // ###
-    //  for each buffer:
-    //    clear updates at index currentFrameSlot
-    //    apply recorded changes from the previous F-1 frames:
-    //      if (N >= F - 1)
-    //        for (int delta = F - 1; delta >= 1; --delta)
-    //          index = (N - delta) % F
-    //          ...
+    buf->lastActiveFrameSlot = currentFrameSlot;
 
-    if (buffers.indexBuffer.buf) {
-        QVkBuffer *ib = buffers.indexBuffer.buf;
-        ib->lastActiveFrameSlot = d->currentFrameSlot;
-        const int idx = ib->isStatic() ? 0 : d->currentFrameSlot;
-        const VkIndexType type = buffers.indexBuffer.format == QVkBufferList::IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-        d->df->vkCmdBindIndexBuffer(cb->cb, ib->d[idx].buffer, buffers.indexBuffer.offset, type);
-    }
-
-    if (buffers.vertexBufferCount > 0) {
-        QVarLengthArray<VkBuffer, 4> bufs;
-        QVarLengthArray<VkDeviceSize, 4> ofs;
-        for (int i = 0; i < buffers.vertexBufferCount; ++i) {
-            QVkBuffer *vb = buffers.vertexBuffers[i].buf;
-            vb->lastActiveFrameSlot = d->currentFrameSlot;
-            const int idx = vb->isStatic() ? 0 : d->currentFrameSlot;
-            bufs.append(vb->d[idx].buffer);
-            ofs.append(buffers.vertexBuffers[i].offset);
+    auto &pendingUpdates(buf->d[currentFrameSlot].pendingUpdates);
+    if (!pendingUpdates.isEmpty()) {
+        Q_ASSERT(!buf->isStatic());
+        void *p = nullptr;
+        VmaAllocation a = toVmaAllocation(buf->d[currentFrameSlot].allocation);
+        VkResult err = vmaMapMemory(allocator, a, &p);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to map buffer: %d", err);
+            return;
         }
-        d->df->vkCmdBindVertexBuffers(cb->cb, 0, buffers.vertexBufferCount, bufs.constData(), ofs.constData());
-    }
 
-    if (buffers.uniformBufferCount > 0) {
-        // ###
+        int changeBegin = -1;
+        int changeEnd = -1;
+        for (const QVkBuffer::PendingUpdate &u : pendingUpdates) {
+            memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
+            if (changeBegin == -1 || u.offset < changeBegin)
+                changeBegin = u.offset;
+            if (changeEnd == -1 || u.offset + u.data.size() > changeEnd)
+                changeEnd = u.offset + u.data.size();
+        }
+
+        vmaUnmapMemory(allocator, a);
+        vmaFlushAllocation(allocator, a, changeBegin, changeEnd - changeBegin);
+
+        pendingUpdates.clear();
     }
+}
+
+void QVkRender::cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset)
+{
+    d->prepareBufferForUse(vb);
+    const int idx = vb->isStatic() ? 0 : d->currentFrameSlot;
+    const VkDeviceSize ofs = offset;
+    d->df->vkCmdBindVertexBuffers(cb->cb, binding, 1, &vb->d[idx].buffer, &ofs);
+}
+
+void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb, const QVector<quint32> &offset)
+{
+    QVarLengthArray<VkBuffer, 4> bufs;
+    QVarLengthArray<VkDeviceSize, 4> ofs;
+    for (int i = 0, ie = vb.count(); i != ie; ++i) {
+        d->prepareBufferForUse(vb[i]);
+        const int idx = vb[i]->isStatic() ? 0 : d->currentFrameSlot;
+        bufs.append(vb[i]->d[idx].buffer);
+        ofs.append(offset[i]);
+    }
+    d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+}
+
+void QVkRender::cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format)
+{
+    d->prepareBufferForUse(ib);
+    const int idx = ib->isStatic() ? 0 : d->currentFrameSlot;
+    const VkIndexType type = format == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+    d->df->vkCmdBindIndexBuffer(cb->cb, ib->d[idx].buffer, offset, type);
 }
 
 void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPipelineState *ps)

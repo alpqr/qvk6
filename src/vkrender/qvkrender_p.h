@@ -67,6 +67,7 @@ public:
     void prepareNewFrame();
     void finishFrame();
     void executeDeferredReleases(bool goingDown = false);
+    void prepareBufferForUse(QVkBuffer *buf);
 
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;

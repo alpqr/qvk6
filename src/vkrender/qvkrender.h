@@ -151,7 +151,7 @@ struct QVkShaderResourceBindings
         Type type = UniformBuffer;
         union {
             struct {
-                QVkBuffer *buf = nullptr;
+                QVkBuffer *buf;
             } uniformBuffer;
         };
     };
@@ -168,7 +168,7 @@ struct QVkGraphicsPipelineState
 {
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
-    QVkRenderPass *renderPass = nullptr;
+    const QVkRenderPass *renderPass = nullptr;
     QVkShaderResourceBindings *shaderResourceBindings = nullptr;
 
 Q_VK_RES_PRIVATE(QVkGraphicsPipelineState)
@@ -375,8 +375,8 @@ public:
     // buffers) the underlying data can change. (its size cannot)
     // Having multiple frames in flight is handled transparently, with
     // multiple allocations, recording updates, etc. internally.
-    bool createBuffer(QVkBuffer *buf, int size, const void *data = nullptr);
-    // Queues a partial update. Memory is updated in the next set*Buffer call.
+    bool createBuffer(QVkBuffer *buf, const void *data = nullptr);
+    // Queues a partial update. Memory is updated in the next set*Buffer (vertex/index) or setGraphicsPipelineState (uniform).
     void updateBuffer(QVkBuffer *buf, int offset, int size, const void *data);
 
     //    bool createTexture(int whatever, QVkTexture *outTex);

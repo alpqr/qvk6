@@ -873,7 +873,7 @@ VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
     return VkBufferUsageFlagBits(u);
 }
 
-bool QVkRender::createBuffer(QVkBuffer *buf, int size, const void *data)
+bool QVkRender::createBuffer(QVkBuffer *buf, const void *data)
 {
     if (buf->d[0].buffer) // no repeated create without a scheduleRelease first
         return false;
@@ -883,7 +883,7 @@ bool QVkRender::createBuffer(QVkBuffer *buf, int size, const void *data)
     VkBufferCreateInfo bufferInfo;
     memset(&bufferInfo, 0, sizeof(bufferInfo));
     bufferInfo.sType = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
-    bufferInfo.size = size;
+    bufferInfo.size = buf->size;
     bufferInfo.usage = toVkBufferUsage(buf->usage);
 
     VmaAllocationCreateInfo allocInfo;
@@ -909,9 +909,9 @@ bool QVkRender::createBuffer(QVkBuffer *buf, int size, const void *data)
                 err = vmaMapMemory(d->allocator, allocation, &p);
                 if (err != VK_SUCCESS)
                     break;
-                memcpy(p, data, size);
+                memcpy(p, data, buf->size);
                 vmaUnmapMemory(d->allocator, allocation);
-                vmaFlushAllocation(d->allocator, allocation, 0, size);
+                vmaFlushAllocation(d->allocator, allocation, 0, buf->size);
             }
         }
     }
@@ -1178,7 +1178,7 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
     };
     err = d->df->vkAllocateDescriptorSets(d->dev, &allocInfo, srb->descSets);
     if (err != VK_SUCCESS) {
-        qWarning("Failed to allocate descriptor set: %d", err);
+        qWarning("Failed to allocate descriptor sets: %d", err);
         return false;
     }
 
@@ -1285,9 +1285,24 @@ void QVkRender::cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 o
 void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPipelineState *ps)
 {
     Q_ASSERT(ps->pipeline);
+
+    for (const QVkShaderResourceBindings::Binding &b : qAsConst(ps->shaderResourceBindings->bindings)) {
+        switch (b.type) {
+        case QVkShaderResourceBindings::Binding::UniformBuffer:
+            d->prepareBufferForUse(b.uniformBuffer.buf);
+            break;
+        // ### others
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
     ps->lastActiveFrameSlot = d->currentFrameSlot;
     ps->shaderResourceBindings->lastActiveFrameSlot = d->currentFrameSlot;
+
     d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
+
     d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
                                    &ps->shaderResourceBindings->descSets[d->currentFrameSlot], 0, nullptr);
 }

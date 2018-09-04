@@ -185,6 +185,20 @@ void QVkRenderPrivate::create()
     allocatorInfo.device = dev;
     allocatorInfo.pVulkanFunctions = &afuncs;
     vmaCreateAllocator(&allocatorInfo, &allocator);
+
+    VkDescriptorPoolSize descPoolSizes[] = {
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, QVK_MAX_UNIFORM_BUFFERS_PER_SRB * QVK_MAX_SHADER_RESOURCE_BINDINGS * QVK_FRAMES_IN_FLIGHT }
+    };
+    VkDescriptorPoolCreateInfo descPoolInfo;
+    memset(&descPoolInfo, 0, sizeof(descPoolInfo));
+    descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descPoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    descPoolInfo.maxSets = QVK_MAX_SHADER_RESOURCE_BINDINGS * QVK_FRAMES_IN_FLIGHT;
+    descPoolInfo.poolSizeCount = sizeof(descPoolSizes) / sizeof(descPoolSizes[0]);
+    descPoolInfo.pPoolSizes = descPoolSizes;
+    VkResult err = df->vkCreateDescriptorPool(dev, &descPoolInfo, nullptr, &descriptorPool);
+    if (err != VK_SUCCESS)
+        qFatal("Failed to create descriptor pool: %d", err);
 }
 
 void QVkRenderPrivate::destroy()
@@ -199,6 +213,11 @@ void QVkRenderPrivate::destroy()
     if (pipelineCache) {
         df->vkDestroyPipelineCache(dev, pipelineCache, nullptr);
         pipelineCache = VK_NULL_HANDLE;
+    }
+
+    if (descriptorPool) {
+        df->vkDestroyDescriptorPool(dev, descriptorPool, nullptr);
+        descriptorPool = VK_NULL_HANDLE;
     }
 
     vmaDestroyAllocator(allocator);
@@ -246,7 +265,7 @@ VkFormat QVkRenderPrivate::optimalDepthStencilFormat()
     return dsFormat;
 }
 
-bool QVkRenderPrivate::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil)
+bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthStencil)
 {
     VkAttachmentDescription attDesc[3];
     memset(attDesc, 0, sizeof(attDesc));
@@ -307,7 +326,7 @@ bool QVkRenderPrivate::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthSt
 //        rpInfo.attachmentCount = 3; // or 2
 //    }
 
-    VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, rp);
+    VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, &rp->rp);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create renderpass: %d", err);
         return false;
@@ -362,7 +381,7 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = outSwapChain->rp;
+        fbInfo.renderPass = outSwapChain->rp.rp;
         fbInfo.attachmentCount = flags.testFlag(ImportWithDepthStencil) ? 2 : 1;
         fbInfo.pAttachments = views;
         fbInfo.width = outSwapChain->pixelSize.width();
@@ -594,9 +613,9 @@ void QVkRenderPrivate::releaseSwapChain(QVkSwapChain *swapChain)
         }
     }
 
-    if (swapChain->rp) {
-        df->vkDestroyRenderPass(dev, swapChain->rp, nullptr);
-        swapChain->rp = VK_NULL_HANDLE;
+    if (swapChain->rp.rp) {
+        df->vkDestroyRenderPass(dev, swapChain->rp.rp, nullptr);
+        swapChain->rp.rp = VK_NULL_HANDLE;
     }
 
     vkDestroySwapchainKHR(dev, swapChain->sc, nullptr);
@@ -764,7 +783,7 @@ void QVkRender::beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues)
 {
     QVkRenderTarget rt;
     rt.fb = sc->imageRes[sc->currentImage].fb;
-    rt.rp = sc->rp;
+    rt.rp.rp = sc->rp.rp;
     rt.pixelSize = sc->pixelSize;
     rt.attCount = sc->hasDepthStencil ? 2 : 1; // 3 or 2 with msaa
 
@@ -779,7 +798,7 @@ void QVkRender::endPass(QVkSwapChain *sc)
 void QVkRender::importVulkanWindowCurrentFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb)
 {
     outRt->fb = window->currentFramebuffer();
-    outRt->rp = window->defaultRenderPass();
+    outRt->rp.rp = window->defaultRenderPass();
     outRt->pixelSize = window->swapChainImageSize();
     outRt->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
 
@@ -806,7 +825,7 @@ void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkCl
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
     rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = rt->rp;
+    rpBeginInfo.renderPass = rt->rp.rp;
     rpBeginInfo.framebuffer = rt->fb;
     rpBeginInfo.renderArea.extent.width = rt->pixelSize.width();
     rpBeginInfo.renderArea.extent.height = rt->pixelSize.height();
@@ -820,7 +839,7 @@ void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkCl
             cv.color = { { clearValues[i].rgba.x(), clearValues[i].rgba.y(), clearValues[i].rgba.z(), clearValues[i].rgba.w() } };
         cvs.append(cv);
     }
-    rpBeginInfo.pClearValues = cvs.data();
+    rpBeginInfo.pClearValues = cvs.constData();
 
     d->df->vkCmdBeginRenderPass(cb->cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
@@ -856,6 +875,9 @@ VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
 
 bool QVkRender::createBuffer(QVkBuffer *buf, int size, const void *data)
 {
+    if (buf->d[0].buffer) // no repeated create without a scheduleRelease first
+        return false;
+
     Q_ASSERT(!buf->isStatic() || data);
 
     VkBufferCreateInfo bufferInfo;
@@ -948,7 +970,7 @@ bool QVkRenderPrivate::ensurePipelineCache()
     return true;
 }
 
-static VkShaderStageFlagBits toVkShaderStageType(QVkGraphicsShaderStage::Type type)
+static VkShaderStageFlagBits toVkShaderStage(QVkGraphicsShaderStage::Type type)
 {
     switch (type) {
     case QVkGraphicsShaderStage::Vertex:
@@ -992,17 +1014,21 @@ static VkFormat toVkAttributeFormat(QVkVertexInputLayout::Attribute::Format form
 
 bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
 {
+    if (ps->pipeline) // no repeated create without a scheduleRelease first
+        return false;
+
     if (!d->ensurePipelineCache())
         return false;
 
-//    VkPipelineLayoutCreateInfo pipelineLayoutInfo;
-//    memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
-//    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-//    pipelineLayoutInfo.setLayoutCount = 1;
-//    pipelineLayoutInfo.pSetLayouts = &descSetLayout;
-//    err = d->df->vkCreatePipelineLayout(d->dev, &pipelineLayoutInfo, nullptr, &d->pipelineLayout);
-//    if (err != VK_SUCCESS)
-//        qWarning("Failed to create pipeline layout: %d", err);
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+    memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    Q_ASSERT(ps->shaderResourceBindings && ps->shaderResourceBindings->layout);
+    pipelineLayoutInfo.pSetLayouts = &ps->shaderResourceBindings->layout;
+    VkResult err = d->df->vkCreatePipelineLayout(d->dev, &pipelineLayoutInfo, nullptr, &ps->layout);
+    if (err != VK_SUCCESS)
+        qWarning("Failed to create pipeline layout: %d", err);
 
     VkGraphicsPipelineCreateInfo pipelineInfo;
     memset(&pipelineInfo, 0, sizeof(pipelineInfo));
@@ -1018,7 +1044,7 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
                 VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
                 nullptr,
                 0,
-                toVkShaderStageType(shaderStage.type),
+                toVkShaderStage(shaderStage.type),
                 shader,
                 shaderStage.entryPoint,
                 nullptr
@@ -1079,7 +1105,12 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
 
     // ###
 
-    VkResult err = d->df->vkCreateGraphicsPipelines(d->dev, d->pipelineCache, 1, &pipelineInfo, nullptr, &ps->pipeline);
+    pipelineInfo.layout = ps->layout;
+
+    Q_ASSERT(ps->renderPass && ps->renderPass->rp);
+    pipelineInfo.renderPass = ps->renderPass->rp;
+
+    err = d->df->vkCreateGraphicsPipelines(d->dev, d->pipelineCache, 1, &pipelineInfo, nullptr, &ps->pipeline);
 
     for (VkShaderModule shader : shaders)
         d->df->vkDestroyShaderModule(d->dev, shader, nullptr);
@@ -1091,6 +1122,103 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
         qWarning("Failed to create graphics pipeline: %d", err);
         return false;
     }
+}
+
+static inline VkDescriptorType toVkDescriptorType(QVkShaderResourceBindings::Binding::Type type)
+{
+    switch (type) {
+    case QVkShaderResourceBindings::Binding::UniformBuffer:
+        return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    // ### others
+    default:
+        Q_UNREACHABLE();
+        return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    }
+}
+
+bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
+{
+    if (srb->layout) // no repeated create without a scheduleRelease first
+        return false;
+
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        srb->descSets[i] = VK_NULL_HANDLE;
+
+    QVarLengthArray<VkDescriptorSetLayoutBinding, 4> bindings;
+    for (const QVkShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
+        VkDescriptorSetLayoutBinding binding;
+        memset(&binding, 0, sizeof(binding));
+        binding.binding = b.binding;
+        binding.descriptorType = toVkDescriptorType(b.type);
+        binding.descriptorCount = 1; // no array support yet
+        binding.stageFlags = toVkShaderStage(b.stage);
+        bindings.append(binding);
+    }
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo = {
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        nullptr,
+        0, // flags
+        uint32_t(bindings.count()),
+        bindings.constData()
+    };
+
+    VkResult err = d->df->vkCreateDescriptorSetLayout(d->dev, &layoutInfo, nullptr, &srb->layout);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create descriptor set layout: %d", err);
+        return false;
+    }
+
+    VkDescriptorSetAllocateInfo allocInfo = {
+        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        nullptr,
+        d->descriptorPool,
+        QVK_FRAMES_IN_FLIGHT,
+        &srb->layout
+    };
+    err = d->df->vkAllocateDescriptorSets(d->dev, &allocInfo, srb->descSets);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to allocate descriptor set: %d", err);
+        return false;
+    }
+
+    QVarLengthArray<VkDescriptorBufferInfo, 4> bufferInfos;
+    QVarLengthArray<VkWriteDescriptorSet, 8> writeInfos;
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        for (const QVkShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
+            VkWriteDescriptorSet writeInfo;
+            memset(&writeInfo, 0, sizeof(writeInfo));
+            writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            writeInfo.dstSet = srb->descSets[i];
+            writeInfo.dstBinding = b.binding;
+            writeInfo.descriptorCount = 1;
+
+            switch (b.type) {
+            case QVkShaderResourceBindings::Binding::UniformBuffer:
+            {
+                writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                VkDescriptorBufferInfo bufInfo;
+                QVkBuffer *buf = b.uniformBuffer.buf;
+                bufInfo.buffer = buf->isStatic() ? buf->d[0].buffer : buf->d[i].buffer;
+                bufInfo.offset = 0;
+                bufInfo.range = buf->size;
+                bufferInfos.append(bufInfo);
+                writeInfo.pBufferInfo = &bufferInfos.last();
+            }
+                break;
+            // ### others
+            default:
+                continue;
+            }
+
+            writeInfos.append(writeInfo);
+        }
+    }
+
+    d->df->vkUpdateDescriptorSets(d->dev, writeInfos.count(), writeInfos.constData(), 0, nullptr);
+
+    srb->lastActiveFrameSlot = -1;
+    return true;
 }
 
 void QVkRenderPrivate::prepareBufferForUse(QVkBuffer *buf)
@@ -1158,7 +1286,10 @@ void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPip
 {
     Q_ASSERT(ps->pipeline);
     ps->lastActiveFrameSlot = d->currentFrameSlot;
+    ps->shaderResourceBindings->lastActiveFrameSlot = d->currentFrameSlot;
     d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
+    d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
+                                   &ps->shaderResourceBindings->descSets[d->currentFrameSlot], 0, nullptr);
 }
 
 static VkViewport toVkViewport(const QVkViewport &viewport)
@@ -1233,6 +1364,12 @@ void QVkRenderPrivate::executeDeferredReleases(bool goingDown)
                 if (e.pipelineState.layout)
                     df->vkDestroyPipelineLayout(dev, e.pipelineState.layout, nullptr);
                 break;
+            case QVkRenderPrivate::DeferredReleaseEntry::ShaderResourceBindings:
+                if (e.shaderResourceBindings.layout)
+                    df->vkDestroyDescriptorSetLayout(dev, e.shaderResourceBindings.layout, nullptr);
+                if (descriptorPool)
+                    df->vkFreeDescriptorSets(dev, descriptorPool, QVK_FRAMES_IN_FLIGHT, e.shaderResourceBindings.sets);
+                break;
             case QVkRenderPrivate::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
                     vmaDestroyBuffer(allocator, e.buffer[i].buffer, toVmaAllocation(e.buffer[i].allocation));
@@ -1256,6 +1393,29 @@ void QVkRender::scheduleRelease(QVkGraphicsPipelineState *ps)
     e.pipelineState.pipeline = ps->pipeline;
     e.pipelineState.layout = ps->layout;
 
+    ps->pipeline = VK_NULL_HANDLE;
+    ps->layout = VK_NULL_HANDLE;
+
+    d->releaseQueue.append(e);
+}
+
+void QVkRender::scheduleRelease(QVkShaderResourceBindings *srb)
+{
+    if (!srb->layout)
+        return;
+
+    QVkRenderPrivate::DeferredReleaseEntry e;
+    e.type = QVkRenderPrivate::DeferredReleaseEntry::ShaderResourceBindings;
+    e.lastActiveFrameSlot = srb->lastActiveFrameSlot;
+
+    e.shaderResourceBindings.layout = srb->layout;
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        e.shaderResourceBindings.sets[i] = srb->descSets[i];
+
+    srb->layout = VK_NULL_HANDLE;
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        srb->descSets[i] = VK_NULL_HANDLE;
+
     d->releaseQueue.append(e);
 }
 
@@ -1276,6 +1436,9 @@ void QVkRender::scheduleRelease(QVkBuffer *buf)
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         e.buffer[i].buffer = buf->d[i].buffer;
         e.buffer[i].allocation = buf->d[i].allocation;
+
+        buf->d[i].buffer = VK_NULL_HANDLE;
+        buf->d[i].allocation = nullptr;
     }
 
     d->releaseQueue.append(e);

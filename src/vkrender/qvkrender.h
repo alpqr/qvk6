@@ -50,6 +50,8 @@ class QVkRenderPrivate;
 class QVulkanWindow;
 
 static const int QVK_FRAMES_IN_FLIGHT = 2;
+static const int QVK_MAX_SHADER_RESOURCE_BINDINGS = 4;
+static const int QVK_MAX_UNIFORM_BUFFERS_PER_SRB = 4;
 
 struct QVkClearValue
 {
@@ -130,10 +132,44 @@ private: \
     friend class QVkRender; \
     friend class QVkRenderPrivate;
 
+struct QVkRenderPass
+{
+Q_VK_RES_PRIVATE(QVkRenderPass)
+    VkRenderPass rp = VK_NULL_HANDLE;
+};
+
+struct QVkBuffer;
+
+struct QVkShaderResourceBindings
+{
+    struct Binding {
+        enum Type {
+            UniformBuffer
+        };
+        int binding = 0;
+        QVkGraphicsShaderStage::Type stage = QVkGraphicsShaderStage::Vertex;
+        Type type = UniformBuffer;
+        union {
+            struct {
+                QVkBuffer *buf = nullptr;
+            } uniformBuffer;
+        };
+    };
+
+    QVector<Binding> bindings;
+
+Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT];
+    int lastActiveFrameSlot = -1;
+};
+
 struct QVkGraphicsPipelineState
 {
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
+    QVkRenderPass *renderPass = nullptr;
+    QVkShaderResourceBindings *shaderResourceBindings = nullptr;
 
 Q_VK_RES_PRIVATE(QVkGraphicsPipelineState)
     VkPipelineLayout layout = VK_NULL_HANDLE;
@@ -207,6 +243,7 @@ struct QVkSwapChain
 {
     QVkCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
     QSize sizeInPixels() const { return pixelSize; }
+    const QVkRenderPass *renderPass() const { return &rp; }
 
 Q_VK_RES_PRIVATE(QVkSwapChain)
     static const int DEFAULT_BUFFER_COUNT = 2;
@@ -238,14 +275,16 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
 
     quint32 currentImage = 0; // index in imageRes
     quint32 currentFrame = 0; // index in frameRes
-    VkRenderPass rp = VK_NULL_HANDLE;
+    QVkRenderPass rp;
 };
 
 struct QVkRenderTarget
 {
+    const QVkRenderPass *renderPass() const { return &rp; }
+
 Q_VK_RES_PRIVATE(QVkRenderTarget)
     VkFramebuffer fb = VK_NULL_HANDLE;
-    VkRenderPass rp = VK_NULL_HANDLE;
+    QVkRenderPass rp;
     QSize pixelSize;
     int attCount = 0;
 };
@@ -324,11 +363,13 @@ public:
        The QVk* instance itself is not destroyed by the release and it is safe
        to destroy it right away after calling scheduleRelease.
 
-       create(&res); scheduleRelease(&res); create(&res); ... is valid and can be used to recreate things (when buffer or texture size changes f.ex.)
+       create(res); scheduleRelease(res); create(res); ... is valid and can be used to recreate things (when buffer or texture size changes f.ex.)
      */
 
     bool createGraphicsPipelineState(QVkGraphicsPipelineState *ps);
     //bool createComputePipelineState(QVkComputePipelineState *ps);
+
+    bool createShaderResourceBindings(QVkShaderResourceBindings *srb);
 
     // Buffers are immutable like other resources but (for non-static
     // buffers) the underlying data can change. (its size cannot)
@@ -343,6 +384,8 @@ public:
 
     void scheduleRelease(QVkGraphicsPipelineState *ps);
     //void scheduleRelease(QVkComputePipelineState *ps);
+
+    void scheduleRelease(QVkShaderResourceBindings *srb);
 
     void scheduleRelease(QVkBuffer *buf);
 //    void scheduleRelease(QVkTexture *tex);

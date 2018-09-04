@@ -60,7 +60,7 @@ public:
     void releaseSwapChain(QVkSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();
-    bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil);
+    bool createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthStencil);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 
@@ -91,6 +91,7 @@ public:
     VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
+    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
 
     QMatrix4x4 clipCorrectMatrix;
 
@@ -101,6 +102,7 @@ public:
     struct DeferredReleaseEntry {
         enum Type {
             PipelineState,
+            ShaderResourceBindings,
             Buffer
         };
         Type type;
@@ -110,6 +112,10 @@ public:
                 VkPipeline pipeline;
                 VkPipelineLayout layout;
             } pipelineState;
+            struct {
+                VkDescriptorSetLayout layout;
+                VkDescriptorSet sets[QVK_FRAMES_IN_FLIGHT];
+            } shaderResourceBindings;
             struct {
                 VkBuffer buffer;
                 QVkAlloc allocation;

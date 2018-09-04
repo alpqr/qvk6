@@ -1094,10 +1094,8 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.constData();
     pipelineInfo.pVertexInputState = &vertexInputInfo;
 
-    // Preseve our sanity and do not allow baked-in viewports and such since
-    // other APIs may not support this, and it is not very helpful with
-    // typical Qt Quick / Qt 3D content anyway.
-    VkDynamicState dynEnable[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR }; // ### add others when we start supporting them
+    // ### revise this later
+    VkDynamicState dynEnable[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
     VkPipelineDynamicStateCreateInfo dynamicInfo;
     memset(&dynamicInfo, 0, sizeof(dynamicInfo));
     dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
@@ -1112,7 +1110,44 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     viewportInfo.scissorCount = 1;
     pipelineInfo.pViewportState = &viewportInfo;
 
-    // ###
+    VkPipelineInputAssemblyStateCreateInfo inputAsmInfo;
+    memset(&inputAsmInfo, 0, sizeof(inputAsmInfo));
+    inputAsmInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;;
+    inputAsmInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; // ###
+    pipelineInfo.pInputAssemblyState = &inputAsmInfo;
+
+    VkPipelineRasterizationStateCreateInfo rastInfo;
+    memset(&rastInfo, 0, sizeof(rastInfo));
+    rastInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rastInfo.polygonMode = VK_POLYGON_MODE_FILL;
+    rastInfo.cullMode = VK_CULL_MODE_NONE; // ###
+    rastInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rastInfo.lineWidth = 1.0f;
+    pipelineInfo.pRasterizationState = &rastInfo;
+
+    VkPipelineMultisampleStateCreateInfo msInfo;
+    memset(&msInfo, 0, sizeof(msInfo));
+    msInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    msInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    pipelineInfo.pMultisampleState = &msInfo;
+
+    VkPipelineDepthStencilStateCreateInfo dsInfo;
+    memset(&dsInfo, 0, sizeof(dsInfo));
+    dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    dsInfo.depthTestEnable = VK_FALSE; // ###
+    dsInfo.depthWriteEnable = VK_FALSE;
+    dsInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    pipelineInfo.pDepthStencilState = &dsInfo;
+
+    VkPipelineColorBlendStateCreateInfo blendInfo;
+    memset(&blendInfo, 0, sizeof(blendInfo));
+    blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    VkPipelineColorBlendAttachmentState blendAtt;
+    memset(&blendAtt, 0, sizeof(blendAtt));
+    blendAtt.colorWriteMask = 0xF;
+    blendInfo.attachmentCount = 1;
+    blendInfo.pAttachments = &blendAtt;
+    pipelineInfo.pColorBlendState = &blendInfo;
 
     pipelineInfo.layout = ps->layout;
 

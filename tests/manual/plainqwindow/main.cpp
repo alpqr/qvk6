@@ -47,7 +47,8 @@ private:
     bool event(QEvent *) override;
 
     void init();
-    void initResources(const QVkRenderPass *rp);
+    void initDrawResources(const QVkRenderPass *rp);
+    void releaseDrawResources();
     void releaseResources();
     void recreateSwapChain();
     void releaseSwapChain();
@@ -71,6 +72,8 @@ private:
     QVkBuffer *m_mvpBuf = nullptr;
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipelineState *m_ps = nullptr;
+
+    float m_rotation = 0;
 };
 
 void VWindow::exposeEvent(QExposeEvent *)
@@ -216,7 +219,7 @@ QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-void VWindow::initResources(const QVkRenderPass *rp)
+void VWindow::initDrawResources(const QVkRenderPass *rp)
 {
     // note the dependencies:
     //   ps depends on srb that depends on uniform buffer(s)
@@ -239,11 +242,6 @@ void VWindow::initResources(const QVkRenderPass *rp)
     m_mvpBuf->size = 4 * 4 * sizeof(float);
     m_r->createBuffer(m_mvpBuf);
 
-    QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
-    Q_ASSERT(vs.isValid());
-    QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
-    Q_ASSERT(fs.isValid());
-
     m_srb = new QVkShaderResourceBindings;
     QVkShaderResourceBindings::Binding mvpBinding;
     mvpBinding.binding = 0;
@@ -255,9 +253,13 @@ void VWindow::initResources(const QVkRenderPass *rp)
 
     m_ps = new QVkGraphicsPipelineState;
 
+    QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
+    Q_ASSERT(vs.isValid());
     QVkGraphicsShaderStage vsStage;
     vsStage.type = QVkGraphicsShaderStage::Vertex;
     vsStage.spirv = vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader;
+    QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
+    Q_ASSERT(fs.isValid());
     QVkGraphicsShaderStage fsStage;
     fsStage.type = QVkGraphicsShaderStage::Fragment;
     fsStage.spirv = fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader;
@@ -267,7 +269,7 @@ void VWindow::initResources(const QVkRenderPass *rp)
     QVkVertexInputLayout inputLayout;
     QVkVertexInputLayout::Binding inputBinding;
     inputBinding.stride = 5 * sizeof(float);
-    inputLayout.bindings.append(inputBinding);
+    inputLayout.bindings = { inputBinding };
     QVkVertexInputLayout::Attribute inputAttr1;
     inputAttr1.binding = 0;
     inputAttr1.location = 0;
@@ -280,8 +282,7 @@ void VWindow::initResources(const QVkRenderPass *rp)
     inputAttr2.format = QVkVertexInputLayout::Attribute::Float3;
     inputAttr2.offset = 2 * sizeof(float);
     inputAttr1.semanticName = "COLOR";
-    inputLayout.attributes.append(inputAttr1);
-    inputLayout.attributes.append(inputAttr2);
+    inputLayout.attributes = { inputAttr1, inputAttr2 };
 
     m_ps->vertexInputLayout = inputLayout;
 
@@ -289,16 +290,11 @@ void VWindow::initResources(const QVkRenderPass *rp)
 
     m_ps->shaderResourceBindings = m_srb;
 
-    //m_r->createGraphicsPipelineState(m_ps);
+    m_r->createGraphicsPipelineState(m_ps);
 }
 
-void VWindow::releaseResources()
+void VWindow::releaseDrawResources()
 {
-    if (!m_vkDev)
-        return;
-
-    m_devFuncs->vkDeviceWaitIdle(m_vkDev);
-
     if (m_ps) {
         m_r->scheduleRelease(m_ps);
         delete m_ps;
@@ -322,6 +318,16 @@ void VWindow::releaseResources()
         delete m_triBuf;
         m_triBuf = nullptr;
     }
+}
+
+void VWindow::releaseResources()
+{
+    if (!m_vkDev)
+        return;
+
+    m_devFuncs->vkDeviceWaitIdle(m_vkDev);
+
+    releaseDrawResources();
 
     delete m_r;
     m_r = nullptr;
@@ -345,6 +351,7 @@ void VWindow::releaseResources()
 void VWindow::recreateSwapChain()
 {
     m_hasSwapChain = m_r->importSurface(m_vkSurface, size() * devicePixelRatio(), 0, nullptr, &m_sc);
+    releaseDrawResources();
 }
 
 void VWindow::releaseSwapChain()
@@ -379,7 +386,7 @@ void VWindow::render()
     }
 
     if (!m_ps)
-        initResources(m_sc.renderPass());
+        initDrawResources(m_sc.renderPass());
 
     const QVkClearValue clearValues[2] = {
         QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
@@ -390,12 +397,21 @@ void VWindow::render()
     QMatrix4x4 m = m_r->openGLCorrectionMatrix();
     m.perspective(45.0f, width() / (float) height(), 0.01f, 100.0f);
     m.translate(0, 0, -4);
+    m.rotate(m_rotation, 0, 1, 0);
+    m_rotation += 1;
     m_r->updateBuffer(m_mvpBuf, 0, 4 * 4 * sizeof(float), m.constData());
 
     QVkCommandBuffer *cb = m_sc.currentFrameCommandBuffer();
-//    m_r->cmdSetGraphicsPipelineState(cb, m_ps);
+    QVkViewport vp;
+    vp.r = QRectF(QPointF(0, 0), m_sc.sizeInPixels());
+    m_r->cmdViewport(cb, vp);
+    QVkScissor s;
+    s.r = vp.r;
+    m_r->cmdScissor(cb, s);
+
+    m_r->cmdSetGraphicsPipelineState(cb, m_ps);
     m_r->cmdSetVertexBuffer(cb, 0, m_triBuf, 0);
-//    m_r->cmdDraw(cb, 3, 1, 0, 0);
+    m_r->cmdDraw(cb, 3, 1, 0, 0);
 
     m_r->endPass(&m_sc);
 

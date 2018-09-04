@@ -224,6 +224,7 @@ void VWindow::initDrawResources(const QVkRenderPass *rp)
     // note the dependencies:
     //   ps depends on srb that depends on uniform buffer(s)
     //   ps depends on vertex/index buffers
+    //   ps depends on the renderpass -> now it is tied to the swapchain too
 
     static float vertexData[] = { // Y up, CCW
          0.0f,   0.5f,   1.0f, 0.0f, 0.0f,

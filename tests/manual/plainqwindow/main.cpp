@@ -66,6 +66,7 @@ private:
 
     QVkRender *m_r = nullptr;
     bool m_hasSwapChain = false;
+    bool m_swapChainChanged = false;
     QVkSwapChain m_sc;
 
     QVkBuffer *m_triBuf = nullptr;
@@ -319,11 +320,6 @@ void VWindow::releaseDrawResources()
         delete m_triBuf;
         m_triBuf = nullptr;
     }
-
-    // the device should be idle now so execute all the releases queued above,
-    // this is important when we are called due to a resize (swapchain
-    // recreate)
-    m_r->forceRelease();
 }
 
 void VWindow::releaseResources()
@@ -357,7 +353,7 @@ void VWindow::releaseResources()
 void VWindow::recreateSwapChain()
 {
     m_hasSwapChain = m_r->importSurface(m_vkSurface, size() * devicePixelRatio(), 0, nullptr, &m_sc);
-    releaseDrawResources();
+    m_swapChainChanged = true;
 }
 
 void VWindow::releaseSwapChain()
@@ -389,6 +385,11 @@ void VWindow::render()
     if (r != QVkRender::FrameOpSuccess) {
         requestUpdate();
         return;
+    }
+
+    if (m_swapChainChanged) {
+        m_swapChainChanged = false;
+        releaseDrawResources();
     }
 
     if (!m_ps)

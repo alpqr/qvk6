@@ -1405,17 +1405,11 @@ void QVkRenderPrivate::finishFrame()
     ++finishedFrameCount;
 }
 
-static inline bool isResourceUsedByInFlightFrames(int lastActiveFrameSlot, int currentFrameSlot)
-{
-    return lastActiveFrameSlot >= 0
-            && currentFrameSlot <= (lastActiveFrameSlot + QVK_FRAMES_IN_FLIGHT - 1) % QVK_FRAMES_IN_FLIGHT;
-}
-
 void QVkRenderPrivate::executeDeferredReleases(bool forced)
 {
     for (int i = releaseQueue.count() - 1; i >= 0; --i) {
         const QVkRenderPrivate::DeferredReleaseEntry &e(releaseQueue[i]);
-        if (forced || !isResourceUsedByInFlightFrames(e.lastActiveFrameSlot, currentFrameSlot)) {
+        if (forced || currentFrameSlot == e.lastActiveFrameSlot || e.lastActiveFrameSlot < 0) {
             switch (e.type) {
             case QVkRenderPrivate::DeferredReleaseEntry::PipelineState:
                 if (e.pipelineState.pipeline)
@@ -1501,11 +1495,6 @@ void QVkRender::scheduleRelease(QVkBuffer *buf)
     }
 
     d->releaseQueue.append(e);
-}
-
-void QVkRender::forceRelease()
-{
-    d->executeDeferredReleases(true);
 }
 
 QT_END_NAMESPACE

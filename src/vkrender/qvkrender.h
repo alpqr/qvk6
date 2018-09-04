@@ -390,8 +390,6 @@ public:
     void scheduleRelease(QVkBuffer *buf);
 //    void scheduleRelease(QVkTexture *tex);
 
-    void forceRelease();
-
     bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags, QVkTexture *depthStencil, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
     FrameOpResult beginFrame(QVkSwapChain *sc);

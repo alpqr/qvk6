@@ -506,7 +506,10 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
         return false;
     }
 
-    VkFenceCreateInfo fenceInfo = { VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, nullptr, VK_FENCE_CREATE_SIGNALED_BIT };
+    VkFenceCreateInfo fenceInfo;
+    memset(&fenceInfo, 0, sizeof(fenceInfo));
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
     for (int i = 0; i < swapChain->bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(swapChain->imageRes[i]);
@@ -540,7 +543,10 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
 
     swapChain->currentImage = 0;
 
-    VkSemaphoreCreateInfo semInfo = { VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO, nullptr, 0 };
+    VkSemaphoreCreateInfo semInfo;
+    memset(&semInfo, 0, sizeof(semInfo));
+    semInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         QVkSwapChain::FrameResources &frame(swapChain->frameRes[i]);
 
@@ -676,8 +682,13 @@ QVkRender::FrameOpResult QVkRender::beginFrame(QVkSwapChain *sc)
         image.cmdBuf.cb = VK_NULL_HANDLE;
     }
 
-    VkCommandBufferAllocateInfo cmdBufInfo = {
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, nullptr, d->cmdPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1 };
+    VkCommandBufferAllocateInfo cmdBufInfo;
+    memset(&cmdBufInfo, 0, sizeof(cmdBufInfo));
+    cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdBufInfo.commandPool = d->cmdPool;
+    cmdBufInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdBufInfo.commandBufferCount = 1;
+
     VkResult err = d->df->vkAllocateCommandBuffers(d->dev, &cmdBufInfo, &image.cmdBuf.cb);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
@@ -687,8 +698,10 @@ QVkRender::FrameOpResult QVkRender::beginFrame(QVkSwapChain *sc)
         return FrameOpError;
     }
 
-    VkCommandBufferBeginInfo cmdBufBeginInfo = {
-        VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, nullptr, 0, nullptr };
+    VkCommandBufferBeginInfo cmdBufBeginInfo;
+    memset(&cmdBufBeginInfo, 0, sizeof(cmdBufBeginInfo));
+    cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
     err = d->df->vkBeginCommandBuffer(image.cmdBuf.cb, &cmdBufBeginInfo);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
@@ -882,7 +895,7 @@ bool QVkRender::createBuffer(QVkBuffer *buf, const void *data)
 
     VkBufferCreateInfo bufferInfo;
     memset(&bufferInfo, 0, sizeof(bufferInfo));
-    bufferInfo.sType = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = buf->size;
     bufferInfo.usage = toVkBufferUsage(buf->usage);
 
@@ -1040,16 +1053,13 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
         VkShaderModule shader = d->createShader(shaderStage.spirv);
         if (shader) {
             shaders.append(shader);
-            VkPipelineShaderStageCreateInfo info = {
-                VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-                nullptr,
-                0,
-                toVkShaderStage(shaderStage.type),
-                shader,
-                shaderStage.entryPoint,
-                nullptr
-            };
-            shaderStageCreateInfos.append(info);
+            VkPipelineShaderStageCreateInfo shaderInfo;
+            memset(&shaderInfo, 0, sizeof(shaderInfo));
+            shaderInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            shaderInfo.stage = toVkShaderStage(shaderStage.type);
+            shaderInfo.module = shader;
+            shaderInfo.pName = shaderStage.entryPoint;
+            shaderStageCreateInfos.append(shaderInfo);
         }
     }
     pipelineInfo.stageCount = shaderStageCreateInfos.count();
@@ -1076,9 +1086,8 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
         vertexAttributes.append(attributeInfo);
     }
     VkPipelineVertexInputStateCreateInfo vertexInputInfo;
+    memset(&vertexInputInfo, 0, sizeof(vertexInputInfo));
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.pNext = nullptr;
-    vertexInputInfo.flags = 0;
     vertexInputInfo.vertexBindingDescriptionCount = vertexBindings.count();
     vertexInputInfo.pVertexBindingDescriptions = vertexBindings.constData();
     vertexInputInfo.vertexAttributeDescriptionCount = vertexAttributes.count();
@@ -1155,13 +1164,11 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
         bindings.append(binding);
     }
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo = {
-        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        nullptr,
-        0, // flags
-        uint32_t(bindings.count()),
-        bindings.constData()
-    };
+    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    memset(&layoutInfo, 0, sizeof(layoutInfo));
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = uint32_t(bindings.count());
+    layoutInfo.pBindings = bindings.constData();
 
     VkResult err = d->df->vkCreateDescriptorSetLayout(d->dev, &layoutInfo, nullptr, &srb->layout);
     if (err != VK_SUCCESS) {
@@ -1169,13 +1176,15 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
         return false;
     }
 
-    VkDescriptorSetAllocateInfo allocInfo = {
-        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        nullptr,
-        d->descriptorPool,
-        QVK_FRAMES_IN_FLIGHT,
-        &srb->layout
-    };
+    VkDescriptorSetAllocateInfo allocInfo;
+    memset(&allocInfo, 0, sizeof(allocInfo));
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = d->descriptorPool;
+    allocInfo.descriptorSetCount = QVK_FRAMES_IN_FLIGHT;
+    VkDescriptorSetLayout layouts[QVK_FRAMES_IN_FLIGHT];
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        layouts[i] = srb->layout;
+    allocInfo.pSetLayouts = layouts;
     err = d->df->vkAllocateDescriptorSets(d->dev, &allocInfo, srb->descSets);
     if (err != VK_SUCCESS) {
         qWarning("Failed to allocate descriptor sets: %d", err);

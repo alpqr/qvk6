@@ -392,10 +392,9 @@ void VWindow::render()
     m.translate(0, 0, -4);
     m_r->updateBuffer(m_mvpBuf, 0, 4 * 4 * sizeof(float), m.constData());
 
-//    QVkCommandBuffer *cb = m_sc.currentFrameCommandBuffer();
-
+    QVkCommandBuffer *cb = m_sc.currentFrameCommandBuffer();
 //    m_r->cmdSetGraphicsPipelineState(cb, m_ps);
-//    m_r->cmdSetVertexBuffer(cb, 0, m_triBuf, 0);
+    m_r->cmdSetVertexBuffer(cb, 0, m_triBuf, 0);
 //    m_r->cmdDraw(cb, 3, 1, 0, 0);
 
     m_r->endPass(&m_sc);

@@ -318,6 +318,11 @@ void VWindow::releaseDrawResources()
         delete m_triBuf;
         m_triBuf = nullptr;
     }
+
+    // the device should be idle now so execute all the releases queued above,
+    // this is important when we are called due to a resize (swapchain
+    // recreate)
+    m_r->forceRelease();
 }
 
 void VWindow::releaseResources()

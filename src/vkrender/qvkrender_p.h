@@ -66,7 +66,7 @@ public:
 
     void prepareNewFrame();
     void finishFrame();
-    void executeDeferredReleases(bool goingDown = false);
+    void executeDeferredReleases(bool forced = false);
     void prepareBufferForUse(QVkBuffer *buf);
 
     QVulkanInstance *inst;

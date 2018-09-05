@@ -49,6 +49,7 @@
 ****************************************************************************/
 
 #include <QVulkanWindow>
+#include "trianglerenderer.h"
 
 class QVkRender;
 
@@ -67,4 +68,5 @@ public:
 protected:
     QVulkanWindow *m_window;
     QVkRender *m_r;
+    TriangleRenderer m_triRenderer;
 };

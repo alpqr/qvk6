@@ -808,6 +808,11 @@ void QVkRender::endPass(QVkSwapChain *sc)
     endPass(&sc->imageRes[sc->currentImage].cmdBuf);
 }
 
+void QVkRender::importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRp)
+{
+    outRp->rp = window->defaultRenderPass();
+}
+
 void QVkRender::importVulkanWindowCurrentFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb)
 {
     outRt->fb = window->currentFramebuffer();

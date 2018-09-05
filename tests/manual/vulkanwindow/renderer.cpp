@@ -50,7 +50,6 @@
 
 #include "renderer.h"
 #include <QVulkanFunctions>
-#include <QVkRender>
 
 Renderer::Renderer(QVulkanWindow *w)
     : m_window(w)
@@ -66,18 +65,27 @@ void Renderer::initResources()
     params.cmdPool = m_window->graphicsCommandPool();
     params.gfxQueue = m_window->graphicsQueue();
     m_r = new QVkRender(params);
+
+    m_triRenderer.setVkRender(m_r);
+    m_triRenderer.initResources();
 }
 
 void Renderer::initSwapChainResources()
 {
+    QVkRenderPass rp;
+    m_r->importVulkanWindowRenderPass(m_window, &rp);
+    m_triRenderer.initRenderPassDependentResources(&rp);
 }
 
 void Renderer::releaseSwapChainResources()
 {
+    m_triRenderer.releaseRenderPassDependentResources();
 }
 
 void Renderer::releaseResources()
 {
+    m_triRenderer.releaseResources();
+
     delete m_r;
     m_r = nullptr;
 }
@@ -95,6 +103,8 @@ void Renderer::startNextFrame()
         QVkClearValue(1.0f, 0)
     };
     m_r->beginPass(&rt, &cb, clearValues);
+
+    m_triRenderer.queueDraw(&cb, rt.sizeInPixels());
 
     m_r->endPass(&cb);
 

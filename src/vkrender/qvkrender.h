@@ -280,6 +280,7 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
 
 struct QVkRenderTarget
 {
+    QSize sizeInPixels() const { return pixelSize; }
     const QVkRenderPass *renderPass() const { return &rp; }
 
 Q_VK_RES_PRIVATE(QVkRenderTarget)
@@ -397,6 +398,7 @@ public:
     void beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues);
     void endPass(QVkSwapChain *sc);
 
+    void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRp);
     void importVulkanWindowCurrentFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb);
     void beginFrame(QVulkanWindow *window);
     void endFrame(QVulkanWindow *window);

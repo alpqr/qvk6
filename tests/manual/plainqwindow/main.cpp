@@ -212,7 +212,7 @@ void VWindow::releaseResources()
 
     m_devFuncs->vkDeviceWaitIdle(m_vkDev);
 
-    m_triRenderer.releaseRenderPassDependentResources();
+    m_triRenderer.releaseOutputDependentResources();
     m_triRenderer.releaseResources();
 
     delete m_r;
@@ -273,11 +273,11 @@ void VWindow::render()
 
     if (m_swapChainChanged) {
         m_swapChainChanged = false;
-        m_triRenderer.releaseRenderPassDependentResources();
+        m_triRenderer.releaseOutputDependentResources();
     }
 
     if (!m_triRenderer.isPipelineInitialized())
-        m_triRenderer.initRenderPassDependentResources(m_sc.renderPass());
+        m_triRenderer.initOutputDependentResources(m_sc.renderPass(), m_sc.sizeInPixels());
 
     const QVkClearValue clearValues[2] = {
         QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),

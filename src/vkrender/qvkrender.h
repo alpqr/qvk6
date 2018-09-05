@@ -55,23 +55,32 @@ static const int QVK_MAX_UNIFORM_BUFFERS_PER_SRB = 4;
 
 struct QVkClearValue
 {
-    QVkClearValue(const QVector4D &rgba_) : rgba(rgba_) { }
+    QVkClearValue() { }
+    QVkClearValue(const QVector4D &rgba_) : rgba(rgba_), isDepthStencil(false) { }
     QVkClearValue(float d_, quint32 s_) : d(d_), s(s_), isDepthStencil(true) { }
     QVector4D rgba;
-    float d = 1;
-    quint32 s = 0;
-    bool isDepthStencil = false;
+    float d;
+    quint32 s;
+    bool isDepthStencil;
 };
 
 struct QVkViewport
 {
+    QVkViewport() { }
+    QVkViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
+        : r(x, y, w, h), minDepth(minDepth_), maxDepth(maxDepth_)
+    { }
     QRectF r;
-    float minDepth = 0.0f;
-    float maxDepth = 1.0f;
+    float minDepth;
+    float maxDepth;
 };
 
 struct QVkScissor
 {
+    QVkScissor() { }
+    QVkScissor(float x, float y, float w, float h)
+        : r(x, y, w, h)
+    { }
     QRectF r;
 };
 
@@ -83,8 +92,12 @@ struct QVkVertexInputLayout
             PerVertex,
             PerInstance
         };
-        quint32 stride = 0; // if another api needs this in setVertexBuffer (d3d12), make the cb store a ptr to the current ps and look up the stride via that
-        Classification classification = PerVertex;
+        Binding() { }
+        Binding(quint32 stride_, Classification k = PerVertex)
+            : stride(stride_), classification(k)
+        { }
+        quint32 stride; // if another api needs this in setVertexBuffer (d3d12), make the cb store a ptr to the current ps and look up the stride via that
+        Classification classification;
     };
 
     struct Attribute {
@@ -97,12 +110,18 @@ struct QVkVertexInputLayout
             UNormByte2,
             UNormByte
         };
-        int binding = 0;
-        int location = 0;
-        Format format = Float4;
-        quint32 offset = 0;
-        const char *semanticName = nullptr; // POSITION, COLOR, TEXCOORD, ...
-        int semanticIndex = 0; // matters for TEXCOORD
+        Attribute() { }
+        Attribute(int binding_, int location_, Format format_, quint32 offset_,
+                  const char *semanticName_, int semanticIndex_ = 0)
+            : binding(binding_), location(location_), format(format_), offset(offset_),
+              semanticName(semanticName_), semanticIndex(semanticIndex_)
+        { }
+        int binding;
+        int location;
+        Format format;
+        quint32 offset;
+        const char *semanticName; // POSITION, COLOR, TEXCOORD, ...
+        int semanticIndex; // matters for TEXCOORD
     };
 
     QVector<Binding> bindings; // aka slot (d3d12)
@@ -119,9 +138,14 @@ struct QVkGraphicsShaderStage
         TessellationEvaluation // Domain
     };
 
-    Type type = Vertex;
+    QVkGraphicsShaderStage() { }
+    QVkGraphicsShaderStage(Type type_, const QByteArray &spirv_, const char *name_ = "main")
+        : type(type_), spirv(spirv_), name(name_)
+    { }
+
+    Type type;
     QByteArray spirv;
-    const char *entryPoint = "main";
+    const char *name;
 };
 
 #define Q_VK_RES_PRIVATE(Class) \
@@ -146,13 +170,33 @@ struct QVkShaderResourceBindings
         enum Type {
             UniformBuffer
         };
-        int binding = 0;
-        QVkGraphicsShaderStage::Type stage = QVkGraphicsShaderStage::Vertex;
-        Type type = UniformBuffer;
+
+        enum StageFlag {
+            VertexStage = 1 << 0,
+            FragmentStage = 1 << 1,
+            GeometryStage = 1 << 2,
+            TessellationControlStage = 1 << 3,
+            TessellationEvaluationStage = 1 << 4
+        };
+        Q_DECLARE_FLAGS(StageFlags, StageFlag)
+
+        static Binding uniformBuffer(int binding_, StageFlags stage_, QVkBuffer *buf_)
+        {
+            Binding b;
+            b.binding = binding_;
+            b.stage = stage_;
+            b.type = UniformBuffer;
+            b.ubuf.buf = buf_;
+            return b;
+        }
+
+        int binding;
+        StageFlags stage;
+        Type type;
         union {
             struct {
                 QVkBuffer *buf;
-            } uniformBuffer;
+            } ubuf;
         };
     };
 
@@ -163,6 +207,8 @@ Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT];
     int lastActiveFrameSlot = -1;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
 
 struct QVkGraphicsPipelineState
 {
@@ -193,9 +239,13 @@ struct QVkBuffer
     };
     Q_DECLARE_FLAGS(UsageFlags, UsageFlag)
 
-    Type type = DynamicType;
-    UsageFlags usage = VertexBuffer;
-    int size = 0;
+    QVkBuffer(Type type_, UsageFlags usage_, int size_)
+        : type(type_), usage(usage_), size(size_)
+    { }
+
+    Type type;
+    UsageFlags usage;
+    int size;
 
     bool isStatic() const { return type == StaticType; }
 

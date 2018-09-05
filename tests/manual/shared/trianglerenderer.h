@@ -38,8 +38,8 @@ public:
     bool isPipelineInitialized() const { return m_ps != nullptr; }
     void initResources();
     void releaseResources();
-    void initRenderPassDependentResources(const QVkRenderPass *rp);
-    void releaseRenderPassDependentResources();
+    void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize);
+    void releaseOutputDependentResources();
     void queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels);
 
 private:
@@ -50,6 +50,7 @@ private:
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipelineState *m_ps = nullptr;
 
+    QMatrix4x4 m_proj;
     float m_rotation = 0;
 };
 

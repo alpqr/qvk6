@@ -74,12 +74,12 @@ void Renderer::initSwapChainResources()
 {
     QVkRenderPass rp;
     m_r->importVulkanWindowRenderPass(m_window, &rp);
-    m_triRenderer.initRenderPassDependentResources(&rp);
+    m_triRenderer.initOutputDependentResources(&rp, m_window->swapChainImageSize());
 }
 
 void Renderer::releaseSwapChainResources()
 {
-    m_triRenderer.releaseRenderPassDependentResources();
+    m_triRenderer.releaseOutputDependentResources();
 }
 
 void Renderer::releaseResources()

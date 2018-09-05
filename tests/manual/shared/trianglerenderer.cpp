@@ -51,68 +51,52 @@ void TriangleRenderer::initResources()
         -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
          0.5f,  -0.5f,   0.0f, 0.0f, 1.0f
     };
-    m_triBuf = new QVkBuffer;
-    m_triBuf->type = QVkBuffer::StaticType;
-    m_triBuf->usage = QVkBuffer::VertexBuffer;
-    m_triBuf->size = sizeof(vertexData);
+    m_triBuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
     m_r->createBuffer(m_triBuf, vertexData);
 
-    m_mvpBuf = new QVkBuffer;
-    m_mvpBuf->type = QVkBuffer::DynamicType;
-    m_mvpBuf->usage = QVkBuffer::UniformBuffer;
-    m_mvpBuf->size = 4 * 4 * sizeof(float);
+    m_mvpBuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 4 * 4 * sizeof(float));
     m_r->createBuffer(m_mvpBuf);
 
     m_srb = new QVkShaderResourceBindings;
-    QVkShaderResourceBindings::Binding mvpBinding;
-    mvpBinding.binding = 0;
-    mvpBinding.stage = QVkGraphicsShaderStage::Vertex;
-    mvpBinding.type = QVkShaderResourceBindings::Binding::UniformBuffer;
-    mvpBinding.uniformBuffer.buf = m_mvpBuf;
-    m_srb->bindings = { mvpBinding };
+    m_srb->bindings = {
+        QVkShaderResourceBindings::Binding::uniformBuffer(0, QVkShaderResourceBindings::Binding::VertexStage, m_mvpBuf)
+    };
     m_r->createShaderResourceBindings(m_srb);
 }
 
-void TriangleRenderer::initRenderPassDependentResources(const QVkRenderPass *rp)
+void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
 {
     m_ps = new QVkGraphicsPipelineState;
 
     QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());
-    QVkGraphicsShaderStage vsStage;
-    vsStage.type = QVkGraphicsShaderStage::Vertex;
-    vsStage.spirv = vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader;
     QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
     Q_ASSERT(fs.isValid());
-    QVkGraphicsShaderStage fsStage;
-    fsStage.type = QVkGraphicsShaderStage::Fragment;
-    fsStage.spirv = fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader;
-
-    m_ps->shaderStages = { vsStage, fsStage };
+    m_ps->shaderStages = {
+        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
+                               vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
+        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Fragment,
+                               fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
+    };
 
     QVkVertexInputLayout inputLayout;
-    QVkVertexInputLayout::Binding inputBinding;
-    inputBinding.stride = 5 * sizeof(float);
-    inputLayout.bindings = { inputBinding };
-    QVkVertexInputLayout::Attribute inputAttr1;
-    inputAttr1.binding = 0;
-    inputAttr1.location = 0;
-    inputAttr1.format = QVkVertexInputLayout::Attribute::Float2;
-    inputAttr1.offset = 0;
-    inputAttr1.semanticName = "POSITION";
-    QVkVertexInputLayout::Attribute inputAttr2;
-    inputAttr2.binding = 0;
-    inputAttr2.location = 1;
-    inputAttr2.format = QVkVertexInputLayout::Attribute::Float3;
-    inputAttr2.offset = 2 * sizeof(float);
-    inputAttr1.semanticName = "COLOR";
-    inputLayout.attributes = { inputAttr1, inputAttr2 };
+    inputLayout.bindings = {
+        QVkVertexInputLayout::Binding(5 * sizeof(float))
+    };
+    inputLayout.attributes = {
+        QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float2, 0, "POSITION"),
+        QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR")
+    };
 
     m_ps->vertexInputLayout = inputLayout;
     m_ps->renderPass = rp;
     m_ps->shaderResourceBindings = m_srb;
 
     m_r->createGraphicsPipelineState(m_ps);
+
+    m_proj = m_r->openGLCorrectionMatrix();
+    m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
+    m_proj.translate(0, 0, -4);
 }
 
 void TriangleRenderer::releaseResources()
@@ -136,7 +120,7 @@ void TriangleRenderer::releaseResources()
     }
 }
 
-void TriangleRenderer::releaseRenderPassDependentResources()
+void TriangleRenderer::releaseOutputDependentResources()
 {
     if (m_ps) {
         m_r->scheduleRelease(m_ps);
@@ -147,19 +131,13 @@ void TriangleRenderer::releaseRenderPassDependentResources()
 
 void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
-    QMatrix4x4 m = m_r->openGLCorrectionMatrix();
-    m.perspective(45.0f, outputSizeInPixels.width() / (float) outputSizeInPixels.height(), 0.01f, 100.0f);
-    m.translate(0, 0, -4);
-    m.rotate(m_rotation, 0, 1, 0);
     m_rotation += 1;
-    m_r->updateBuffer(m_mvpBuf, 0, 4 * 4 * sizeof(float), m.constData());
+    QMatrix4x4 mvp = m_proj;
+    mvp.rotate(m_rotation, 0, 1, 0);
+    m_r->updateBuffer(m_mvpBuf, 0, 4 * 4 * sizeof(float), mvp.constData());
 
-    QVkViewport vp;
-    vp.r = QRectF(QPointF(0, 0), outputSizeInPixels);
-    m_r->cmdViewport(cb, vp);
-    QVkScissor s;
-    s.r = vp.r;
-    m_r->cmdScissor(cb, s);
+    m_r->cmdViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->cmdScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
     m_r->cmdSetGraphicsPipelineState(cb, m_ps);
     m_r->cmdSetVertexBuffer(cb, 0, m_triBuf, 0);

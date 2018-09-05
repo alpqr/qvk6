@@ -1063,7 +1063,7 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
             shaderInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             shaderInfo.stage = toVkShaderStage(shaderStage.type);
             shaderInfo.module = shader;
-            shaderInfo.pName = shaderStage.entryPoint;
+            shaderInfo.pName = shaderStage.name;
             shaderStageCreateInfos.append(shaderInfo);
         }
     }
@@ -1185,6 +1185,22 @@ static inline VkDescriptorType toVkDescriptorType(QVkShaderResourceBindings::Bin
     }
 }
 
+static VkShaderStageFlags toVkShaderStageFlags(QVkShaderResourceBindings::Binding::StageFlags stage)
+{
+    int s = 0;
+    if (stage.testFlag(QVkShaderResourceBindings::Binding::VertexStage))
+        s |= VK_SHADER_STAGE_VERTEX_BIT;
+    if (stage.testFlag(QVkShaderResourceBindings::Binding::FragmentStage))
+        s |= VK_SHADER_STAGE_FRAGMENT_BIT;
+    if (stage.testFlag(QVkShaderResourceBindings::Binding::GeometryStage))
+        s |= VK_SHADER_STAGE_GEOMETRY_BIT;
+    if (stage.testFlag(QVkShaderResourceBindings::Binding::TessellationControlStage))
+        s |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+    if (stage.testFlag(QVkShaderResourceBindings::Binding::TessellationEvaluationStage))
+        s |= VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+    return VkShaderStageFlags(s);
+}
+
 bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
 {
     if (srb->layout) // no repeated create without a scheduleRelease first
@@ -1200,7 +1216,7 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
         binding.binding = b.binding;
         binding.descriptorType = toVkDescriptorType(b.type);
         binding.descriptorCount = 1; // no array support yet
-        binding.stageFlags = toVkShaderStage(b.stage);
+        binding.stageFlags = toVkShaderStageFlags(b.stage);
         bindings.append(binding);
     }
 
@@ -1247,7 +1263,7 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 VkDescriptorBufferInfo bufInfo;
-                QVkBuffer *buf = b.uniformBuffer.buf;
+                QVkBuffer *buf = b.ubuf.buf;
                 bufInfo.buffer = buf->isStatic() ? buf->d[0].buffer : buf->d[i].buffer;
                 bufInfo.offset = 0;
                 bufInfo.range = buf->size;
@@ -1338,7 +1354,7 @@ void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPip
     for (const QVkShaderResourceBindings::Binding &b : qAsConst(ps->shaderResourceBindings->bindings)) {
         switch (b.type) {
         case QVkShaderResourceBindings::Binding::UniformBuffer:
-            d->prepareBufferForUse(b.uniformBuffer.buf);
+            d->prepareBufferForUse(b.ubuf.buf);
             break;
         // ### others
         default:

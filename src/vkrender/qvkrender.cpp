@@ -1054,9 +1054,9 @@ static VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topology t)
 static VkCullModeFlags toVkCullMode(QVkGraphicsPipelineState::CullMode c)
 {
     int m = 0;
-    if (c.testFlag(QVkGraphicsPipelineState::CullFront))
+    if (c.testFlag(QVkGraphicsPipelineState::Front))
         m |= VK_CULL_MODE_FRONT_BIT;
-    if (c.testFlag(QVkGraphicsPipelineState::CullBack))
+    if (c.testFlag(QVkGraphicsPipelineState::Back))
         m |= VK_CULL_MODE_BACK_BIT;
     return VkCullModeFlags(m);
 }
@@ -1071,6 +1071,86 @@ static VkFrontFace toVkFrontFace(QVkGraphicsPipelineState::FrontFace f)
     default:
         Q_UNREACHABLE();
         return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    }
+}
+
+static VkColorComponentFlags toVkColorComponents(QVkGraphicsPipelineState::ColorMask c)
+{
+    int f = 0;
+    if (c.testFlag(QVkGraphicsPipelineState::R))
+        f |= VK_COLOR_COMPONENT_R_BIT;
+    if (c.testFlag(QVkGraphicsPipelineState::G))
+        f |= VK_COLOR_COMPONENT_G_BIT;
+    if (c.testFlag(QVkGraphicsPipelineState::B))
+        f |= VK_COLOR_COMPONENT_B_BIT;
+    if (c.testFlag(QVkGraphicsPipelineState::A))
+        f |= VK_COLOR_COMPONENT_A_BIT;
+    return VkColorComponentFlags(f);
+}
+
+static VkBlendFactor toVkBlendFactor(QVkGraphicsPipelineState::BlendFactor f)
+{
+    switch (f) {
+    case QVkGraphicsPipelineState::Zero:
+        return VK_BLEND_FACTOR_ZERO;
+    case QVkGraphicsPipelineState::One:
+        return VK_BLEND_FACTOR_ONE;
+    case QVkGraphicsPipelineState::SrcColor:
+        return VK_BLEND_FACTOR_SRC_COLOR;
+    case QVkGraphicsPipelineState::OneMinusSrcColor:
+        return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
+    case QVkGraphicsPipelineState::DstColor:
+        return VK_BLEND_FACTOR_DST_COLOR;
+    case QVkGraphicsPipelineState::OneMinusDstColor:
+        return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
+    case QVkGraphicsPipelineState::SrcAlpha:
+        return VK_BLEND_FACTOR_SRC_ALPHA;
+    case QVkGraphicsPipelineState::OneMinusSrcAlpha:
+        return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    case QVkGraphicsPipelineState::DstAlpha:
+        return VK_BLEND_FACTOR_DST_ALPHA;
+    case QVkGraphicsPipelineState::OneMinusDstAlpha:
+        return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
+    case QVkGraphicsPipelineState::ConstantColor:
+        return VK_BLEND_FACTOR_CONSTANT_COLOR;
+    case QVkGraphicsPipelineState::OneMinusConstantColor:
+        return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
+    case QVkGraphicsPipelineState::ConstantAlpha:
+        return VK_BLEND_FACTOR_CONSTANT_ALPHA;
+    case QVkGraphicsPipelineState::OneMinusConstantAlpha:
+        return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
+    case QVkGraphicsPipelineState::SrcAlphaSaturate:
+        return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
+    case QVkGraphicsPipelineState::Src1Color:
+        return VK_BLEND_FACTOR_SRC1_COLOR;
+    case QVkGraphicsPipelineState::OneMinusSrc1Color:
+        return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
+    case QVkGraphicsPipelineState::Src1Alpha:
+        return VK_BLEND_FACTOR_SRC1_ALPHA;
+    case QVkGraphicsPipelineState::OneMinusSrc1Alpha:
+        return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
+    default:
+        Q_UNREACHABLE();
+        return VK_BLEND_FACTOR_ZERO;
+    }
+}
+
+static VkBlendOp toVkBlendOp(QVkGraphicsPipelineState::BlendOp op)
+{
+    switch (op) {
+    case QVkGraphicsPipelineState::Add:
+        return VK_BLEND_OP_ADD;
+    case QVkGraphicsPipelineState::Subtract:
+        return VK_BLEND_OP_SUBTRACT;
+    case QVkGraphicsPipelineState::ReverseSubtract:
+        return VK_BLEND_OP_REVERSE_SUBTRACT;
+    case QVkGraphicsPipelineState::Min:
+        return VK_BLEND_OP_MIN;
+    case QVkGraphicsPipelineState::Max:
+        return VK_BLEND_OP_MAX;
+    default:
+        Q_UNREACHABLE();
+        return VK_BLEND_OP_ADD;
     }
 }
 
@@ -1143,13 +1223,17 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.constData();
     pipelineInfo.pVertexInputState = &vertexInputInfo;
 
-    // ### revise this later
-    VkDynamicState dynEnable[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    QVarLengthArray<VkDynamicState, 8> dynEnable;
+    dynEnable << VK_DYNAMIC_STATE_VIEWPORT;
+    dynEnable << VK_DYNAMIC_STATE_SCISSOR;
+    if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesBlendConstants))
+        dynEnable << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+
     VkPipelineDynamicStateCreateInfo dynamicInfo;
     memset(&dynamicInfo, 0, sizeof(dynamicInfo));
     dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicInfo.dynamicStateCount = sizeof(dynEnable) / sizeof(VkDynamicState);
-    dynamicInfo.pDynamicStates = dynEnable;
+    dynamicInfo.dynamicStateCount = dynEnable.count();
+    dynamicInfo.pDynamicStates = dynEnable.constData();
     pipelineInfo.pDynamicState = &dynamicInfo;
 
     VkPipelineViewportStateCreateInfo viewportInfo;
@@ -1192,11 +1276,22 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     VkPipelineColorBlendStateCreateInfo blendInfo;
     memset(&blendInfo, 0, sizeof(blendInfo));
     blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    VkPipelineColorBlendAttachmentState blendAtt;
-    memset(&blendAtt, 0, sizeof(blendAtt));
-    blendAtt.colorWriteMask = 0xF;
-    blendInfo.attachmentCount = 1;
-    blendInfo.pAttachments = &blendAtt;
+    QVarLengthArray<VkPipelineColorBlendAttachmentState, 4> targetBlends;
+    for (const QVkGraphicsPipelineState::TargetBlend &b : qAsConst(ps->targetBlends)) {
+        VkPipelineColorBlendAttachmentState blend;
+        memset(&blend, 0, sizeof(blend));
+        blend.colorWriteMask = toVkColorComponents(b.colorWrite);
+        blend.blendEnable = b.enable;
+        blend.srcColorBlendFactor = toVkBlendFactor(b.srcColor);
+        blend.srcAlphaBlendFactor = toVkBlendFactor(b.srcAlpha);
+        blend.colorBlendOp = toVkBlendOp(b.opColor);
+        blend.dstColorBlendFactor = toVkBlendFactor(b.dstColor);
+        blend.dstAlphaBlendFactor = toVkBlendFactor(b.dstAlpha);
+        blend.alphaBlendOp = toVkBlendOp(b.opAlpha);
+        targetBlends.append(blend);
+    }
+    blendInfo.attachmentCount = targetBlends.count();
+    blendInfo.pAttachments = targetBlends.constData();
     pipelineInfo.pColorBlendState = &blendInfo;
 
     pipelineInfo.layout = ps->layout;
@@ -1449,6 +1544,12 @@ void QVkRender::cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor)
 {
     VkRect2D s = toVkScissor(scissor);
     d->df->vkCmdSetScissor(cb->cb, 0, 1, &s);
+}
+
+void QVkRender::cmdBlendConstants(QVkCommandBuffer *cb, const QVector4D &c)
+{
+    const float bc[4] = { c.x(), c.y(), c.z(), c.w() };
+    d->df->vkCmdSetBlendConstants(cb->cb, bc);
 }
 
 void QVkRender::cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)

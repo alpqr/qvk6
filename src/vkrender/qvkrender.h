@@ -212,6 +212,11 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
 
 struct QVkGraphicsPipelineState
 {
+    enum Flag {
+        UsesBlendConstants = 1 << 0
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
     enum Topology {
         Triangles,
         TriangleStrip,
@@ -222,8 +227,8 @@ struct QVkGraphicsPipelineState
     };
 
     enum CullModeFlag {
-        CullFront = 1 << 0,
-        CullBack = 1 << 1
+        Front = 1 << 0,
+        Back = 1 << 1
     };
     Q_DECLARE_FLAGS(CullMode, CullModeFlag)
 
@@ -232,10 +237,61 @@ struct QVkGraphicsPipelineState
         CW
     };
 
+    enum ColorMaskComponent {
+        R = 1 << 0,
+        G = 1 << 1,
+        B = 1 << 2,
+        A = 1 << 3
+    };
+    Q_DECLARE_FLAGS(ColorMask, ColorMaskComponent)
+
+    enum BlendFactor {
+        Zero,
+        One,
+        SrcColor,
+        OneMinusSrcColor,
+        DstColor,
+        OneMinusDstColor,
+        SrcAlpha,
+        OneMinusSrcAlpha,
+        DstAlpha,
+        OneMinusDstAlpha,
+        ConstantColor,
+        OneMinusConstantColor,
+        ConstantAlpha,
+        OneMinusConstantAlpha,
+        SrcAlphaSaturate,
+        Src1Color,
+        OneMinusSrc1Color,
+        Src1Alpha,
+        OneMinusSrc1Alpha
+    };
+
+    enum BlendOp {
+        Add,
+        Subtract,
+        ReverseSubtract,
+        Min,
+        Max
+    };
+
+    struct TargetBlend {
+        ColorMask colorWrite = R | G | B | A;
+        bool enable = false;
+        BlendFactor srcColor = One;
+        BlendFactor dstColor = OneMinusSrcAlpha;
+        BlendOp opColor = Add;
+        BlendFactor srcAlpha = One;
+        BlendFactor dstAlpha = OneMinusSrcAlpha;
+        BlendOp opAlpha = Add;
+    };
+
+    Flags flags;
     Topology topology = Triangles;
     bool rasterizerDiscard = false;
     CullMode cullMode;
     FrontFace frontFace = CCW;
+    QVector<TargetBlend> targetBlends;
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
     QVkShaderResourceBindings *shaderResourceBindings = nullptr;
@@ -247,7 +303,9 @@ Q_VK_RES_PRIVATE(QVkGraphicsPipelineState)
     int lastActiveFrameSlot = -1;
 };
 
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipelineState::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipelineState::CullMode)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipelineState::ColorMask)
 
 typedef void * QVkAlloc;
 
@@ -491,6 +549,7 @@ public:
 
     void cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
     void cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);
+    void cmdBlendConstants(QVkCommandBuffer *cb, const QVector4D &c);
 
     void cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance);
 

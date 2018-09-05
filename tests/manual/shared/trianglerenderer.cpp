@@ -68,6 +68,8 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
 {
     m_ps = new QVkGraphicsPipelineState;
 
+    m_ps->targetBlends = { QVkGraphicsPipelineState::TargetBlend() };
+
     QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());
     QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));

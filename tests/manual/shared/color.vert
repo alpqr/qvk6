@@ -7,6 +7,7 @@ layout(location = 0) out vec3 v_color;
 
 layout(std140, binding = 0) uniform buf {
     mat4 mvp;
+    float opacity;
 } ubuf;
 
 out gl_PerVertex { vec4 gl_Position; };

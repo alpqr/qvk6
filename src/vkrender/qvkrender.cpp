@@ -368,7 +368,7 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
     if (!d->recreateSwapChain(surface, pixelSize, flags, outSwapChain))
         return false;
 
-    outSwapChain->hasDepthStencil = flags.testFlag(ImportWithDepthStencil);
+    outSwapChain->hasDepthStencil = flags.testFlag(UseDepthStencil);
 
     d->createDefaultRenderPass(&outSwapChain->rp, outSwapChain->hasDepthStencil);
 
@@ -382,7 +382,7 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass = outSwapChain->rp.rp;
-        fbInfo.attachmentCount = flags.testFlag(ImportWithDepthStencil) ? 2 : 1;
+        fbInfo.attachmentCount = outSwapChain->hasDepthStencil ? 2 : 1;
         fbInfo.pAttachments = views;
         fbInfo.width = outSwapChain->pixelSize.width();
         fbInfo.height = outSwapChain->pixelSize.height();
@@ -442,11 +442,16 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
         ? VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
         : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
-    if (flags.testFlag(QVkRender::ImportWithAlpha)) {
-        if (surfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)
-            compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
-        else if (surfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR)
-            compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+    if (flags.testFlag(QVkRender::SurfaceHasPreMulAlpha)
+            && (surfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR))
+    {
+        compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+    }
+
+    if (flags.testFlag(QVkRender::SurfaceHasNonPreMulAlpha)
+            && (surfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR))
+    {
+        compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
     }
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -1280,14 +1285,14 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     for (const QVkGraphicsPipelineState::TargetBlend &b : qAsConst(ps->targetBlends)) {
         VkPipelineColorBlendAttachmentState blend;
         memset(&blend, 0, sizeof(blend));
-        blend.colorWriteMask = toVkColorComponents(b.colorWrite);
         blend.blendEnable = b.enable;
         blend.srcColorBlendFactor = toVkBlendFactor(b.srcColor);
-        blend.srcAlphaBlendFactor = toVkBlendFactor(b.srcAlpha);
-        blend.colorBlendOp = toVkBlendOp(b.opColor);
         blend.dstColorBlendFactor = toVkBlendFactor(b.dstColor);
+        blend.colorBlendOp = toVkBlendOp(b.opColor);
+        blend.srcAlphaBlendFactor = toVkBlendFactor(b.srcAlpha);
         blend.dstAlphaBlendFactor = toVkBlendFactor(b.dstAlpha);
         blend.alphaBlendOp = toVkBlendOp(b.opAlpha);
+        blend.colorWriteMask = toVkColorComponents(b.colorWrite);
         targetBlends.append(blend);
     }
     blendInfo.attachmentCount = targetBlends.count();

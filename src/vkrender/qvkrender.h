@@ -436,8 +436,9 @@ public:
     };
 
     enum SurfaceImportFlag {
-        ImportWithAlpha = 0x01,
-        ImportWithDepthStencil = 0x02
+        UseDepthStencil = 1 << 0,
+        SurfaceHasPreMulAlpha = 1 << 1,
+        SurfaceHasNonPreMulAlpha = 1 << 2
     };
     Q_DECLARE_FLAGS(SurfaceImportFlags, SurfaceImportFlag)
 

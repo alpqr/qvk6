@@ -45,13 +45,15 @@ public:
 private:
     QVkRender *m_r;
 
-    QVkBuffer *m_triBuf = nullptr;
-    QVkBuffer *m_mvpBuf = nullptr;
+    QVkBuffer *m_vbuf = nullptr;
+    QVkBuffer *m_ubuf = nullptr;
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipelineState *m_ps = nullptr;
 
     QMatrix4x4 m_proj;
     float m_rotation = 0;
+    float m_opacity = 1;
+    int m_opacityDir = -1;
 };
 
 #endif

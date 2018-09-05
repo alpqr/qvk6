@@ -51,15 +51,16 @@ void TriangleRenderer::initResources()
         -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
          0.5f,  -0.5f,   0.0f, 0.0f, 1.0f
     };
-    m_triBuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
-    m_r->createBuffer(m_triBuf, vertexData);
+    m_vbuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
+    m_r->createBuffer(m_vbuf, vertexData);
 
-    m_mvpBuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 4 * 4 * sizeof(float));
-    m_r->createBuffer(m_mvpBuf);
+    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64 + 4);
+    m_r->createBuffer(m_ubuf);
 
     m_srb = new QVkShaderResourceBindings;
+    const auto ubufVisibility = QVkShaderResourceBindings::Binding::VertexStage | QVkShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QVkShaderResourceBindings::Binding::uniformBuffer(0, QVkShaderResourceBindings::Binding::VertexStage, m_mvpBuf)
+        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf)
     };
     m_r->createShaderResourceBindings(m_srb);
 }
@@ -68,7 +69,11 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
 {
     m_ps = new QVkGraphicsPipelineState;
 
-    m_ps->targetBlends = { QVkGraphicsPipelineState::TargetBlend() };
+    //m_ps->targetBlends = { QVkGraphicsPipelineState::TargetBlend() }; // no blending
+
+    QVkGraphicsPipelineState::TargetBlend premulAlphaBlend; // convenient defaults...
+    premulAlphaBlend.enable = true;
+    m_ps->targetBlends = { premulAlphaBlend };
 
     QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());
@@ -109,16 +114,16 @@ void TriangleRenderer::releaseResources()
         m_srb = nullptr;
     }
 
-    if (m_mvpBuf) {
-        m_r->scheduleRelease(m_mvpBuf);
-        delete m_mvpBuf;
-        m_mvpBuf = nullptr;
+    if (m_ubuf) {
+        m_r->scheduleRelease(m_ubuf);
+        delete m_ubuf;
+        m_ubuf = nullptr;
     }
 
-    if (m_triBuf) {
-        m_r->scheduleRelease(m_triBuf);
-        delete m_triBuf;
-        m_triBuf = nullptr;
+    if (m_vbuf) {
+        m_r->scheduleRelease(m_vbuf);
+        delete m_vbuf;
+        m_vbuf = nullptr;
     }
 }
 
@@ -133,15 +138,21 @@ void TriangleRenderer::releaseOutputDependentResources()
 
 void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
-    m_rotation += 1;
+    m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.rotate(m_rotation, 0, 1, 0);
-    m_r->updateBuffer(m_mvpBuf, 0, 4 * 4 * sizeof(float), mvp.constData());
+    m_r->updateBuffer(m_ubuf, 0, 64, mvp.constData());
+    m_opacity += m_opacityDir * 0.005f;
+    if (m_opacity < 0.0f || m_opacity > 1.0f) {
+        m_opacityDir *= -1;
+        m_opacity = qBound(0.0f, m_opacity, 1.0f);
+    }
+    m_r->updateBuffer(m_ubuf, 64, 4, &m_opacity);
 
     m_r->cmdViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     m_r->cmdScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
     m_r->cmdSetGraphicsPipelineState(cb, m_ps);
-    m_r->cmdSetVertexBuffer(cb, 0, m_triBuf, 0);
+    m_r->cmdSetVertexBuffer(cb, 0, m_vbuf, 0);
     m_r->cmdDraw(cb, 3, 1, 0, 0);
 }

@@ -1051,6 +1051,29 @@ static VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topology t)
     }
 }
 
+static VkCullModeFlags toVkCullMode(QVkGraphicsPipelineState::CullMode c)
+{
+    int m = 0;
+    if (c.testFlag(QVkGraphicsPipelineState::CullFront))
+        m |= VK_CULL_MODE_FRONT_BIT;
+    if (c.testFlag(QVkGraphicsPipelineState::CullBack))
+        m |= VK_CULL_MODE_BACK_BIT;
+    return VkCullModeFlags(m);
+}
+
+static VkFrontFace toVkFrontFace(QVkGraphicsPipelineState::FrontFace f)
+{
+    switch (f) {
+    case QVkGraphicsPipelineState::CCW:
+        return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    case QVkGraphicsPipelineState::CW:
+        return VK_FRONT_FACE_CLOCKWISE;
+    default:
+        Q_UNREACHABLE();
+        return VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    }
+}
+
 bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
 {
     if (ps->pipeline) // no repeated create without a scheduleRelease first
@@ -1138,16 +1161,17 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
 
     VkPipelineInputAssemblyStateCreateInfo inputAsmInfo;
     memset(&inputAsmInfo, 0, sizeof(inputAsmInfo));
-    inputAsmInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;;
+    inputAsmInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputAsmInfo.topology = toVkTopology(ps->topology);
     pipelineInfo.pInputAssemblyState = &inputAsmInfo;
 
     VkPipelineRasterizationStateCreateInfo rastInfo;
     memset(&rastInfo, 0, sizeof(rastInfo));
     rastInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rastInfo.rasterizerDiscardEnable = ps->rasterizerDiscard;
     rastInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rastInfo.cullMode = VK_CULL_MODE_NONE; // ###
-    rastInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rastInfo.cullMode = toVkCullMode(ps->cullMode);
+    rastInfo.frontFace = toVkFrontFace(ps->frontFace);
     rastInfo.lineWidth = 1.0f;
     pipelineInfo.pRasterizationState = &rastInfo;
 

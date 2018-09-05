@@ -46,7 +46,7 @@ QBakedShader getShader(const QString &name)
 
 void TriangleRenderer::initResources()
 {
-    static float vertexData[] = { // Y up, CCW
+    static float vertexData[] = { // Y up (note m_proj), CCW
          0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
         -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
          0.5f,  -0.5f,   0.0f, 0.0f, 1.0f
@@ -89,8 +89,8 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
     };
 
     m_ps->vertexInputLayout = inputLayout;
-    m_ps->renderPass = rp;
     m_ps->shaderResourceBindings = m_srb;
+    m_ps->renderPass = rp;
 
     m_r->createGraphicsPipelineState(m_ps);
 

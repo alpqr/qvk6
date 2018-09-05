@@ -221,17 +221,33 @@ struct QVkGraphicsPipelineState
         Points
     };
 
+    enum CullModeFlag {
+        CullFront = 1 << 0,
+        CullBack = 1 << 1
+    };
+    Q_DECLARE_FLAGS(CullMode, CullModeFlag)
+
+    enum FrontFace {
+        CCW,
+        CW
+    };
+
     Topology topology = Triangles;
+    bool rasterizerDiscard = false;
+    CullMode cullMode;
+    FrontFace frontFace = CCW;
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
-    const QVkRenderPass *renderPass = nullptr;
     QVkShaderResourceBindings *shaderResourceBindings = nullptr;
+    const QVkRenderPass *renderPass = nullptr;
 
 Q_VK_RES_PRIVATE(QVkGraphicsPipelineState)
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipelineState::CullMode)
 
 typedef void * QVkAlloc;
 

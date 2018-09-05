@@ -212,6 +212,16 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
 
 struct QVkGraphicsPipelineState
 {
+    enum Topology {
+        Triangles,
+        TriangleStrip,
+        TriangleFan,
+        Lines,
+        LineStrip,
+        Points
+    };
+
+    Topology topology = Triangles;
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
     const QVkRenderPass *renderPass = nullptr;

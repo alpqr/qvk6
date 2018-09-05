@@ -1030,6 +1030,27 @@ static VkFormat toVkAttributeFormat(QVkVertexInputLayout::Attribute::Format form
     }
 }
 
+static VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topology t)
+{
+    switch (t) {
+    case QVkGraphicsPipelineState::Triangles:
+        return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    case QVkGraphicsPipelineState::TriangleStrip:
+        return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    case QVkGraphicsPipelineState::TriangleFan:
+        return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+    case QVkGraphicsPipelineState::Lines:
+        return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    case QVkGraphicsPipelineState::LineStrip:
+        return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+    case QVkGraphicsPipelineState::Points:
+        return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    default:
+        Q_UNREACHABLE();
+        return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    }
+}
+
 bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
 {
     if (ps->pipeline) // no repeated create without a scheduleRelease first
@@ -1118,7 +1139,7 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     VkPipelineInputAssemblyStateCreateInfo inputAsmInfo;
     memset(&inputAsmInfo, 0, sizeof(inputAsmInfo));
     inputAsmInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;;
-    inputAsmInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST; // ###
+    inputAsmInfo.topology = toVkTopology(ps->topology);
     pipelineInfo.pInputAssemblyState = &inputAsmInfo;
 
     VkPipelineRasterizationStateCreateInfo rastInfo;

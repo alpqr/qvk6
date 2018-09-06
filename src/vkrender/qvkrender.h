@@ -201,7 +201,7 @@ struct QVkShaderResourceBindings
     QVector<Binding> bindings;
 
 Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
-    VkDescriptorPool poolRef = VK_NULL_HANDLE;
+    int poolIndex = -1;
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT];
     int lastActiveFrameSlot = -1;

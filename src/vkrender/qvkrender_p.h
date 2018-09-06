@@ -59,7 +59,7 @@ public:
     void create();
     void destroy();
     VkResult createDescriptorPool(VkDescriptorPool *pool);
-    bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *dst);
+    bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *result, int *resultPoolIndex);
 
     bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QVkRender::SurfaceImportFlags flags, QVkSwapChain *swapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
@@ -96,7 +96,15 @@ public:
     VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
-    QVector<VkDescriptorPool> descriptorPools;
+    struct DescriptorPoolData {
+        DescriptorPoolData() { }
+        DescriptorPoolData(VkDescriptorPool pool_)
+            : pool(pool_)
+        { }
+        VkDescriptorPool pool = VK_NULL_HANDLE;
+        int activeSets = 0;
+    };
+    QVector<DescriptorPoolData> descriptorPools;
 
     QMatrix4x4 clipCorrectMatrix;
 
@@ -118,7 +126,7 @@ public:
                 VkPipelineLayout layout;
             } pipelineState;
             struct {
-                VkDescriptorPool poolRef;
+                int poolIndex;
                 VkDescriptorSetLayout layout;
                 VkDescriptorSet sets[QVK_FRAMES_IN_FLIGHT];
             } shaderResourceBindings;

@@ -212,7 +212,8 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
 struct QVkGraphicsPipelineState
 {
     enum Flag {
-        UsesBlendConstants = 1 << 0
+        UsesBlendConstants = 1 << 0,
+        UsesStencil = 1 << 1
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -296,6 +297,24 @@ struct QVkGraphicsPipelineState
         Always
     };
 
+    enum StencilOp {
+        StencilZero,
+        Keep,
+        Replace,
+        IncrementAndClamp,
+        DecrementAndClamp,
+        Invert,
+        IncrementAndWrap,
+        DecrementAndWrap
+    };
+
+    struct StencilOpState {
+        StencilOp failOp = Keep;
+        StencilOp depthFailOp = Keep;
+        StencilOp passOp = Keep;
+        CompareOp compareOp = Always;
+    };
+
     Flags flags;
     Topology topology = Triangles;
     bool rasterizerDiscard = false;
@@ -304,7 +323,14 @@ struct QVkGraphicsPipelineState
     QVector<TargetBlend> targetBlends;
     bool depthTest = false;
     bool depthWrite = false;
-    CompareOp depthOp = LessOrEqual;
+    CompareOp depthOp = Less;
+    bool stencilTest = false;
+    StencilOpState stencilFront;
+    StencilOpState stencilBack;
+    // use the same read (compare) and write masks for both faces (see d3d12).
+    // have the reference value dynamically settable.
+    quint32 stencilReadMask = 0xFF;
+    quint32 stencilWriteMask = 0xFF;
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
     QVkShaderResourceBindings *shaderResourceBindings = nullptr;
@@ -577,6 +603,7 @@ public:
     void cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
     void cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);
     void cmdBlendConstants(QVkCommandBuffer *cb, const QVector4D &c);
+    void cmdStencilRef(QVkCommandBuffer *cb, quint32 refValue);
 
     void cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance);
 

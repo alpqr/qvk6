@@ -1400,6 +1400,39 @@ static inline VkCompareOp toVkCompareOp(QVkGraphicsPipelineState::CompareOp op)
     }
 }
 
+static inline VkStencilOp toVkStencilOp(QVkGraphicsPipelineState::StencilOp op)
+{
+    switch (op) {
+    case QVkGraphicsPipelineState::StencilZero:
+        return VK_STENCIL_OP_ZERO;
+    case QVkGraphicsPipelineState::Keep:
+        return VK_STENCIL_OP_KEEP;
+    case QVkGraphicsPipelineState::Replace:
+        return VK_STENCIL_OP_REPLACE;
+    case QVkGraphicsPipelineState::IncrementAndClamp:
+        return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
+    case QVkGraphicsPipelineState::DecrementAndClamp:
+        return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
+    case QVkGraphicsPipelineState::Invert:
+        return VK_STENCIL_OP_INVERT;
+    case QVkGraphicsPipelineState::IncrementAndWrap:
+        return VK_STENCIL_OP_INCREMENT_AND_WRAP;
+    case QVkGraphicsPipelineState::DecrementAndWrap:
+        return VK_STENCIL_OP_DECREMENT_AND_WRAP;
+    default:
+        Q_UNREACHABLE();
+        return VK_STENCIL_OP_KEEP;
+    }
+}
+
+static inline void fillVkStencilOpState(VkStencilOpState *dst, const QVkGraphicsPipelineState::StencilOpState &src)
+{
+    dst->failOp = toVkStencilOp(src.failOp);
+    dst->passOp = toVkStencilOp(src.passOp);
+    dst->depthFailOp = toVkStencilOp(src.depthFailOp);
+    dst->compareOp = toVkCompareOp(src.compareOp);
+}
+
 bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
 {
     if (ps->pipeline) // no repeated create without a scheduleRelease first
@@ -1474,6 +1507,8 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     dynEnable << VK_DYNAMIC_STATE_SCISSOR;
     if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesBlendConstants))
         dynEnable << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+    if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesStencil))
+        dynEnable << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
 
     VkPipelineDynamicStateCreateInfo dynamicInfo;
     memset(&dynamicInfo, 0, sizeof(dynamicInfo));
@@ -1514,10 +1549,16 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     VkPipelineDepthStencilStateCreateInfo dsInfo;
     memset(&dsInfo, 0, sizeof(dsInfo));
     dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-
     dsInfo.depthTestEnable = ps->depthTest;
     dsInfo.depthWriteEnable = ps->depthWrite;
     dsInfo.depthCompareOp = toVkCompareOp(ps->depthOp);
+    dsInfo.stencilTestEnable = ps->stencilTest;
+    fillVkStencilOpState(&dsInfo.front, ps->stencilFront);
+    dsInfo.front.compareMask = ps->stencilReadMask;
+    dsInfo.front.writeMask = ps->stencilWriteMask;
+    fillVkStencilOpState(&dsInfo.back, ps->stencilBack);
+    dsInfo.back.compareMask = ps->stencilReadMask;
+    dsInfo.back.writeMask = ps->stencilWriteMask;
     pipelineInfo.pDepthStencilState = &dsInfo;
 
     VkPipelineColorBlendStateCreateInfo blendInfo;
@@ -1794,6 +1835,11 @@ void QVkRender::cmdBlendConstants(QVkCommandBuffer *cb, const QVector4D &c)
 {
     const float bc[4] = { c.x(), c.y(), c.z(), c.w() };
     d->df->vkCmdSetBlendConstants(cb->cb, bc);
+}
+
+void QVkRender::cmdStencilRef(QVkCommandBuffer *cb, quint32 refValue)
+{
+    d->df->vkCmdSetStencilReference(cb->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
 }
 
 void QVkRender::cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount,

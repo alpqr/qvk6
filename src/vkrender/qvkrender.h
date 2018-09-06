@@ -505,6 +505,8 @@ public:
     QVkRender(const InitParams &params);
     ~QVkRender();
 
+    QVector<int> supportedSampleCounts() const;
+
     /* some basic use cases:
 
       1. render to a QVulkanWindow from a startNextFrame() implementation

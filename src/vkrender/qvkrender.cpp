@@ -184,6 +184,8 @@ void QVkRenderPrivate::create()
     afuncs.vkCreateImage = wrap_vkCreateImage;
     afuncs.vkDestroyImage = wrap_vkDestroyImage;
 
+    f->vkGetPhysicalDeviceProperties(physDev, &physDevProperties);
+
     VmaAllocatorCreateInfo allocatorInfo;
     memset(&allocatorInfo, 0, sizeof(allocatorInfo));
     allocatorInfo.physicalDevice = physDev;
@@ -1985,6 +1987,40 @@ void QVkRender::scheduleRelease(QVkRenderBuffer *rb)
     }
 
     d->releaseQueue.append(e);
+}
+
+static struct {
+    VkSampleCountFlagBits mask;
+    int count;
+} qvk_sampleCounts[] = {
+    // keep this sorted by 'count'
+    { VK_SAMPLE_COUNT_1_BIT, 1 },
+    { VK_SAMPLE_COUNT_2_BIT, 2 },
+    { VK_SAMPLE_COUNT_4_BIT, 4 },
+    { VK_SAMPLE_COUNT_8_BIT, 8 },
+    { VK_SAMPLE_COUNT_16_BIT, 16 },
+    { VK_SAMPLE_COUNT_32_BIT, 32 },
+    { VK_SAMPLE_COUNT_64_BIT, 64 }
+};
+
+QVector<int> QVkRender::supportedSampleCounts() const
+{
+    const VkPhysicalDeviceLimits *limits = &d->physDevProperties.limits;
+    VkSampleCountFlags color = limits->framebufferColorSampleCounts;
+    VkSampleCountFlags depth = limits->framebufferDepthSampleCounts;
+    VkSampleCountFlags stencil = limits->framebufferStencilSampleCounts;
+    QVector<int> result;
+
+    for (size_t i = 0; i < sizeof(qvk_sampleCounts) / sizeof(qvk_sampleCounts[0]); ++i) {
+        if ((color & qvk_sampleCounts[i].mask)
+                && (depth & qvk_sampleCounts[i].mask)
+                && (stencil & qvk_sampleCounts[i].mask))
+        {
+            result.append(qvk_sampleCounts[i].count);
+        }
+    }
+
+    return result;
 }
 
 QT_END_NAMESPACE

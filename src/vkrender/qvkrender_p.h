@@ -86,6 +86,7 @@ public:
     VmaAllocator allocator;
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;
+    VkPhysicalDeviceProperties physDevProperties;
 
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;

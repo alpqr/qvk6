@@ -285,12 +285,26 @@ struct QVkGraphicsPipelineState
         BlendOp opAlpha = Add;
     };
 
+    enum CompareOp {
+        Never,
+        Less,
+        Equal,
+        LessOrEqual,
+        Greater,
+        NotEqual,
+        GreaterOrEqual,
+        Always
+    };
+
     Flags flags;
     Topology topology = Triangles;
     bool rasterizerDiscard = false;
     CullMode cullMode;
     FrontFace frontFace = CCW;
     QVector<TargetBlend> targetBlends;
+    bool depthTest = false;
+    bool depthWrite = false;
+    CompareOp depthOp = LessOrEqual;
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
     QVkShaderResourceBindings *shaderResourceBindings = nullptr;

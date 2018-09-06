@@ -1066,7 +1066,7 @@ QMatrix4x4 QVkRender::openGLCorrectionMatrix() const
     return d->clipCorrectMatrix;
 }
 
-VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
+static inline VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
 {
     int u = 0;
     if (usage.testFlag(QVkBuffer::VertexBuffer))
@@ -1209,7 +1209,7 @@ bool QVkRenderPrivate::ensurePipelineCache()
     return true;
 }
 
-static VkShaderStageFlagBits toVkShaderStage(QVkGraphicsShaderStage::Type type)
+static inline VkShaderStageFlagBits toVkShaderStage(QVkGraphicsShaderStage::Type type)
 {
     switch (type) {
     case QVkGraphicsShaderStage::Vertex:
@@ -1228,7 +1228,7 @@ static VkShaderStageFlagBits toVkShaderStage(QVkGraphicsShaderStage::Type type)
     }
 }
 
-static VkFormat toVkAttributeFormat(QVkVertexInputLayout::Attribute::Format format)
+static inline VkFormat toVkAttributeFormat(QVkVertexInputLayout::Attribute::Format format)
 {
     switch (format) {
     case QVkVertexInputLayout::Attribute::Float4:
@@ -1251,7 +1251,7 @@ static VkFormat toVkAttributeFormat(QVkVertexInputLayout::Attribute::Format form
     }
 }
 
-static VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topology t)
+static inline VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topology t)
 {
     switch (t) {
     case QVkGraphicsPipelineState::Triangles:
@@ -1272,7 +1272,7 @@ static VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topology t)
     }
 }
 
-static VkCullModeFlags toVkCullMode(QVkGraphicsPipelineState::CullMode c)
+static inline VkCullModeFlags toVkCullMode(QVkGraphicsPipelineState::CullMode c)
 {
     int m = 0;
     if (c.testFlag(QVkGraphicsPipelineState::Front))
@@ -1282,7 +1282,7 @@ static VkCullModeFlags toVkCullMode(QVkGraphicsPipelineState::CullMode c)
     return VkCullModeFlags(m);
 }
 
-static VkFrontFace toVkFrontFace(QVkGraphicsPipelineState::FrontFace f)
+static inline VkFrontFace toVkFrontFace(QVkGraphicsPipelineState::FrontFace f)
 {
     switch (f) {
     case QVkGraphicsPipelineState::CCW:
@@ -1295,7 +1295,7 @@ static VkFrontFace toVkFrontFace(QVkGraphicsPipelineState::FrontFace f)
     }
 }
 
-static VkColorComponentFlags toVkColorComponents(QVkGraphicsPipelineState::ColorMask c)
+static inline VkColorComponentFlags toVkColorComponents(QVkGraphicsPipelineState::ColorMask c)
 {
     int f = 0;
     if (c.testFlag(QVkGraphicsPipelineState::R))
@@ -1309,7 +1309,7 @@ static VkColorComponentFlags toVkColorComponents(QVkGraphicsPipelineState::Color
     return VkColorComponentFlags(f);
 }
 
-static VkBlendFactor toVkBlendFactor(QVkGraphicsPipelineState::BlendFactor f)
+static inline VkBlendFactor toVkBlendFactor(QVkGraphicsPipelineState::BlendFactor f)
 {
     switch (f) {
     case QVkGraphicsPipelineState::Zero:
@@ -1356,7 +1356,7 @@ static VkBlendFactor toVkBlendFactor(QVkGraphicsPipelineState::BlendFactor f)
     }
 }
 
-static VkBlendOp toVkBlendOp(QVkGraphicsPipelineState::BlendOp op)
+static inline VkBlendOp toVkBlendOp(QVkGraphicsPipelineState::BlendOp op)
 {
     switch (op) {
     case QVkGraphicsPipelineState::Add:
@@ -1372,6 +1372,31 @@ static VkBlendOp toVkBlendOp(QVkGraphicsPipelineState::BlendOp op)
     default:
         Q_UNREACHABLE();
         return VK_BLEND_OP_ADD;
+    }
+}
+
+static inline VkCompareOp toVkCompareOp(QVkGraphicsPipelineState::CompareOp op)
+{
+    switch (op) {
+    case QVkGraphicsPipelineState::Never:
+        return VK_COMPARE_OP_NEVER;
+    case QVkGraphicsPipelineState::Less:
+        return VK_COMPARE_OP_LESS;
+    case QVkGraphicsPipelineState::Equal:
+        return VK_COMPARE_OP_EQUAL;
+    case QVkGraphicsPipelineState::LessOrEqual:
+        return VK_COMPARE_OP_LESS_OR_EQUAL;
+    case QVkGraphicsPipelineState::Greater:
+        return VK_COMPARE_OP_GREATER;
+    case QVkGraphicsPipelineState::NotEqual:
+        return VK_COMPARE_OP_NOT_EQUAL;
+    case QVkGraphicsPipelineState::GreaterOrEqual:
+        return VK_COMPARE_OP_GREATER_OR_EQUAL;
+    case QVkGraphicsPipelineState::Always:
+        return VK_COMPARE_OP_ALWAYS;
+    default:
+        Q_UNREACHABLE();
+        return VK_COMPARE_OP_ALWAYS;
     }
 }
 
@@ -1489,9 +1514,10 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     VkPipelineDepthStencilStateCreateInfo dsInfo;
     memset(&dsInfo, 0, sizeof(dsInfo));
     dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    dsInfo.depthTestEnable = VK_FALSE; // ###
-    dsInfo.depthWriteEnable = VK_FALSE;
-    dsInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+
+    dsInfo.depthTestEnable = ps->depthTest;
+    dsInfo.depthWriteEnable = ps->depthWrite;
+    dsInfo.depthCompareOp = toVkCompareOp(ps->depthOp);
     pipelineInfo.pDepthStencilState = &dsInfo;
 
     VkPipelineColorBlendStateCreateInfo blendInfo;
@@ -1546,7 +1572,7 @@ static inline VkDescriptorType toVkDescriptorType(QVkShaderResourceBindings::Bin
     }
 }
 
-static VkShaderStageFlags toVkShaderStageFlags(QVkShaderResourceBindings::Binding::StageFlags stage)
+static inline VkShaderStageFlags toVkShaderStageFlags(QVkShaderResourceBindings::Binding::StageFlags stage)
 {
     int s = 0;
     if (stage.testFlag(QVkShaderResourceBindings::Binding::VertexStage))
@@ -1730,7 +1756,7 @@ void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPip
                                    &ps->shaderResourceBindings->descSets[d->currentFrameSlot], 0, nullptr);
 }
 
-static VkViewport toVkViewport(const QVkViewport &viewport)
+static inline VkViewport toVkViewport(const QVkViewport &viewport)
 {
     VkViewport vp;
     vp.x = viewport.r.x();
@@ -1748,7 +1774,7 @@ void QVkRender::cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport)
     d->df->vkCmdSetViewport(cb->cb, 0, 1, &vp);
 }
 
-static VkRect2D toVkScissor(const QVkScissor &scissor)
+static inline VkRect2D toVkScissor(const QVkScissor &scissor)
 {
     VkRect2D s;
     s.offset.x = scissor.r.x();

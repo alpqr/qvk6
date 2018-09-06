@@ -1641,8 +1641,10 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
             case QVkRenderPrivate::DeferredReleaseEntry::ShaderResourceBindings:
                 if (e.shaderResourceBindings.layout)
                     df->vkDestroyDescriptorSetLayout(dev, e.shaderResourceBindings.layout, nullptr);
-                if (e.shaderResourceBindings.poolIndex >= 0)
+                if (e.shaderResourceBindings.poolIndex >= 0) {
                     descriptorPools[e.shaderResourceBindings.poolIndex].activeSets -= 1;
+                    Q_ASSERT(descriptorPools[e.shaderResourceBindings.poolIndex].activeSets >= 0);
+                }
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)

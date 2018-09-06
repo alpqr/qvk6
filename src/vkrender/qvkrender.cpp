@@ -186,19 +186,56 @@ void QVkRenderPrivate::create()
     allocatorInfo.pVulkanFunctions = &afuncs;
     vmaCreateAllocator(&allocatorInfo, &allocator);
 
+    VkDescriptorPool pool;
+    VkResult err = createDescriptorPool(&pool);
+    if (err == VK_SUCCESS)
+        descriptorPools.append(pool);
+    else
+        qWarning("Failed to create initial descriptor pool: %d", err);
+}
+
+VkResult QVkRenderPrivate::createDescriptorPool(VkDescriptorPool *pool)
+{
     VkDescriptorPoolSize descPoolSizes[] = {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, QVK_MAX_UNIFORM_BUFFERS_PER_SRB * QVK_MAX_SHADER_RESOURCE_BINDINGS * QVK_FRAMES_IN_FLIGHT }
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, QVK_UNIFORM_BUFFERS_PER_POOL }
     };
     VkDescriptorPoolCreateInfo descPoolInfo;
     memset(&descPoolInfo, 0, sizeof(descPoolInfo));
     descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     descPoolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-    descPoolInfo.maxSets = QVK_MAX_SHADER_RESOURCE_BINDINGS * QVK_FRAMES_IN_FLIGHT;
+    descPoolInfo.maxSets = QVK_DESC_SETS_PER_POOL;
     descPoolInfo.poolSizeCount = sizeof(descPoolSizes) / sizeof(descPoolSizes[0]);
     descPoolInfo.pPoolSizes = descPoolSizes;
-    VkResult err = df->vkCreateDescriptorPool(dev, &descPoolInfo, nullptr, &descriptorPool);
-    if (err != VK_SUCCESS)
-        qFatal("Failed to create descriptor pool: %d", err);
+    return df->vkCreateDescriptorPool(dev, &descPoolInfo, nullptr, pool);
+}
+
+bool QVkRenderPrivate::allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *dst)
+{
+    auto tryAllocate = [this, allocInfo, dst](VkDescriptorPool pool) {
+        allocInfo->descriptorPool = pool;
+        return df->vkAllocateDescriptorSets(dev, allocInfo, dst);
+    };
+
+    for (int i = descriptorPools.count() - 1; i >= 0; --i) {
+        VkResult err = tryAllocate(descriptorPools[i]);
+        if (err == VK_SUCCESS)
+            return true;
+    }
+
+    VkDescriptorPool newPool;
+    VkResult poolErr = createDescriptorPool(&newPool);
+    if (poolErr == VK_SUCCESS) {
+        descriptorPools.append(newPool);
+        VkResult err = tryAllocate(newPool);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to allocate descriptor set from new pool too, giving up: %d", err);
+            return false;
+        }
+        return true;
+    } else {
+        qWarning("Failed to allocate new descriptor pool: %d", poolErr);
+        return false;
+    }
 }
 
 void QVkRenderPrivate::destroy()
@@ -215,10 +252,10 @@ void QVkRenderPrivate::destroy()
         pipelineCache = VK_NULL_HANDLE;
     }
 
-    if (descriptorPool) {
-        df->vkDestroyDescriptorPool(dev, descriptorPool, nullptr);
-        descriptorPool = VK_NULL_HANDLE;
-    }
+    for (VkDescriptorPool pool : descriptorPools)
+        df->vkDestroyDescriptorPool(dev, pool, nullptr);
+
+    descriptorPools.clear();
 
     vmaDestroyAllocator(allocator);
 
@@ -397,7 +434,8 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
     return true;
 }
 
-bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QVkRender::SurfaceImportFlags flags, QVkSwapChain *swapChain)
+bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
+                                         QVkRender::SurfaceImportFlags flags, QVkSwapChain *swapChain)
 {
     swapChain->pixelSize = pixelSize;
     if (swapChain->pixelSize.isEmpty())
@@ -1380,17 +1418,15 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
     VkDescriptorSetAllocateInfo allocInfo;
     memset(&allocInfo, 0, sizeof(allocInfo));
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = d->descriptorPool;
     allocInfo.descriptorSetCount = QVK_FRAMES_IN_FLIGHT;
     VkDescriptorSetLayout layouts[QVK_FRAMES_IN_FLIGHT];
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
         layouts[i] = srb->layout;
     allocInfo.pSetLayouts = layouts;
-    err = d->df->vkAllocateDescriptorSets(d->dev, &allocInfo, srb->descSets);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to allocate descriptor sets: %d", err);
+    if (d->allocateDescriptorSet(&allocInfo, srb->descSets))
+        srb->poolRef = allocInfo.descriptorPool;
+    else
         return false;
-    }
 
     QVarLengthArray<VkDescriptorBufferInfo, 4> bufferInfos;
     QVarLengthArray<VkWriteDescriptorSet, 8> writeInfos;
@@ -1471,7 +1507,8 @@ void QVkRender::cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer 
     d->df->vkCmdBindVertexBuffers(cb->cb, binding, 1, &vb->d[idx].buffer, &ofs);
 }
 
-void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb, const QVector<quint32> &offset)
+void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb,
+                                    const QVector<quint32> &offset)
 {
     QVarLengthArray<VkBuffer, 4> bufs;
     QVarLengthArray<VkDeviceSize, 4> ofs;
@@ -1557,7 +1594,8 @@ void QVkRender::cmdBlendConstants(QVkCommandBuffer *cb, const QVector4D &c)
     d->df->vkCmdSetBlendConstants(cb->cb, bc);
 }
 
-void QVkRender::cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
+void QVkRender::cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount,
+                        quint32 firstVertex, quint32 firstInstance)
 {
     d->df->vkCmdDraw(cb->cb, vertexCount, instanceCount, firstVertex, firstInstance);
 }
@@ -1592,8 +1630,9 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
             case QVkRenderPrivate::DeferredReleaseEntry::ShaderResourceBindings:
                 if (e.shaderResourceBindings.layout)
                     df->vkDestroyDescriptorSetLayout(dev, e.shaderResourceBindings.layout, nullptr);
-                if (descriptorPool)
-                    df->vkFreeDescriptorSets(dev, descriptorPool, QVK_FRAMES_IN_FLIGHT, e.shaderResourceBindings.sets);
+                if (e.shaderResourceBindings.poolRef)
+                    df->vkFreeDescriptorSets(dev, e.shaderResourceBindings.poolRef,
+                                             QVK_FRAMES_IN_FLIGHT, e.shaderResourceBindings.sets);
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
@@ -1633,10 +1672,12 @@ void QVkRender::scheduleRelease(QVkShaderResourceBindings *srb)
     e.type = QVkRenderPrivate::DeferredReleaseEntry::ShaderResourceBindings;
     e.lastActiveFrameSlot = srb->lastActiveFrameSlot;
 
+    e.shaderResourceBindings.poolRef = srb->poolRef;
     e.shaderResourceBindings.layout = srb->layout;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
         e.shaderResourceBindings.sets[i] = srb->descSets[i];
 
+    srb->poolRef = VK_NULL_HANDLE;
     srb->layout = VK_NULL_HANDLE;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
         srb->descSets[i] = VK_NULL_HANDLE;

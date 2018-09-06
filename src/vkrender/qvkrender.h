@@ -50,8 +50,6 @@ class QVkRenderPrivate;
 class QVulkanWindow;
 
 static const int QVK_FRAMES_IN_FLIGHT = 2;
-static const int QVK_MAX_SHADER_RESOURCE_BINDINGS = 4;
-static const int QVK_MAX_UNIFORM_BUFFERS_PER_SRB = 4;
 
 struct QVkClearValue
 {
@@ -203,6 +201,7 @@ struct QVkShaderResourceBindings
     QVector<Binding> bindings;
 
 Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
+    VkDescriptorPool poolRef = VK_NULL_HANDLE;
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT];
     int lastActiveFrameSlot = -1;
@@ -499,7 +498,12 @@ public:
        The QVk* instance itself is not destroyed by the release and it is safe
        to destroy it right away after calling scheduleRelease.
 
-       create(res); scheduleRelease(res); create(res); ... is valid and can be used to recreate things (when buffer or texture size changes f.ex.)
+       Changing any value needs explicit release and rebuilding of the
+       underlying resource before it can take effect.
+
+       create(res); <change something>; scheduleRelease(res); create(res); ...
+       is therefore perfectly valid and can be used to recreate things (when
+       buffer or texture size changes f.ex.)
      */
 
     bool createGraphicsPipelineState(QVkGraphicsPipelineState *ps);

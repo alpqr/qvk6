@@ -50,11 +50,16 @@ class QVulkanFunctions;
 class QVulkanDeviceFunctions;
 class QWindow;
 
+static const int QVK_DESC_SETS_PER_POOL = 128;
+static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
+
 class QVkRenderPrivate
 {
 public:
     void create();
     void destroy();
+    VkResult createDescriptorPool(VkDescriptorPool *pool);
+    bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *dst);
 
     bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QVkRender::SurfaceImportFlags flags, QVkSwapChain *swapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
@@ -91,7 +96,7 @@ public:
     VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
-    VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+    QVector<VkDescriptorPool> descriptorPools;
 
     QMatrix4x4 clipCorrectMatrix;
 
@@ -113,6 +118,7 @@ public:
                 VkPipelineLayout layout;
             } pipelineState;
             struct {
+                VkDescriptorPool poolRef;
                 VkDescriptorSetLayout layout;
                 VkDescriptorSet sets[QVK_FRAMES_IN_FLIGHT];
             } shaderResourceBindings;

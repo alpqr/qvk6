@@ -39,11 +39,6 @@ QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-// note the dependencies:
-//   ps depends on srb that depends on uniform buffer(s)
-//   ps depends on vertex/index buffers
-//   ps depends on the renderpass -> now it may be tied to the swapchain too
-
 void TriangleRenderer::initResources()
 {
     static float vertexData[] = { // Y up (note m_proj), CCW
@@ -65,6 +60,8 @@ void TriangleRenderer::initResources()
     m_r->createShaderResourceBindings(m_srb);
 }
 
+// the ps depends on the renderpass -> so it is tied to the swapchain.
+// on the other hand, srb and buffers are referenced from the ps but can be reused.
 void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
 {
     m_ps = new QVkGraphicsPipelineState;

@@ -444,6 +444,8 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
         VkFence cmdFence = VK_NULL_HANDLE;
         bool cmdFenceWaitable = false;
         VkFramebuffer fb = VK_NULL_HANDLE;
+        VkImage msaaImage = VK_NULL_HANDLE;
+        VkImageView msaaImageView = VK_NULL_HANDLE;
     } imageRes[MAX_BUFFER_COUNT];
 
     struct FrameResources {

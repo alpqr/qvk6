@@ -803,6 +803,14 @@ void QVkRenderPrivate::releaseSwapChain(QVkSwapChain *swapChain)
             df->vkFreeCommandBuffers(dev, cmdPool, 1, &image.cmdBuf.cb);
             image.cmdBuf.cb = VK_NULL_HANDLE;
         }
+        if (image.msaaImageView) {
+            df->vkDestroyImageView(dev, image.msaaImageView, nullptr);
+            image.msaaImageView = VK_NULL_HANDLE;
+        }
+        if (image.msaaImage) {
+            df->vkDestroyImage(dev, image.msaaImage, nullptr);
+            image.msaaImage = VK_NULL_HANDLE;
+        }
     }
 
     if (swapChain->rp.rp) {

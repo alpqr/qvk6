@@ -191,10 +191,11 @@ struct QVkShaderResourceBindings
         int binding;
         StageFlags stage;
         Type type;
+        struct UniformBufferData {
+            QVkBuffer *buf;
+        };
         union {
-            struct {
-                QVkBuffer *buf;
-            } ubuf;
+            UniformBufferData ubuf;
         };
     };
 
@@ -276,7 +277,7 @@ struct QVkGraphicsPipelineState
     };
 
     struct TargetBlend {
-        ColorMask colorWrite = R | G | B | A;
+        ColorMask colorWrite = ColorMask(0xF); // R | G | B | A
         bool enable = false;
         BlendFactor srcColor = One;
         BlendFactor dstColor = OneMinusSrcAlpha;

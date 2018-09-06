@@ -70,6 +70,11 @@ QVkRender::~QVkRender()
     delete d;
 }
 
+static inline VkDeviceSize aligned(VkDeviceSize v, VkDeviceSize byteAlign)
+{
+    return (v + byteAlign - 1) & ~(byteAlign - 1);
+}
+
 static QVulkanInstance *globalVulkanInstance;
 
 static void VKAPI_PTR wrap_vkGetPhysicalDeviceProperties(VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties* pProperties)
@@ -251,6 +256,134 @@ bool QVkRenderPrivate::allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocI
     }
 }
 
+// Transient images ("render buffers") backed by lazily allocated memory are
+// managed manually without going through vk_mem_alloc since it does not offer
+// any support for such images. This should be ok since in practice there
+// should be very few of such images.
+
+uint32_t QVkRenderPrivate::chooseTransientImageMemType(VkImage img, uint32_t startIndex)
+{
+    VkPhysicalDeviceMemoryProperties physDevMemProps;
+    f->vkGetPhysicalDeviceMemoryProperties(physDev, &physDevMemProps);
+
+    VkMemoryRequirements memReq;
+    df->vkGetImageMemoryRequirements(dev, img, &memReq);
+    uint32_t memTypeIndex = uint32_t(-1);
+
+    if (memReq.memoryTypeBits) {
+        // Find a device local + lazily allocated, or at least device local memtype.
+        const VkMemoryType *memType = physDevMemProps.memoryTypes;
+        bool foundDevLocal = false;
+        for (uint32_t i = startIndex; i < physDevMemProps.memoryTypeCount; ++i) {
+            if (memReq.memoryTypeBits & (1 << i)) {
+                if (memType[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+                    if (!foundDevLocal) {
+                        foundDevLocal = true;
+                        memTypeIndex = i;
+                    }
+                    if (memType[i].propertyFlags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
+                        memTypeIndex = i;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    return memTypeIndex;
+}
+
+bool QVkRenderPrivate::createTransientImage(VkFormat format,
+                                            const QSize &pixelSize,
+                                            VkImageUsageFlags usage,
+                                            VkImageAspectFlags aspectMask,
+                                            VkSampleCountFlagBits sampleCount,
+                                            VkDeviceMemory *mem,
+                                            VkImage *images,
+                                            VkImageView *views,
+                                            int count)
+{
+    VkMemoryRequirements memReq;
+    VkResult err;
+
+    for (int i = 0; i < count; ++i) {
+        VkImageCreateInfo imgInfo;
+        memset(&imgInfo, 0, sizeof(imgInfo));
+        imgInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imgInfo.imageType = VK_IMAGE_TYPE_2D;
+        imgInfo.format = format;
+        imgInfo.extent.width = pixelSize.width();
+        imgInfo.extent.height = pixelSize.height();
+        imgInfo.extent.depth = 1;
+        imgInfo.mipLevels = imgInfo.arrayLayers = 1;
+        imgInfo.samples = sampleCount;
+        imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imgInfo.usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+
+        err = df->vkCreateImage(dev, &imgInfo, nullptr, images + i);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create image: %d", err);
+            return false;
+        }
+
+        // Assume the reqs are the same since the images are same in every way.
+        // Still, call GetImageMemReq for every image, in order to prevent the
+        // validation layer from complaining.
+        df->vkGetImageMemoryRequirements(dev, images[i], &memReq);
+    }
+
+    VkMemoryAllocateInfo memInfo;
+    memset(&memInfo, 0, sizeof(memInfo));
+    memInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memInfo.allocationSize = aligned(memReq.size, memReq.alignment) * count;
+
+    uint32_t startIndex = 0;
+    do {
+        memInfo.memoryTypeIndex = chooseTransientImageMemType(images[0], startIndex);
+        if (memInfo.memoryTypeIndex == uint32_t(-1)) {
+            qWarning("No suitable memory type found");
+            return false;
+        }
+        startIndex = memInfo.memoryTypeIndex + 1;
+        err = df->vkAllocateMemory(dev, &memInfo, nullptr, mem);
+        if (err != VK_SUCCESS && err != VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+            qWarning("Failed to allocate image memory: %d", err);
+            return false;
+        }
+    } while (err != VK_SUCCESS);
+
+    VkDeviceSize ofs = 0;
+    for (int i = 0; i < count; ++i) {
+        err = df->vkBindImageMemory(dev, images[i], *mem, ofs);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to bind image memory: %d", err);
+            return false;
+        }
+        ofs += aligned(memReq.size, memReq.alignment);
+
+        VkImageViewCreateInfo imgViewInfo;
+        memset(&imgViewInfo, 0, sizeof(imgViewInfo));
+        imgViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imgViewInfo.image = images[i];
+        imgViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imgViewInfo.format = format;
+        imgViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+        imgViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+        imgViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+        imgViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        imgViewInfo.subresourceRange.aspectMask = aspectMask;
+        imgViewInfo.subresourceRange.levelCount = imgViewInfo.subresourceRange.layerCount = 1;
+
+        err = df->vkCreateImageView(dev, &imgViewInfo, nullptr, views + i);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create image view: %d", err);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void QVkRenderPrivate::destroy()
 {
     if (!df)
@@ -282,11 +415,6 @@ static inline VmaAllocation toVmaAllocation(QVkAlloc a)
 }
 
 static const VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-
-VkFormat QVkRender::optimalDepthStencilFormat() const
-{
-    return d->optimalDepthStencilFormat();
-}
 
 VkFormat QVkRenderPrivate::optimalDepthStencilFormat()
 {
@@ -386,7 +514,7 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
 }
 
 bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
-                              SurfaceImportFlags flags, QVkTexture *depthStencil,
+                              SurfaceImportFlags flags, QVkRenderBuffer *depthStencil,
                               QVkSwapChain *outSwapChain)
 {
     // Can be called multiple times without a call to releaseSwapChain - this
@@ -418,21 +546,21 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
     if (!d->recreateSwapChain(surface, pixelSize, flags, outSwapChain))
         return false;
 
-    outSwapChain->hasDepthStencil = flags.testFlag(UseDepthStencil);
+    outSwapChain->depthStencil = flags.testFlag(UseDepthStencil) ? depthStencil : nullptr;
 
-    d->createDefaultRenderPass(&outSwapChain->rp, outSwapChain->hasDepthStencil);
+    d->createDefaultRenderPass(&outSwapChain->rp, outSwapChain->depthStencil != nullptr);
 
     for (int i = 0; i < outSwapChain->bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(outSwapChain->imageRes[i]);
 
         VkImageView views[3] = { image.imageView,
-                                 outSwapChain->hasDepthStencil ? depthStencil->d[0].imageView : VK_NULL_HANDLE,
+                                 outSwapChain->depthStencil ? outSwapChain->depthStencil->imageViews[0] : VK_NULL_HANDLE,
                                  VK_NULL_HANDLE }; // ### will be 3 with MSAA
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass = outSwapChain->rp.rp;
-        fbInfo.attachmentCount = outSwapChain->hasDepthStencil ? 2 : 1;
+        fbInfo.attachmentCount = outSwapChain->depthStencil ? 2 : 1;
         fbInfo.pAttachments = views;
         fbInfo.width = outSwapChain->pixelSize.width();
         fbInfo.height = outSwapChain->pixelSize.height();
@@ -768,6 +896,9 @@ QVkRender::FrameOpResult QVkRender::beginFrame(QVkSwapChain *sc)
     }
 
     d->currentFrameSlot = sc->currentFrame;
+    if (sc->depthStencil)
+        sc->depthStencil->lastActiveFrameSlot = d->currentFrameSlot;
+
     d->prepareNewFrame();
 
     return FrameOpSuccess;
@@ -854,7 +985,7 @@ void QVkRender::beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues)
     rt.fb = sc->imageRes[sc->currentImage].fb;
     rt.rp.rp = sc->rp.rp;
     rt.pixelSize = sc->pixelSize;
-    rt.attCount = sc->hasDepthStencil ? 2 : 1; // 3 or 2 with msaa
+    rt.attCount = sc->depthStencil ? 2 : 1; // 3 or 2 with msaa
 
     beginPass(&rt, &sc->imageRes[sc->currentImage].cmdBuf, clearValues);
 }
@@ -1010,6 +1141,40 @@ void QVkRender::updateBuffer(QVkBuffer *buf, int offset, int size, const void *d
     const QByteArray u(static_cast<const char *>(data), size);
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
         buf->d[i].pendingUpdates.append(QVkBuffer::PendingUpdate(offset, u));
+}
+
+bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
+{
+    if (rb->memory) // no repeated create without a scheduleRelease first
+        return false;
+
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        rb->images[i] = VK_NULL_HANDLE;
+        rb->imageViews[i] = VK_NULL_HANDLE;
+    }
+
+    switch (rb->type) {
+    case QVkRenderBuffer::DepthStencil:
+        if (!d->createTransientImage(d->optimalDepthStencilFormat(),
+                                     rb->pixelSize,
+                                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                     VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                                     VK_SAMPLE_COUNT_1_BIT,
+                                     &rb->memory,
+                                     rb->images,
+                                     rb->imageViews,
+                                     1))
+        {
+            return false;
+        }
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
+    rb->lastActiveFrameSlot = -1;
+    return true;
 }
 
 VkShaderModule QVkRenderPrivate::createShader(const QByteArray &spirv)
@@ -1633,14 +1798,11 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
         if (forced || currentFrameSlot == e.lastActiveFrameSlot || e.lastActiveFrameSlot < 0) {
             switch (e.type) {
             case QVkRenderPrivate::DeferredReleaseEntry::PipelineState:
-                if (e.pipelineState.pipeline)
-                    df->vkDestroyPipeline(dev, e.pipelineState.pipeline, nullptr);
-                if (e.pipelineState.layout)
-                    df->vkDestroyPipelineLayout(dev, e.pipelineState.layout, nullptr);
+                df->vkDestroyPipeline(dev, e.pipelineState.pipeline, nullptr);
+                df->vkDestroyPipelineLayout(dev, e.pipelineState.layout, nullptr);
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::ShaderResourceBindings:
-                if (e.shaderResourceBindings.layout)
-                    df->vkDestroyDescriptorSetLayout(dev, e.shaderResourceBindings.layout, nullptr);
+                df->vkDestroyDescriptorSetLayout(dev, e.shaderResourceBindings.layout, nullptr);
                 if (e.shaderResourceBindings.poolIndex >= 0) {
                     descriptorPools[e.shaderResourceBindings.poolIndex].activeSets -= 1;
                     Q_ASSERT(descriptorPools[e.shaderResourceBindings.poolIndex].activeSets >= 0);
@@ -1649,6 +1811,14 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
             case QVkRenderPrivate::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
                     vmaDestroyBuffer(allocator, e.buffer[i].buffer, toVmaAllocation(e.buffer[i].allocation));
+                break;
+            case QVkRenderPrivate::DeferredReleaseEntry::RenderBuffer:
+                for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+                    df->vkDestroyImageView(dev, e.renderBuffer.imageViews[i], nullptr);
+                    df->vkDestroyImage(dev, e.renderBuffer.images[i], nullptr);
+                }
+                df->vkFreeMemory(dev, e.renderBuffer.memory, nullptr);
+                break;
             default:
                 break;
             }
@@ -1717,6 +1887,29 @@ void QVkRender::scheduleRelease(QVkBuffer *buf)
 
         buf->d[i].buffer = VK_NULL_HANDLE;
         buf->d[i].allocation = nullptr;
+    }
+
+    d->releaseQueue.append(e);
+}
+
+void QVkRender::scheduleRelease(QVkRenderBuffer *rb)
+{
+    if (!rb->memory)
+        return;
+
+    QVkRenderPrivate::DeferredReleaseEntry e;
+    e.type = QVkRenderPrivate::DeferredReleaseEntry::RenderBuffer;
+    e.lastActiveFrameSlot = rb->lastActiveFrameSlot;
+
+    e.renderBuffer.memory = rb->memory;
+    rb->memory = VK_NULL_HANDLE;
+
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        e.renderBuffer.images[i] = rb->images[i];
+        e.renderBuffer.imageViews[i] = rb->imageViews[i];
+
+        rb->images[i] = VK_NULL_HANDLE;
+        rb->imageViews[i] = VK_NULL_HANDLE;
     }
 
     d->releaseQueue.append(e);

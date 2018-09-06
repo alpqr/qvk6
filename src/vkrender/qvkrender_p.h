@@ -60,6 +60,10 @@ public:
     void destroy();
     VkResult createDescriptorPool(VkDescriptorPool *pool);
     bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *result, int *resultPoolIndex);
+    uint32_t chooseTransientImageMemType(VkImage img, uint32_t startIndex);
+    bool createTransientImage(VkFormat format, const QSize &pixelSize, VkImageUsageFlags usage,
+                              VkImageAspectFlags aspectMask, VkSampleCountFlagBits sampleCount,
+                              VkDeviceMemory *mem, VkImage *images, VkImageView *views, int count);
 
     bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QVkRender::SurfaceImportFlags flags, QVkSwapChain *swapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
@@ -116,7 +120,8 @@ public:
         enum Type {
             PipelineState,
             ShaderResourceBindings,
-            Buffer
+            Buffer,
+            RenderBuffer
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -134,6 +139,11 @@ public:
                 VkBuffer buffer;
                 QVkAlloc allocation;
             } buffer[QVK_FRAMES_IN_FLIGHT];
+            struct {
+                VkDeviceMemory memory;
+                VkImage images[QVK_FRAMES_IN_FLIGHT];
+                VkImageView imageViews[QVK_FRAMES_IN_FLIGHT];
+            } renderBuffer;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

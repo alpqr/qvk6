@@ -64,6 +64,7 @@ private:
     bool m_hasSwapChain = false;
     bool m_swapChainChanged = false;
     QVkSwapChain m_sc;
+    QVkRenderBuffer *m_ds = nullptr;
 
     TriangleRenderer m_triRenderer;
 };
@@ -236,7 +237,17 @@ void VWindow::releaseResources()
 
 void VWindow::recreateSwapChain()
 {
-    m_hasSwapChain = m_r->importSurface(m_vkSurface, size() * devicePixelRatio(), 0, nullptr, &m_sc);
+    const QSize outputSize = size() * devicePixelRatio();
+
+    if (!m_ds) {
+        m_ds = new QVkRenderBuffer(QVkRenderBuffer::DepthStencil, outputSize);
+    } else {
+        m_r->scheduleRelease(m_ds);
+        m_ds->pixelSize = outputSize;
+    }
+    m_r->createRenderBuffer(m_ds);
+
+    m_hasSwapChain = m_r->importSurface(m_vkSurface, outputSize, QVkRender::UseDepthStencil, m_ds, &m_sc);
     m_swapChainChanged = true;
 }
 
@@ -245,6 +256,11 @@ void VWindow::releaseSwapChain()
     if (m_hasSwapChain) {
         m_hasSwapChain = false;
         m_r->releaseSwapChain(&m_sc);
+    }
+    if (m_ds) {
+        m_r->scheduleRelease(m_ds);
+        delete m_ds;
+        m_ds = nullptr;
     }
 }
 

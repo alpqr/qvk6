@@ -351,14 +351,23 @@ Q_VK_RES_PRIVATE(QVkBuffer)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkBuffer::UsageFlags)
 
-struct QVkTexture
+struct QVkRenderBuffer
 {
-Q_VK_RES_PRIVATE(QVkTexture)
-    struct {
-        VkImage image = VK_NULL_HANDLE;
-        QVkAlloc allocation = nullptr;
-        VkImageView imageView = VK_NULL_HANDLE;
-    } d[QVK_FRAMES_IN_FLIGHT];
+    enum Type {
+        DepthStencil
+    };
+
+    QVkRenderBuffer(Type type_, const QSize &pixelSize_)
+        : type(type_), pixelSize(pixelSize_)
+    { }
+
+    Type type;
+    QSize pixelSize;
+
+Q_VK_RES_PRIVATE(QVkRenderBuffer)
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImage images[QVK_FRAMES_IN_FLIGHT];
+    VkImageView imageViews[QVK_FRAMES_IN_FLIGHT];
     int lastActiveFrameSlot = -1;
 };
 
@@ -386,7 +395,7 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
     bool supportsReadback = false;
     VkSwapchainKHR sc = VK_NULL_HANDLE;
     int bufferCount = 0;
-    bool hasDepthStencil = false;
+    QVkRenderBuffer *depthStencil = nullptr;
 
     struct ImageResources {
         VkImage image = VK_NULL_HANDLE;
@@ -456,8 +465,6 @@ public:
     QVkRender(const InitParams &params);
     ~QVkRender();
 
-    VkFormat optimalDepthStencilFormat() const;
-
     /* some basic use cases:
 
       1. render to a QVulkanWindow from a startNextFrame() implementation
@@ -468,6 +475,7 @@ public:
            endPass(cb)
 
       2. render to a QWindow (must be VulkanSurface), VkDevice and friends must be provided as well
+           [create a QVkRenderBuffer for depth-stencil and release+create it whenever size changes]
            call importSurface to create a swapchain + call it whenever the size is different than before
            call releaseSwapChain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed
            Then on every frame:
@@ -519,18 +527,18 @@ public:
     // Queues a partial update. Memory is updated in the next set*Buffer (vertex/index) or setGraphicsPipelineState (uniform).
     void updateBuffer(QVkBuffer *buf, int offset, int size, const void *data);
 
-    //    bool createTexture(int whatever, QVkTexture *outTex);
-    //    bool createRenderTarget(QVkTexture *color, QVkTexture *ds, QVkRenderTarget *outRt);
+    // Transient image, backed by lazily allocated memory (ideal for tiled
+    // GPUs). To be used for depth-stencil.
+    bool createRenderBuffer(QVkRenderBuffer *rb);
 
     void scheduleRelease(QVkGraphicsPipelineState *ps);
     //void scheduleRelease(QVkComputePipelineState *ps);
-
     void scheduleRelease(QVkShaderResourceBindings *srb);
-
     void scheduleRelease(QVkBuffer *buf);
-//    void scheduleRelease(QVkTexture *tex);
+    void scheduleRelease(QVkRenderBuffer *rb);
 
-    bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags, QVkTexture *depthStencil, QVkSwapChain *outSwapChain);
+    bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags,
+                       QVkRenderBuffer *depthStencil, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
     FrameOpResult beginFrame(QVkSwapChain *sc);
     FrameOpResult endFrame(QVkSwapChain *sc);

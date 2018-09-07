@@ -51,6 +51,9 @@ private:
     QVkBuffer *m_vbuf = nullptr;
     bool m_vbufReady = false;
     QVkBuffer *m_ubuf = nullptr;
+    QImage m_image;
+    QVkTexture *m_tex = nullptr;
+    bool m_texReady = false;
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipelineState *m_ps = nullptr;
 

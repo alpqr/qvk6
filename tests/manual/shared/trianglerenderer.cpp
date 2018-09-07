@@ -54,6 +54,11 @@ void TriangleRenderer::initResources()
     m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64 + 4);
     m_r->createBuffer(m_ubuf);
 
+    m_image = QImage(QLatin1String(":/qt256.png"));
+    m_tex = new QVkTexture(QVkTexture::RGBA8, QSize(m_image.width(), m_image.height()));
+    m_r->createTexture(m_tex);
+    m_texReady = false;
+
     m_srb = new QVkShaderResourceBindings;
     const auto ubufVisibility = QVkShaderResourceBindings::Binding::VertexStage | QVkShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
@@ -119,6 +124,12 @@ void TriangleRenderer::releaseResources()
         m_srb = nullptr;
     }
 
+    if (m_tex) {
+        m_r->scheduleRelease(m_tex);
+        delete m_tex;
+        m_tex = nullptr;
+    }
+
     if (m_ubuf) {
         m_r->scheduleRelease(m_ubuf);
         delete m_ubuf;
@@ -146,6 +157,11 @@ void TriangleRenderer::queueCopy(QVkCommandBuffer *cb)
     if (!m_vbufReady) {
         m_vbufReady = true;
         m_r->cmdUploadStaticBuffer(cb, m_vbuf, vertexData);
+    }
+
+    if (!m_texReady) {
+        m_texReady = true;
+        m_r->cmdUploadTexture(cb, m_tex, m_image);
     }
 }
 

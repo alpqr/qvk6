@@ -43,6 +43,7 @@
 #include <QSize>
 #include <QMatrix4x4>
 #include <QVector>
+#include <QImage>
 
 QT_BEGIN_NAMESPACE
 
@@ -416,6 +417,48 @@ Q_VK_RES_PRIVATE(QVkRenderBuffer)
     int lastActiveFrameSlot = -1;
 };
 
+struct QVkTexture
+{
+    enum Flag {
+        NoCpuContents = 1 << 0
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
+    enum Format {
+        RGBA8,
+        RGBA8_SRGB,
+        BGRA8,
+        BGRA8_SRGB,
+        R8,
+        R8_SRGB
+    };
+
+    struct SubImageInfo {
+        int size = 0;
+        int stride = 0;
+        int offset = 0;
+    };
+
+    QVkTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0, int sampleCount_ = 1)
+        : format(format_), pixelSize(pixelSize_), flags(flags_), sampleCount(sampleCount_)
+    { }
+
+    Format format;
+    QSize pixelSize;
+    Flags flags;
+    int sampleCount;
+
+Q_VK_RES_PRIVATE(QVkTexture)
+    VkImage image = VK_NULL_HANDLE;
+    VkImageView imageView = VK_NULL_HANDLE;
+    QVkAlloc allocation = nullptr;
+    VkImage stagingImage = VK_NULL_HANDLE;
+    QVkAlloc stagingAlloc = nullptr;
+    int lastActiveFrameSlot = -1;
+};
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTexture::Flags)
+
 struct QVkSampler
 {
 };
@@ -593,11 +636,16 @@ public:
     // GPUs). To be used for depth-stencil.
     bool createRenderBuffer(QVkRenderBuffer *rb);
 
+    bool createTexture(QVkTexture *tex);
+    QVkTexture::SubImageInfo textureInfo(QVkTexture *tex, int mipLevel = 0, int layer = 0);
+    void cmdUploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &data, int mipLevel = 0, int layer = 0);
+
     void scheduleRelease(QVkGraphicsPipelineState *ps);
     //void scheduleRelease(QVkComputePipelineState *ps);
     void scheduleRelease(QVkShaderResourceBindings *srb);
     void scheduleRelease(QVkBuffer *buf);
     void scheduleRelease(QVkRenderBuffer *rb);
+    void scheduleRelease(QVkTexture *tex);
 
     bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags,
                        QVkRenderBuffer *depthStencil, int sampleCount, QVkSwapChain *outSwapChain);

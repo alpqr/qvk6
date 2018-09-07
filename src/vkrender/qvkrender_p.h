@@ -122,7 +122,8 @@ public:
             PipelineState,
             ShaderResourceBindings,
             Buffer,
-            RenderBuffer
+            RenderBuffer,
+            Texture
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -137,8 +138,8 @@ public:
                 VkDescriptorSet sets[QVK_FRAMES_IN_FLIGHT];
             } shaderResourceBindings;
             struct {
-                VkBuffer buffer[QVK_FRAMES_IN_FLIGHT];
-                QVkAlloc allocation[QVK_FRAMES_IN_FLIGHT];
+                VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
+                QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
                 VkBuffer stagingBuffer;
                 QVkAlloc stagingAlloc;
             } buffer;
@@ -147,6 +148,13 @@ public:
                 VkImage images[QVK_FRAMES_IN_FLIGHT];
                 VkImageView imageViews[QVK_FRAMES_IN_FLIGHT];
             } renderBuffer;
+            struct {
+                VkImage image;
+                VkImageView imageView;
+                QVkAlloc allocation;
+                VkImage stagingImage;
+                QVkAlloc stagingAlloc;
+            } texture;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

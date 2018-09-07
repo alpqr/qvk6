@@ -1282,6 +1282,205 @@ bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
     return true;
 }
 
+VkFormat toVkTextureFormat(QVkTexture::Format format)
+{
+    switch (format) {
+    case QVkTexture::RGBA8:
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    case QVkTexture::RGBA8_SRGB:
+        return VK_FORMAT_R8G8B8A8_SRGB;
+    case QVkTexture::BGRA8:
+        return VK_FORMAT_B8G8R8A8_UNORM;
+    case QVkTexture::BGRA8_SRGB:
+        return VK_FORMAT_B8G8R8A8_SRGB;
+    case QVkTexture::R8:
+        return VK_FORMAT_R8_UNORM;
+    case QVkTexture::R8_SRGB:
+        return VK_FORMAT_R8_SRGB;
+    default:
+        Q_UNREACHABLE();
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    }
+}
+
+bool QVkRender::createTexture(QVkTexture *tex)
+{
+    if (tex->image) // no repeated create without a scheduleRelease first
+        return false;
+
+    VkFormat vkformat = toVkTextureFormat(tex->format);
+    VkFormatProperties props;
+    d->f->vkGetPhysicalDeviceFormatProperties(d->physDev, vkformat, &props);
+    const bool canSampleOptimal = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
+    if (!canSampleOptimal) {
+        qWarning("Texture sampling not supported?!");
+        return false;
+    }
+
+    VkSampleCountFlagBits samples = d->effectiveSampleCount(tex->sampleCount);
+    QSize size = tex->pixelSize;
+    if (size.isEmpty())
+        size = QSize(16, 16);
+
+    VkImageCreateInfo imageInfo;
+    memset(&imageInfo, 0, sizeof(imageInfo));
+    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageInfo.format = vkformat;
+    imageInfo.extent.width = size.width();
+    imageInfo.extent.height = size.height();
+    imageInfo.extent.depth = 1;
+    imageInfo.mipLevels = 1;
+    imageInfo.arrayLayers = 1;
+    imageInfo.samples = samples;
+    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+
+    VmaAllocationCreateInfo allocInfo;
+    memset(&allocInfo, 0, sizeof(allocInfo));
+    allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+
+    VmaAllocation allocation;
+    VkResult err = vmaCreateImage(d->allocator, &imageInfo, &allocInfo, &tex->image, &allocation, nullptr);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create image: %d", err);
+        return false;
+    }
+    tex->allocation = allocation;
+
+    VkImageViewCreateInfo viewInfo;
+    memset(&viewInfo, 0, sizeof(viewInfo));
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = tex->image;
+    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = vkformat;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = viewInfo.subresourceRange.layerCount = 1;
+
+    err = d->df->vkCreateImageView(d->dev, &viewInfo, nullptr, &tex->imageView);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create image view: %d", err);
+        return false;
+    }
+
+    if (!tex->flags.testFlag(QVkTexture::NoCpuContents)) {
+        imageInfo.tiling = VK_IMAGE_TILING_LINEAR;
+        allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+        imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        err = vmaCreateImage(d->allocator, &imageInfo, &allocInfo, &tex->stagingImage, &allocation, nullptr);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create staging image buffer: %d", err);
+            return false;
+        }
+        tex->stagingAlloc = allocation;
+    }
+
+    tex->lastActiveFrameSlot = -1;
+    return true;
+}
+
+QVkTexture::SubImageInfo QVkRender::textureInfo(QVkTexture *tex, int mipLevel, int layer)
+{
+    VkImageSubresource subres = {
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        uint32_t(mipLevel),
+        uint32_t(layer)
+    };
+
+    VkSubresourceLayout layout;
+    d->df->vkGetImageSubresourceLayout(d->dev, tex->stagingImage, &subres, &layout);
+
+    QVkTexture::SubImageInfo t;
+    t.size = layout.size;
+    t.stride = layout.rowPitch;
+    t.offset = layout.offset;
+    return t;
+}
+
+void QVkRender::cmdUploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &image, int mipLevel, int layer)
+{
+    const QVkTexture::SubImageInfo t = textureInfo(tex, mipLevel, layer);
+
+    void *mp = nullptr;
+    VmaAllocation a = toVmaAllocation(tex->stagingAlloc);
+    VkResult err = vmaMapMemory(d->allocator, a, &mp);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to map image data: %d", err);
+        return;
+    }
+    uchar *p = static_cast<uchar *>(mp);
+    Q_ASSERT(image.bytesPerLine() <= t.stride);
+    for (int y = 0, h = image.height(), bpl = image.bytesPerLine(); y < h; ++y) {
+        const uchar *line = image.constScanLine(y);
+        memcpy(p, line, bpl);
+        p += t.stride;
+    }
+    vmaUnmapMemory(d->allocator, a);
+    vmaFlushAllocation(d->allocator, a, 0, t.size);
+
+    VkImageMemoryBarrier barrier;
+    memset(&barrier, 0, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.image = tex->stagingImage;
+    d->df->vkCmdPipelineBarrier(cb->cb,
+                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0, 0, nullptr, 0, nullptr,
+                                1, &barrier);
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.image = tex->image;
+    d->df->vkCmdPipelineBarrier(cb->cb,
+                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                0, 0, nullptr, 0, nullptr,
+                                1, &barrier);
+
+    QSize size = tex->pixelSize;
+    if (size.isEmpty())
+        size = QSize(16, 16);
+
+    VkImageCopy copyInfo;
+    memset(&copyInfo, 0, sizeof(copyInfo));
+    copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyInfo.srcSubresource.layerCount = 1;
+    copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    copyInfo.dstSubresource.layerCount = 1;
+    copyInfo.extent.width = size.width();
+    copyInfo.extent.height = size.height();
+    copyInfo.extent.depth = 1;
+    d->df->vkCmdCopyImage(cb->cb,
+                          tex->stagingImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                          tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          1, &copyInfo);
+
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    barrier.image = tex->image;
+    d->df->vkCmdPipelineBarrier(cb->cb,
+                                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                0, 0, nullptr, 0, nullptr,
+                                1, &barrier);
+}
+
 VkShaderModule QVkRenderPrivate::createShader(const QByteArray &spirv)
 {
     VkShaderModuleCreateInfo shaderInfo;
@@ -1987,7 +2186,7 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-                    vmaDestroyBuffer(allocator, e.buffer.buffer[i], toVmaAllocation(e.buffer.allocation[i]));
+                    vmaDestroyBuffer(allocator, e.buffer.buffers[i], toVmaAllocation(e.buffer.allocations[i]));
                 vmaDestroyBuffer(allocator, e.buffer.stagingBuffer, toVmaAllocation(e.buffer.stagingAlloc));
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::RenderBuffer:
@@ -1996,6 +2195,11 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
                     df->vkDestroyImage(dev, e.renderBuffer.images[i], nullptr);
                 }
                 df->vkFreeMemory(dev, e.renderBuffer.memory, nullptr);
+                break;
+            case QVkRenderPrivate::DeferredReleaseEntry::Texture:
+                df->vkDestroyImageView(dev, e.texture.imageView, nullptr);
+                vmaDestroyImage(allocator, e.texture.image, toVmaAllocation(e.texture.allocation));
+                vmaDestroyImage(allocator, e.texture.stagingImage, toVmaAllocation(e.texture.stagingAlloc));
                 break;
             default:
                 break;
@@ -2066,8 +2270,8 @@ void QVkRender::scheduleRelease(QVkBuffer *buf)
     buf->stagingAlloc = nullptr;
 
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        e.buffer.buffer[i] = buf->d[i].buffer;
-        e.buffer.allocation[i] = buf->d[i].allocation;
+        e.buffer.buffers[i] = buf->d[i].buffer;
+        e.buffer.allocations[i] = buf->d[i].allocation;
 
         buf->d[i].buffer = VK_NULL_HANDLE;
         buf->d[i].allocation = nullptr;
@@ -2095,6 +2299,30 @@ void QVkRender::scheduleRelease(QVkRenderBuffer *rb)
         rb->images[i] = VK_NULL_HANDLE;
         rb->imageViews[i] = VK_NULL_HANDLE;
     }
+
+    d->releaseQueue.append(e);
+}
+
+void QVkRender::scheduleRelease(QVkTexture *tex)
+{
+    if (!tex->image)
+        return;
+
+    QVkRenderPrivate::DeferredReleaseEntry e;
+    e.type = QVkRenderPrivate::DeferredReleaseEntry::Texture;
+    e.lastActiveFrameSlot = tex->lastActiveFrameSlot;
+
+    e.texture.image = tex->image;
+    e.texture.imageView = tex->imageView;
+    e.texture.allocation = tex->allocation;
+    e.texture.stagingImage = tex->stagingImage;
+    e.texture.stagingAlloc = tex->stagingAlloc;
+
+    tex->image = VK_NULL_HANDLE;
+    tex->imageView = VK_NULL_HANDLE;
+    tex->allocation = nullptr;
+    tex->stagingImage = VK_NULL_HANDLE;
+    tex->stagingAlloc = nullptr;
 
     d->releaseQueue.append(e);
 }

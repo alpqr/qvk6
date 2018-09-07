@@ -30,6 +30,12 @@
 #include <QFile>
 #include <QBakedShader>
 
+static float vertexData[] = { // Y up (note m_proj), CCW
+     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
+    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
+     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f
+};
+
 QBakedShader getShader(const QString &name)
 {
     QFile f(name);
@@ -41,13 +47,9 @@ QBakedShader getShader(const QString &name)
 
 void TriangleRenderer::initResources()
 {
-    static float vertexData[] = { // Y up (note m_proj), CCW
-         0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
-        -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
-         0.5f,  -0.5f,   0.0f, 0.0f, 1.0f
-    };
     m_vbuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
-    m_r->createBuffer(m_vbuf, vertexData);
+    m_r->createBuffer(m_vbuf);
+    m_vbufReady = false;
 
     m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64 + 4);
     m_r->createBuffer(m_ubuf);
@@ -139,18 +141,26 @@ void TriangleRenderer::releaseOutputDependentResources()
     }
 }
 
+void TriangleRenderer::queueCopy(QVkCommandBuffer *cb)
+{
+    if (!m_vbufReady) {
+        m_vbufReady = true;
+        m_r->cmdUploadStaticBuffer(cb, m_vbuf, vertexData);
+    }
+}
+
 void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.rotate(m_rotation, 0, 1, 0);
-    m_r->updateBuffer(m_ubuf, 0, 64, mvp.constData());
+    m_r->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
     m_opacity += m_opacityDir * 0.005f;
     if (m_opacity < 0.0f || m_opacity > 1.0f) {
         m_opacityDir *= -1;
         m_opacity = qBound(0.0f, m_opacity, 1.0f);
     }
-    m_r->updateBuffer(m_ubuf, 64, 4, &m_opacity);
+    m_r->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 
     m_r->cmdViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     m_r->cmdScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));

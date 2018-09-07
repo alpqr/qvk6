@@ -40,6 +40,7 @@ public:
     void releaseResources();
     void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize);
     void releaseOutputDependentResources();
+    void queueCopy(QVkCommandBuffer *cb);
     void queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels);
 
     static const int SAMPLES = 1; // 1 (or 0) = no MSAA; 2, 4, 8 = MSAA
@@ -48,6 +49,7 @@ private:
     QVkRender *m_r;
 
     QVkBuffer *m_vbuf = nullptr;
+    bool m_vbufReady = false;
     QVkBuffer *m_ubuf = nullptr;
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipelineState *m_ps = nullptr;

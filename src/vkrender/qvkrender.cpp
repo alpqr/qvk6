@@ -1131,12 +1131,10 @@ static inline VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
     return VkBufferUsageFlagBits(u);
 }
 
-bool QVkRender::createBuffer(QVkBuffer *buf, const void *data)
+bool QVkRender::createBuffer(QVkBuffer *buf)
 {
     if (buf->d[0].buffer) // no repeated create without a scheduleRelease first
         return false;
-
-    Q_ASSERT(!buf->isStatic() || data);
 
     VkBufferCreateInfo bufferInfo;
     memset(&bufferInfo, 0, sizeof(bufferInfo));
@@ -1147,10 +1145,12 @@ bool QVkRender::createBuffer(QVkBuffer *buf, const void *data)
     VmaAllocationCreateInfo allocInfo;
     memset(&allocInfo, 0, sizeof(allocInfo));
 
-    // Some day we may consider using GPU_ONLY for static buffers and
-    // issue a transfer from a temporary CPU_ONLY staging buffer. But
-    // for now treat everything as "often changing".
-    allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    if (buf->isStatic()) {
+        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    } else {
+        allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    }
 
     VkResult err = VK_SUCCESS;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
@@ -1162,16 +1162,16 @@ bool QVkRender::createBuffer(QVkBuffer *buf, const void *data)
             if (err != VK_SUCCESS)
                 break;
             buf->d[i].allocation = allocation;
-            if (data) {
-                void *p = nullptr;
-                err = vmaMapMemory(d->allocator, allocation, &p);
-                if (err != VK_SUCCESS)
-                    break;
-                memcpy(p, data, buf->size);
-                vmaUnmapMemory(d->allocator, allocation);
-                vmaFlushAllocation(d->allocator, allocation, 0, buf->size);
-            }
         }
+    }
+
+    if (err == VK_SUCCESS && buf->isStatic()) {
+        allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        VmaAllocation allocation;
+        err = vmaCreateBuffer(d->allocator, &bufferInfo, &allocInfo, &buf->stagingBuffer, &allocation, nullptr);
+        if (err == VK_SUCCESS)
+            buf->stagingAlloc = allocation;
     }
 
     if (err == VK_SUCCESS) {
@@ -1183,7 +1183,59 @@ bool QVkRender::createBuffer(QVkBuffer *buf, const void *data)
     }
 }
 
-void QVkRender::updateBuffer(QVkBuffer *buf, int offset, int size, const void *data)
+void QVkRender::cmdUploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data)
+{
+    Q_ASSERT(buf->isStatic());
+    Q_ASSERT(buf->stagingBuffer);
+
+    void *p = nullptr;
+    VmaAllocation a = toVmaAllocation(buf->stagingAlloc);
+    VkResult err = vmaMapMemory(d->allocator, a, &p);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to map buffer: %d", err);
+        return;
+    }
+    memcpy(p, data, buf->size);
+    vmaUnmapMemory(d->allocator, a);
+    vmaFlushAllocation(d->allocator, a, 0, buf->size);
+
+    VkBufferCopy copyInfo;
+    memset(&copyInfo, 0, sizeof(copyInfo));
+    copyInfo.size = buf->size;
+
+    VkBuffer dstBuf = buf->d[0].buffer;
+    d->df->vkCmdCopyBuffer(cb->cb, buf->stagingBuffer, dstBuf, 1, &copyInfo);
+
+    int dstAccess = 0;
+    VkPipelineStageFlagBits dstStage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+
+    if (buf->usage.testFlag(QVkBuffer::VertexBuffer))
+        dstAccess |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    if (buf->usage.testFlag(QVkBuffer::IndexBuffer))
+        dstAccess |= VK_ACCESS_INDEX_READ_BIT;
+    if (buf->usage.testFlag(QVkBuffer::UniformBuffer)) {
+        dstAccess |= VK_ACCESS_UNIFORM_READ_BIT;
+        dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+
+    VkBufferMemoryBarrier bufMemBarrier;
+    memset(&bufMemBarrier, 0, sizeof(bufMemBarrier));
+    bufMemBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    bufMemBarrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+    bufMemBarrier.dstAccessMask = dstAccess;
+    bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufMemBarrier.buffer = dstBuf;
+    bufMemBarrier.size = buf->size;
+
+    d->df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
+                                0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
+
+    // ### for now we keep the staging buffer around (thus allowing multiple
+    // uploads, making the buffer not so "static"...) This may need to change.
+}
+
+void QVkRender::updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data)
 {
     Q_ASSERT(!buf->isStatic());
     Q_ASSERT(offset + size <= buf->size);
@@ -1935,7 +1987,8 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-                    vmaDestroyBuffer(allocator, e.buffer[i].buffer, toVmaAllocation(e.buffer[i].allocation));
+                    vmaDestroyBuffer(allocator, e.buffer.buffer[i], toVmaAllocation(e.buffer.allocation[i]));
+                vmaDestroyBuffer(allocator, e.buffer.stagingBuffer, toVmaAllocation(e.buffer.stagingAlloc));
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::RenderBuffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
@@ -2006,9 +2059,15 @@ void QVkRender::scheduleRelease(QVkBuffer *buf)
     e.type = QVkRenderPrivate::DeferredReleaseEntry::Buffer;
     e.lastActiveFrameSlot = buf->lastActiveFrameSlot;
 
+    e.buffer.stagingBuffer = buf->stagingBuffer;
+    e.buffer.stagingAlloc = buf->stagingAlloc;
+
+    buf->stagingBuffer = VK_NULL_HANDLE;
+    buf->stagingAlloc = nullptr;
+
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        e.buffer[i].buffer = buf->d[i].buffer;
-        e.buffer[i].allocation = buf->d[i].allocation;
+        e.buffer.buffer[i] = buf->d[i].buffer;
+        e.buffer.allocation[i] = buf->d[i].allocation;
 
         buf->d[i].buffer = VK_NULL_HANDLE;
         buf->d[i].allocation = nullptr;

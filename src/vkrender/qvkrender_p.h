@@ -137,9 +137,11 @@ public:
                 VkDescriptorSet sets[QVK_FRAMES_IN_FLIGHT];
             } shaderResourceBindings;
             struct {
-                VkBuffer buffer;
-                QVkAlloc allocation;
-            } buffer[QVK_FRAMES_IN_FLIGHT];
+                VkBuffer buffer[QVK_FRAMES_IN_FLIGHT];
+                QVkAlloc allocation[QVK_FRAMES_IN_FLIGHT];
+                VkBuffer stagingBuffer;
+                QVkAlloc stagingAlloc;
+            } buffer;
             struct {
                 VkDeviceMemory memory;
                 VkImage images[QVK_FRAMES_IN_FLIGHT];

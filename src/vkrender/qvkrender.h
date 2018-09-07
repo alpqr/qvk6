@@ -388,6 +388,8 @@ Q_VK_RES_PRIVATE(QVkBuffer)
         QVkAlloc allocation = nullptr;
         QVector<PendingUpdate> pendingUpdates;
     } d[QVK_FRAMES_IN_FLIGHT];
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    QVkAlloc stagingAlloc = nullptr;
     int lastActiveFrameSlot = -1;
 };
 
@@ -570,13 +572,22 @@ public:
 
     bool createShaderResourceBindings(QVkShaderResourceBindings *srb);
 
-    // Buffers are immutable like other resources but (for non-static
-    // buffers) the underlying data can change. (its size cannot)
-    // Having multiple frames in flight is handled transparently, with
-    // multiple allocations, recording updates, etc. internally.
-    bool createBuffer(QVkBuffer *buf, const void *data = nullptr);
-    // Queues a partial update. Memory is updated in the next set*Buffer (vertex/index) or setGraphicsPipelineState (uniform).
-    void updateBuffer(QVkBuffer *buf, int offset, int size, const void *data);
+    // Buffers are immutable like other resources but the underlying data can
+    // change. (its size cannot) Having multiple frames in flight is handled
+    // transparently, with multiple allocations, recording updates, etc.
+    // internally. The underlying memory type may differ for static and dynamic
+    // buffers. For best performance, static buffers may be copied to device
+    // local (not necessarily host visible) memory via a staging (host visible)
+    // buffer. Hence a separate cmdUploadStaticBuffer().
+    bool createBuffer(QVkBuffer *buf);
+
+    // Unlike other buffer ops, this must be within begin/endFrame. But outside
+    // begin/endPass!
+    void cmdUploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data);
+
+    // Queues a partial update. Memory is updated in the next set*Buffer
+    // (vertex/index) or setGraphicsPipelineState (uniform).
+    void updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data);
 
     // Transient image, backed by lazily allocated memory (ideal for tiled
     // GPUs). To be used for depth-stencil.

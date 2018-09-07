@@ -295,6 +295,8 @@ void VWindow::render()
     if (!m_triRenderer.isPipelineInitialized())
         m_triRenderer.initOutputDependentResources(m_sc.renderPass(), m_sc.sizeInPixels());
 
+    m_triRenderer.queueCopy(m_sc.currentFrameCommandBuffer());
+
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
     const QVkClearValue clearValues[] = {
         clearColor,
@@ -302,9 +304,7 @@ void VWindow::render()
         clearColor // 3 attachments when using MSAA
     };
     m_r->beginPass(&m_sc, clearValues);
-
     m_triRenderer.queueDraw(m_sc.currentFrameCommandBuffer(), m_sc.sizeInPixels());
-
     m_r->endPass(&m_sc);
 
     m_r->endFrame(&m_sc);

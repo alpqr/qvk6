@@ -99,6 +99,8 @@ void Renderer::startNextFrame()
 
     m_r->beginFrame(m_window);
 
+    m_triRenderer.queueCopy(&cb);
+
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
     const QVkClearValue clearValues[] = {
         clearColor,
@@ -106,9 +108,7 @@ void Renderer::startNextFrame()
         clearColor // 3 attachments when using MSAA
     };
     m_r->beginPass(&rt, &cb, clearValues);
-
     m_triRenderer.queueDraw(&cb, rt.sizeInPixels());
-
     m_r->endPass(&cb);
 
     m_r->endFrame(m_window);

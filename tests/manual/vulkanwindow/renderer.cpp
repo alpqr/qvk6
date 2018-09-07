@@ -54,6 +54,7 @@
 Renderer::Renderer(QVulkanWindow *w)
     : m_window(w)
 {
+    m_window->setSampleCount(TriangleRenderer::SAMPLES);
 }
 
 void Renderer::initResources()
@@ -98,9 +99,11 @@ void Renderer::startNextFrame()
 
     m_r->beginFrame(m_window);
 
-    const QVkClearValue clearValues[2] = {
-        QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
-        QVkClearValue(1.0f, 0)
+    const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
+    const QVkClearValue clearValues[] = {
+        clearColor,
+        QVkClearValue(1.0f, 0), // depth, stencil
+        clearColor // 3 attachments when using MSAA
     };
     m_r->beginPass(&rt, &cb, clearValues);
 

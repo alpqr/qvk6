@@ -53,7 +53,7 @@
 QT_BEGIN_NAMESPACE
 
 QVkRender::QVkRender(const InitParams &params)
-    : d(new QVkRenderPrivate)
+    : d(new QVkRenderPrivate(this))
 {
     d->inst = params.inst;
     d->physDev = params.physDev;
@@ -420,21 +420,20 @@ static const VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
 
 VkFormat QVkRenderPrivate::optimalDepthStencilFormat()
 {
-    if (dsFormat != VK_FORMAT_UNDEFINED)
-        return dsFormat;
+    if (optimalDsFormat != VK_FORMAT_UNDEFINED)
+        return optimalDsFormat;
 
     const VkFormat dsFormatCandidates[] = {
         VK_FORMAT_D24_UNORM_S8_UINT,
         VK_FORMAT_D32_SFLOAT_S8_UINT,
         VK_FORMAT_D16_UNORM_S8_UINT
     };
-    VkFormat dsFormat;
     const int dsFormatCandidateCount = sizeof(dsFormatCandidates) / sizeof(VkFormat);
     int dsFormatIdx = 0;
     while (dsFormatIdx < dsFormatCandidateCount) {
-        dsFormat = dsFormatCandidates[dsFormatIdx];
+        optimalDsFormat = dsFormatCandidates[dsFormatIdx];
         VkFormatProperties fmtProp;
-        f->vkGetPhysicalDeviceFormatProperties(physDev, dsFormat, &fmtProp);
+        f->vkGetPhysicalDeviceFormatProperties(physDev, optimalDsFormat, &fmtProp);
         if (fmtProp.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
             break;
         ++dsFormatIdx;
@@ -442,10 +441,10 @@ VkFormat QVkRenderPrivate::optimalDepthStencilFormat()
     if (dsFormatIdx == dsFormatCandidateCount)
         qWarning("Failed to find an optimal depth-stencil format");
 
-    return dsFormat;
+    return optimalDsFormat;
 }
 
-bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthStencil)
+bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat)
 {
     VkAttachmentDescription attDesc[3];
     memset(attDesc, 0, sizeof(attDesc));
@@ -461,7 +460,7 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
     attDesc[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     attDesc[1].format = optimalDepthStencilFormat();
-    attDesc[1].samples = VK_SAMPLE_COUNT_1_BIT; // ###
+    attDesc[1].samples = sampleCount;
     attDesc[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attDesc[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attDesc[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -469,20 +468,19 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
     attDesc[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attDesc[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-//    if (msaa) {
-//        // msaa render target
-//        attDesc[2].format = colorFormat;
-//        attDesc[2].samples = sampleCount;
-//        attDesc[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-//        attDesc[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-//        attDesc[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-//        attDesc[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-//        attDesc[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-//        attDesc[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-//    }
+    if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+        attDesc[2].format = colorFormat;
+        attDesc[2].samples = sampleCount;
+        attDesc[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attDesc[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    }
 
     VkAttachmentReference colorRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-//    VkAttachmentReference resolveRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+    VkAttachmentReference resolveRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
     VkAttachmentReference dsRef = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
     VkSubpassDescription subPassDesc;
@@ -495,16 +493,19 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
     VkRenderPassCreateInfo rpInfo;
     memset(&rpInfo, 0, sizeof(rpInfo));
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpInfo.attachmentCount = hasDepthStencil ? 2 : 1;
+    rpInfo.attachmentCount = 1;
     rpInfo.pAttachments = attDesc;
     rpInfo.subpassCount = 1;
     rpInfo.pSubpasses = &subPassDesc;
 
-//    if (msaa) {
-//        colorRef.attachment = 2;
-//        subPassDesc.pResolveAttachments = &resolveRef;
-//        rpInfo.attachmentCount = 3; // or 2
-//    }
+    if (hasDepthStencil)
+        rpInfo.attachmentCount += 1;
+
+    if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+        rpInfo.attachmentCount += 1;
+        colorRef.attachment = 2;
+        subPassDesc.pResolveAttachments = &resolveRef;
+    }
 
     VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, &rp->rp);
     if (err != VK_SUCCESS) {
@@ -517,7 +518,7 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
 
 bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
                               SurfaceImportFlags flags, QVkRenderBuffer *depthStencil,
-                              QVkSwapChain *outSwapChain)
+                              int sampleCount, QVkSwapChain *outSwapChain)
 {
     // Can be called multiple times without a call to releaseSwapChain - this
     // is typical when a window is resized.
@@ -541,28 +542,40 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
 
     // Pick the preferred format, if there is one.
     if (!formats.isEmpty() && formats[0].format != VK_FORMAT_UNDEFINED) {
-        d->colorFormat = formats[0].format;
-        d->colorSpace = formats[0].colorSpace;
+        outSwapChain->colorFormat = formats[0].format;
+        outSwapChain->colorSpace = formats[0].colorSpace;
     }
+
+    outSwapChain->depthStencil = flags.testFlag(UseDepthStencil) ? depthStencil : nullptr;
+    if (outSwapChain->depthStencil && outSwapChain->depthStencil->sampleCount != sampleCount) {
+        qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
+                 outSwapChain->depthStencil->sampleCount, sampleCount);
+    }
+    outSwapChain->sampleCount = d->effectiveSampleCount(sampleCount);
 
     if (!d->recreateSwapChain(surface, pixelSize, flags, outSwapChain))
         return false;
 
-    outSwapChain->depthStencil = flags.testFlag(UseDepthStencil) ? depthStencil : nullptr;
-
-    d->createDefaultRenderPass(&outSwapChain->rp, outSwapChain->depthStencil != nullptr);
+    d->createDefaultRenderPass(&outSwapChain->rp, outSwapChain->depthStencil != nullptr,
+                               outSwapChain->sampleCount, outSwapChain->colorFormat);
 
     for (int i = 0; i < outSwapChain->bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(outSwapChain->imageRes[i]);
 
-        VkImageView views[3] = { image.imageView,
-                                 outSwapChain->depthStencil ? outSwapChain->depthStencil->imageViews[0] : VK_NULL_HANDLE,
-                                 VK_NULL_HANDLE }; // ### will be 3 with MSAA
+        VkImageView views[3] = {
+            image.imageView,
+            outSwapChain->depthStencil ? outSwapChain->depthStencil->imageViews[0] : VK_NULL_HANDLE,
+            outSwapChain->sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
+        };
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass = outSwapChain->rp.rp;
-        fbInfo.attachmentCount = outSwapChain->depthStencil ? 2 : 1;
+        fbInfo.attachmentCount = 1;
+        if (outSwapChain->depthStencil)
+            fbInfo.attachmentCount += 1;
+        if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
+            fbInfo.attachmentCount += 1;
         fbInfo.pAttachments = views;
         fbInfo.width = outSwapChain->pixelSize.width();
         fbInfo.height = outSwapChain->pixelSize.height();
@@ -648,8 +661,8 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
     swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
     swapChainInfo.surface = surface;
     swapChainInfo.minImageCount = reqBufferCount;
-    swapChainInfo.imageFormat = colorFormat;
-    swapChainInfo.imageColorSpace = colorSpace;
+    swapChainInfo.imageFormat = swapChain->colorFormat;
+    swapChainInfo.imageColorSpace = swapChain->colorSpace;
     swapChainInfo.imageExtent = bufferSize;
     swapChainInfo.imageArrayLayers = 1;
     swapChainInfo.imageUsage = usage;
@@ -692,6 +705,23 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
         return false;
     }
 
+    VkImage msaaImages[QVkSwapChain::MAX_BUFFER_COUNT];
+    VkImageView msaaViews[QVkSwapChain::MAX_BUFFER_COUNT];
+    if (swapChain->sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+        if (!createTransientImage(swapChain->colorFormat,
+                                  swapChain->pixelSize,
+                                  VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                                  VK_IMAGE_ASPECT_COLOR_BIT,
+                                  swapChain->sampleCount,
+                                  &swapChain->msaaImageMem,
+                                  msaaImages,
+                                  msaaViews,
+                                  swapChain->bufferCount))
+        {
+            return false;
+        }
+    }
+
     VkFenceCreateInfo fenceInfo;
     memset(&fenceInfo, 0, sizeof(fenceInfo));
     fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -700,13 +730,17 @@ bool QVkRenderPrivate::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixe
     for (int i = 0; i < swapChain->bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(swapChain->imageRes[i]);
         image.image = swapChainImages[i];
+        if (swapChain->sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+            image.msaaImage = msaaImages[i];
+            image.msaaImageView = msaaViews[i];
+        }
 
         VkImageViewCreateInfo imgViewInfo;
         memset(&imgViewInfo, 0, sizeof(imgViewInfo));
         imgViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         imgViewInfo.image = swapChainImages[i];
         imgViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        imgViewInfo.format = colorFormat;
+        imgViewInfo.format = swapChain->colorFormat;
         imgViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
         imgViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
         imgViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
@@ -811,6 +845,11 @@ void QVkRenderPrivate::releaseSwapChain(QVkSwapChain *swapChain)
             df->vkDestroyImage(dev, image.msaaImage, nullptr);
             image.msaaImage = VK_NULL_HANDLE;
         }
+    }
+
+    if (swapChain->msaaImageMem) {
+        df->vkFreeMemory(dev, swapChain->msaaImageMem, nullptr);
+        swapChain->msaaImageMem = VK_NULL_HANDLE;
     }
 
     if (swapChain->rp.rp) {
@@ -995,7 +1034,11 @@ void QVkRender::beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues)
     rt.fb = sc->imageRes[sc->currentImage].fb;
     rt.rp.rp = sc->rp.rp;
     rt.pixelSize = sc->pixelSize;
-    rt.attCount = sc->depthStencil ? 2 : 1; // 3 or 2 with msaa
+    rt.attCount = 1;
+    if (sc->depthStencil)
+        rt.attCount += 1;
+    if (sc->sampleCount > VK_SAMPLE_COUNT_1_BIT)
+        rt.attCount += 1;
 
     beginPass(&rt, &sc->imageRes[sc->currentImage].cmdBuf, clearValues);
 }
@@ -1169,7 +1212,7 @@ bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
                                      rb->pixelSize,
                                      VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                                      VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                                     VK_SAMPLE_COUNT_1_BIT,
+                                     d->effectiveSampleCount(rb->sampleCount),
                                      &rb->memory,
                                      rb->images,
                                      rb->imageViews,
@@ -1553,7 +1596,7 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     VkPipelineMultisampleStateCreateInfo msInfo;
     memset(&msInfo, 0, sizeof(msInfo));
     msInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    msInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    msInfo.rasterizationSamples = d->effectiveSampleCount(ps->sampleCount);
     pipelineInfo.pMultisampleState = &msInfo;
 
     VkPipelineDepthStencilStateCreateInfo dsInfo;
@@ -2029,6 +2072,24 @@ QVector<int> QVkRender::supportedSampleCounts() const
     }
 
     return result;
+}
+
+VkSampleCountFlagBits QVkRenderPrivate::effectiveSampleCount(int sampleCount)
+{
+    // Stay compatible with QSurfaceFormat and friends where samples == 0 means the same as 1.
+    sampleCount = qBound(1, sampleCount, 64);
+
+    if (!q->supportedSampleCounts().contains(sampleCount)) {
+        qWarning("Attempted to set unsupported sample count %d", sampleCount);
+        return VK_SAMPLE_COUNT_1_BIT;
+    }
+
+    for (size_t i = 0; i < sizeof(qvk_sampleCounts) / sizeof(qvk_sampleCounts[0]); ++i) {
+        if (qvk_sampleCounts[i].count == sampleCount)
+            return qvk_sampleCounts[i].mask;
+    }
+
+    Q_UNREACHABLE();
 }
 
 QT_END_NAMESPACE

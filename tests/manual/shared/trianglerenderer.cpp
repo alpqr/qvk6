@@ -76,6 +76,8 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
     m_ps->depthWrite = true;
     m_ps->depthOp = QVkGraphicsPipelineState::LessOrEqual;
 
+    m_ps->sampleCount = SAMPLES;
+
     QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());
     QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));

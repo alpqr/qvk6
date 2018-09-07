@@ -56,6 +56,7 @@ static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
 class QVkRenderPrivate
 {
 public:
+    QVkRenderPrivate(QVkRender *q_ptr) : q(q_ptr) { }
     void create();
     void destroy();
     VkResult createDescriptorPool(VkDescriptorPool *pool);
@@ -69,7 +70,8 @@ public:
     void releaseSwapChain(QVkSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();
-    bool createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthStencil);
+    VkSampleCountFlagBits effectiveSampleCount(int sampleCount);
+    bool createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 
@@ -78,6 +80,7 @@ public:
     void executeDeferredReleases(bool forced = false);
     void prepareBufferForUse(QVkBuffer *buf);
 
+    QVkRender *q;
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;
     VkDevice dev;
@@ -96,10 +99,6 @@ public:
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = nullptr;
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
 
-    VkFormat dsFormat = VK_FORMAT_UNDEFINED;
-    VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
-    VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     struct DescriptorPoolData {
         DescriptorPoolData() { }
@@ -111,6 +110,7 @@ public:
     };
     QVector<DescriptorPoolData> descriptorPools;
 
+    VkFormat optimalDsFormat = VK_FORMAT_UNDEFINED;
     QMatrix4x4 clipCorrectMatrix;
 
     int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1

@@ -42,6 +42,8 @@ public:
     void releaseOutputDependentResources();
     void queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels);
 
+    static const int SAMPLES = 1; // 1 (or 0) = no MSAA; 2, 4, 8 = MSAA
+
 private:
     QVkRender *m_r;
 

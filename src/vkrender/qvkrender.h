@@ -332,6 +332,7 @@ struct QVkGraphicsPipelineState
     // have the reference value dynamically settable.
     quint32 stencilReadMask = 0xFF;
     quint32 stencilWriteMask = 0xFF;
+    int sampleCount = 1; // MSAA, swapchain+depthstencil must match
     QVector<QVkGraphicsShaderStage> shaderStages;
     QVkVertexInputLayout vertexInputLayout;
     QVkShaderResourceBindings *shaderResourceBindings = nullptr;
@@ -398,12 +399,13 @@ struct QVkRenderBuffer
         DepthStencil
     };
 
-    QVkRenderBuffer(Type type_, const QSize &pixelSize_)
-        : type(type_), pixelSize(pixelSize_)
+    QVkRenderBuffer(Type type_, const QSize &pixelSize_, int sampleCount_ = 1)
+        : type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
     { }
 
     Type type;
     QSize pixelSize;
+    int sampleCount;
 
 Q_VK_RES_PRIVATE(QVkRenderBuffer)
     VkDeviceMemory memory = VK_NULL_HANDLE;
@@ -436,7 +438,11 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
     bool supportsReadback = false;
     VkSwapchainKHR sc = VK_NULL_HANDLE;
     int bufferCount = 0;
+    VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
     QVkRenderBuffer *depthStencil = nullptr;
+    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
 
     struct ImageResources {
         VkImage image = VK_NULL_HANDLE;
@@ -583,7 +589,7 @@ public:
     void scheduleRelease(QVkRenderBuffer *rb);
 
     bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags,
-                       QVkRenderBuffer *depthStencil, QVkSwapChain *outSwapChain);
+                       QVkRenderBuffer *depthStencil, int sampleCount, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
     FrameOpResult beginFrame(QVkSwapChain *sc);
     FrameOpResult endFrame(QVkSwapChain *sc);

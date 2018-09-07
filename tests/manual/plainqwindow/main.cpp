@@ -240,14 +240,14 @@ void VWindow::recreateSwapChain()
     const QSize outputSize = size() * devicePixelRatio();
 
     if (!m_ds) {
-        m_ds = new QVkRenderBuffer(QVkRenderBuffer::DepthStencil, outputSize);
+        m_ds = new QVkRenderBuffer(QVkRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
     } else {
         m_r->scheduleRelease(m_ds);
         m_ds->pixelSize = outputSize;
     }
     m_r->createRenderBuffer(m_ds);
 
-    m_hasSwapChain = m_r->importSurface(m_vkSurface, outputSize, QVkRender::UseDepthStencil, m_ds, &m_sc);
+    m_hasSwapChain = m_r->importSurface(m_vkSurface, outputSize, QVkRender::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES, &m_sc);
     m_swapChainChanged = true;
 }
 
@@ -295,9 +295,11 @@ void VWindow::render()
     if (!m_triRenderer.isPipelineInitialized())
         m_triRenderer.initOutputDependentResources(m_sc.renderPass(), m_sc.sizeInPixels());
 
-    const QVkClearValue clearValues[2] = {
-        QVkClearValue(QVector4D(0.4f, 0.7f, 0.0f, 1.0f)),
-        QVkClearValue(1.0f, 0)
+    const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
+    const QVkClearValue clearValues[] = {
+        clearColor,
+        QVkClearValue(1.0f, 0), // depth, stencil
+        clearColor // 3 attachments when using MSAA
     };
     m_r->beginPass(&m_sc, clearValues);
 

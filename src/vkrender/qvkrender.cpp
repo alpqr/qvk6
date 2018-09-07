@@ -1560,7 +1560,7 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     dynEnable << VK_DYNAMIC_STATE_SCISSOR;
     if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesBlendConstants))
         dynEnable << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
-    if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesStencil))
+    if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesStencilRef))
         dynEnable << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
 
     VkPipelineDynamicStateCreateInfo dynamicInfo;

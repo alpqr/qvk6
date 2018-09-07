@@ -214,7 +214,7 @@ struct QVkGraphicsPipelineState
 {
     enum Flag {
         UsesBlendConstants = 1 << 0,
-        UsesStencil = 1 << 1
+        UsesStencilRef = 1 << 1
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 

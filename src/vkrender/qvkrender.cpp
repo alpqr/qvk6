@@ -566,7 +566,7 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
 
         VkImageView views[3] = {
             image.imageView,
-            outSwapChain->depthStencil ? outSwapChain->depthStencil->imageViews[0] : VK_NULL_HANDLE,
+            outSwapChain->depthStencil ? outSwapChain->depthStencil->imageView : VK_NULL_HANDLE,
             outSwapChain->sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
         };
         VkFramebufferCreateInfo fbInfo;
@@ -1262,11 +1262,6 @@ bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
     if (rb->memory) // no repeated create without a scheduleRelease first
         return false;
 
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        rb->images[i] = VK_NULL_HANDLE;
-        rb->imageViews[i] = VK_NULL_HANDLE;
-    }
-
     switch (rb->type) {
     case QVkRenderBuffer::DepthStencil:
         if (!d->createTransientImage(d->optimalDepthStencilFormat(),
@@ -1275,8 +1270,8 @@ bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
                                      VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
                                      d->effectiveSampleCount(rb->sampleCount),
                                      &rb->memory,
-                                     rb->images,
-                                     rb->imageViews,
+                                     &rb->image,
+                                     &rb->imageView,
                                      1))
         {
             return false;
@@ -2175,11 +2170,14 @@ void QVkRender::cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline
 {
     Q_ASSERT(ps->pipeline);
 
+    bool hasDynamicBuffer = false; // excluding vertex and index
     for (const QVkShaderResourceBindings::Binding &b : qAsConst(ps->shaderResourceBindings->bindings)) {
         switch (b.type) {
         case QVkShaderResourceBindings::Binding::UniformBuffer:
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QVkBuffer::UniformBuffer));
             d->prepareBufferForUse(b.ubuf.buf);
+            if (!b.ubuf.buf->isStatic())
+                hasDynamicBuffer = true;
             break;
         case QVkShaderResourceBindings::Binding::SampledTexture:
             b.stex.tex->lastActiveFrameSlot = d->currentFrameSlot;
@@ -2196,8 +2194,9 @@ void QVkRender::cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline
 
     d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
 
+    const int descSetIdx = hasDynamicBuffer ? d->currentFrameSlot : 0;
     d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
-                                   &ps->shaderResourceBindings->descSets[d->currentFrameSlot], 0, nullptr);
+                                   &ps->shaderResourceBindings->descSets[descSetIdx], 0, nullptr);
 }
 
 static inline VkViewport toVkViewport(const QVkViewport &viewport)
@@ -2289,10 +2288,8 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
                 vmaDestroyBuffer(allocator, e.buffer.stagingBuffer, toVmaAllocation(e.buffer.stagingAlloc));
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::RenderBuffer:
-                for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-                    df->vkDestroyImageView(dev, e.renderBuffer.imageViews[i], nullptr);
-                    df->vkDestroyImage(dev, e.renderBuffer.images[i], nullptr);
-                }
+                df->vkDestroyImageView(dev, e.renderBuffer.imageView, nullptr);
+                df->vkDestroyImage(dev, e.renderBuffer.image, nullptr);
                 df->vkFreeMemory(dev, e.renderBuffer.memory, nullptr);
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::Texture:
@@ -2340,8 +2337,6 @@ void QVkRender::scheduleRelease(QVkShaderResourceBindings *srb)
 
     e.shaderResourceBindings.poolIndex = srb->poolIndex;
     e.shaderResourceBindings.layout = srb->layout;
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-        e.shaderResourceBindings.sets[i] = srb->descSets[i];
 
     srb->poolIndex = -1;
     srb->layout = VK_NULL_HANDLE;
@@ -2392,15 +2387,12 @@ void QVkRender::scheduleRelease(QVkRenderBuffer *rb)
     e.lastActiveFrameSlot = rb->lastActiveFrameSlot;
 
     e.renderBuffer.memory = rb->memory;
+    e.renderBuffer.image = rb->image;
+    e.renderBuffer.imageView = rb->imageView;
+
     rb->memory = VK_NULL_HANDLE;
-
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        e.renderBuffer.images[i] = rb->images[i];
-        e.renderBuffer.imageViews[i] = rb->imageViews[i];
-
-        rb->images[i] = VK_NULL_HANDLE;
-        rb->imageViews[i] = VK_NULL_HANDLE;
-    }
+    rb->image = VK_NULL_HANDLE;
+    rb->imageView = VK_NULL_HANDLE;
 
     d->releaseQueue.append(e);
 }

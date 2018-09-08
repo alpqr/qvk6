@@ -228,7 +228,7 @@ struct QVkShaderResourceBindings
 Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
     int poolIndex = -1;
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT];
+    VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
     int lastActiveFrameSlot = -1;
 };
 
@@ -411,7 +411,7 @@ Q_VK_RES_PRIVATE(QVkBuffer)
         VkBuffer buffer = VK_NULL_HANDLE;
         QVkAlloc allocation = nullptr;
         QVector<PendingUpdate> pendingUpdates;
-    } d[QVK_FRAMES_IN_FLIGHT];
+    } d[QVK_FRAMES_IN_FLIGHT]; // only [0] is used for Static
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     int lastActiveFrameSlot = -1;
@@ -435,8 +435,8 @@ struct QVkRenderBuffer
 
 Q_VK_RES_PRIVATE(QVkRenderBuffer)
     VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkImage images[QVK_FRAMES_IN_FLIGHT];
-    VkImageView imageViews[QVK_FRAMES_IN_FLIGHT];
+    VkImage image;
+    VkImageView imageView;
     int lastActiveFrameSlot = -1;
 };
 

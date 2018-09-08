@@ -138,7 +138,6 @@ public:
             struct {
                 int poolIndex;
                 VkDescriptorSetLayout layout;
-                VkDescriptorSet sets[QVK_FRAMES_IN_FLIGHT];
             } shaderResourceBindings;
             struct {
                 VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
@@ -148,8 +147,8 @@ public:
             } buffer;
             struct {
                 VkDeviceMemory memory;
-                VkImage images[QVK_FRAMES_IN_FLIGHT];
-                VkImageView imageViews[QVK_FRAMES_IN_FLIGHT];
+                VkImage image;
+                VkImageView imageView;
             } renderBuffer;
             struct {
                 VkImage image;

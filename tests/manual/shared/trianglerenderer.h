@@ -35,7 +35,7 @@ class TriangleRenderer
 {
 public:
     void setVkRender(QVkRender *r) { m_r = r; }
-    bool isPipelineInitialized() const { return m_ps != nullptr; }
+    bool isPipelineInitialized() const { return m_psColor != nullptr; }
     void initResources();
     void releaseResources();
     void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize);
@@ -53,9 +53,12 @@ private:
     QVkBuffer *m_ubuf = nullptr;
     QImage m_image;
     QVkTexture *m_tex = nullptr;
+    QVkSampler *m_sampler = nullptr;
     bool m_texReady = false;
-    QVkShaderResourceBindings *m_srb = nullptr;
-    QVkGraphicsPipelineState *m_ps = nullptr;
+    QVkShaderResourceBindings *m_srbColor = nullptr;
+    QVkShaderResourceBindings *m_srbTexture = nullptr;
+    QVkGraphicsPipeline *m_psColor = nullptr;
+    QVkGraphicsPipeline *m_psTexture = nullptr;
 
     QMatrix4x4 m_proj;
     float m_rotation = 0;

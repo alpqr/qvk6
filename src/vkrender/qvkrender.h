@@ -162,12 +162,15 @@ Q_VK_RES_PRIVATE(QVkRenderPass)
 };
 
 struct QVkBuffer;
+struct QVkTexture;
+struct QVkSampler;
 
 struct QVkShaderResourceBindings
 {
     struct Binding {
         enum Type {
-            UniformBuffer
+            UniformBuffer,
+            SampledTexture
         };
 
         enum StageFlag {
@@ -179,13 +182,26 @@ struct QVkShaderResourceBindings
         };
         Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
-        static Binding uniformBuffer(int binding_, StageFlags stage_, QVkBuffer *buf_)
+        static Binding uniformBuffer(int binding_, StageFlags stage_, QVkBuffer *buf_, int offset_ = 0, int size_ = 0)
         {
             Binding b;
             b.binding = binding_;
             b.stage = stage_;
             b.type = UniformBuffer;
             b.ubuf.buf = buf_;
+            b.ubuf.offset = offset_;
+            b.ubuf.size = size_;
+            return b;
+        }
+
+        static Binding sampledTexture(int binding_, StageFlags stage_, QVkTexture *tex_, QVkSampler *sampler_)
+        {
+            Binding b;
+            b.binding = binding_;
+            b.stage = stage_;
+            b.type = SampledTexture;
+            b.stex.tex = tex_;
+            b.stex.sampler = sampler_;
             return b;
         }
 
@@ -194,9 +210,16 @@ struct QVkShaderResourceBindings
         Type type;
         struct UniformBufferData {
             QVkBuffer *buf;
+            int offset;
+            int size;
+        };
+        struct SampledTextureData {
+            QVkTexture *tex;
+            QVkSampler *sampler;
         };
         union {
             UniformBufferData ubuf;
+            SampledTextureData stex;
         };
     };
 
@@ -211,7 +234,7 @@ Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
 
-struct QVkGraphicsPipelineState
+struct QVkGraphicsPipeline
 {
     enum Flag {
         UsesBlendConstants = 1 << 0,
@@ -339,15 +362,15 @@ struct QVkGraphicsPipelineState
     QVkShaderResourceBindings *shaderResourceBindings = nullptr;
     const QVkRenderPass *renderPass = nullptr;
 
-Q_VK_RES_PRIVATE(QVkGraphicsPipelineState)
+Q_VK_RES_PRIVATE(QVkGraphicsPipeline)
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipelineState::Flags)
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipelineState::CullMode)
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipelineState::ColorMask)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipeline::Flags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipeline::CullMode)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipeline::ColorMask)
 
 typedef void * QVkAlloc;
 
@@ -420,7 +443,7 @@ Q_VK_RES_PRIVATE(QVkRenderBuffer)
 struct QVkTexture
 {
     enum Flag {
-        NoCpuContents = 1 << 0
+        NoUploadContents = 1 << 0
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -461,6 +484,33 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTexture::Flags)
 
 struct QVkSampler
 {
+    enum Filter {
+        Nearest,
+        Linear
+    };
+
+    enum AddressMode {
+        Repeat,
+        ClampToEdge,
+        Border,
+        Mirror,
+        MirrorOnce
+    };
+
+    QVkSampler(Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
+        : magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
+          addressU(u_), addressV(v_)
+    { }
+
+    Filter magFilter;
+    Filter minFilter;
+    Filter mipmapMode;
+    AddressMode addressU;
+    AddressMode addressV;
+
+Q_VK_RES_PRIVATE(QVkSampler)
+    VkSampler sampler = VK_NULL_HANDLE;
+    int lastActiveFrameSlot = -1;
 };
 
 struct QVkCommandBuffer
@@ -561,22 +611,83 @@ public:
 
     QVector<int> supportedSampleCounts() const;
 
+    /*
+       The underlying graphics resources are created when calling create* and
+       put on the release queue by scheduleRelease (so this is safe even when
+       the resource is used by the still executing/pending frame(s)).
+
+       The QVk* instance itself is not destroyed by the release and it is safe
+       to destroy it right away after calling scheduleRelease.
+
+       Changing any value needs explicit release and rebuilding of the
+       underlying resource before it can take effect.
+
+       create(res); <change something>; scheduleRelease(res); create(res); ...
+       is therefore perfectly valid and can be used to recreate things (when
+       buffer or texture size changes f.ex.)
+     */
+
+    bool createGraphicsPipeline(QVkGraphicsPipeline *ps);
+
+    bool createShaderResourceBindings(QVkShaderResourceBindings *srb);
+
+    // Buffers are immutable like other resources but the underlying data can
+    // change. (its size cannot) Having multiple frames in flight is handled
+    // transparently, with multiple allocations, recording updates, etc.
+    // internally. The underlying memory type may differ for static and dynamic
+    // buffers. For best performance, static buffers may be copied to device
+    // local (not necessarily host visible) memory via a staging (host visible)
+    // buffer. Hence a separate cmdUploadStaticBuffer().
+    bool createBuffer(QVkBuffer *buf);
+    // This goes on the command buffer so must be within begin/endFrame. But
+    // outside begin/endPass!
+    void cmdUploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data);
+    // Queues a partial update. Memory is updated in the next cmdSet*Buffer(s)
+    // (vertex/index) or cmdSetGraphicsPipeline (uniform). (so changing the
+    // same region more than once per frame must be avoided as only the values
+    // from the last update will be the visible when the commands are executed)
+    void updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data);
+    int ubufAlignment() const;
+    int ubufAligned(int v) const;
+
+    // Transient image, backed by lazily allocated memory (ideal for tiled
+    // GPUs). To be used for depth-stencil.
+    bool createRenderBuffer(QVkRenderBuffer *rb);
+
+    bool createTexture(QVkTexture *tex);
+    QVkTexture::SubImageInfo textureInfo(QVkTexture *tex, int mipLevel = 0, int layer = 0);
+    // similar to cmdUploadStaticBuffer. must not be between begin/endPass.
+    void cmdUploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &data, int mipLevel = 0, int layer = 0);
+
+    bool createSampler(QVkSampler *sampler);
+
+    void scheduleRelease(QVkGraphicsPipeline *ps);
+    void scheduleRelease(QVkShaderResourceBindings *srb);
+    void scheduleRelease(QVkBuffer *buf);
+    void scheduleRelease(QVkRenderBuffer *rb);
+    void scheduleRelease(QVkTexture *tex);
+    void scheduleRelease(QVkSampler *sampler);
+
     /* some basic use cases:
 
       1. render to a QVulkanWindow from a startNextFrame() implementation
          This is simple, repeat on every frame:
-           importVulkanWindowCurrentFrame
-           beginPass(rt, cb, ...)
+           importVulkanWindowCurrentFrame(window, rt, cb)
+           beginFrame(window)
+           ...
+           beginPass(rt, cb)
            ...
            endPass(cb)
+           endFrame
 
       2. render to a QWindow (must be VulkanSurface), VkDevice and friends must be provided as well
            [create a QVkRenderBuffer for depth-stencil and release+create it whenever size changes]
            call importSurface to create a swapchain + call it whenever the size is different than before
            call releaseSwapChain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed
            Then on every frame:
-             beginFrame
-             beginPass(sc, ...)
+             beginFrame(sc)
+             ...
+             beginPass(sc)
              ...
              endPass(sc)
              endFrame (this queues the Present, begin/endFrame manages double buffering internally)
@@ -594,59 +705,6 @@ public:
         TBD. everything is subject to change.
       */
 
-    /*
-       The underlying graphics resources are created when calling create* and
-       put on the release queue by scheduleRelease (so this is safe even when
-       the resource is used by the still executing/pending frame(s)).
-
-       The QVk* instance itself is not destroyed by the release and it is safe
-       to destroy it right away after calling scheduleRelease.
-
-       Changing any value needs explicit release and rebuilding of the
-       underlying resource before it can take effect.
-
-       create(res); <change something>; scheduleRelease(res); create(res); ...
-       is therefore perfectly valid and can be used to recreate things (when
-       buffer or texture size changes f.ex.)
-     */
-
-    bool createGraphicsPipelineState(QVkGraphicsPipelineState *ps);
-    //bool createComputePipelineState(QVkComputePipelineState *ps);
-
-    bool createShaderResourceBindings(QVkShaderResourceBindings *srb);
-
-    // Buffers are immutable like other resources but the underlying data can
-    // change. (its size cannot) Having multiple frames in flight is handled
-    // transparently, with multiple allocations, recording updates, etc.
-    // internally. The underlying memory type may differ for static and dynamic
-    // buffers. For best performance, static buffers may be copied to device
-    // local (not necessarily host visible) memory via a staging (host visible)
-    // buffer. Hence a separate cmdUploadStaticBuffer().
-    bool createBuffer(QVkBuffer *buf);
-
-    // Unlike other buffer ops, this must be within begin/endFrame. But outside
-    // begin/endPass!
-    void cmdUploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data);
-
-    // Queues a partial update. Memory is updated in the next set*Buffer
-    // (vertex/index) or setGraphicsPipelineState (uniform).
-    void updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data);
-
-    // Transient image, backed by lazily allocated memory (ideal for tiled
-    // GPUs). To be used for depth-stencil.
-    bool createRenderBuffer(QVkRenderBuffer *rb);
-
-    bool createTexture(QVkTexture *tex);
-    QVkTexture::SubImageInfo textureInfo(QVkTexture *tex, int mipLevel = 0, int layer = 0);
-    void cmdUploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &data, int mipLevel = 0, int layer = 0);
-
-    void scheduleRelease(QVkGraphicsPipelineState *ps);
-    //void scheduleRelease(QVkComputePipelineState *ps);
-    void scheduleRelease(QVkShaderResourceBindings *srb);
-    void scheduleRelease(QVkBuffer *buf);
-    void scheduleRelease(QVkRenderBuffer *rb);
-    void scheduleRelease(QVkTexture *tex);
-
     bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags,
                        QVkRenderBuffer *depthStencil, int sampleCount, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
@@ -662,10 +720,8 @@ public:
     void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
     void endPass(QVkCommandBuffer *cb);
 
-    void cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPipelineState *ps);
-    //void cmdSetComputePipelineState(QVkComputePipelineState *ps);
+    void cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps);
 
-    // pipeline must be set first
     void cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset);
     void cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb, const QVector<quint32> &offset);
     void cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format);

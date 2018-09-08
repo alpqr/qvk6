@@ -185,6 +185,7 @@ void QVkRenderPrivate::create()
     afuncs.vkDestroyImage = wrap_vkDestroyImage;
 
     f->vkGetPhysicalDeviceProperties(physDev, &physDevProperties);
+    ubufAlign = physDevProperties.limits.minUniformBufferOffsetAlignment;
 
     VmaAllocatorCreateInfo allocatorInfo;
     memset(&allocatorInfo, 0, sizeof(allocatorInfo));
@@ -204,7 +205,8 @@ void QVkRenderPrivate::create()
 VkResult QVkRenderPrivate::createDescriptorPool(VkDescriptorPool *pool)
 {
     VkDescriptorPoolSize descPoolSizes[] = {
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, QVK_UNIFORM_BUFFERS_PER_POOL }
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, QVK_UNIFORM_BUFFERS_PER_POOL },
+        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL }
     };
     VkDescriptorPoolCreateInfo descPoolInfo;
     memset(&descPoolInfo, 0, sizeof(descPoolInfo));
@@ -1230,9 +1232,6 @@ void QVkRender::cmdUploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, cons
 
     d->df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
                                 0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
-
-    // ### for now we keep the staging buffer around (thus allowing multiple
-    // uploads, making the buffer not so "static"...) This may need to change.
 }
 
 void QVkRender::updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data)
@@ -1246,6 +1245,16 @@ void QVkRender::updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const 
     const QByteArray u(static_cast<const char *>(data), size);
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
         buf->d[i].pendingUpdates.append(QVkBuffer::PendingUpdate(offset, u));
+}
+
+int QVkRender::ubufAlignment() const
+{
+    return d->ubufAlign; // typically 256 (bytes)
+}
+
+int QVkRender::ubufAligned(int v) const
+{
+    return aligned(v, d->ubufAlign);
 }
 
 bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
@@ -1368,7 +1377,7 @@ bool QVkRender::createTexture(QVkTexture *tex)
         return false;
     }
 
-    if (!tex->flags.testFlag(QVkTexture::NoCpuContents)) {
+    if (!tex->flags.testFlag(QVkTexture::NoUploadContents)) {
         imageInfo.tiling = VK_IMAGE_TILING_LINEAR;
         allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
         imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
@@ -1481,6 +1490,75 @@ void QVkRender::cmdUploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QI
                                 1, &barrier);
 }
 
+VkFilter toVkFilter(QVkSampler::Filter f)
+{
+    switch (f) {
+    case QVkSampler::Nearest:
+        return VK_FILTER_NEAREST;
+    case QVkSampler::Linear:
+        return VK_FILTER_LINEAR;
+    default:
+        Q_UNREACHABLE();
+        return VK_FILTER_NEAREST;
+    }
+}
+
+VkSamplerMipmapMode toVkMipmapMode(QVkSampler::Filter f)
+{
+    switch (f) {
+    case QVkSampler::Nearest:
+        return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    case QVkSampler::Linear:
+        return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    default:
+        Q_UNREACHABLE();
+        return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    }
+}
+
+VkSamplerAddressMode toVkAddressMode(QVkSampler::AddressMode m)
+{
+    switch (m) {
+    case QVkSampler::Repeat:
+        return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case QVkSampler::ClampToEdge:
+        return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    case QVkSampler::Border:
+        return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    case QVkSampler::Mirror:
+        return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    case QVkSampler::MirrorOnce:
+        return VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+    default:
+        Q_UNREACHABLE();
+        return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    }
+}
+
+bool QVkRender::createSampler(QVkSampler *sampler)
+{
+    if (sampler->sampler) // no repeated create without a scheduleRelease first
+        return false;
+
+    VkSamplerCreateInfo samplerInfo;
+    memset(&samplerInfo, 0, sizeof(samplerInfo));
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = toVkFilter(sampler->magFilter);
+    samplerInfo.minFilter = toVkFilter(sampler->minFilter);
+    samplerInfo.mipmapMode = toVkMipmapMode(sampler->mipmapMode);
+    samplerInfo.addressModeU = toVkAddressMode(sampler->addressU);
+    samplerInfo.addressModeV = toVkAddressMode(sampler->addressV);
+
+    VkResult err = d->df->vkCreateSampler(d->dev, &samplerInfo, nullptr, &sampler->sampler);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create sampler: %d", err);
+        return false;
+    }
+
+    sampler->lastActiveFrameSlot = -1;
+    return true;
+}
+
 VkShaderModule QVkRenderPrivate::createShader(const QByteArray &spirv)
 {
     VkShaderModuleCreateInfo shaderInfo;
@@ -1555,20 +1633,20 @@ static inline VkFormat toVkAttributeFormat(QVkVertexInputLayout::Attribute::Form
     }
 }
 
-static inline VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topology t)
+static inline VkPrimitiveTopology toVkTopology(QVkGraphicsPipeline::Topology t)
 {
     switch (t) {
-    case QVkGraphicsPipelineState::Triangles:
+    case QVkGraphicsPipeline::Triangles:
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    case QVkGraphicsPipelineState::TriangleStrip:
+    case QVkGraphicsPipeline::TriangleStrip:
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    case QVkGraphicsPipelineState::TriangleFan:
+    case QVkGraphicsPipeline::TriangleFan:
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
-    case QVkGraphicsPipelineState::Lines:
+    case QVkGraphicsPipeline::Lines:
         return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
-    case QVkGraphicsPipelineState::LineStrip:
+    case QVkGraphicsPipeline::LineStrip:
         return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
-    case QVkGraphicsPipelineState::Points:
+    case QVkGraphicsPipeline::Points:
         return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
     default:
         Q_UNREACHABLE();
@@ -1576,22 +1654,22 @@ static inline VkPrimitiveTopology toVkTopology(QVkGraphicsPipelineState::Topolog
     }
 }
 
-static inline VkCullModeFlags toVkCullMode(QVkGraphicsPipelineState::CullMode c)
+static inline VkCullModeFlags toVkCullMode(QVkGraphicsPipeline::CullMode c)
 {
     int m = 0;
-    if (c.testFlag(QVkGraphicsPipelineState::Front))
+    if (c.testFlag(QVkGraphicsPipeline::Front))
         m |= VK_CULL_MODE_FRONT_BIT;
-    if (c.testFlag(QVkGraphicsPipelineState::Back))
+    if (c.testFlag(QVkGraphicsPipeline::Back))
         m |= VK_CULL_MODE_BACK_BIT;
     return VkCullModeFlags(m);
 }
 
-static inline VkFrontFace toVkFrontFace(QVkGraphicsPipelineState::FrontFace f)
+static inline VkFrontFace toVkFrontFace(QVkGraphicsPipeline::FrontFace f)
 {
     switch (f) {
-    case QVkGraphicsPipelineState::CCW:
+    case QVkGraphicsPipeline::CCW:
         return VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    case QVkGraphicsPipelineState::CW:
+    case QVkGraphicsPipeline::CW:
         return VK_FRONT_FACE_CLOCKWISE;
     default:
         Q_UNREACHABLE();
@@ -1599,60 +1677,60 @@ static inline VkFrontFace toVkFrontFace(QVkGraphicsPipelineState::FrontFace f)
     }
 }
 
-static inline VkColorComponentFlags toVkColorComponents(QVkGraphicsPipelineState::ColorMask c)
+static inline VkColorComponentFlags toVkColorComponents(QVkGraphicsPipeline::ColorMask c)
 {
     int f = 0;
-    if (c.testFlag(QVkGraphicsPipelineState::R))
+    if (c.testFlag(QVkGraphicsPipeline::R))
         f |= VK_COLOR_COMPONENT_R_BIT;
-    if (c.testFlag(QVkGraphicsPipelineState::G))
+    if (c.testFlag(QVkGraphicsPipeline::G))
         f |= VK_COLOR_COMPONENT_G_BIT;
-    if (c.testFlag(QVkGraphicsPipelineState::B))
+    if (c.testFlag(QVkGraphicsPipeline::B))
         f |= VK_COLOR_COMPONENT_B_BIT;
-    if (c.testFlag(QVkGraphicsPipelineState::A))
+    if (c.testFlag(QVkGraphicsPipeline::A))
         f |= VK_COLOR_COMPONENT_A_BIT;
     return VkColorComponentFlags(f);
 }
 
-static inline VkBlendFactor toVkBlendFactor(QVkGraphicsPipelineState::BlendFactor f)
+static inline VkBlendFactor toVkBlendFactor(QVkGraphicsPipeline::BlendFactor f)
 {
     switch (f) {
-    case QVkGraphicsPipelineState::Zero:
+    case QVkGraphicsPipeline::Zero:
         return VK_BLEND_FACTOR_ZERO;
-    case QVkGraphicsPipelineState::One:
+    case QVkGraphicsPipeline::One:
         return VK_BLEND_FACTOR_ONE;
-    case QVkGraphicsPipelineState::SrcColor:
+    case QVkGraphicsPipeline::SrcColor:
         return VK_BLEND_FACTOR_SRC_COLOR;
-    case QVkGraphicsPipelineState::OneMinusSrcColor:
+    case QVkGraphicsPipeline::OneMinusSrcColor:
         return VK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR;
-    case QVkGraphicsPipelineState::DstColor:
+    case QVkGraphicsPipeline::DstColor:
         return VK_BLEND_FACTOR_DST_COLOR;
-    case QVkGraphicsPipelineState::OneMinusDstColor:
+    case QVkGraphicsPipeline::OneMinusDstColor:
         return VK_BLEND_FACTOR_ONE_MINUS_DST_COLOR;
-    case QVkGraphicsPipelineState::SrcAlpha:
+    case QVkGraphicsPipeline::SrcAlpha:
         return VK_BLEND_FACTOR_SRC_ALPHA;
-    case QVkGraphicsPipelineState::OneMinusSrcAlpha:
+    case QVkGraphicsPipeline::OneMinusSrcAlpha:
         return VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-    case QVkGraphicsPipelineState::DstAlpha:
+    case QVkGraphicsPipeline::DstAlpha:
         return VK_BLEND_FACTOR_DST_ALPHA;
-    case QVkGraphicsPipelineState::OneMinusDstAlpha:
+    case QVkGraphicsPipeline::OneMinusDstAlpha:
         return VK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA;
-    case QVkGraphicsPipelineState::ConstantColor:
+    case QVkGraphicsPipeline::ConstantColor:
         return VK_BLEND_FACTOR_CONSTANT_COLOR;
-    case QVkGraphicsPipelineState::OneMinusConstantColor:
+    case QVkGraphicsPipeline::OneMinusConstantColor:
         return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR;
-    case QVkGraphicsPipelineState::ConstantAlpha:
+    case QVkGraphicsPipeline::ConstantAlpha:
         return VK_BLEND_FACTOR_CONSTANT_ALPHA;
-    case QVkGraphicsPipelineState::OneMinusConstantAlpha:
+    case QVkGraphicsPipeline::OneMinusConstantAlpha:
         return VK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA;
-    case QVkGraphicsPipelineState::SrcAlphaSaturate:
+    case QVkGraphicsPipeline::SrcAlphaSaturate:
         return VK_BLEND_FACTOR_SRC_ALPHA_SATURATE;
-    case QVkGraphicsPipelineState::Src1Color:
+    case QVkGraphicsPipeline::Src1Color:
         return VK_BLEND_FACTOR_SRC1_COLOR;
-    case QVkGraphicsPipelineState::OneMinusSrc1Color:
+    case QVkGraphicsPipeline::OneMinusSrc1Color:
         return VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR;
-    case QVkGraphicsPipelineState::Src1Alpha:
+    case QVkGraphicsPipeline::Src1Alpha:
         return VK_BLEND_FACTOR_SRC1_ALPHA;
-    case QVkGraphicsPipelineState::OneMinusSrc1Alpha:
+    case QVkGraphicsPipeline::OneMinusSrc1Alpha:
         return VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA;
     default:
         Q_UNREACHABLE();
@@ -1660,18 +1738,18 @@ static inline VkBlendFactor toVkBlendFactor(QVkGraphicsPipelineState::BlendFacto
     }
 }
 
-static inline VkBlendOp toVkBlendOp(QVkGraphicsPipelineState::BlendOp op)
+static inline VkBlendOp toVkBlendOp(QVkGraphicsPipeline::BlendOp op)
 {
     switch (op) {
-    case QVkGraphicsPipelineState::Add:
+    case QVkGraphicsPipeline::Add:
         return VK_BLEND_OP_ADD;
-    case QVkGraphicsPipelineState::Subtract:
+    case QVkGraphicsPipeline::Subtract:
         return VK_BLEND_OP_SUBTRACT;
-    case QVkGraphicsPipelineState::ReverseSubtract:
+    case QVkGraphicsPipeline::ReverseSubtract:
         return VK_BLEND_OP_REVERSE_SUBTRACT;
-    case QVkGraphicsPipelineState::Min:
+    case QVkGraphicsPipeline::Min:
         return VK_BLEND_OP_MIN;
-    case QVkGraphicsPipelineState::Max:
+    case QVkGraphicsPipeline::Max:
         return VK_BLEND_OP_MAX;
     default:
         Q_UNREACHABLE();
@@ -1679,24 +1757,24 @@ static inline VkBlendOp toVkBlendOp(QVkGraphicsPipelineState::BlendOp op)
     }
 }
 
-static inline VkCompareOp toVkCompareOp(QVkGraphicsPipelineState::CompareOp op)
+static inline VkCompareOp toVkCompareOp(QVkGraphicsPipeline::CompareOp op)
 {
     switch (op) {
-    case QVkGraphicsPipelineState::Never:
+    case QVkGraphicsPipeline::Never:
         return VK_COMPARE_OP_NEVER;
-    case QVkGraphicsPipelineState::Less:
+    case QVkGraphicsPipeline::Less:
         return VK_COMPARE_OP_LESS;
-    case QVkGraphicsPipelineState::Equal:
+    case QVkGraphicsPipeline::Equal:
         return VK_COMPARE_OP_EQUAL;
-    case QVkGraphicsPipelineState::LessOrEqual:
+    case QVkGraphicsPipeline::LessOrEqual:
         return VK_COMPARE_OP_LESS_OR_EQUAL;
-    case QVkGraphicsPipelineState::Greater:
+    case QVkGraphicsPipeline::Greater:
         return VK_COMPARE_OP_GREATER;
-    case QVkGraphicsPipelineState::NotEqual:
+    case QVkGraphicsPipeline::NotEqual:
         return VK_COMPARE_OP_NOT_EQUAL;
-    case QVkGraphicsPipelineState::GreaterOrEqual:
+    case QVkGraphicsPipeline::GreaterOrEqual:
         return VK_COMPARE_OP_GREATER_OR_EQUAL;
-    case QVkGraphicsPipelineState::Always:
+    case QVkGraphicsPipeline::Always:
         return VK_COMPARE_OP_ALWAYS;
     default:
         Q_UNREACHABLE();
@@ -1704,24 +1782,24 @@ static inline VkCompareOp toVkCompareOp(QVkGraphicsPipelineState::CompareOp op)
     }
 }
 
-static inline VkStencilOp toVkStencilOp(QVkGraphicsPipelineState::StencilOp op)
+static inline VkStencilOp toVkStencilOp(QVkGraphicsPipeline::StencilOp op)
 {
     switch (op) {
-    case QVkGraphicsPipelineState::StencilZero:
+    case QVkGraphicsPipeline::StencilZero:
         return VK_STENCIL_OP_ZERO;
-    case QVkGraphicsPipelineState::Keep:
+    case QVkGraphicsPipeline::Keep:
         return VK_STENCIL_OP_KEEP;
-    case QVkGraphicsPipelineState::Replace:
+    case QVkGraphicsPipeline::Replace:
         return VK_STENCIL_OP_REPLACE;
-    case QVkGraphicsPipelineState::IncrementAndClamp:
+    case QVkGraphicsPipeline::IncrementAndClamp:
         return VK_STENCIL_OP_INCREMENT_AND_CLAMP;
-    case QVkGraphicsPipelineState::DecrementAndClamp:
+    case QVkGraphicsPipeline::DecrementAndClamp:
         return VK_STENCIL_OP_DECREMENT_AND_CLAMP;
-    case QVkGraphicsPipelineState::Invert:
+    case QVkGraphicsPipeline::Invert:
         return VK_STENCIL_OP_INVERT;
-    case QVkGraphicsPipelineState::IncrementAndWrap:
+    case QVkGraphicsPipeline::IncrementAndWrap:
         return VK_STENCIL_OP_INCREMENT_AND_WRAP;
-    case QVkGraphicsPipelineState::DecrementAndWrap:
+    case QVkGraphicsPipeline::DecrementAndWrap:
         return VK_STENCIL_OP_DECREMENT_AND_WRAP;
     default:
         Q_UNREACHABLE();
@@ -1729,7 +1807,7 @@ static inline VkStencilOp toVkStencilOp(QVkGraphicsPipelineState::StencilOp op)
     }
 }
 
-static inline void fillVkStencilOpState(VkStencilOpState *dst, const QVkGraphicsPipelineState::StencilOpState &src)
+static inline void fillVkStencilOpState(VkStencilOpState *dst, const QVkGraphicsPipeline::StencilOpState &src)
 {
     dst->failOp = toVkStencilOp(src.failOp);
     dst->passOp = toVkStencilOp(src.passOp);
@@ -1737,7 +1815,7 @@ static inline void fillVkStencilOpState(VkStencilOpState *dst, const QVkGraphics
     dst->compareOp = toVkCompareOp(src.compareOp);
 }
 
-bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
+bool QVkRender::createGraphicsPipeline(QVkGraphicsPipeline *ps)
 {
     if (ps->pipeline) // no repeated create without a scheduleRelease first
         return false;
@@ -1809,9 +1887,9 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     QVarLengthArray<VkDynamicState, 8> dynEnable;
     dynEnable << VK_DYNAMIC_STATE_VIEWPORT;
     dynEnable << VK_DYNAMIC_STATE_SCISSOR;
-    if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesBlendConstants))
+    if (ps->flags.testFlag(QVkGraphicsPipeline::UsesBlendConstants))
         dynEnable << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
-    if (ps->flags.testFlag(QVkGraphicsPipelineState::UsesStencilRef))
+    if (ps->flags.testFlag(QVkGraphicsPipeline::UsesStencilRef))
         dynEnable << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
 
     VkPipelineDynamicStateCreateInfo dynamicInfo;
@@ -1869,7 +1947,7 @@ bool QVkRender::createGraphicsPipelineState(QVkGraphicsPipelineState *ps)
     memset(&blendInfo, 0, sizeof(blendInfo));
     blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     QVarLengthArray<VkPipelineColorBlendAttachmentState, 4> targetBlends;
-    for (const QVkGraphicsPipelineState::TargetBlend &b : qAsConst(ps->targetBlends)) {
+    for (const QVkGraphicsPipeline::TargetBlend &b : qAsConst(ps->targetBlends)) {
         VkPipelineColorBlendAttachmentState blend;
         memset(&blend, 0, sizeof(blend));
         blend.blendEnable = b.enable;
@@ -1910,7 +1988,8 @@ static inline VkDescriptorType toVkDescriptorType(QVkShaderResourceBindings::Bin
     switch (type) {
     case QVkShaderResourceBindings::Binding::UniformBuffer:
         return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    // ### others
+    case QVkShaderResourceBindings::Binding::SampledTexture:
+        return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     default:
         Q_UNREACHABLE();
         return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1976,6 +2055,7 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
         return false;
 
     QVarLengthArray<VkDescriptorBufferInfo, 4> bufferInfos;
+    QVarLengthArray<VkDescriptorImageInfo, 4> imageInfos;
     QVarLengthArray<VkWriteDescriptorSet, 8> writeInfos;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         for (const QVkShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
@@ -1993,13 +2073,25 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
                 VkDescriptorBufferInfo bufInfo;
                 QVkBuffer *buf = b.ubuf.buf;
                 bufInfo.buffer = buf->isStatic() ? buf->d[0].buffer : buf->d[i].buffer;
-                bufInfo.offset = 0;
-                bufInfo.range = buf->size;
+                bufInfo.offset = b.ubuf.offset;
+                bufInfo.range = b.ubuf.size <= 0 ? buf->size : b.ubuf.size;
+                // be nice and assert when we know the vulkan device would die a horrible death due to non-aligned reads
+                Q_ASSERT(aligned(bufInfo.offset, d->ubufAlign) == bufInfo.offset);
                 bufferInfos.append(bufInfo);
                 writeInfo.pBufferInfo = &bufferInfos.last();
             }
                 break;
-            // ### others
+            case QVkShaderResourceBindings::Binding::SampledTexture:
+            {
+                writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                VkDescriptorImageInfo imageInfo;
+                imageInfo.sampler = b.stex.sampler->sampler;
+                imageInfo.imageView = b.stex.tex->imageView;
+                imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                imageInfos.append(imageInfo);
+                writeInfo.pImageInfo = &imageInfos.last();
+            }
+                break;
             default:
                 continue;
             }
@@ -2076,7 +2168,7 @@ void QVkRender::cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 o
     d->df->vkCmdBindIndexBuffer(cb->cb, ib->d[idx].buffer, offset, type);
 }
 
-void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPipelineState *ps)
+void QVkRender::cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps)
 {
     Q_ASSERT(ps->pipeline);
 
@@ -2085,7 +2177,10 @@ void QVkRender::cmdSetGraphicsPipelineState(QVkCommandBuffer *cb, QVkGraphicsPip
         case QVkShaderResourceBindings::Binding::UniformBuffer:
             d->prepareBufferForUse(b.ubuf.buf);
             break;
-        // ### others
+        case QVkShaderResourceBindings::Binding::SampledTexture:
+            b.stex.tex->lastActiveFrameSlot = d->currentFrameSlot;
+            b.stex.sampler->lastActiveFrameSlot = d->currentFrameSlot;
+            break;
         default:
             Q_UNREACHABLE();
             break;
@@ -2173,7 +2268,7 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
         const QVkRenderPrivate::DeferredReleaseEntry &e(releaseQueue[i]);
         if (forced || currentFrameSlot == e.lastActiveFrameSlot || e.lastActiveFrameSlot < 0) {
             switch (e.type) {
-            case QVkRenderPrivate::DeferredReleaseEntry::PipelineState:
+            case QVkRenderPrivate::DeferredReleaseEntry::Pipeline:
                 df->vkDestroyPipeline(dev, e.pipelineState.pipeline, nullptr);
                 df->vkDestroyPipelineLayout(dev, e.pipelineState.layout, nullptr);
                 break;
@@ -2201,6 +2296,9 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
                 vmaDestroyImage(allocator, e.texture.image, toVmaAllocation(e.texture.allocation));
                 vmaDestroyImage(allocator, e.texture.stagingImage, toVmaAllocation(e.texture.stagingAlloc));
                 break;
+            case QVkRenderPrivate::DeferredReleaseEntry::Sampler:
+                df->vkDestroySampler(dev, e.sampler.sampler, nullptr);
+                break;
             default:
                 break;
             }
@@ -2209,13 +2307,13 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
     }
 }
 
-void QVkRender::scheduleRelease(QVkGraphicsPipelineState *ps)
+void QVkRender::scheduleRelease(QVkGraphicsPipeline *ps)
 {
     if (!ps->pipeline && !ps->layout)
         return;
 
     QVkRenderPrivate::DeferredReleaseEntry e;
-    e.type = QVkRenderPrivate::DeferredReleaseEntry::PipelineState;
+    e.type = QVkRenderPrivate::DeferredReleaseEntry::Pipeline;
     e.lastActiveFrameSlot = ps->lastActiveFrameSlot;
 
     e.pipelineState.pipeline = ps->pipeline;
@@ -2323,6 +2421,21 @@ void QVkRender::scheduleRelease(QVkTexture *tex)
     tex->allocation = nullptr;
     tex->stagingImage = VK_NULL_HANDLE;
     tex->stagingAlloc = nullptr;
+
+    d->releaseQueue.append(e);
+}
+
+void QVkRender::scheduleRelease(QVkSampler *sampler)
+{
+    if (!sampler->sampler)
+        return;
+
+    QVkRenderPrivate::DeferredReleaseEntry e;
+    e.type = QVkRenderPrivate::DeferredReleaseEntry::Sampler;
+    e.lastActiveFrameSlot = sampler->lastActiveFrameSlot;
+
+    e.sampler.sampler = sampler->sampler;
+    sampler->sampler = VK_NULL_HANDLE;
 
     d->releaseQueue.append(e);
 }

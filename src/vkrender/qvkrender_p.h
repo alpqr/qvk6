@@ -52,6 +52,7 @@ class QWindow;
 
 static const int QVK_DESC_SETS_PER_POOL = 128;
 static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
+static const int QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL = 256;
 
 class QVkRenderPrivate
 {
@@ -90,6 +91,7 @@ public:
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;
     VkPhysicalDeviceProperties physDevProperties;
+    VkDeviceSize ubufAlign;
 
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
@@ -119,11 +121,12 @@ public:
 
     struct DeferredReleaseEntry {
         enum Type {
-            PipelineState,
+            Pipeline,
             ShaderResourceBindings,
             Buffer,
             RenderBuffer,
-            Texture
+            Texture,
+            Sampler
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -155,6 +158,9 @@ public:
                 VkImage stagingImage;
                 QVkAlloc stagingAlloc;
             } texture;
+            struct {
+                VkSampler sampler;
+            } sampler;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

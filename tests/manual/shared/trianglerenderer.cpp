@@ -31,9 +31,9 @@
 #include <QBakedShader>
 
 static float vertexData[] = { // Y up (note m_proj), CCW
-     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
-    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
-     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f
+     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,   0.0f, 1.0f,
+    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
+     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,   1.0f, 0.0f
 };
 
 QBakedShader getShader(const QString &name)
@@ -51,7 +51,11 @@ void TriangleRenderer::initResources()
     m_r->createBuffer(m_vbuf);
     m_vbufReady = false;
 
-    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64 + 4);
+    // Use the same buffer/memory for both pipelines, just altering the offset
+    // in the descriptor set in order to get the shader to read the correct mvp.
+    // mvp (64), opacity (4), padding (so that ubuf2 starts aligned (typically to 256)), mvp (64)
+    const int ubuf2Offset = m_r->ubufAligned(68);
+    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, ubuf2Offset + 64);
     m_r->createBuffer(m_ubuf);
 
     m_image = QImage(QLatin1String(":/qt256.png"));
@@ -59,57 +63,105 @@ void TriangleRenderer::initResources()
     m_r->createTexture(m_tex);
     m_texReady = false;
 
-    m_srb = new QVkShaderResourceBindings;
+    m_sampler = new QVkSampler(QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Repeat, QVkSampler::Repeat);
+    m_r->createSampler(m_sampler);
+
+    m_srbColor = new QVkShaderResourceBindings;
     const auto ubufVisibility = QVkShaderResourceBindings::Binding::VertexStage | QVkShaderResourceBindings::Binding::FragmentStage;
-    m_srb->bindings = {
-        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf)
+    m_srbColor->bindings = {
+        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 68)
     };
-    m_r->createShaderResourceBindings(m_srb);
+    m_r->createShaderResourceBindings(m_srbColor);
+
+    m_srbTexture = new QVkShaderResourceBindings;
+    m_srbTexture->bindings = {
+        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, ubuf2Offset, 64),
+        QVkShaderResourceBindings::Binding::sampledTexture(1, QVkShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
+    };
+    m_r->createShaderResourceBindings(m_srbTexture);
 }
 
 // the ps depends on the renderpass -> so it is tied to the swapchain.
 // on the other hand, srb and buffers are referenced from the ps but can be reused.
 void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
 {
-    m_ps = new QVkGraphicsPipelineState;
+    {
+        m_psColor = new QVkGraphicsPipeline;
 
-    //m_ps->targetBlends = { QVkGraphicsPipelineState::TargetBlend() }; // no blending
+        QVkGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
+        premulAlphaBlend.enable = true;
+        m_psColor->targetBlends = { premulAlphaBlend };
 
-    QVkGraphicsPipelineState::TargetBlend premulAlphaBlend; // convenient defaults...
-    premulAlphaBlend.enable = true;
-    m_ps->targetBlends = { premulAlphaBlend };
+        m_psColor->depthTest = true;
+        m_psColor->depthWrite = true;
+        m_psColor->depthOp = QVkGraphicsPipeline::LessOrEqual;
 
-    m_ps->depthTest = true;
-    m_ps->depthWrite = true;
-    m_ps->depthOp = QVkGraphicsPipelineState::LessOrEqual;
+        m_psColor->sampleCount = SAMPLES;
 
-    m_ps->sampleCount = SAMPLES;
+        QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
+        Q_ASSERT(vs.isValid());
+        QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
+        Q_ASSERT(fs.isValid());
+        m_psColor->shaderStages = {
+            QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
+            vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
+            QVkGraphicsShaderStage(QVkGraphicsShaderStage::Fragment,
+            fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
+        };
 
-    QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
-    Q_ASSERT(vs.isValid());
-    QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
-    Q_ASSERT(fs.isValid());
-    m_ps->shaderStages = {
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
-                               vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Fragment,
-                               fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
-    };
+        QVkVertexInputLayout inputLayout;
+        inputLayout.bindings = {
+            QVkVertexInputLayout::Binding(7 * sizeof(float))
+        };
+        inputLayout.attributes = {
+            QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float2, 0, "POSITION"),
+            QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR")
+        };
 
-    QVkVertexInputLayout inputLayout;
-    inputLayout.bindings = {
-        QVkVertexInputLayout::Binding(5 * sizeof(float))
-    };
-    inputLayout.attributes = {
-        QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float2, 0, "POSITION"),
-        QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR")
-    };
+        m_psColor->vertexInputLayout = inputLayout;
+        m_psColor->shaderResourceBindings = m_srbColor;
+        m_psColor->renderPass = rp;
 
-    m_ps->vertexInputLayout = inputLayout;
-    m_ps->shaderResourceBindings = m_srb;
-    m_ps->renderPass = rp;
+        m_r->createGraphicsPipeline(m_psColor);
+    }
 
-    m_r->createGraphicsPipelineState(m_ps);
+    {
+        m_psTexture = new QVkGraphicsPipeline;
+
+        m_psTexture->targetBlends = { QVkGraphicsPipeline::TargetBlend() };
+
+        m_psTexture->depthTest = true;
+        m_psTexture->depthWrite = true;
+        m_psTexture->depthOp = QVkGraphicsPipeline::LessOrEqual;
+
+        m_psTexture->sampleCount = SAMPLES;
+
+        QBakedShader vs = getShader(QLatin1String(":/texture.vert.qsb"));
+        Q_ASSERT(vs.isValid());
+        QBakedShader fs = getShader(QLatin1String(":/texture.frag.qsb"));
+        Q_ASSERT(fs.isValid());
+        m_psTexture->shaderStages = {
+            QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
+            vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
+            QVkGraphicsShaderStage(QVkGraphicsShaderStage::Fragment,
+            fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
+        };
+
+        QVkVertexInputLayout inputLayout;
+        inputLayout.bindings = {
+            QVkVertexInputLayout::Binding(7 * sizeof(float))
+        };
+        inputLayout.attributes = {
+            QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float2, 0, "POSITION"),
+            QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float2, 2 * sizeof(float), "TEXCOORD")
+        };
+
+        m_psTexture->vertexInputLayout = inputLayout;
+        m_psTexture->shaderResourceBindings = m_srbTexture;
+        m_psTexture->renderPass = rp;
+
+        m_r->createGraphicsPipeline(m_psTexture);
+    }
 
     m_proj = m_r->openGLCorrectionMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
@@ -118,10 +170,22 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
 
 void TriangleRenderer::releaseResources()
 {
-    if (m_srb) {
-        m_r->scheduleRelease(m_srb);
-        delete m_srb;
-        m_srb = nullptr;
+    if (m_srbColor) {
+        m_r->scheduleRelease(m_srbColor);
+        delete m_srbColor;
+        m_srbColor = nullptr;
+    }
+
+    if (m_srbTexture) {
+        m_r->scheduleRelease(m_srbTexture);
+        delete m_srbTexture;
+        m_srbTexture = nullptr;
+    }
+
+    if (m_sampler) {
+        m_r->scheduleRelease(m_sampler);
+        delete m_sampler;
+        m_sampler = nullptr;
     }
 
     if (m_tex) {
@@ -145,10 +209,16 @@ void TriangleRenderer::releaseResources()
 
 void TriangleRenderer::releaseOutputDependentResources()
 {
-    if (m_ps) {
-        m_r->scheduleRelease(m_ps);
-        delete m_ps;
-        m_ps = nullptr;
+    if (m_psColor) {
+        m_r->scheduleRelease(m_psColor);
+        delete m_psColor;
+        m_psColor = nullptr;
+    }
+
+    if (m_psTexture) {
+        m_r->scheduleRelease(m_psTexture);
+        delete m_psTexture;
+        m_psTexture = nullptr;
     }
 }
 
@@ -178,10 +248,19 @@ void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeIn
     }
     m_r->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 
+    mvp = m_proj;
+    mvp.rotate(m_rotation, 1, 0, 0);
+    mvp.translate(-1.5f, 0, 0);
+    m_r->updateDynamicBuffer(m_ubuf, m_r->ubufAligned(68), 64, mvp.constData());
+
     m_r->cmdViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     m_r->cmdScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
-    m_r->cmdSetGraphicsPipelineState(cb, m_ps);
+    m_r->cmdSetGraphicsPipeline(cb, m_psColor);
     m_r->cmdSetVertexBuffer(cb, 0, m_vbuf, 0);
+    m_r->cmdDraw(cb, 3, 1, 0, 0);
+
+    m_r->cmdSetGraphicsPipeline(cb, m_psTexture);
+    //m_r->cmdSetVertexBuffer(cb, 0, m_vbuf, 0);
     m_r->cmdDraw(cb, 3, 1, 0, 0);
 }

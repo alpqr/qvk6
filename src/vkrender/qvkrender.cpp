@@ -2140,6 +2140,7 @@ void QVkRenderPrivate::prepareBufferForUse(QVkBuffer *buf)
 
 void QVkRender::cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset)
 {
+    Q_ASSERT(vb->usage.testFlag(QVkBuffer::VertexBuffer));
     d->prepareBufferForUse(vb);
     const int idx = vb->isStatic() ? 0 : d->currentFrameSlot;
     const VkDeviceSize ofs = offset;
@@ -2152,6 +2153,7 @@ void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, cons
     QVarLengthArray<VkBuffer, 4> bufs;
     QVarLengthArray<VkDeviceSize, 4> ofs;
     for (int i = 0, ie = vb.count(); i != ie; ++i) {
+        Q_ASSERT(vb[i]->usage.testFlag(QVkBuffer::VertexBuffer));
         d->prepareBufferForUse(vb[i]);
         const int idx = vb[i]->isStatic() ? 0 : d->currentFrameSlot;
         bufs.append(vb[i]->d[idx].buffer);
@@ -2162,6 +2164,7 @@ void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, cons
 
 void QVkRender::cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format)
 {
+    Q_ASSERT(ib->usage.testFlag(QVkBuffer::IndexBuffer));
     d->prepareBufferForUse(ib);
     const int idx = ib->isStatic() ? 0 : d->currentFrameSlot;
     const VkIndexType type = format == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
@@ -2175,6 +2178,7 @@ void QVkRender::cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline
     for (const QVkShaderResourceBindings::Binding &b : qAsConst(ps->shaderResourceBindings->bindings)) {
         switch (b.type) {
         case QVkShaderResourceBindings::Binding::UniformBuffer:
+            Q_ASSERT(b.ubuf.buf->usage.testFlag(QVkBuffer::UniformBuffer));
             d->prepareBufferForUse(b.ubuf.buf);
             break;
         case QVkShaderResourceBindings::Binding::SampledTexture:

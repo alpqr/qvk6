@@ -734,16 +734,7 @@ public:
     // are the same as in the last call in the same frame.
     void setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb = nullptr);
 
-    struct VertexInput {
-        VertexInput() { }
-        VertexInput(int binding_, QVkBuffer *buf_, quint32 offset_ = 0)
-            : binding(binding_), buf(buf_), offset(offset_)
-        { }
-
-        int binding = 0;
-        QVkBuffer *buf = nullptr;
-        quint32 offset = 0;
-    };
+    using VertexInput = QPair<QVkBuffer *, quint32>; // buffer, offset
     // Binds vertex/index buffers and performs dynamic buffer updates.
     void setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
                         QVkBuffer *indexBuf = nullptr, quint32 indexOffset = 0, IndexFormat indexFormat = IndexUInt16);
@@ -753,9 +744,10 @@ public:
     void setBlendConstants(QVkCommandBuffer *cb, const QVector4D &c);
     void setStencilRef(QVkCommandBuffer *cb, quint32 refValue);
 
-    void draw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance);
-    void drawIndexed(QVkCommandBuffer *cb, quint32 indexCount, quint32 instanceCount,
-                     quint32 firstIndex, int vertexOffset, quint32 firstInstance);
+    void draw(QVkCommandBuffer *cb, quint32 vertexCount,
+              quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0);
+    void drawIndexed(QVkCommandBuffer *cb, quint32 indexCount,
+                     quint32 instanceCount = 1, quint32 firstIndex = 0, qint32 vertexOffset = 0, quint32 firstInstance = 0);
 
     // make Y up and viewport.min/maxDepth 0/1
     QMatrix4x4 openGLCorrectionMatrix() const;

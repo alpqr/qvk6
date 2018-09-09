@@ -2134,12 +2134,12 @@ void QVkRender::setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVe
     QVarLengthArray<VkBuffer, 4> bufs;
     QVarLengthArray<VkDeviceSize, 4> ofs;
     for (int i = 0, ie = bindings.count(); i != ie; ++i) {
-        QVkBuffer *buf = bindings[i].buf;
+        QVkBuffer *buf = bindings[i].first;
         Q_ASSERT(buf->usage.testFlag(QVkBuffer::VertexBuffer));
         d->prepareBufferForUse(buf);
         const int idx = buf->isStatic() ? 0 : d->currentFrameSlot;
         bufs.append(buf->d[idx].buffer);
-        ofs.append(bindings[i].offset);
+        ofs.append(bindings[i].second);
     }
     if (!bufs.isEmpty())
         d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
@@ -2239,14 +2239,14 @@ void QVkRender::setStencilRef(QVkCommandBuffer *cb, quint32 refValue)
     d->df->vkCmdSetStencilReference(cb->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
 }
 
-void QVkRender::draw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount,
-                     quint32 firstVertex, quint32 firstInstance)
+void QVkRender::draw(QVkCommandBuffer *cb, quint32 vertexCount,
+                     quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
     d->df->vkCmdDraw(cb->cb, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
-void QVkRender::drawIndexed(QVkCommandBuffer *cb, quint32 indexCount, quint32 instanceCount,
-                            quint32 firstIndex, int vertexOffset, quint32 firstInstance)
+void QVkRender::drawIndexed(QVkCommandBuffer *cb, quint32 indexCount,
+                            quint32 instanceCount, quint32 firstIndex, qint32 vertexOffset, quint32 firstInstance)
 {
     d->df->vkCmdDrawIndexed(cb->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }

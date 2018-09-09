@@ -257,9 +257,9 @@ void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeIn
     m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
     m_r->setGraphicsPipeline(cb, m_psColor);
-    m_r->setVertexInput(cb, 0, { QVkRender::VertexInput(0, m_vbuf) });
-    m_r->draw(cb, 3, 1, 0, 0);
+    m_r->setVertexInput(cb, 0, { { m_vbuf, 0 } });
+    m_r->draw(cb, 3);
 
     m_r->setGraphicsPipeline(cb, m_psTexture);
-    m_r->draw(cb, 3, 1, 0, 0);
+    m_r->draw(cb, 3);
 }

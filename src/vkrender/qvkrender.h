@@ -517,6 +517,13 @@ struct QVkCommandBuffer
 {
 Q_VK_RES_PRIVATE(QVkCommandBuffer)
     VkCommandBuffer cb = VK_NULL_HANDLE;
+
+    void resetState() {
+        currentPipeline = nullptr;
+        currentSrb = nullptr;
+    }
+    QVkGraphicsPipeline *currentPipeline;
+    QVkShaderResourceBindings *currentSrb;
 };
 
 struct QVkSwapChain
@@ -637,15 +644,16 @@ public:
     // internally. The underlying memory type may differ for static and dynamic
     // buffers. For best performance, static buffers may be copied to device
     // local (not necessarily host visible) memory via a staging (host visible)
-    // buffer. Hence a separate cmdUploadStaticBuffer().
+    // buffer. Hence a separate uploadStaticBuffer().
     bool createBuffer(QVkBuffer *buf);
     // This goes on the command buffer so must be within begin/endFrame. But
     // outside begin/endPass!
-    void cmdUploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data);
-    // Queues a partial update. Memory is updated in the next cmdSet*Buffer(s)
-    // (vertex/index) or cmdSetGraphicsPipeline (uniform). (so changing the
-    // same region more than once per frame must be avoided as only the values
-    // from the last update will be the visible when the commands are executed)
+    void uploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data);
+    // Queues a partial update. GPU-visible memory is updated in the next
+    // set*Buffer(s) (vertex/index) or setGraphicsPipeline (uniform). (so
+    // changing the same region more than once per frame must be avoided as
+    // only the values from the last update will be the visible when the
+    // commands are executed)
     void updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data);
     int ubufAlignment() const;
     int ubufAligned(int v) const;
@@ -656,8 +664,8 @@ public:
 
     bool createTexture(QVkTexture *tex);
     QVkTexture::SubImageInfo textureInfo(QVkTexture *tex, int mipLevel = 0, int layer = 0);
-    // similar to cmdUploadStaticBuffer. must not be between begin/endPass.
-    void cmdUploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &data, int mipLevel = 0, int layer = 0);
+    // similar to uploadStaticBuffer. must not be between begin/endPass.
+    void uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &data, int mipLevel = 0, int layer = 0);
 
     bool createSampler(QVkSampler *sampler);
 
@@ -672,13 +680,12 @@ public:
 
       1. render to a QVulkanWindow from a startNextFrame() implementation
          This is simple, repeat on every frame:
-           importVulkanWindowCurrentFrame(window, rt, cb)
-           beginFrame(window)
+           beginFrame(window, &rt, &cb)
            ...
            beginPass(rt, cb)
            ...
            endPass(cb)
-           endFrame
+           endFrame(window)
 
       2. render to a QWindow (must be VulkanSurface), VkDevice and friends must be provided as well
            [create a QVkRenderBuffer for depth-stencil and release+create it whenever size changes]
@@ -690,7 +697,7 @@ public:
              beginPass(sc)
              ...
              endPass(sc)
-             endFrame (this queues the Present, begin/endFrame manages double buffering internally)
+             endFrame(sc) (this queues the Present, begin/endFrame manages double buffering internally)
 
       3. render to a texture:
         3.1 as part of normal frame as described in #1 or #2:
@@ -713,25 +720,42 @@ public:
     void beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues);
     void endPass(QVkSwapChain *sc);
 
-    void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRp);
-    void importVulkanWindowCurrentFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb);
-    void beginFrame(QVulkanWindow *window);
+    void beginFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb);
     void endFrame(QVulkanWindow *window);
     void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
     void endPass(QVkCommandBuffer *cb);
+    // the renderpass may be needed before beginFrame can be called
+    void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRp);
 
-    void cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps);
+    // Binds the pipeline and manages shader resources (like does the actual
+    // update for queued dynamic buffer updates). When specified, srb can be
+    // different from ps' srb but the layouts must match. Basic tracking is
+    // included: no command is added to the cb when the pipeline or desc.set
+    // are the same as in the last call in the same frame.
+    void setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb = nullptr);
 
-    void cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset);
-    void cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb, const QVector<quint32> &offset);
-    void cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format);
+    struct VertexInput {
+        VertexInput() { }
+        VertexInput(int binding_, QVkBuffer *buf_, quint32 offset_ = 0)
+            : binding(binding_), buf(buf_), offset(offset_)
+        { }
 
-    void cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
-    void cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);
-    void cmdBlendConstants(QVkCommandBuffer *cb, const QVector4D &c);
-    void cmdStencilRef(QVkCommandBuffer *cb, quint32 refValue);
+        int binding = 0;
+        QVkBuffer *buf = nullptr;
+        quint32 offset = 0;
+    };
+    // Binds vertex/index buffers and performs dynamic buffer updates.
+    void setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
+                        QVkBuffer *indexBuf = nullptr, quint32 indexOffset = 0, IndexFormat indexFormat = IndexUInt16);
 
-    void cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance);
+    void setViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
+    void setScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);
+    void setBlendConstants(QVkCommandBuffer *cb, const QVector4D &c);
+    void setStencilRef(QVkCommandBuffer *cb, quint32 refValue);
+
+    void draw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount, quint32 firstVertex, quint32 firstInstance);
+    void drawIndexed(QVkCommandBuffer *cb, quint32 indexCount, quint32 instanceCount,
+                     quint32 firstIndex, int vertexOffset, quint32 firstInstance);
 
     // make Y up and viewport.min/maxDepth 0/1
     QMatrix4x4 openGLCorrectionMatrix() const;

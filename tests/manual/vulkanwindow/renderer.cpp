@@ -95,9 +95,7 @@ void Renderer::startNextFrame()
 {
     QVkRenderTarget rt;
     QVkCommandBuffer cb;
-    m_r->importVulkanWindowCurrentFrame(m_window, &rt, &cb);
-
-    m_r->beginFrame(m_window);
+    m_r->beginFrame(m_window, &rt, &cb);
 
     m_triRenderer.queueCopy(&cb);
 

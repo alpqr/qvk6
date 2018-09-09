@@ -76,7 +76,7 @@ public:
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 
-    void prepareNewFrame();
+    void prepareNewFrame(QVkCommandBuffer *cb);
     void finishFrame();
     void executeDeferredReleases(bool forced = false);
     void prepareBufferForUse(QVkBuffer *buf);

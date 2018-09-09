@@ -950,7 +950,7 @@ QVkRender::FrameOpResult QVkRender::beginFrame(QVkSwapChain *sc)
     if (sc->depthStencil)
         sc->depthStencil->lastActiveFrameSlot = d->currentFrameSlot;
 
-    d->prepareNewFrame();
+    d->prepareNewFrame(&image.cmdBuf);
 
     return FrameOpSuccess;
 }
@@ -1055,22 +1055,17 @@ void QVkRender::importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPas
     outRp->rp = window->defaultRenderPass();
 }
 
-void QVkRender::importVulkanWindowCurrentFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb)
+void QVkRender::beginFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb)
 {
+    importVulkanWindowRenderPass(window, &outRt->rp);
     outRt->fb = window->currentFramebuffer();
-    outRt->rp.rp = window->defaultRenderPass();
     outRt->pixelSize = window->swapChainImageSize();
     outRt->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
 
     outCb->cb = window->currentCommandBuffer();
-}
-
-void QVkRender::beginFrame(QVulkanWindow *window)
-{
-    Q_UNUSED(window);
 
     d->currentFrameSlot = window->currentFrame();
-    d->prepareNewFrame();
+    d->prepareNewFrame(outCb);
 }
 
 void QVkRender::endFrame(QVulkanWindow *window)
@@ -1185,7 +1180,7 @@ bool QVkRender::createBuffer(QVkBuffer *buf)
     }
 }
 
-void QVkRender::cmdUploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data)
+void QVkRender::uploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data)
 {
     Q_ASSERT(buf->isStatic());
     Q_ASSERT(buf->stagingBuffer);
@@ -1406,7 +1401,7 @@ QVkTexture::SubImageInfo QVkRender::textureInfo(QVkTexture *tex, int mipLevel, i
     return t;
 }
 
-void QVkRender::cmdUploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &image, int mipLevel, int layer)
+void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &image, int mipLevel, int layer)
 {
     const QVkTexture::SubImageInfo t = textureInfo(tex, mipLevel, layer);
 
@@ -2133,45 +2128,40 @@ void QVkRenderPrivate::prepareBufferForUse(QVkBuffer *buf)
     }
 }
 
-void QVkRender::cmdSetVertexBuffer(QVkCommandBuffer *cb, int binding, QVkBuffer *vb, quint32 offset)
-{
-    Q_ASSERT(vb->usage.testFlag(QVkBuffer::VertexBuffer));
-    d->prepareBufferForUse(vb);
-    const int idx = vb->isStatic() ? 0 : d->currentFrameSlot;
-    const VkDeviceSize ofs = offset;
-    d->df->vkCmdBindVertexBuffers(cb->cb, binding, 1, &vb->d[idx].buffer, &ofs);
-}
-
-void QVkRender::cmdSetVertexBuffers(QVkCommandBuffer *cb, int startBinding, const QVector<QVkBuffer *> &vb,
-                                    const QVector<quint32> &offset)
+void QVkRender::setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
+                               QVkBuffer *indexBuf, quint32 indexOffset, IndexFormat indexFormat)
 {
     QVarLengthArray<VkBuffer, 4> bufs;
     QVarLengthArray<VkDeviceSize, 4> ofs;
-    for (int i = 0, ie = vb.count(); i != ie; ++i) {
-        Q_ASSERT(vb[i]->usage.testFlag(QVkBuffer::VertexBuffer));
-        d->prepareBufferForUse(vb[i]);
-        const int idx = vb[i]->isStatic() ? 0 : d->currentFrameSlot;
-        bufs.append(vb[i]->d[idx].buffer);
-        ofs.append(offset[i]);
+    for (int i = 0, ie = bindings.count(); i != ie; ++i) {
+        QVkBuffer *buf = bindings[i].buf;
+        Q_ASSERT(buf->usage.testFlag(QVkBuffer::VertexBuffer));
+        d->prepareBufferForUse(buf);
+        const int idx = buf->isStatic() ? 0 : d->currentFrameSlot;
+        bufs.append(buf->d[idx].buffer);
+        ofs.append(bindings[i].offset);
     }
-    d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+    if (!bufs.isEmpty())
+        d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+
+    if (indexBuf) {
+        Q_ASSERT(indexBuf->usage.testFlag(QVkBuffer::IndexBuffer));
+        d->prepareBufferForUse(indexBuf);
+        const int idx = indexBuf->isStatic() ? 0 : d->currentFrameSlot;
+        const VkIndexType type = indexFormat == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+        d->df->vkCmdBindIndexBuffer(cb->cb, indexBuf->d[idx].buffer, indexOffset, type);
+    }
 }
 
-void QVkRender::cmdSetIndexBuffer(QVkCommandBuffer *cb, QVkBuffer *ib, quint32 offset, IndexFormat format)
-{
-    Q_ASSERT(ib->usage.testFlag(QVkBuffer::IndexBuffer));
-    d->prepareBufferForUse(ib);
-    const int idx = ib->isStatic() ? 0 : d->currentFrameSlot;
-    const VkIndexType type = format == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-    d->df->vkCmdBindIndexBuffer(cb->cb, ib->d[idx].buffer, offset, type);
-}
-
-void QVkRender::cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps)
+void QVkRender::setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb)
 {
     Q_ASSERT(ps->pipeline);
 
+    if (!srb)
+        srb = ps->shaderResourceBindings;
+
     bool hasDynamicBuffer = false; // excluding vertex and index
-    for (const QVkShaderResourceBindings::Binding &b : qAsConst(ps->shaderResourceBindings->bindings)) {
+    for (const QVkShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
         switch (b.type) {
         case QVkShaderResourceBindings::Binding::UniformBuffer:
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QVkBuffer::UniformBuffer));
@@ -2189,14 +2179,19 @@ void QVkRender::cmdSetGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline
         }
     }
 
-    ps->lastActiveFrameSlot = d->currentFrameSlot;
-    ps->shaderResourceBindings->lastActiveFrameSlot = d->currentFrameSlot;
+    if (cb->currentPipeline != ps) {
+        ps->lastActiveFrameSlot = d->currentFrameSlot;
+        d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
+        cb->currentPipeline = ps;
+    }
 
-    d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
-
-    const int descSetIdx = hasDynamicBuffer ? d->currentFrameSlot : 0;
-    d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
-                                   &ps->shaderResourceBindings->descSets[descSetIdx], 0, nullptr);
+    if (hasDynamicBuffer || cb->currentSrb != srb) {
+        srb->lastActiveFrameSlot = d->currentFrameSlot;
+        const int descSetIdx = hasDynamicBuffer ? d->currentFrameSlot : 0;
+        d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
+                                       &srb->descSets[descSetIdx], 0, nullptr);
+        cb->currentSrb = srb;
+    }
 }
 
 static inline VkViewport toVkViewport(const QVkViewport &viewport)
@@ -2211,7 +2206,7 @@ static inline VkViewport toVkViewport(const QVkViewport &viewport)
     return vp;
 }
 
-void QVkRender::cmdViewport(QVkCommandBuffer *cb, const QVkViewport &viewport)
+void QVkRender::setViewport(QVkCommandBuffer *cb, const QVkViewport &viewport)
 {
     VkViewport vp = toVkViewport(viewport);
     d->df->vkCmdSetViewport(cb->cb, 0, 1, &vp);
@@ -2227,35 +2222,43 @@ static inline VkRect2D toVkScissor(const QVkScissor &scissor)
     return s;
 }
 
-void QVkRender::cmdScissor(QVkCommandBuffer *cb, const QVkScissor &scissor)
+void QVkRender::setScissor(QVkCommandBuffer *cb, const QVkScissor &scissor)
 {
     VkRect2D s = toVkScissor(scissor);
     d->df->vkCmdSetScissor(cb->cb, 0, 1, &s);
 }
 
-void QVkRender::cmdBlendConstants(QVkCommandBuffer *cb, const QVector4D &c)
+void QVkRender::setBlendConstants(QVkCommandBuffer *cb, const QVector4D &c)
 {
     const float bc[4] = { c.x(), c.y(), c.z(), c.w() };
     d->df->vkCmdSetBlendConstants(cb->cb, bc);
 }
 
-void QVkRender::cmdStencilRef(QVkCommandBuffer *cb, quint32 refValue)
+void QVkRender::setStencilRef(QVkCommandBuffer *cb, quint32 refValue)
 {
     d->df->vkCmdSetStencilReference(cb->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
 }
 
-void QVkRender::cmdDraw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount,
-                        quint32 firstVertex, quint32 firstInstance)
+void QVkRender::draw(QVkCommandBuffer *cb, quint32 vertexCount, quint32 instanceCount,
+                     quint32 firstVertex, quint32 firstInstance)
 {
     d->df->vkCmdDraw(cb->cb, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
-void QVkRenderPrivate::prepareNewFrame()
+void QVkRender::drawIndexed(QVkCommandBuffer *cb, quint32 indexCount, quint32 instanceCount,
+                            quint32 firstIndex, int vertexOffset, quint32 firstInstance)
+{
+    d->df->vkCmdDrawIndexed(cb->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+void QVkRenderPrivate::prepareNewFrame(QVkCommandBuffer *cb)
 {
     Q_ASSERT(!inFrame);
     inFrame = true;
 
     executeDeferredReleases();
+
+    cb->resetState();
 }
 
 void QVkRenderPrivate::finishFrame()

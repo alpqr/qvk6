@@ -226,12 +226,12 @@ void TriangleRenderer::queueCopy(QVkCommandBuffer *cb)
 {
     if (!m_vbufReady) {
         m_vbufReady = true;
-        m_r->cmdUploadStaticBuffer(cb, m_vbuf, vertexData);
+        m_r->uploadStaticBuffer(cb, m_vbuf, vertexData);
     }
 
     if (!m_texReady) {
         m_texReady = true;
-        m_r->cmdUploadTexture(cb, m_tex, m_image);
+        m_r->uploadTexture(cb, m_tex, m_image);
     }
 }
 
@@ -253,14 +253,13 @@ void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeIn
     mvp.translate(-1.5f, 0, 0);
     m_r->updateDynamicBuffer(m_ubuf, m_r->ubufAligned(68), 64, mvp.constData());
 
-    m_r->cmdViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
-    m_r->cmdScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
-    m_r->cmdSetGraphicsPipeline(cb, m_psColor);
-    m_r->cmdSetVertexBuffer(cb, 0, m_vbuf, 0);
-    m_r->cmdDraw(cb, 3, 1, 0, 0);
+    m_r->setGraphicsPipeline(cb, m_psColor);
+    m_r->setVertexInput(cb, 0, { QVkRender::VertexInput(0, m_vbuf) });
+    m_r->draw(cb, 3, 1, 0, 0);
 
-    m_r->cmdSetGraphicsPipeline(cb, m_psTexture);
-    //m_r->cmdSetVertexBuffer(cb, 0, m_vbuf, 0);
-    m_r->cmdDraw(cb, 3, 1, 0, 0);
+    m_r->setGraphicsPipeline(cb, m_psTexture);
+    m_r->draw(cb, 3, 1, 0, 0);
 }

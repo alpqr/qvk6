@@ -443,17 +443,19 @@ Q_VK_RES_PRIVATE(QVkRenderBuffer)
 struct QVkTexture
 {
     enum Flag {
-        NoUploadContents = 1 << 0
+        NoUploadContents = 1 << 0,
+        RenderTarget = 1 << 1
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
     enum Format {
         RGBA8,
-        RGBA8_SRGB,
         BGRA8,
-        BGRA8_SRGB,
         R8,
-        R8_SRGB
+        R16,
+
+        D16,
+        D32
     };
 
     struct SubImageInfo {

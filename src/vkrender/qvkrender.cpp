@@ -1281,24 +1281,39 @@ bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
     return true;
 }
 
-VkFormat toVkTextureFormat(QVkTexture::Format format)
+static inline VkFormat toVkTextureFormat(QVkTexture::Format format)
 {
     switch (format) {
     case QVkTexture::RGBA8:
         return VK_FORMAT_R8G8B8A8_UNORM;
-    case QVkTexture::RGBA8_SRGB:
-        return VK_FORMAT_R8G8B8A8_SRGB;
     case QVkTexture::BGRA8:
         return VK_FORMAT_B8G8R8A8_UNORM;
-    case QVkTexture::BGRA8_SRGB:
-        return VK_FORMAT_B8G8R8A8_SRGB;
     case QVkTexture::R8:
         return VK_FORMAT_R8_UNORM;
-    case QVkTexture::R8_SRGB:
-        return VK_FORMAT_R8_SRGB;
+    case QVkTexture::R16:
+        return VK_FORMAT_R16_UNORM;
+
+    case QVkTexture::D16:
+        return VK_FORMAT_D16_UNORM;
+    case QVkTexture::D32:
+        return VK_FORMAT_D32_SFLOAT;
+
     default:
         Q_UNREACHABLE();
         return VK_FORMAT_R8G8B8A8_UNORM;
+    }
+}
+
+static inline bool isDepthStencilTextureFormat(QVkTexture::Format format)
+{
+    switch (format) {
+    case QVkTexture::Format::D16:
+        Q_FALLTHROUGH();
+    case QVkTexture::Format::D32:
+        return true;
+
+    default:
+        return false;
     }
 }
 
@@ -1333,8 +1348,15 @@ bool QVkRender::createTexture(QVkTexture *tex)
     imageInfo.arrayLayers = 1;
     imageInfo.samples = samples;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+
+    imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    if (tex->flags.testFlag(QVkTexture::RenderTarget)) {
+        if (isDepthStencilTextureFormat(tex->format))
+            imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+        else
+            imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    }
 
     VmaAllocationCreateInfo allocInfo;
     memset(&allocInfo, 0, sizeof(allocInfo));
@@ -1480,7 +1502,7 @@ void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImag
                                 1, &barrier);
 }
 
-VkFilter toVkFilter(QVkSampler::Filter f)
+static inline VkFilter toVkFilter(QVkSampler::Filter f)
 {
     switch (f) {
     case QVkSampler::Nearest:
@@ -1493,7 +1515,7 @@ VkFilter toVkFilter(QVkSampler::Filter f)
     }
 }
 
-VkSamplerMipmapMode toVkMipmapMode(QVkSampler::Filter f)
+static inline VkSamplerMipmapMode toVkMipmapMode(QVkSampler::Filter f)
 {
     switch (f) {
     case QVkSampler::Nearest:
@@ -1506,7 +1528,7 @@ VkSamplerMipmapMode toVkMipmapMode(QVkSampler::Filter f)
     }
 }
 
-VkSamplerAddressMode toVkAddressMode(QVkSampler::AddressMode m)
+static inline VkSamplerAddressMode toVkAddressMode(QVkSampler::AddressMode m)
 {
     switch (m) {
     case QVkSampler::Repeat:

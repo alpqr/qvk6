@@ -451,37 +451,40 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
     VkAttachmentDescription attDesc[3];
     memset(attDesc, 0, sizeof(attDesc));
 
-    // This is either the non-msaa render target or the resolve target.
+    uint32_t colorAttIndex = 0;
     attDesc[0].format = colorFormat;
     attDesc[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attDesc[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // ignored when msaa
+    attDesc[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attDesc[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attDesc[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attDesc[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attDesc[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attDesc[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+    // clear on load + no store + lazy alloc + transient image should play
+    // nicely with tiled GPUs (no physical backing necessary for ds buffer)
     attDesc[1].format = optimalDepthStencilFormat();
     attDesc[1].samples = sampleCount;
     attDesc[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attDesc[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attDesc[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attDesc[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attDesc[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attDesc[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attDesc[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+        colorAttIndex = 2;
         attDesc[2].format = colorFormat;
         attDesc[2].samples = sampleCount;
         attDesc[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc[2].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attDesc[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attDesc[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attDesc[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
 
-    VkAttachmentReference colorRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+    VkAttachmentReference colorRef = { colorAttIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
     VkAttachmentReference resolveRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
     VkAttachmentReference dsRef = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
@@ -505,7 +508,6 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
 
     if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
         rpInfo.attachmentCount += 1;
-        colorRef.attachment = 2;
         subPassDesc.pResolveAttachments = &resolveRef;
     }
 

@@ -171,37 +171,37 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
 void TriangleRenderer::releaseResources()
 {
     if (m_srbColor) {
-        m_r->scheduleRelease(m_srbColor);
+        m_r->releaseLater(m_srbColor);
         delete m_srbColor;
         m_srbColor = nullptr;
     }
 
     if (m_srbTexture) {
-        m_r->scheduleRelease(m_srbTexture);
+        m_r->releaseLater(m_srbTexture);
         delete m_srbTexture;
         m_srbTexture = nullptr;
     }
 
     if (m_sampler) {
-        m_r->scheduleRelease(m_sampler);
+        m_r->releaseLater(m_sampler);
         delete m_sampler;
         m_sampler = nullptr;
     }
 
     if (m_tex) {
-        m_r->scheduleRelease(m_tex);
+        m_r->releaseLater(m_tex);
         delete m_tex;
         m_tex = nullptr;
     }
 
     if (m_ubuf) {
-        m_r->scheduleRelease(m_ubuf);
+        m_r->releaseLater(m_ubuf);
         delete m_ubuf;
         m_ubuf = nullptr;
     }
 
     if (m_vbuf) {
-        m_r->scheduleRelease(m_vbuf);
+        m_r->releaseLater(m_vbuf);
         delete m_vbuf;
         m_vbuf = nullptr;
     }
@@ -210,13 +210,13 @@ void TriangleRenderer::releaseResources()
 void TriangleRenderer::releaseOutputDependentResources()
 {
     if (m_psColor) {
-        m_r->scheduleRelease(m_psColor);
+        m_r->releaseLater(m_psColor);
         delete m_psColor;
         m_psColor = nullptr;
     }
 
     if (m_psTexture) {
-        m_r->scheduleRelease(m_psTexture);
+        m_r->releaseLater(m_psTexture);
         delete m_psTexture;
         m_psTexture = nullptr;
     }

@@ -1132,7 +1132,7 @@ static inline VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
 
 bool QVkRender::createBuffer(QVkBuffer *buf)
 {
-    if (buf->d[0].buffer) // no repeated create without a scheduleRelease first
+    if (buf->d[0].buffer) // no repeated create without a releaseLater first
         return false;
 
     VkBufferCreateInfo bufferInfo;
@@ -1256,7 +1256,7 @@ int QVkRender::ubufAligned(int v) const
 
 bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
 {
-    if (rb->memory) // no repeated create without a scheduleRelease first
+    if (rb->memory) // no repeated create without a releaseLater first
         return false;
 
     switch (rb->type) {
@@ -1321,7 +1321,7 @@ static inline bool isDepthStencilTextureFormat(QVkTexture::Format format)
 
 bool QVkRender::createTexture(QVkTexture *tex)
 {
-    if (tex->image) // no repeated create without a scheduleRelease first
+    if (tex->image) // no repeated create without a releaseLater first
         return false;
 
     VkFormat vkformat = toVkTextureFormat(tex->format);
@@ -1551,7 +1551,7 @@ static inline VkSamplerAddressMode toVkAddressMode(QVkSampler::AddressMode m)
 
 bool QVkRender::createSampler(QVkSampler *sampler)
 {
-    if (sampler->sampler) // no repeated create without a scheduleRelease first
+    if (sampler->sampler) // no repeated create without a releaseLater first
         return false;
 
     VkSamplerCreateInfo samplerInfo;
@@ -1562,6 +1562,7 @@ bool QVkRender::createSampler(QVkSampler *sampler)
     samplerInfo.mipmapMode = toVkMipmapMode(sampler->mipmapMode);
     samplerInfo.addressModeU = toVkAddressMode(sampler->addressU);
     samplerInfo.addressModeV = toVkAddressMode(sampler->addressV);
+    samplerInfo.maxAnisotropy = 1.0f;
 
     VkResult err = d->df->vkCreateSampler(d->dev, &samplerInfo, nullptr, &sampler->sampler);
     if (err != VK_SUCCESS) {
@@ -1831,7 +1832,7 @@ static inline void fillVkStencilOpState(VkStencilOpState *dst, const QVkGraphics
 
 bool QVkRender::createGraphicsPipeline(QVkGraphicsPipeline *ps)
 {
-    if (ps->pipeline) // no repeated create without a scheduleRelease first
+    if (ps->pipeline) // no repeated create without a releaseLater first
         return false;
 
     if (!d->ensurePipelineCache())
@@ -2028,7 +2029,7 @@ static inline VkShaderStageFlags toVkShaderStageFlags(QVkShaderResourceBindings:
 
 bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
 {
-    if (srb->layout) // no repeated create without a scheduleRelease first
+    if (srb->layout) // no repeated create without a releaseLater first
         return false;
 
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
@@ -2335,7 +2336,7 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
     }
 }
 
-void QVkRender::scheduleRelease(QVkGraphicsPipeline *ps)
+void QVkRender::releaseLater(QVkGraphicsPipeline *ps)
 {
     if (!ps->pipeline && !ps->layout)
         return;
@@ -2353,7 +2354,7 @@ void QVkRender::scheduleRelease(QVkGraphicsPipeline *ps)
     d->releaseQueue.append(e);
 }
 
-void QVkRender::scheduleRelease(QVkShaderResourceBindings *srb)
+void QVkRender::releaseLater(QVkShaderResourceBindings *srb)
 {
     if (!srb->layout)
         return;
@@ -2373,7 +2374,7 @@ void QVkRender::scheduleRelease(QVkShaderResourceBindings *srb)
     d->releaseQueue.append(e);
 }
 
-void QVkRender::scheduleRelease(QVkBuffer *buf)
+void QVkRender::releaseLater(QVkBuffer *buf)
 {
     int nullBufferCount = 0;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
@@ -2404,7 +2405,7 @@ void QVkRender::scheduleRelease(QVkBuffer *buf)
     d->releaseQueue.append(e);
 }
 
-void QVkRender::scheduleRelease(QVkRenderBuffer *rb)
+void QVkRender::releaseLater(QVkRenderBuffer *rb)
 {
     if (!rb->memory)
         return;
@@ -2424,7 +2425,7 @@ void QVkRender::scheduleRelease(QVkRenderBuffer *rb)
     d->releaseQueue.append(e);
 }
 
-void QVkRender::scheduleRelease(QVkTexture *tex)
+void QVkRender::releaseLater(QVkTexture *tex)
 {
     if (!tex->image)
         return;
@@ -2448,7 +2449,7 @@ void QVkRender::scheduleRelease(QVkTexture *tex)
     d->releaseQueue.append(e);
 }
 
-void QVkRender::scheduleRelease(QVkSampler *sampler)
+void QVkRender::releaseLater(QVkSampler *sampler)
 {
     if (!sampler->sampler)
         return;

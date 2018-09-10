@@ -622,16 +622,16 @@ public:
 
     /*
        The underlying graphics resources are created when calling create* and
-       put on the release queue by scheduleRelease (so this is safe even when
+       put on the release queue by releaseLater (so this is safe even when
        the resource is used by the still executing/pending frame(s)).
 
        The QVk* instance itself is not destroyed by the release and it is safe
-       to destroy it right away after calling scheduleRelease.
+       to destroy it right away after calling releaseLater.
 
        Changing any value needs explicit release and rebuilding of the
        underlying resource before it can take effect.
 
-       create(res); <change something>; scheduleRelease(res); create(res); ...
+       create(res); <change something>; releaseLater(res); create(res); ...
        is therefore perfectly valid and can be used to recreate things (when
        buffer or texture size changes f.ex.)
      */
@@ -671,12 +671,12 @@ public:
 
     bool createSampler(QVkSampler *sampler);
 
-    void scheduleRelease(QVkGraphicsPipeline *ps);
-    void scheduleRelease(QVkShaderResourceBindings *srb);
-    void scheduleRelease(QVkBuffer *buf);
-    void scheduleRelease(QVkRenderBuffer *rb);
-    void scheduleRelease(QVkTexture *tex);
-    void scheduleRelease(QVkSampler *sampler);
+    void releaseLater(QVkGraphicsPipeline *ps);
+    void releaseLater(QVkShaderResourceBindings *srb);
+    void releaseLater(QVkBuffer *buf);
+    void releaseLater(QVkRenderBuffer *rb);
+    void releaseLater(QVkTexture *tex);
+    void releaseLater(QVkSampler *sampler);
 
     /* some basic use cases:
 

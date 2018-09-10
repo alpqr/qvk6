@@ -242,7 +242,7 @@ void VWindow::recreateSwapChain()
     if (!m_ds) {
         m_ds = new QVkRenderBuffer(QVkRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
     } else {
-        m_r->scheduleRelease(m_ds);
+        m_r->releaseLater(m_ds);
         m_ds->pixelSize = outputSize;
     }
     m_r->createRenderBuffer(m_ds);
@@ -258,7 +258,7 @@ void VWindow::releaseSwapChain()
         m_r->releaseSwapChain(&m_sc);
     }
     if (m_ds) {
-        m_r->scheduleRelease(m_ds);
+        m_r->releaseLater(m_ds);
         delete m_ds;
         m_ds = nullptr;
     }

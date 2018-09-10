@@ -26,23 +26,23 @@
  **
  ****************************************************************************/
 
-#ifndef TRIANGLERENDERER_H
-#define TRIANGLERENDERER_H
+#ifndef TRIANGLEONCUBERENDERER_H
+#define TRIANGLEONCUBERENDERER_H
 
-#include <QVkRender>
+#include "trianglerenderer.h"
 
-class TriangleRenderer
+class TriangleOnCubeRenderer
 {
 public:
     void setVkRender(QVkRender *r) { m_r = r; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
-    void setScale(float f) { m_scale = f; }
     bool isPipelineInitialized() const { return m_ps != nullptr; }
     void initResources();
     void releaseResources();
-    void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize);
+    void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize, QVkRenderBuffer *ds);
     void releaseOutputDependentResources();
     void queueCopy(QVkCommandBuffer *cb);
+    void queueOffscreenPass(QVkCommandBuffer *cb);
     void queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels);
 
     static const int SAMPLES = 1; // 1 (or 0) = no MSAA; 2, 4, 8 = MSAA
@@ -53,15 +53,17 @@ private:
     QVkBuffer *m_vbuf = nullptr;
     bool m_vbufReady = false;
     QVkBuffer *m_ubuf = nullptr;
+    QVkTexture *m_tex = nullptr;
+    QVkSampler *m_sampler = nullptr;
+    QVkTextureRenderTarget *m_rt = nullptr;
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipeline *m_ps = nullptr;
 
     QVector3D m_translation;
-    float m_scale = 1;
     QMatrix4x4 m_proj;
     float m_rotation = 0;
-    float m_opacity = 1;
-    int m_opacityDir = -1;
+
+    TriangleRenderer m_offscreenTriangle;
 };
 
 #endif

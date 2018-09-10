@@ -1605,8 +1605,6 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
     Q_ASSERT(!rt->depthStencilBuffer || !rt->depthTexture);
     const bool hasDepthStencil = rt->depthStencilBuffer || rt->depthTexture;
 
-    rt->type = QVkRenderTarget::RtTexture;
-
     VkAttachmentDescription attDesc[2];
     memset(attDesc, 0, sizeof(attDesc));
 
@@ -1681,6 +1679,10 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
         qWarning("Failed to create framebuffer: %d", err);
         return false;
     }
+
+    rt->pixelSize = rt->texture->pixelSize;
+    rt->attCount = attCount;
+    rt->type = QVkRenderTarget::RtTexture;
 
     rt->lastActiveFrameSlot = -1;
     return true;

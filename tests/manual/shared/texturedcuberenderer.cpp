@@ -26,14 +26,42 @@
  **
  ****************************************************************************/
 
-#include "trianglerenderer.h"
+#include "texturedcuberenderer.h"
 #include <QFile>
 #include <QBakedShader>
 
-static float vertexData[] = { // Y up (note m_proj), CCW
-     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,
-    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
-     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,   1.0f, 1.0f
+// ugliness borrowed from qtdeclarative/examples/quick/rendercontrol/cuberenderer.cpp
+static float vertexData[] = { // Y up, CW
+    -0.5, 0.5, 0.5, 0.5,-0.5,0.5,-0.5,-0.5,0.5,
+    0.5, -0.5, 0.5, -0.5,0.5,0.5,0.5,0.5,0.5,
+    -0.5, -0.5, -0.5, 0.5,-0.5,-0.5,-0.5,0.5,-0.5,
+    0.5, 0.5, -0.5, -0.5,0.5,-0.5,0.5,-0.5,-0.5,
+
+    0.5, -0.5, -0.5, 0.5,-0.5,0.5,0.5,0.5,-0.5,
+    0.5, 0.5, 0.5, 0.5,0.5,-0.5,0.5,-0.5,0.5,
+    -0.5, 0.5, -0.5, -0.5,-0.5,0.5,-0.5,-0.5,-0.5,
+    -0.5, -0.5, 0.5, -0.5,0.5,-0.5,-0.5,0.5,0.5,
+
+    0.5, 0.5,  -0.5, -0.5, 0.5,  0.5,  -0.5,  0.5,  -0.5,
+    -0.5,  0.5,  0.5,  0.5,  0.5,  -0.5, 0.5, 0.5,  0.5,
+    -0.5,  -0.5, -0.5, -0.5, -0.5, 0.5,  0.5, -0.5, -0.5,
+    0.5, -0.5, 0.5,  0.5,  -0.5, -0.5, -0.5,  -0.5, 0.5,
+
+    // texcoords
+    0.0f,0.0f, 1.0f,1.0f, 1.0f,0.0f,
+    1.0f,1.0f, 0.0f,0.0f, 0.0f,1.0f,
+    1.0f,1.0f, 1.0f,0.0f, 0.0f,1.0f,
+    0.0f,0.0f, 0.0f,1.0f, 1.0f,0.0f,
+
+    1.0f,1.0f, 1.0f,0.0f, 0.0f,1.0f,
+    0.0f,0.0f, 0.0f,1.0f, 1.0f,0.0f,
+    0.0f,0.0f, 1.0f,1.0f, 1.0f,0.0f,
+    1.0f,1.0f, 0.0f,0.0f, 0.0f,1.0f,
+
+    0.0f,1.0f, 1.0f,0.0f, 1.0f,1.0f,
+    1.0f,0.0f, 0.0f,1.0f, 0.0f,0.0f,
+    1.0f,0.0f, 1.0f,1.0f, 0.0f,0.0f,
+    0.0f,1.0f, 0.0f,0.0f, 1.0f,1.0f
 };
 
 static QBakedShader getShader(const QString &name)
@@ -45,38 +73,50 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-void TriangleRenderer::initResources()
+void TexturedCubeRenderer::initResources()
 {
     m_vbuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
     m_r->createBuffer(m_vbuf);
     m_vbufReady = false;
 
-    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 68);
+    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64);
     m_r->createBuffer(m_ubuf);
+
+    m_image = QImage(QLatin1String(":/qt256.png")).mirrored().convertToFormat(QImage::Format_RGBA8888);
+    m_tex = new QVkTexture(QVkTexture::RGBA8, QSize(m_image.width(), m_image.height()));
+    m_r->createTexture(m_tex);
+    m_texReady = false;
+
+    m_sampler = new QVkSampler(QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Repeat, QVkSampler::Repeat);
+    m_r->createSampler(m_sampler);
 
     m_srb = new QVkShaderResourceBindings;
     const auto ubufVisibility = QVkShaderResourceBindings::Binding::VertexStage | QVkShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 68)
+        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
+        QVkShaderResourceBindings::Binding::sampledTexture(1, QVkShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
     };
     m_r->createShaderResourceBindings(m_srb);
 }
 
-// the ps depends on the renderpass -> so it is tied to the swapchain.
-// on the other hand, srb and buffers are referenced from the ps but can be reused.
-void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
+void TexturedCubeRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
 {
     m_ps = new QVkGraphicsPipeline;
 
-    QVkGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
-    premulAlphaBlend.enable = true;
-    m_ps->targetBlends = { premulAlphaBlend };
+    m_ps->targetBlends = { QVkGraphicsPipeline::TargetBlend() };
+
+    m_ps->depthTest = true;
+    m_ps->depthWrite = true;
+    m_ps->depthOp = QVkGraphicsPipeline::Less;
+
+    m_ps->cullMode = QVkGraphicsPipeline::Back;
+    m_ps->frontFace = QVkGraphicsPipeline::CW;
 
     m_ps->sampleCount = SAMPLES;
 
-    QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
+    QBakedShader vs = getShader(QLatin1String(":/texture.vert.qsb"));
     Q_ASSERT(vs.isValid());
-    QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
+    QBakedShader fs = getShader(QLatin1String(":/texture.frag.qsb"));
     Q_ASSERT(fs.isValid());
     m_ps->shaderStages = {
         QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
@@ -87,11 +127,12 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
 
     QVkVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        QVkVertexInputLayout::Binding(7 * sizeof(float))
+        QVkVertexInputLayout::Binding(3 * sizeof(float)),
+        QVkVertexInputLayout::Binding(2 * sizeof(float))
     };
     inputLayout.attributes = {
-        QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float2, 0, "POSITION"),
-        QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR")
+        QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float3, 0, "POSITION"),
+        QVkVertexInputLayout::Attribute(1, 1, QVkVertexInputLayout::Attribute::Float2, 0, "TEXCOORD")
     };
 
     m_ps->vertexInputLayout = inputLayout;
@@ -105,12 +146,24 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
     m_proj.translate(0, 0, -4);
 }
 
-void TriangleRenderer::releaseResources()
+void TexturedCubeRenderer::releaseResources()
 {
     if (m_srb) {
         m_r->releaseLater(m_srb);
         delete m_srb;
         m_srb = nullptr;
+    }
+
+    if (m_sampler) {
+        m_r->releaseLater(m_sampler);
+        delete m_sampler;
+        m_sampler = nullptr;
+    }
+
+    if (m_tex) {
+        m_r->releaseLater(m_tex);
+        delete m_tex;
+        m_tex = nullptr;
     }
 
     if (m_ubuf) {
@@ -126,7 +179,7 @@ void TriangleRenderer::releaseResources()
     }
 }
 
-void TriangleRenderer::releaseOutputDependentResources()
+void TexturedCubeRenderer::releaseOutputDependentResources()
 {
     if (m_ps) {
         m_r->releaseLater(m_ps);
@@ -135,33 +188,31 @@ void TriangleRenderer::releaseOutputDependentResources()
     }
 }
 
-void TriangleRenderer::queueCopy(QVkCommandBuffer *cb)
+void TexturedCubeRenderer::queueCopy(QVkCommandBuffer *cb)
 {
     if (!m_vbufReady) {
         m_vbufReady = true;
         m_r->uploadStaticBuffer(cb, m_vbuf, vertexData);
     }
+
+    if (!m_texReady) {
+        m_texReady = true;
+        m_r->uploadTexture(cb, m_tex, m_image);
+    }
 }
 
-void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
+void TexturedCubeRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.translate(m_translation);
-    mvp.scale(m_scale);
     mvp.rotate(m_rotation, 0, 1, 0);
     m_r->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
-    m_opacity += m_opacityDir * 0.005f;
-    if (m_opacity < 0.0f || m_opacity > 1.0f) {
-        m_opacityDir *= -1;
-        m_opacity = qBound(0.0f, m_opacity, 1.0f);
-    }
-    m_r->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 
     m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
     m_r->setGraphicsPipeline(cb, m_ps);
-    m_r->setVertexInput(cb, 0, { { m_vbuf, 0 } });
-    m_r->draw(cb, 3);
+    m_r->setVertexInput(cb, 0, { { m_vbuf, 0 }, { m_vbuf, 36 * 3 * sizeof(float) } });
+    m_r->draw(cb, 36);
 }

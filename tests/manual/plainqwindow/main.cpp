@@ -33,6 +33,8 @@
 #include <QVulkanFunctions>
 #include <QPlatformSurfaceEvent>
 #include "trianglerenderer.h"
+#include "texturedcuberenderer.h"
+#include "triangleoncuberenderer.h"
 
 class VWindow : public QWindow
 {
@@ -67,6 +69,8 @@ private:
     QVkRenderBuffer *m_ds = nullptr;
 
     TriangleRenderer m_triRenderer;
+    TexturedCubeRenderer m_cubeRenderer;
+    TriangleOnCubeRenderer m_liveTexCubeRenderer;
 };
 
 void VWindow::exposeEvent(QExposeEvent *)
@@ -204,6 +208,15 @@ void VWindow::init()
 
     m_triRenderer.setVkRender(m_r);
     m_triRenderer.initResources();
+    m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
+
+    m_cubeRenderer.setVkRender(m_r);
+    m_cubeRenderer.initResources();
+    m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
+
+    m_liveTexCubeRenderer.setVkRender(m_r);
+    m_liveTexCubeRenderer.initResources();
+    m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
 }
 
 void VWindow::releaseResources()
@@ -215,6 +228,12 @@ void VWindow::releaseResources()
 
     m_triRenderer.releaseOutputDependentResources();
     m_triRenderer.releaseResources();
+
+    m_cubeRenderer.releaseOutputDependentResources();
+    m_cubeRenderer.releaseResources();
+
+    m_liveTexCubeRenderer.releaseOutputDependentResources();
+    m_liveTexCubeRenderer.releaseResources();
 
     delete m_r;
     m_r = nullptr;
@@ -290,12 +309,23 @@ void VWindow::render()
     if (m_swapChainChanged) {
         m_swapChainChanged = false;
         m_triRenderer.releaseOutputDependentResources();
+        m_cubeRenderer.releaseOutputDependentResources();
+        m_liveTexCubeRenderer.releaseOutputDependentResources();
     }
 
-    if (!m_triRenderer.isPipelineInitialized())
-        m_triRenderer.initOutputDependentResources(m_sc.defaultRenderPass(), m_sc.sizeInPixels());
+    if (!m_triRenderer.isPipelineInitialized()) {
+        const QVkRenderPass *rp = m_sc.defaultRenderPass();
+        m_triRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
+        m_cubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
+        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels(), m_ds);
+    }
 
-    m_triRenderer.queueCopy(m_sc.currentFrameCommandBuffer());
+    QVkCommandBuffer *cb = m_sc.currentFrameCommandBuffer();
+    m_triRenderer.queueCopy(cb);
+    m_cubeRenderer.queueCopy(cb);
+    m_liveTexCubeRenderer.queueCopy(cb);
+
+    m_liveTexCubeRenderer.queueOffscreenPass(cb);
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
     const QVkClearValue clearValues[] = {
@@ -303,9 +333,11 @@ void VWindow::render()
         QVkClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
-    m_r->beginPass(m_sc.currentFrameRenderTarget(), m_sc.currentFrameCommandBuffer(), clearValues);
-    m_triRenderer.queueDraw(m_sc.currentFrameCommandBuffer(), m_sc.sizeInPixels());
-    m_r->endPass(m_sc.currentFrameCommandBuffer());
+    m_r->beginPass(m_sc.currentFrameRenderTarget(), cb, clearValues);
+    m_triRenderer.queueDraw(cb, m_sc.sizeInPixels());
+    m_cubeRenderer.queueDraw(cb, m_sc.sizeInPixels());
+    m_liveTexCubeRenderer.queueDraw(cb, m_sc.sizeInPixels());
+    m_r->endPass(cb);
 
     m_r->endFrame(&m_sc);
 

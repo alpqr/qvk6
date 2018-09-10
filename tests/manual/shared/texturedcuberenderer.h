@@ -26,17 +26,16 @@
  **
  ****************************************************************************/
 
-#ifndef TRIANGLERENDERER_H
-#define TRIANGLERENDERER_H
+#ifndef TEXTUREDCUBERENDERER_H
+#define TEXTUREDCUBERENDERER_H
 
 #include <QVkRender>
 
-class TriangleRenderer
+class TexturedCubeRenderer
 {
 public:
     void setVkRender(QVkRender *r) { m_r = r; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
-    void setScale(float f) { m_scale = f; }
     bool isPipelineInitialized() const { return m_ps != nullptr; }
     void initResources();
     void releaseResources();
@@ -53,15 +52,16 @@ private:
     QVkBuffer *m_vbuf = nullptr;
     bool m_vbufReady = false;
     QVkBuffer *m_ubuf = nullptr;
+    QImage m_image;
+    QVkTexture *m_tex = nullptr;
+    QVkSampler *m_sampler = nullptr;
+    bool m_texReady = false;
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipeline *m_ps = nullptr;
 
     QVector3D m_translation;
-    float m_scale = 1;
     QMatrix4x4 m_proj;
     float m_rotation = 0;
-    float m_opacity = 1;
-    int m_opacityDir = -1;
 };
 
 #endif

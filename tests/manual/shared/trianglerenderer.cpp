@@ -31,9 +31,9 @@
 #include <QBakedShader>
 
 static float vertexData[] = { // Y up (note m_proj), CCW
-     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,   0.0f, 1.0f,
-    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,   0.0f, 0.0f,
-     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,   1.0f, 0.0f
+     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,
+    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
+     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,   1.0f, 1.0f
 };
 
 QBakedShader getShader(const QString &name)
@@ -153,7 +153,7 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
         };
         inputLayout.attributes = {
             QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float2, 0, "POSITION"),
-            QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float2, 2 * sizeof(float), "TEXCOORD")
+            QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float2, 5 * sizeof(float), "TEXCOORD")
         };
 
         m_psTexture->vertexInputLayout = inputLayout;
@@ -239,6 +239,7 @@ void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeIn
 {
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
+    mvp.translate(1.0f, 0, 0);
     mvp.rotate(m_rotation, 0, 1, 0);
     m_r->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
     m_opacity += m_opacityDir * 0.005f;
@@ -249,8 +250,8 @@ void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeIn
     m_r->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 
     mvp = m_proj;
+    mvp.translate(-1.0f, 0, 0);
     mvp.rotate(m_rotation, 1, 0, 0);
-    mvp.translate(-1.5f, 0, 0);
     m_r->updateDynamicBuffer(m_ubuf, m_r->ubufAligned(68), 64, mvp.constData());
 
     m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));

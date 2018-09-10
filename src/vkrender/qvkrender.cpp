@@ -323,6 +323,7 @@ bool QVkRenderPrivate::createTransientImage(VkFormat format,
         imgInfo.samples = sampleCount;
         imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imgInfo.usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+        imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
         err = df->vkCreateImage(dev, &imgInfo, nullptr, images + i);
         if (err != VK_SUCCESS) {
@@ -1323,12 +1324,10 @@ bool QVkRender::createTexture(QVkTexture *tex)
         return false;
     }
 
-    VkSampleCountFlagBits samples = d->effectiveSampleCount(tex->sampleCount);
     QSize size = tex->pixelSize;
     if (size.isEmpty())
         size = QSize(16, 16);
 
-    Q_ASSERT(samples == VK_SAMPLE_COUNT_1_BIT || !tex->flags.testFlag(QVkTexture::NoUploadContents));
     const bool isDepthStencil = isDepthStencilTextureFormat(tex->format);
 
     VkImageCreateInfo imageInfo;
@@ -1341,7 +1340,7 @@ bool QVkRender::createTexture(QVkTexture *tex)
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
     imageInfo.arrayLayers = 1;
-    imageInfo.samples = samples;
+    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
 
@@ -1603,9 +1602,85 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
         return false;
 
     Q_ASSERT(rt->texture);
+    Q_ASSERT(!rt->depthStencilBuffer || !rt->depthTexture);
+    const bool hasDepthStencil = rt->depthStencilBuffer || rt->depthTexture;
+
     rt->type = QVkRenderTarget::RtTexture;
 
-    // ###
+    VkAttachmentDescription attDesc[2];
+    memset(attDesc, 0, sizeof(attDesc));
+
+    // ### what about depth-only passes?
+
+    attDesc[0].format = toVkTextureFormat(rt->texture->format);
+    attDesc[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attDesc[0].loadOp = rt->flags.testFlag(QVkTextureRenderTarget::PreserveColorContents)
+            ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attDesc[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attDesc[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attDesc[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attDesc[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    if (hasDepthStencil) {
+        attDesc[1].format = rt->depthTexture ? toVkTextureFormat(rt->depthTexture->format) : d->optimalDepthStencilFormat();
+        attDesc[1].samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc[1].storeOp = rt->depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc[1].stencilStoreOp = rt->depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc[1].finalLayout = rt->depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+    }
+
+    VkAttachmentReference colorRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+    VkAttachmentReference dsRef = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+    VkSubpassDescription subPassDesc;
+    memset(&subPassDesc, 0, sizeof(subPassDesc));
+    subPassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subPassDesc.colorAttachmentCount = 1;
+    subPassDesc.pColorAttachments = &colorRef;
+    subPassDesc.pDepthStencilAttachment = hasDepthStencil ? &dsRef : nullptr;
+
+    VkRenderPassCreateInfo rpInfo;
+    memset(&rpInfo, 0, sizeof(rpInfo));
+    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpInfo.attachmentCount = 1;
+    rpInfo.pAttachments = attDesc;
+    rpInfo.subpassCount = 1;
+    rpInfo.pSubpasses = &subPassDesc;
+
+    if (hasDepthStencil)
+        rpInfo.attachmentCount += 1;
+
+    VkResult err = d->df->vkCreateRenderPass(d->dev, &rpInfo, nullptr, &rt->rp.rp);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create renderpass: %d", err);
+        return false;
+    }
+
+    const VkImageView views[] = {
+        rt->texture->imageView,
+        hasDepthStencil ? (rt->depthTexture ? rt->depthTexture->imageView : rt->depthStencilBuffer->imageView) : VK_NULL_HANDLE
+    };
+    const int attCount = hasDepthStencil ? 2 : 1;
+
+    VkFramebufferCreateInfo fbInfo;
+    memset(&fbInfo, 0, sizeof(fbInfo));
+    fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    fbInfo.renderPass = rt->rp.rp;
+    fbInfo.attachmentCount = attCount;
+    fbInfo.pAttachments = views;
+    fbInfo.width = rt->texture->pixelSize.width();
+    fbInfo.height = rt->texture->pixelSize.height();
+    fbInfo.layers = 1;
+
+    err = d->df->vkCreateFramebuffer(d->dev, &fbInfo, nullptr, &rt->fb);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create framebuffer: %d", err);
+        return false;
+    }
 
     rt->lastActiveFrameSlot = -1;
     return true;

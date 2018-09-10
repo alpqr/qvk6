@@ -464,14 +464,13 @@ struct QVkTexture
         int offset = 0;
     };
 
-    QVkTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0, int sampleCount_ = 1)
-        : format(format_), pixelSize(pixelSize_), flags(flags_), sampleCount(sampleCount_)
+    QVkTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0)
+        : format(format_), pixelSize(pixelSize_), flags(flags_)
     { }
 
     Format format;
     QSize pixelSize;
     Flags flags;
-    int sampleCount;
 
 Q_VK_RES_PRIVATE(QVkTexture)
     VkImage image = VK_NULL_HANDLE;
@@ -548,15 +547,34 @@ Q_VK_RES_PRIVATE(QVkRenderTarget)
 
 struct QVkTextureRenderTarget : public QVkRenderTarget
 {
-    QVkTextureRenderTarget(QVkTexture *texture_)
-        : texture(texture_)
+    enum Flag {
+        PreserveColorContents = 1 << 0
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
+    // color only
+    QVkTextureRenderTarget(QVkTexture *texture_, Flags flags_ = 0)
+        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
+    { }
+    // color and depth-stencil, only color accessed afterwards
+    QVkTextureRenderTarget(QVkTexture *texture_, QVkRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
+        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
+    { }
+    // color and depth, both as textures accessible afterwards
+    QVkTextureRenderTarget(QVkTexture *texture_, QVkTexture *depthTexture_, Flags flags_ = 0)
+        : texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
     { }
 
     QVkTexture *texture;
+    QVkTexture *depthTexture;
+    QVkRenderBuffer *depthStencilBuffer;
+    Flags flags;
 
 Q_VK_RES_PRIVATE(QVkTextureRenderTarget)
     int lastActiveFrameSlot = -1;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTextureRenderTarget::Flags)
 
 struct QVkSwapChain
 {

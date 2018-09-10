@@ -1458,7 +1458,7 @@ void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImag
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
     barrier.image = tex->stagingImage;
     d->df->vkCmdPipelineBarrier(cb->cb,
-                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                VK_PIPELINE_STAGE_HOST_BIT,
                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
                                 0, 0, nullptr, 0, nullptr,
                                 1, &barrier);

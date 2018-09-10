@@ -126,7 +126,8 @@ public:
             Buffer,
             RenderBuffer,
             Texture,
-            Sampler
+            Sampler,
+            TextureRenderTarget
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -160,6 +161,10 @@ public:
             struct {
                 VkSampler sampler;
             } sampler;
+            struct {
+                VkFramebuffer fb;
+                VkRenderPass rp;
+            } textureRenderTarget;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

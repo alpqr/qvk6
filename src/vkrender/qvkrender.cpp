@@ -1064,7 +1064,7 @@ void QVkRender::endFrame(QVulkanWindow *window)
     d->finishFrame();
 }
 
-void QVkRender::beginPass(const QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues)
+void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues)
 {
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
@@ -1086,6 +1086,9 @@ void QVkRender::beginPass(const QVkRenderTarget *rt, QVkCommandBuffer *cb, const
     rpBeginInfo.pClearValues = cvs.constData();
 
     d->df->vkCmdBeginRenderPass(cb->cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+    if (rt->type == QVkRenderTarget::RtTexture)
+        static_cast<QVkTextureRenderTarget *>(rt)->lastActiveFrameSlot = d->currentFrameSlot;
 }
 
 void QVkRender::endPass(QVkCommandBuffer *cb)
@@ -1325,6 +1328,9 @@ bool QVkRender::createTexture(QVkTexture *tex)
     if (size.isEmpty())
         size = QSize(16, 16);
 
+    Q_ASSERT(samples == VK_SAMPLE_COUNT_1_BIT || !tex->flags.testFlag(QVkTexture::NoUploadContents));
+    const bool isDepthStencil = isDepthStencilTextureFormat(tex->format);
+
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -1341,7 +1347,7 @@ bool QVkRender::createTexture(QVkTexture *tex)
 
     imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (tex->flags.testFlag(QVkTexture::RenderTarget)) {
-        if (isDepthStencilTextureFormat(tex->format))
+        if (isDepthStencil)
             imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         else
             imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -1369,7 +1375,8 @@ bool QVkRender::createTexture(QVkTexture *tex)
     viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
     viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
     viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.aspectMask = isDepthStencil ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+                                                          : VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.levelCount = viewInfo.subresourceRange.layerCount = 1;
 
     err = d->df->vkCreateImageView(d->dev, &viewInfo, nullptr, &tex->imageView);
@@ -1587,6 +1594,20 @@ bool QVkRender::createSampler(QVkSampler *sampler)
     }
 
     sampler->lastActiveFrameSlot = -1;
+    return true;
+}
+
+bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
+{
+    if (rt->fb) // no repeated create without a releaseLater first
+        return false;
+
+    Q_ASSERT(rt->texture);
+    rt->type = QVkRenderTarget::RtTexture;
+
+    // ###
+
+    rt->lastActiveFrameSlot = -1;
     return true;
 }
 
@@ -2344,6 +2365,10 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
             case QVkRenderPrivate::DeferredReleaseEntry::Sampler:
                 df->vkDestroySampler(dev, e.sampler.sampler, nullptr);
                 break;
+            case QVkRenderPrivate::DeferredReleaseEntry::TextureRenderTarget:
+                df->vkDestroyFramebuffer(dev, e.textureRenderTarget.fb, nullptr);
+                df->vkDestroyRenderPass(dev, e.textureRenderTarget.rp, nullptr);
+                break;
             default:
                 break;
             }
@@ -2476,6 +2501,24 @@ void QVkRender::releaseLater(QVkSampler *sampler)
 
     e.sampler.sampler = sampler->sampler;
     sampler->sampler = VK_NULL_HANDLE;
+
+    d->releaseQueue.append(e);
+}
+
+void QVkRender::releaseLater(QVkTextureRenderTarget *rt)
+{
+    if (!rt->fb)
+        return;
+
+    QVkRenderPrivate::DeferredReleaseEntry e;
+    e.type = QVkRenderPrivate::DeferredReleaseEntry::TextureRenderTarget;
+    e.lastActiveFrameSlot = rt->lastActiveFrameSlot;
+
+    e.textureRenderTarget.fb = rt->fb;
+    e.textureRenderTarget.rp = rt->rp.rp;
+
+    rt->fb = VK_NULL_HANDLE;
+    rt->rp.rp = VK_NULL_HANDLE;
 
     d->releaseQueue.append(e);
 }

@@ -150,7 +150,7 @@ struct QVkGraphicsShaderStage
 #define Q_VK_RES_PRIVATE(Class) \
 public: \
     Class() { } \
-private: \
+protected: \
     Q_DISABLE_COPY(Class) \
     friend class QVkRender; \
     friend class QVkRenderPrivate;
@@ -539,12 +539,29 @@ Q_VK_RES_PRIVATE(QVkRenderTarget)
     QVkRenderPass rp;
     QSize pixelSize;
     int attCount = 0;
+    enum Type {
+        RtRef,
+        RtTexture
+    };
+    Type type = RtRef;
+};
+
+struct QVkTextureRenderTarget : public QVkRenderTarget
+{
+    QVkTextureRenderTarget(QVkTexture *texture_)
+        : texture(texture_)
+    { }
+
+    QVkTexture *texture;
+
+Q_VK_RES_PRIVATE(QVkTextureRenderTarget)
+    int lastActiveFrameSlot = -1;
 };
 
 struct QVkSwapChain
 {
     QVkCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
-    const QVkRenderTarget *currentFrameRenderTarget() const { return &rt; }
+    QVkRenderTarget *currentFrameRenderTarget() { return &rt; }
     const QVkRenderPass *defaultRenderPass() const { return rt.renderPass(); }
     QSize sizeInPixels() const { return pixelSize; }
 
@@ -673,12 +690,15 @@ public:
 
     bool createSampler(QVkSampler *sampler);
 
+    bool createTextureRenderTarget(QVkTextureRenderTarget *rt);
+
     void releaseLater(QVkGraphicsPipeline *ps);
     void releaseLater(QVkShaderResourceBindings *srb);
     void releaseLater(QVkBuffer *buf);
     void releaseLater(QVkRenderBuffer *rb);
     void releaseLater(QVkTexture *tex);
     void releaseLater(QVkSampler *sampler);
+    void releaseLater(QVkTextureRenderTarget *rt);
 
     /*
       Render to a QWindow (must be VulkanSurface):
@@ -716,7 +736,7 @@ public:
     // the renderpass may be needed before beginFrame can be called
     void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRenderPass);
 
-    void beginPass(const QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
+    void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
     void endPass(QVkCommandBuffer *cb);
 
     // Binds the pipeline and manages shader resources (like does the actual

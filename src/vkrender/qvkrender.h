@@ -529,11 +529,24 @@ Q_VK_RES_PRIVATE(QVkCommandBuffer)
     QVkShaderResourceBindings *currentSrb;
 };
 
+struct QVkRenderTarget
+{
+    QSize sizeInPixels() const { return pixelSize; }
+    const QVkRenderPass *renderPass() const { return &rp; }
+
+Q_VK_RES_PRIVATE(QVkRenderTarget)
+    VkFramebuffer fb = VK_NULL_HANDLE;
+    QVkRenderPass rp;
+    QSize pixelSize;
+    int attCount = 0;
+};
+
 struct QVkSwapChain
 {
     QVkCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
+    const QVkRenderTarget *currentFrameRenderTarget() const { return &rt; }
+    const QVkRenderPass *defaultRenderPass() const { return rt.renderPass(); }
     QSize sizeInPixels() const { return pixelSize; }
-    const QVkRenderPass *renderPass() const { return &rp; }
 
 Q_VK_RES_PRIVATE(QVkSwapChain)
     static const int DEFAULT_BUFFER_COUNT = 2;
@@ -571,19 +584,7 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
 
     quint32 currentImage = 0; // index in imageRes
     quint32 currentFrame = 0; // index in frameRes
-    QVkRenderPass rp;
-};
-
-struct QVkRenderTarget
-{
-    QSize sizeInPixels() const { return pixelSize; }
-    const QVkRenderPass *renderPass() const { return &rp; }
-
-Q_VK_RES_PRIVATE(QVkRenderTarget)
-    VkFramebuffer fb = VK_NULL_HANDLE;
-    QVkRenderPass rp;
-    QSize pixelSize;
-    int attCount = 0;
+    QVkRenderTarget rt;
 };
 
 class Q_VKR_EXPORT QVkRender
@@ -679,56 +680,44 @@ public:
     void releaseLater(QVkTexture *tex);
     void releaseLater(QVkSampler *sampler);
 
-    /* some basic use cases:
-
-      1. render to a QVulkanWindow from a startNextFrame() implementation
-         This is simple, repeat on every frame:
-           beginFrame(window, &rt, &cb)
-           ...
-           beginPass(rt, cb)
-           ...
-           endPass(cb)
-           endFrame(window)
-
-      2. render to a QWindow (must be VulkanSurface), VkDevice and friends must be provided as well
-           [create a QVkRenderBuffer for depth-stencil and release+create it whenever size changes]
-           call importSurface to create a swapchain + call it whenever the size is different than before
-           call releaseSwapChain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed
-           Then on every frame:
-             beginFrame(sc)
-             ...
-             beginPass(sc)
-             ...
-             endPass(sc)
-             endFrame(sc) (this queues the Present, begin/endFrame manages double buffering internally)
-
-      3. render to a texture:
-        3.1 as part of normal frame as described in #1 or #2:
-          createTexture
-          createRenderTarget
-          ...
-          [cb = sc.currentFrameCommandBuffer() if #2]
-          beginPass(rt, cb, ...)
-          ...
-          endPass(cb)
-
-        TBD. everything is subject to change.
-      */
-
+    /*
+      Render to a QWindow (must be VulkanSurface):
+        Call importSurface to create a swapchain and call it whenever the size is different than before.
+        Call releaseSwapChain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
+        Then on every frame:
+           beginFrame(sc)
+           ... // upload
+           beginPass(sc->currentFrameRenderTarget(), sc->currentFrameCommandBuffer(), clearValues)
+           ... // draw
+           endPass(sc->currentFrameCommandBuffer())
+           endFrame(sc) // this queues the Present, begin/endFrame manages double buffering internally
+     */
     bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags,
                        QVkRenderBuffer *depthStencil, int sampleCount, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
     FrameOpResult beginFrame(QVkSwapChain *sc);
     FrameOpResult endFrame(QVkSwapChain *sc);
-    void beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues);
-    void endPass(QVkSwapChain *sc);
 
-    void beginFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb);
+    /*
+      Render to a QVulkanWindow from a startNextFrame() implementation:
+         QVkRenderTarget currentFrameRenderTarget;
+         QVkCommandBuffer currentFrameCommandBuffer;
+         beginFrame(window, &currentFrameRenderTarget, &currentFrameCommandBuffer)
+         ... // upload
+         beginPass(currentFrameRenderTarget, currentFrameCommandBuffer, clearValues)
+         ... // draw
+         endPass(currentFrameCommandBuffer)
+         endFrame(window)
+     */
+    void beginFrame(QVulkanWindow *window,
+                    QVkRenderTarget *outCurrentFrameRenderTarget,
+                    QVkCommandBuffer *outCurrentFrameCommandBuffer);
     void endFrame(QVulkanWindow *window);
-    void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
-    void endPass(QVkCommandBuffer *cb);
     // the renderpass may be needed before beginFrame can be called
-    void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRp);
+    void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRenderPass);
+
+    void beginPass(const QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
+    void endPass(QVkCommandBuffer *cb);
 
     // Binds the pipeline and manages shader resources (like does the actual
     // update for queued dynamic buffer updates). When specified, srb can be

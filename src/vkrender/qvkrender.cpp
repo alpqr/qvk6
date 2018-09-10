@@ -560,8 +560,14 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
     if (!d->recreateSwapChain(surface, pixelSize, flags, outSwapChain))
         return false;
 
-    d->createDefaultRenderPass(&outSwapChain->rp, outSwapChain->depthStencil != nullptr,
+    d->createDefaultRenderPass(&outSwapChain->rt.rp, outSwapChain->depthStencil != nullptr,
                                outSwapChain->sampleCount, outSwapChain->colorFormat);
+
+    outSwapChain->rt.attCount = 1;
+    if (outSwapChain->depthStencil)
+        outSwapChain->rt.attCount += 1;
+    if (outSwapChain->sampleCount > VK_SAMPLE_COUNT_1_BIT)
+        outSwapChain->rt.attCount += 1;
 
     for (int i = 0; i < outSwapChain->bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(outSwapChain->imageRes[i]);
@@ -574,12 +580,8 @@ bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = outSwapChain->rp.rp;
-        fbInfo.attachmentCount = 1;
-        if (outSwapChain->depthStencil)
-            fbInfo.attachmentCount += 1;
-        if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
-            fbInfo.attachmentCount += 1;
+        fbInfo.renderPass = outSwapChain->rt.rp.rp;
+        fbInfo.attachmentCount = outSwapChain->rt.attCount;
         fbInfo.pAttachments = views;
         fbInfo.width = outSwapChain->pixelSize.width();
         fbInfo.height = outSwapChain->pixelSize.height();
@@ -856,9 +858,9 @@ void QVkRenderPrivate::releaseSwapChain(QVkSwapChain *swapChain)
         swapChain->msaaImageMem = VK_NULL_HANDLE;
     }
 
-    if (swapChain->rp.rp) {
-        df->vkDestroyRenderPass(dev, swapChain->rp.rp, nullptr);
-        swapChain->rp.rp = VK_NULL_HANDLE;
+    if (swapChain->rt.rp.rp) {
+        df->vkDestroyRenderPass(dev, swapChain->rt.rp.rp, nullptr);
+        swapChain->rt.rp.rp = VK_NULL_HANDLE;
     }
 
     vkDestroySwapchainKHR(dev, swapChain->sc, nullptr);
@@ -948,6 +950,9 @@ QVkRender::FrameOpResult QVkRender::beginFrame(QVkSwapChain *sc)
         return FrameOpError;
     }
 
+    sc->rt.fb = image.fb;
+    sc->rt.pixelSize = sc->pixelSize;
+
     d->currentFrameSlot = sc->currentFrame;
     if (sc->depthStencil)
         sc->depthStencil->lastActiveFrameSlot = d->currentFrameSlot;
@@ -1032,42 +1037,24 @@ QVkRender::FrameOpResult QVkRender::endFrame(QVkSwapChain *sc)
     return FrameOpSuccess;
 }
 
-void QVkRender::beginPass(QVkSwapChain *sc, const QVkClearValue *clearValues)
-{
-    QVkRenderTarget rt;
-    rt.fb = sc->imageRes[sc->currentImage].fb;
-    rt.rp.rp = sc->rp.rp;
-    rt.pixelSize = sc->pixelSize;
-    rt.attCount = 1;
-    if (sc->depthStencil)
-        rt.attCount += 1;
-    if (sc->sampleCount > VK_SAMPLE_COUNT_1_BIT)
-        rt.attCount += 1;
-
-    beginPass(&rt, &sc->imageRes[sc->currentImage].cmdBuf, clearValues);
-}
-
-void QVkRender::endPass(QVkSwapChain *sc)
-{
-    endPass(&sc->imageRes[sc->currentImage].cmdBuf);
-}
-
 void QVkRender::importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRp)
 {
     outRp->rp = window->defaultRenderPass();
 }
 
-void QVkRender::beginFrame(QVulkanWindow *window, QVkRenderTarget *outRt, QVkCommandBuffer *outCb)
+void QVkRender::beginFrame(QVulkanWindow *window,
+                           QVkRenderTarget *outCurrentFrameRenderTarget,
+                           QVkCommandBuffer *outCurrentFrameCommandBuffer)
 {
-    importVulkanWindowRenderPass(window, &outRt->rp);
-    outRt->fb = window->currentFramebuffer();
-    outRt->pixelSize = window->swapChainImageSize();
-    outRt->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+    outCurrentFrameRenderTarget->fb = window->currentFramebuffer();
+    importVulkanWindowRenderPass(window, &outCurrentFrameRenderTarget->rp);
+    outCurrentFrameRenderTarget->pixelSize = window->swapChainImageSize();
+    outCurrentFrameRenderTarget->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
 
-    outCb->cb = window->currentCommandBuffer();
+    outCurrentFrameCommandBuffer->cb = window->currentCommandBuffer();
 
     d->currentFrameSlot = window->currentFrame();
-    d->prepareNewFrame(outCb);
+    d->prepareNewFrame(outCurrentFrameCommandBuffer);
 }
 
 void QVkRender::endFrame(QVulkanWindow *window)
@@ -1077,7 +1064,7 @@ void QVkRender::endFrame(QVulkanWindow *window)
     d->finishFrame();
 }
 
-void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues)
+void QVkRender::beginPass(const QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues)
 {
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));

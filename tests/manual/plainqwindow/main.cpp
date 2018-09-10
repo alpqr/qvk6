@@ -293,7 +293,7 @@ void VWindow::render()
     }
 
     if (!m_triRenderer.isPipelineInitialized())
-        m_triRenderer.initOutputDependentResources(m_sc.renderPass(), m_sc.sizeInPixels());
+        m_triRenderer.initOutputDependentResources(m_sc.defaultRenderPass(), m_sc.sizeInPixels());
 
     m_triRenderer.queueCopy(m_sc.currentFrameCommandBuffer());
 
@@ -303,9 +303,9 @@ void VWindow::render()
         QVkClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
-    m_r->beginPass(&m_sc, clearValues);
+    m_r->beginPass(m_sc.currentFrameRenderTarget(), m_sc.currentFrameCommandBuffer(), clearValues);
     m_triRenderer.queueDraw(m_sc.currentFrameCommandBuffer(), m_sc.sizeInPixels());
-    m_r->endPass(&m_sc);
+    m_r->endPass(m_sc.currentFrameCommandBuffer());
 
     m_r->endFrame(&m_sc);
 

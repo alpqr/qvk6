@@ -1401,6 +1401,7 @@ bool QVkRender::createTexture(QVkTexture *tex)
             return false;
         }
         tex->stagingAlloc = allocation;
+        tex->wasStaged = false;
     }
 
     tex->lastActiveFrameSlot = -1;
@@ -1427,6 +1428,27 @@ QVkTexture::SubImageInfo QVkRender::textureInfo(QVkTexture *tex, int mipLevel, i
 
 void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &image, int mipLevel, int layer)
 {
+    VkImageMemoryBarrier barrier;
+    memset(&barrier, 0, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+
+    if (tex->wasStaged) {
+        // the staging image is in transfer read from the previous upload,
+        // reset to general/host write.
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        barrier.image = tex->stagingImage;
+        d->df->vkCmdPipelineBarrier(cb->cb,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                    VK_PIPELINE_STAGE_HOST_BIT,
+                                    0, 0, nullptr, 0, nullptr,
+                                    1, &barrier);
+    }
+
     const QVkTexture::SubImageInfo t = textureInfo(tex, mipLevel, layer);
 
     void *mp = nullptr;
@@ -1446,13 +1468,7 @@ void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImag
     vmaUnmapMemory(d->allocator, a);
     vmaFlushAllocation(d->allocator, a, 0, t.size);
 
-    VkImageMemoryBarrier barrier;
-    memset(&barrier, 0, sizeof(barrier));
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
-
-    barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    barrier.oldLayout = tex->wasStaged ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_PREINITIALIZED;
     barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
     barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -1463,16 +1479,31 @@ void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImag
                                 0, 0, nullptr, 0, nullptr,
                                 1, &barrier);
 
-    barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.image = tex->image;
-    d->df->vkCmdPipelineBarrier(cb->cb,
-                                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, 0, nullptr, 0, nullptr,
-                                1, &barrier);
+    if (tex->wasStaged) {
+        // the device local tiled image is in shader read from previous upload,
+        // reset to transfer write.
+        barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.image = tex->image;
+        d->df->vkCmdPipelineBarrier(cb->cb,
+                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                    0, 0, nullptr, 0, nullptr,
+                                    1, &barrier);
+    } else {
+        barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.image = tex->image;
+        d->df->vkCmdPipelineBarrier(cb->cb,
+                                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                    0, 0, nullptr, 0, nullptr,
+                                    1, &barrier);
+    }
 
     QSize size = tex->pixelSize;
     if (size.isEmpty())
@@ -1502,6 +1533,8 @@ void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImag
                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                                 0, 0, nullptr, 0, nullptr,
                                 1, &barrier);
+
+    tex->wasStaged = true;
 }
 
 static inline VkFilter toVkFilter(QVkSampler::Filter f)

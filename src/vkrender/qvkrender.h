@@ -479,6 +479,7 @@ Q_VK_RES_PRIVATE(QVkTexture)
     QVkAlloc allocation = nullptr;
     VkImage stagingImage = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
+    bool wasStaged = false;
     int lastActiveFrameSlot = -1;
 };
 

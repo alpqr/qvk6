@@ -2089,7 +2089,7 @@ void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::P
             dstAccess |= VK_ACCESS_INDEX_READ_BIT;
         if (u.buf->usage.testFlag(QVkBuffer::UniformBuffer)) {
             dstAccess |= VK_ACCESS_UNIFORM_READ_BIT;
-            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT; // don't know where it's used, assume vertex to be safe
         }
 
         bufMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;

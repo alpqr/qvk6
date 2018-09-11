@@ -30,6 +30,9 @@
 #include <QFile>
 #include <QBakedShader>
 
+// toggle to test the preserved content (no clear) path
+const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
+
 // ugliness borrowed from qtdeclarative/examples/quick/rendercontrol/cuberenderer.cpp
 static float vertexData[] = { // Y up, CW
     -0.5, 0.5, 0.5, 0.5,-0.5,0.5,-0.5,-0.5,0.5,
@@ -84,7 +87,13 @@ void TriangleOnCubeRenderer::initResources()
     m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64);
     m_r->createBuffer(m_ubuf);
 
-    m_tex = new QVkTexture(QVkTexture::RGBA8, OFFSCREEN_SIZE, QVkTexture::NoUploadContents | QVkTexture::RenderTarget);
+    QVkTexture::Flags textureFlags = QVkTexture::RenderTarget;
+    if (IMAGE_UNDER_OFFSCREEN_RENDERING)
+        m_image = QImage(QLatin1String(":/qt256.png")).mirrored().scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
+    else
+        textureFlags |= QVkTexture::NoUploadContents;
+
+    m_tex = new QVkTexture(QVkTexture::RGBA8, OFFSCREEN_SIZE, textureFlags);
     m_r->createTexture(m_tex);
 
     m_sampler = new QVkSampler(QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Repeat, QVkSampler::Repeat);
@@ -98,7 +107,11 @@ void TriangleOnCubeRenderer::initResources()
     };
     m_r->createShaderResourceBindings(m_srb);
 
-    m_rt = new QVkTextureRenderTarget(m_tex);
+    QVkTextureRenderTarget::Flags rtFlags = 0;
+    if (IMAGE_UNDER_OFFSCREEN_RENDERING)
+        rtFlags |= QVkTextureRenderTarget::PreserveColorContents;
+
+    m_rt = new QVkTextureRenderTarget(m_tex, rtFlags);
     m_r->createTextureRenderTarget(m_rt);
 
     m_offscreenTriangle.setVkRender(m_r);
@@ -227,12 +240,20 @@ QVkRender::PassUpdates TriangleOnCubeRenderer::update()
 
 void TriangleOnCubeRenderer::queueOffscreenPass(QVkCommandBuffer *cb)
 {
+    QVkRender::PassUpdates u = m_offscreenTriangle.update();
+
+    if (IMAGE_UNDER_OFFSCREEN_RENDERING && !m_image.isNull()) {
+        u.textureUploads.append({ m_tex, m_image });
+        m_image = QImage();
+    }
+
     const QVector4D clearColor(0.0f, 0.4f, 0.7f, 1.0f);
     const QVkClearValue clearValues[] = {
         clearColor,
         QVkClearValue(1.0f, 0)
     };
-    m_r->beginPass(m_rt, cb, clearValues, m_offscreenTriangle.update());
+
+    m_r->beginPass(m_rt, cb, clearValues, u);
     m_offscreenTriangle.queueDraw(cb, OFFSCREEN_SIZE);
     m_r->endPass(cb);
 }

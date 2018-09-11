@@ -64,6 +64,8 @@ private:
     float m_rotation = 0;
 
     TriangleRenderer m_offscreenTriangle;
+
+    QImage m_image;
 };
 
 #endif

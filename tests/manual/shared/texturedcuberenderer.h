@@ -55,7 +55,6 @@ private:
     QImage m_image;
     QVkTexture *m_tex = nullptr;
     QVkSampler *m_sampler = nullptr;
-    bool m_texReady = false;
     QVkShaderResourceBindings *m_srb = nullptr;
     QVkGraphicsPipeline *m_ps = nullptr;
 

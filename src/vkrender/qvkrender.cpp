@@ -1404,7 +1404,7 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
     attDesc[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attDesc[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attDesc[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attDesc[0].initialLayout = preserved ? rt->texture->layout : VK_IMAGE_LAYOUT_UNDEFINED;
+    attDesc[0].initialLayout = preserved ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
     attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // typical use case, this is also what deactivateTextureRenderTarget expects
 
     if (hasDepthStencil) {

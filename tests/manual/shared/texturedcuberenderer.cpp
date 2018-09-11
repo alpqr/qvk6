@@ -85,7 +85,6 @@ void TexturedCubeRenderer::initResources()
     m_image = QImage(QLatin1String(":/qt256.png")).mirrored().convertToFormat(QImage::Format_RGBA8888);
     m_tex = new QVkTexture(QVkTexture::RGBA8, QSize(m_image.width(), m_image.height()));
     m_r->createTexture(m_tex);
-    m_texReady = false;
 
     m_sampler = new QVkSampler(QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Repeat, QVkSampler::Repeat);
     m_r->createSampler(m_sampler);
@@ -197,9 +196,9 @@ QVkRender::PassUpdates TexturedCubeRenderer::update()
         u.staticBufferUploads.append({ m_vbuf, vertexData });
     }
 
-    if (!m_texReady) {
-        m_texReady = true;
+    if (!m_image.isNull()) {
         u.textureUploads.append({ m_tex, m_image });
+        m_image = QImage();
     }
 
     m_rotation += 1.0f;

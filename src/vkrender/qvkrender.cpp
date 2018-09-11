@@ -1404,8 +1404,8 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
     attDesc[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attDesc[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attDesc[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attDesc[0].initialLayout = preserved ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-    attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // typical use case, this is also what deactivateTextureRenderTarget expects
+    attDesc[0].initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+    attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     if (hasDepthStencil) {
         attDesc[1].format = rt->depthTexture ? toVkTextureFormat(rt->depthTexture->format) : d->optimalDepthStencilFormat();
@@ -2022,6 +2022,64 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
     return true;
 }
 
+void QVkRenderPrivate::bufferBarrier(QVkCommandBuffer *cb, QVkBuffer *buf)
+{
+    VkBufferMemoryBarrier bufMemBarrier;
+    memset(&bufMemBarrier, 0, sizeof(bufMemBarrier));
+    bufMemBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+    int dstAccess = 0;
+    VkPipelineStageFlagBits dstStage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+
+    if (buf->usage.testFlag(QVkBuffer::VertexBuffer))
+        dstAccess |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    if (buf->usage.testFlag(QVkBuffer::IndexBuffer))
+        dstAccess |= VK_ACCESS_INDEX_READ_BIT;
+    if (buf->usage.testFlag(QVkBuffer::UniformBuffer)) {
+        dstAccess |= VK_ACCESS_UNIFORM_READ_BIT;
+        dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT; // don't know where it's used, assume vertex to be safe
+    }
+
+    bufMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    bufMemBarrier.dstAccessMask = dstAccess;
+    bufMemBarrier.buffer = buf->d[0].buffer;
+    bufMemBarrier.size = buf->size;
+
+    df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
+                             0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
+}
+
+void QVkRenderPrivate::imageBarrier(QVkCommandBuffer *cb, QVkTexture *tex, WhichImage which,
+                                    VkImageLayout newLayout,
+                                    VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                                    VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
+{
+    VkImageMemoryBarrier barrier;
+    memset(&barrier, 0, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+
+    barrier.oldLayout = which == StagingImage ? tex->stagingLayout : tex->layout;
+    barrier.newLayout = newLayout;
+    barrier.srcAccessMask = srcAccess;
+    barrier.dstAccessMask = dstAccess;
+    barrier.image = which == StagingImage ? tex->stagingImage : tex->image;
+
+    df->vkCmdPipelineBarrier(cb->cb,
+                             srcStage,
+                             dstStage,
+                             0, 0, nullptr, 0, nullptr,
+                             1, &barrier);
+
+    if (which == StagingImage)
+        tex->stagingLayout = newLayout;
+    else
+        tex->layout = newLayout;
+}
+
 void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::PassUpdates &updates)
 {
     struct ChangeRange {
@@ -2072,33 +2130,8 @@ void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::P
         copyInfo.size = u.buf->size;
 
         df->vkCmdCopyBuffer(cb->cb, u.buf->stagingBuffer, u.buf->d[0].buffer, 1, &copyInfo);
+        bufferBarrier(cb, u.buf);
         u.buf->lastActiveFrameSlot = currentFrameSlot;
-
-        VkBufferMemoryBarrier bufMemBarrier;
-        memset(&bufMemBarrier, 0, sizeof(bufMemBarrier));
-        bufMemBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-        bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-
-        int dstAccess = 0;
-        VkPipelineStageFlagBits dstStage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-
-        if (u.buf->usage.testFlag(QVkBuffer::VertexBuffer))
-            dstAccess |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-        if (u.buf->usage.testFlag(QVkBuffer::IndexBuffer))
-            dstAccess |= VK_ACCESS_INDEX_READ_BIT;
-        if (u.buf->usage.testFlag(QVkBuffer::UniformBuffer)) {
-            dstAccess |= VK_ACCESS_UNIFORM_READ_BIT;
-            dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT; // don't know where it's used, assume vertex to be safe
-        }
-
-        bufMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        bufMemBarrier.dstAccessMask = dstAccess;
-        bufMemBarrier.buffer = u.buf->d[0].buffer;
-        bufMemBarrier.size = u.buf->size;
-
-        df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
-                                 0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
     }
 
     for (const QVkRender::TextureUpload &u : updates.textureUploads) {
@@ -2122,48 +2155,23 @@ void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::P
         vmaUnmapMemory(allocator, a);
         vmaFlushAllocation(allocator, a, 0, t.size);
 
-        VkImageMemoryBarrier barrier;
-        memset(&barrier, 0, sizeof(barrier));
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
-
-        barrier.oldLayout = u.tex->stagingLayout;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.image = u.tex->stagingImage;
-        df->vkCmdPipelineBarrier(cb->cb,
-                                 VK_PIPELINE_STAGE_HOST_BIT,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 0, 0, nullptr, 0, nullptr,
-                                 1, &barrier);
-        u.tex->stagingLayout = barrier.newLayout;
+        imageBarrier(cb, u.tex, StagingImage,
+                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     VK_ACCESS_HOST_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                     VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
         if (u.tex->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            barrier.oldLayout = u.tex->layout;
-            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.image = u.tex->image;
-
-            if (u.tex->layout != VK_IMAGE_LAYOUT_PREINITIALIZED) {
-                barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                df->vkCmdPipelineBarrier(cb->cb,
-                                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                         0, 0, nullptr, 0, nullptr,
-                                         1, &barrier);
+            if (u.tex->layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+                imageBarrier(cb, u.tex, TextureImage,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             0, VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
             } else {
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                df->vkCmdPipelineBarrier(cb->cb,
-                                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                         0, 0, nullptr, 0, nullptr,
-                                         1, &barrier);
+                imageBarrier(cb, u.tex, TextureImage,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
             }
-
-            u.tex->layout = barrier.newLayout;
         }
 
         QSize size = u.tex->pixelSize;
@@ -2186,55 +2194,23 @@ void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::P
                            1, &copyInfo);
         u.tex->lastActiveFrameSlot = currentFrameSlot;
 
-        barrier.oldLayout = u.tex->stagingLayout;
-        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        barrier.image = u.tex->stagingImage;
-        df->vkCmdPipelineBarrier(cb->cb,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_PIPELINE_STAGE_HOST_BIT,
-                                 0, 0, nullptr, 0, nullptr,
-                                 1, &barrier);
-        u.tex->stagingLayout = barrier.newLayout;
+        imageBarrier(cb, u.tex, StagingImage,
+                     VK_IMAGE_LAYOUT_GENERAL,
+                     VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_HOST_WRITE_BIT,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT);
 
-        barrier.oldLayout = u.tex->layout;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.image = u.tex->image;
-        df->vkCmdPipelineBarrier(cb->cb,
-                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                 0, 0, nullptr, 0, nullptr,
-                                 1, &barrier);
-        u.tex->layout = barrier.newLayout;
+        imageBarrier(cb, u.tex, TextureImage,
+                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
     }
 }
 
-void QVkRenderPrivate::activateTextureRenderTarget(QVkCommandBuffer *cb, QVkTextureRenderTarget *rt)
+void QVkRenderPrivate::activateTextureRenderTarget(QVkCommandBuffer *, QVkTextureRenderTarget *rt)
 {
     rt->lastActiveFrameSlot = currentFrameSlot;
-
-    if (rt->texture->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
-        VkImageMemoryBarrier barrier;
-        memset(&barrier, 0, sizeof(barrier));
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
-
-        barrier.oldLayout = rt->texture->layout;
-        barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        barrier.image = rt->texture->image;
-        df->vkCmdPipelineBarrier(cb->cb,
-                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                                 0, 0, nullptr, 0, nullptr,
-                                 1, &barrier);
-        rt->texture->layout = barrier.newLayout;
-    }
+    // the renderpass will implicitly transition so no barrier needed here
+    rt->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 }
 
 void QVkRenderPrivate::deactivateTextureRenderTarget(QVkCommandBuffer *, QVkTextureRenderTarget *rt)

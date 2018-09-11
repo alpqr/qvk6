@@ -32,6 +32,7 @@
 
 // toggle to test the preserved content (no clear) path
 const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
+const bool UPLOAD_UNDERLAY_ON_EVERY_FRAME = false;
 
 // ugliness borrowed from qtdeclarative/examples/quick/rendercontrol/cuberenderer.cpp
 static float vertexData[] = { // Y up, CW
@@ -244,7 +245,8 @@ void TriangleOnCubeRenderer::queueOffscreenPass(QVkCommandBuffer *cb)
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING && !m_image.isNull()) {
         u.textureUploads.append({ m_tex, m_image });
-        m_image = QImage();
+        if (!UPLOAD_UNDERLAY_ON_EVERY_FRAME)
+            m_image = QImage();
     }
 
     const QVector4D clearColor(0.0f, 0.4f, 0.7f, 1.0f);

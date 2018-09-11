@@ -83,6 +83,13 @@ public:
     void deactivateTextureRenderTarget(QVkCommandBuffer *cb, QVkTextureRenderTarget *rt);
     void executeDeferredReleases(bool forced = false);
 
+    void bufferBarrier(QVkCommandBuffer *cb, QVkBuffer *buf);
+    enum WhichImage { TextureImage, StagingImage };
+    void imageBarrier(QVkCommandBuffer *cb, QVkTexture *tex, WhichImage which,
+                      VkImageLayout newLayout,
+                      VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                      VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
+
     QVkRender *q;
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;

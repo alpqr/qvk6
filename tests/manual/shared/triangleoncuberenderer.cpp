@@ -106,7 +106,7 @@ void TriangleOnCubeRenderer::initResources()
     m_offscreenTriangle.setScale(2);
 }
 
-void TriangleOnCubeRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize, QVkRenderBuffer *ds)
+void TriangleOnCubeRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
 {
     m_ps = new QVkGraphicsPipeline;
 
@@ -207,14 +207,22 @@ void TriangleOnCubeRenderer::releaseOutputDependentResources()
     }
 }
 
-void TriangleOnCubeRenderer::queueCopy(QVkCommandBuffer *cb)
+QVkRender::PassUpdates TriangleOnCubeRenderer::update()
 {
+    QVkRender::PassUpdates u;
+
     if (!m_vbufReady) {
         m_vbufReady = true;
-        m_r->uploadStaticBuffer(cb, m_vbuf, vertexData);
+        u.staticBufferUploads.append({ m_vbuf, vertexData });
     }
 
-    m_offscreenTriangle.queueCopy(cb);
+    m_rotation += 1.0f;
+    QMatrix4x4 mvp = m_proj;
+    mvp.translate(m_translation);
+    mvp.rotate(m_rotation, 1, 0, 0);
+    u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
+
+    return u;
 }
 
 void TriangleOnCubeRenderer::queueOffscreenPass(QVkCommandBuffer *cb)
@@ -224,19 +232,13 @@ void TriangleOnCubeRenderer::queueOffscreenPass(QVkCommandBuffer *cb)
         clearColor,
         QVkClearValue(1.0f, 0)
     };
-    m_r->beginPass(m_rt, cb, clearValues);
+    m_r->beginPass(m_rt, cb, clearValues, m_offscreenTriangle.update());
     m_offscreenTriangle.queueDraw(cb, OFFSCREEN_SIZE);
     m_r->endPass(cb);
 }
 
 void TriangleOnCubeRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
-    m_rotation += 1.0f;
-    QMatrix4x4 mvp = m_proj;
-    mvp.translate(m_translation);
-    mvp.rotate(m_rotation, 1, 0, 0);
-    m_r->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
-
     m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 

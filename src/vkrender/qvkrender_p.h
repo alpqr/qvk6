@@ -78,8 +78,10 @@ public:
 
     void prepareNewFrame(QVkCommandBuffer *cb);
     void finishFrame();
+    void applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::PassUpdates &updates);
+    void activateTextureRenderTarget(QVkCommandBuffer *cb, QVkTextureRenderTarget *rt);
+    void deactivateTextureRenderTarget(QVkCommandBuffer *cb, QVkTextureRenderTarget *rt);
     void executeDeferredReleases(bool forced = false);
-    void prepareBufferForUse(QVkBuffer *buf);
 
     QVkRender *q;
     QVulkanInstance *inst;
@@ -118,6 +120,7 @@ public:
     int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1
     bool inFrame = false;
     int finishedFrameCount = 0;
+    bool inPass = false;
 
     struct DeferredReleaseEntry {
         enum Type {

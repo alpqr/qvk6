@@ -39,9 +39,9 @@ public:
     bool isPipelineInitialized() const { return m_ps != nullptr; }
     void initResources();
     void releaseResources();
-    void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize, QVkRenderBuffer *ds);
+    void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize);
     void releaseOutputDependentResources();
-    void queueCopy(QVkCommandBuffer *cb);
+    QVkRender::PassUpdates update();
     void queueOffscreenPass(QVkCommandBuffer *cb);
     void queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels);
 

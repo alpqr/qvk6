@@ -399,18 +399,9 @@ struct QVkBuffer
     bool isStatic() const { return type == StaticType; }
 
 Q_VK_RES_PRIVATE(QVkBuffer)
-    struct PendingUpdate {
-        PendingUpdate() { }
-        PendingUpdate(int o, const QByteArray &u)
-            : offset(o), data(u)
-        { }
-        int offset;
-        const QByteArray data;
-    };
     struct {
         VkBuffer buffer = VK_NULL_HANDLE;
         QVkAlloc allocation = nullptr;
-        QVector<PendingUpdate> pendingUpdates;
     } d[QVK_FRAMES_IN_FLIGHT]; // only [0] is used for Static
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
@@ -478,7 +469,8 @@ Q_VK_RES_PRIVATE(QVkTexture)
     QVkAlloc allocation = nullptr;
     VkImage stagingImage = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
-    bool wasStaged = false;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    VkImageLayout stagingLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     int lastActiveFrameSlot = -1;
 };
 
@@ -513,19 +505,6 @@ struct QVkSampler
 Q_VK_RES_PRIVATE(QVkSampler)
     VkSampler sampler = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
-};
-
-struct QVkCommandBuffer
-{
-Q_VK_RES_PRIVATE(QVkCommandBuffer)
-    VkCommandBuffer cb = VK_NULL_HANDLE;
-
-    void resetState() {
-        currentPipeline = nullptr;
-        currentSrb = nullptr;
-    }
-    QVkGraphicsPipeline *currentPipeline;
-    QVkShaderResourceBindings *currentSrb;
 };
 
 struct QVkRenderTarget
@@ -575,6 +554,21 @@ Q_VK_RES_PRIVATE(QVkTextureRenderTarget)
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTextureRenderTarget::Flags)
+
+struct QVkCommandBuffer
+{
+Q_VK_RES_PRIVATE(QVkCommandBuffer)
+    VkCommandBuffer cb = VK_NULL_HANDLE;
+
+    void resetState() {
+        currentTarget = nullptr;
+        currentPipeline = nullptr;
+        currentSrb = nullptr;
+    }
+    QVkRenderTarget *currentTarget;
+    QVkGraphicsPipeline *currentPipeline;
+    QVkShaderResourceBindings *currentSrb;
+};
 
 struct QVkSwapChain
 {
@@ -652,6 +646,53 @@ public:
         IndexUInt32
     };
 
+    struct DynamicBufferUpdate {
+        DynamicBufferUpdate() { }
+        DynamicBufferUpdate(QVkBuffer *buf_, int offset_, int size_, const void *data_)
+            : buf(buf_), offset(offset_), data(reinterpret_cast<const char *>(data_), size_)
+        { }
+
+        QVkBuffer *buf = nullptr;
+        int offset = 0;
+        QByteArray data;
+    };
+
+    struct StaticBufferUpload {
+        StaticBufferUpload() { }
+        StaticBufferUpload(QVkBuffer *buf_, const void *data_)
+            : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size)
+        { }
+
+        QVkBuffer *buf = nullptr;
+        QByteArray data;
+    };
+
+    struct TextureUpload {
+        TextureUpload() { }
+        TextureUpload(QVkTexture *tex_, const QImage &image_, int mipLevel_ = 0, int layer_ = 0)
+            : tex(tex_), image(image_), mipLevel(mipLevel_), layer(layer_)
+        { }
+
+        QVkTexture *tex = nullptr;
+        QImage image;
+        int mipLevel = 0;
+        int layer = 0;
+    };
+
+    struct PassUpdates {
+        QVector<DynamicBufferUpdate> dynamicBufferUpdates;
+        QVector<StaticBufferUpload> staticBufferUploads;
+        QVector<TextureUpload> textureUploads;
+
+        PassUpdates &operator+=(const PassUpdates &u)
+        {
+            dynamicBufferUpdates += u.dynamicBufferUpdates;
+            staticBufferUploads += u.staticBufferUploads;
+            textureUploads += u.textureUploads;
+            return *this;
+        }
+    };
+
     QVkRender(const InitParams &params);
     ~QVkRender();
 
@@ -674,7 +715,6 @@ public:
      */
 
     bool createGraphicsPipeline(QVkGraphicsPipeline *ps);
-
     bool createShaderResourceBindings(QVkShaderResourceBindings *srb);
 
     // Buffers are immutable like other resources but the underlying data can
@@ -683,17 +723,9 @@ public:
     // internally. The underlying memory type may differ for static and dynamic
     // buffers. For best performance, static buffers may be copied to device
     // local (not necessarily host visible) memory via a staging (host visible)
-    // buffer. Hence a separate uploadStaticBuffer().
+    // buffer. Hence separate update-dynamic and upload-static operations.
     bool createBuffer(QVkBuffer *buf);
-    // This goes on the command buffer so must be within begin/endFrame. But
-    // outside begin/endPass!
-    void uploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data);
-    // Queues a partial update. GPU-visible memory is updated in the next
-    // set*Buffer(s) (vertex/index) or setGraphicsPipeline (uniform). (so
-    // changing the same region more than once per frame must be avoided as
-    // only the values from the last update will be the visible when the
-    // commands are executed)
-    void updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data);
+
     int ubufAlignment() const;
     int ubufAligned(int v) const;
 
@@ -703,11 +735,7 @@ public:
 
     bool createTexture(QVkTexture *tex);
     QVkTexture::SubImageInfo textureInfo(QVkTexture *tex, int mipLevel = 0, int layer = 0);
-    // similar to uploadStaticBuffer. must not be between begin/endPass.
-    void uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &data, int mipLevel = 0, int layer = 0);
-
     bool createSampler(QVkSampler *sampler);
-
     bool createTextureRenderTarget(QVkTextureRenderTarget *rt);
 
     void releaseLater(QVkGraphicsPipeline *ps);
@@ -724,9 +752,8 @@ public:
         Call releaseSwapChain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
         Then on every frame:
            beginFrame(sc)
-           ... // upload
-           beginPass(sc->currentFrameRenderTarget(), sc->currentFrameCommandBuffer(), clearValues)
-           ... // draw
+           beginPass(sc->currentFrameRenderTarget(), sc->currentFrameCommandBuffer(), clearValues, updates)
+           ...
            endPass(sc->currentFrameCommandBuffer())
            endFrame(sc) // this queues the Present, begin/endFrame manages double buffering internally
      */
@@ -741,9 +768,8 @@ public:
          QVkRenderTarget currentFrameRenderTarget;
          QVkCommandBuffer currentFrameCommandBuffer;
          beginFrame(window, &currentFrameRenderTarget, &currentFrameCommandBuffer)
-         ... // upload
-         beginPass(currentFrameRenderTarget, currentFrameCommandBuffer, clearValues)
-         ... // draw
+         beginPass(currentFrameRenderTarget, currentFrameCommandBuffer, clearValues, updates)
+         ...
          endPass(currentFrameCommandBuffer)
          endFrame(window)
      */
@@ -754,18 +780,15 @@ public:
     // the renderpass may be needed before beginFrame can be called
     void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRenderPass);
 
-    void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues);
+    void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues, const PassUpdates &updates);
     void endPass(QVkCommandBuffer *cb);
 
-    // Binds the pipeline and manages shader resources (like does the actual
-    // update for queued dynamic buffer updates). When specified, srb can be
-    // different from ps' srb but the layouts must match. Basic tracking is
-    // included: no command is added to the cb when the pipeline or desc.set
-    // are the same as in the last call in the same frame.
+    // When specified, srb can be different from ps' srb but the layouts must
+    // match. Basic tracking is included: no command is added to the cb when
+    // the pipeline or desc.set are the same as in the last call in the same frame.
     void setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb = nullptr);
 
     using VertexInput = QPair<QVkBuffer *, quint32>; // buffer, offset
-    // Binds vertex/index buffers and performs dynamic buffer updates.
     void setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
                         QVkBuffer *indexBuf = nullptr, quint32 indexOffset = 0, IndexFormat indexFormat = IndexUInt16);
 

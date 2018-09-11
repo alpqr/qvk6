@@ -135,29 +135,34 @@ void TriangleRenderer::releaseOutputDependentResources()
     }
 }
 
-void TriangleRenderer::queueCopy(QVkCommandBuffer *cb)
+QVkRender::PassUpdates TriangleRenderer::update()
 {
+    QVkRender::PassUpdates u;
+
     if (!m_vbufReady) {
         m_vbufReady = true;
-        m_r->uploadStaticBuffer(cb, m_vbuf, vertexData);
+        u.staticBufferUploads.append({ m_vbuf, vertexData });
     }
-}
 
-void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
-{
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.translate(m_translation);
     mvp.scale(m_scale);
     mvp.rotate(m_rotation, 0, 1, 0);
-    m_r->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
+    u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
+
     m_opacity += m_opacityDir * 0.005f;
     if (m_opacity < 0.0f || m_opacity > 1.0f) {
         m_opacityDir *= -1;
         m_opacity = qBound(0.0f, m_opacity, 1.0f);
     }
-    m_r->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
+    u.dynamicBufferUpdates.append({ m_ubuf, 64, 4, &m_opacity });
 
+    return u;
+}
+
+void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
+{
     m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 

@@ -317,15 +317,16 @@ void VWindow::render()
         const QVkRenderPass *rp = m_sc.defaultRenderPass();
         m_triRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
         m_cubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
-        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels(), m_ds);
+        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
     }
 
     QVkCommandBuffer *cb = m_sc.currentFrameCommandBuffer();
-    m_triRenderer.queueCopy(cb);
-    m_cubeRenderer.queueCopy(cb);
-    m_liveTexCubeRenderer.queueCopy(cb);
-
     m_liveTexCubeRenderer.queueOffscreenPass(cb);
+
+    QVkRender::PassUpdates u;
+    u += m_triRenderer.update();
+    u += m_cubeRenderer.update();
+    u += m_liveTexCubeRenderer.update();
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
     const QVkClearValue clearValues[] = {
@@ -333,7 +334,7 @@ void VWindow::render()
         QVkClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
-    m_r->beginPass(m_sc.currentFrameRenderTarget(), cb, clearValues);
+    m_r->beginPass(m_sc.currentFrameRenderTarget(), cb, clearValues, u);
     m_triRenderer.queueDraw(cb, m_sc.sizeInPixels());
     m_cubeRenderer.queueDraw(cb, m_sc.sizeInPixels());
     m_liveTexCubeRenderer.queueDraw(cb, m_sc.sizeInPixels());

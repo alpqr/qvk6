@@ -1065,50 +1065,6 @@ void QVkRender::endFrame(QVulkanWindow *window)
     d->finishFrame();
 }
 
-void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues)
-{
-    VkRenderPassBeginInfo rpBeginInfo;
-    memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
-    rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = rt->rp.rp;
-    rpBeginInfo.framebuffer = rt->fb;
-    rpBeginInfo.renderArea.extent.width = rt->pixelSize.width();
-    rpBeginInfo.renderArea.extent.height = rt->pixelSize.height();
-    rpBeginInfo.clearValueCount = rt->attCount;
-    QVarLengthArray<VkClearValue, 4> cvs;
-    for (int i = 0; i < rt->attCount; ++i) {
-        VkClearValue cv;
-        if (clearValues[i].isDepthStencil)
-            cv.depthStencil = { clearValues[i].d, clearValues[i].s };
-        else
-            cv.color = { { clearValues[i].rgba.x(), clearValues[i].rgba.y(), clearValues[i].rgba.z(), clearValues[i].rgba.w() } };
-        cvs.append(cv);
-    }
-    rpBeginInfo.pClearValues = cvs.constData();
-
-    d->df->vkCmdBeginRenderPass(cb->cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-    if (rt->type == QVkRenderTarget::RtTexture)
-        static_cast<QVkTextureRenderTarget *>(rt)->lastActiveFrameSlot = d->currentFrameSlot;
-}
-
-void QVkRender::endPass(QVkCommandBuffer *cb)
-{
-    d->df->vkCmdEndRenderPass(cb->cb);
-}
-
-QMatrix4x4 QVkRender::openGLCorrectionMatrix() const
-{
-    if (d->clipCorrectMatrix.isIdentity()) {
-        // NB the ctor takes row-major
-        d->clipCorrectMatrix = QMatrix4x4(1.0f, 0.0f, 0.0f, 0.0f,
-                                          0.0f, -1.0f, 0.0f, 0.0f,
-                                          0.0f, 0.0f, 0.5f, 0.5f,
-                                          0.0f, 0.0f, 0.0f, 1.0f);
-    }
-    return d->clipCorrectMatrix;
-}
-
 static inline VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
 {
     int u = 0;
@@ -1171,68 +1127,6 @@ bool QVkRender::createBuffer(QVkBuffer *buf)
         qWarning("Failed to create buffer: %d", err);
         return false;
     }
-}
-
-void QVkRender::uploadStaticBuffer(QVkCommandBuffer *cb, QVkBuffer *buf, const void *data)
-{
-    Q_ASSERT(buf->isStatic());
-    Q_ASSERT(buf->stagingBuffer);
-
-    void *p = nullptr;
-    VmaAllocation a = toVmaAllocation(buf->stagingAlloc);
-    VkResult err = vmaMapMemory(d->allocator, a, &p);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to map buffer: %d", err);
-        return;
-    }
-    memcpy(p, data, buf->size);
-    vmaUnmapMemory(d->allocator, a);
-    vmaFlushAllocation(d->allocator, a, 0, buf->size);
-
-    VkBufferCopy copyInfo;
-    memset(&copyInfo, 0, sizeof(copyInfo));
-    copyInfo.size = buf->size;
-
-    VkBuffer dstBuf = buf->d[0].buffer;
-    d->df->vkCmdCopyBuffer(cb->cb, buf->stagingBuffer, dstBuf, 1, &copyInfo);
-
-    int dstAccess = 0;
-    VkPipelineStageFlagBits dstStage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
-
-    if (buf->usage.testFlag(QVkBuffer::VertexBuffer))
-        dstAccess |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
-    if (buf->usage.testFlag(QVkBuffer::IndexBuffer))
-        dstAccess |= VK_ACCESS_INDEX_READ_BIT;
-    if (buf->usage.testFlag(QVkBuffer::UniformBuffer)) {
-        dstAccess |= VK_ACCESS_UNIFORM_READ_BIT;
-        dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    }
-
-    VkBufferMemoryBarrier bufMemBarrier;
-    memset(&bufMemBarrier, 0, sizeof(bufMemBarrier));
-    bufMemBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bufMemBarrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
-    bufMemBarrier.dstAccessMask = dstAccess;
-    bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufMemBarrier.buffer = dstBuf;
-    bufMemBarrier.size = buf->size;
-
-    d->df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
-                                0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
-}
-
-void QVkRender::updateDynamicBuffer(QVkBuffer *buf, int offset, int size, const void *data)
-{
-    Q_ASSERT(!buf->isStatic());
-    Q_ASSERT(offset + size <= buf->size);
-
-    if (size < 1)
-        return;
-
-    const QByteArray u(static_cast<const char *>(data), size);
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-        buf->d[i].pendingUpdates.append(QVkBuffer::PendingUpdate(offset, u));
 }
 
 int QVkRender::ubufAlignment() const
@@ -1394,7 +1288,7 @@ bool QVkRender::createTexture(QVkTexture *tex)
             return false;
         }
         tex->stagingAlloc = allocation;
-        tex->wasStaged = false;
+        tex->layout = tex->stagingLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     }
 
     tex->lastActiveFrameSlot = -1;
@@ -1417,113 +1311,6 @@ QVkTexture::SubImageInfo QVkRender::textureInfo(QVkTexture *tex, int mipLevel, i
     t.stride = layout.rowPitch;
     t.offset = layout.offset;
     return t;
-}
-
-void QVkRender::uploadTexture(QVkCommandBuffer *cb, QVkTexture *tex, const QImage &image, int mipLevel, int layer)
-{
-    const QVkTexture::SubImageInfo t = textureInfo(tex, mipLevel, layer);
-
-    void *mp = nullptr;
-    VmaAllocation a = toVmaAllocation(tex->stagingAlloc);
-    VkResult err = vmaMapMemory(d->allocator, a, &mp);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to map image data: %d", err);
-        return;
-    }
-    uchar *p = static_cast<uchar *>(mp);
-    Q_ASSERT(image.bytesPerLine() <= t.stride);
-    for (int y = 0, h = image.height(), bpl = image.bytesPerLine(); y < h; ++y) {
-        const uchar *line = image.constScanLine(y);
-        memcpy(p, line, bpl);
-        p += t.stride;
-    }
-    vmaUnmapMemory(d->allocator, a);
-    vmaFlushAllocation(d->allocator, a, 0, t.size);
-
-    VkImageMemoryBarrier barrier;
-    memset(&barrier, 0, sizeof(barrier));
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
-
-    barrier.oldLayout = tex->wasStaged ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_PREINITIALIZED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier.image = tex->stagingImage;
-    d->df->vkCmdPipelineBarrier(cb->cb,
-                                VK_PIPELINE_STAGE_HOST_BIT,
-                                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                0, 0, nullptr, 0, nullptr,
-                                1, &barrier);
-
-    if (tex->wasStaged) {
-        barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.image = tex->image;
-        d->df->vkCmdPipelineBarrier(cb->cb,
-                                    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                    0, 0, nullptr, 0, nullptr,
-                                    1, &barrier);
-    } else {
-        barrier.oldLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.image = tex->image;
-        d->df->vkCmdPipelineBarrier(cb->cb,
-                                    VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                    VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                    0, 0, nullptr, 0, nullptr,
-                                    1, &barrier);
-    }
-
-    QSize size = tex->pixelSize;
-    if (size.isEmpty())
-        size = QSize(16, 16);
-
-    VkImageCopy copyInfo;
-    memset(&copyInfo, 0, sizeof(copyInfo));
-    copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copyInfo.srcSubresource.layerCount = 1;
-    copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    copyInfo.dstSubresource.layerCount = 1;
-    copyInfo.extent.width = size.width();
-    copyInfo.extent.height = size.height();
-    copyInfo.extent.depth = 1;
-    d->df->vkCmdCopyImage(cb->cb,
-                          tex->stagingImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                          tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                          1, &copyInfo);
-
-    // The staging image's layout has to transition back to general if we want
-    // to reuse it in a subsequent upload request.
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier.dstAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barrier.image = tex->stagingImage;
-    d->df->vkCmdPipelineBarrier(cb->cb,
-                                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                VK_PIPELINE_STAGE_HOST_BIT,
-                                0, 0, nullptr, 0, nullptr,
-                                1, &barrier);
-
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barrier.image = tex->image;
-    d->df->vkCmdPipelineBarrier(cb->cb,
-                                VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                                0, 0, nullptr, 0, nullptr,
-                                1, &barrier);
-
-    tex->wasStaged = true;
 }
 
 static inline VkFilter toVkFilter(QVkSampler::Filter f)
@@ -1604,6 +1391,7 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
     Q_ASSERT(rt->texture);
     Q_ASSERT(!rt->depthStencilBuffer || !rt->depthTexture);
     const bool hasDepthStencil = rt->depthStencilBuffer || rt->depthTexture;
+    const bool preserved = rt->flags.testFlag(QVkTextureRenderTarget::PreserveColorContents);
 
     VkAttachmentDescription attDesc[2];
     memset(attDesc, 0, sizeof(attDesc));
@@ -1612,13 +1400,12 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
 
     attDesc[0].format = toVkTextureFormat(rt->texture->format);
     attDesc[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attDesc[0].loadOp = rt->flags.testFlag(QVkTextureRenderTarget::PreserveColorContents)
-            ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attDesc[0].loadOp = preserved ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
     attDesc[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     attDesc[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attDesc[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attDesc[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    attDesc[0].initialLayout = preserved ? rt->texture->layout : VK_IMAGE_LAYOUT_UNDEFINED;
+    attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // typical use case, this is also what deactivateTextureRenderTarget expects
 
     if (hasDepthStencil) {
         attDesc[1].format = rt->depthTexture ? toVkTextureFormat(rt->depthTexture->format) : d->optimalDepthStencilFormat();
@@ -2235,65 +2022,276 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
     return true;
 }
 
-void QVkRenderPrivate::prepareBufferForUse(QVkBuffer *buf)
+void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::PassUpdates &updates)
 {
-    buf->lastActiveFrameSlot = currentFrameSlot;
-
-    auto &pendingUpdates(buf->d[currentFrameSlot].pendingUpdates);
-    if (!pendingUpdates.isEmpty()) {
-        Q_ASSERT(!buf->isStatic());
+    struct ChangeRange {
+        int changeBegin = -1;
+        int changeEnd = -1;
+    };
+    QHash<QVkBuffer *, ChangeRange> changeRanges;
+    for (const QVkRender::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
+        Q_ASSERT(!u.buf->isStatic());
         void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(buf->d[currentFrameSlot].allocation);
+        VmaAllocation a = toVmaAllocation(u.buf->d[currentFrameSlot].allocation);
         VkResult err = vmaMapMemory(allocator, a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
-            return;
+            continue;
         }
-
-        int changeBegin = -1;
-        int changeEnd = -1;
-        for (const QVkBuffer::PendingUpdate &u : pendingUpdates) {
-            memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
-            if (changeBegin == -1 || u.offset < changeBegin)
-                changeBegin = u.offset;
-            if (changeEnd == -1 || u.offset + u.data.size() > changeEnd)
-                changeEnd = u.offset + u.data.size();
-        }
-
+        memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
         vmaUnmapMemory(allocator, a);
-        vmaFlushAllocation(allocator, a, changeBegin, changeEnd - changeBegin);
+        ChangeRange &r(changeRanges[u.buf]);
+        if (r.changeBegin == -1 || u.offset < r.changeBegin)
+            r.changeBegin = u.offset;
+        if (r.changeEnd == -1 || u.offset + u.data.size() > r.changeEnd)
+            r.changeEnd = u.offset + u.data.size();
+    }
+    for (auto it = changeRanges.cbegin(), itEnd = changeRanges.cend(); it != itEnd; ++it) {
+        VmaAllocation a = toVmaAllocation(it.key()->d[currentFrameSlot].allocation);
+        vmaFlushAllocation(allocator, a, it->changeBegin, it->changeEnd - it->changeBegin);
+    }
 
-        pendingUpdates.clear();
+    for (const QVkRender::StaticBufferUpload &u : updates.staticBufferUploads) {
+        Q_ASSERT(u.buf->isStatic());
+        Q_ASSERT(u.buf->stagingBuffer);
+        Q_ASSERT(u.data.size() == u.buf->size);
+
+        void *p = nullptr;
+        VmaAllocation a = toVmaAllocation(u.buf->stagingAlloc);
+        VkResult err = vmaMapMemory(allocator, a, &p);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to map buffer: %d", err);
+            continue;
+        }
+        memcpy(p, u.data.constData(), u.buf->size);
+        vmaUnmapMemory(allocator, a);
+        vmaFlushAllocation(allocator, a, 0, u.buf->size);
+
+        VkBufferCopy copyInfo;
+        memset(&copyInfo, 0, sizeof(copyInfo));
+        copyInfo.size = u.buf->size;
+
+        df->vkCmdCopyBuffer(cb->cb, u.buf->stagingBuffer, u.buf->d[0].buffer, 1, &copyInfo);
+        u.buf->lastActiveFrameSlot = currentFrameSlot;
+
+        VkBufferMemoryBarrier bufMemBarrier;
+        memset(&bufMemBarrier, 0, sizeof(bufMemBarrier));
+        bufMemBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+        bufMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        bufMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+        int dstAccess = 0;
+        VkPipelineStageFlagBits dstStage = VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+
+        if (u.buf->usage.testFlag(QVkBuffer::VertexBuffer))
+            dstAccess |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+        if (u.buf->usage.testFlag(QVkBuffer::IndexBuffer))
+            dstAccess |= VK_ACCESS_INDEX_READ_BIT;
+        if (u.buf->usage.testFlag(QVkBuffer::UniformBuffer)) {
+            dstAccess |= VK_ACCESS_UNIFORM_READ_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+
+        bufMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        bufMemBarrier.dstAccessMask = dstAccess;
+        bufMemBarrier.buffer = u.buf->d[0].buffer;
+        bufMemBarrier.size = u.buf->size;
+
+        df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
+                                 0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
+    }
+
+    for (const QVkRender::TextureUpload &u : updates.textureUploads) {
+        Q_ASSERT(u.tex->stagingImage);
+        const QVkTexture::SubImageInfo t = q->textureInfo(u.tex, u.mipLevel, u.layer);
+
+        void *mp = nullptr;
+        VmaAllocation a = toVmaAllocation(u.tex->stagingAlloc);
+        VkResult err = vmaMapMemory(allocator, a, &mp);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to map image data: %d", err);
+            continue;
+        }
+        uchar *p = static_cast<uchar *>(mp);
+        Q_ASSERT(u.image.bytesPerLine() <= t.stride);
+        for (int y = 0, h = u.image.height(), bpl = u.image.bytesPerLine(); y < h; ++y) {
+            const uchar *line = u.image.constScanLine(y);
+            memcpy(p, line, bpl);
+            p += t.stride;
+        }
+        vmaUnmapMemory(allocator, a);
+        vmaFlushAllocation(allocator, a, 0, t.size);
+
+        VkImageMemoryBarrier barrier;
+        memset(&barrier, 0, sizeof(barrier));
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+
+        barrier.oldLayout = u.tex->stagingLayout;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.image = u.tex->stagingImage;
+        df->vkCmdPipelineBarrier(cb->cb,
+                                 VK_PIPELINE_STAGE_HOST_BIT,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0, 0, nullptr, 0, nullptr,
+                                 1, &barrier);
+        u.tex->stagingLayout = barrier.newLayout;
+
+        if (u.tex->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            barrier.oldLayout = u.tex->layout;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.image = u.tex->image;
+
+            if (u.tex->layout != VK_IMAGE_LAYOUT_PREINITIALIZED) {
+                barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                df->vkCmdPipelineBarrier(cb->cb,
+                                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         0, 0, nullptr, 0, nullptr,
+                                         1, &barrier);
+            } else {
+                barrier.srcAccessMask = 0;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                df->vkCmdPipelineBarrier(cb->cb,
+                                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                         VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         0, 0, nullptr, 0, nullptr,
+                                         1, &barrier);
+            }
+
+            u.tex->layout = barrier.newLayout;
+        }
+
+        QSize size = u.tex->pixelSize;
+        if (size.isEmpty())
+            size = QSize(16, 16);
+
+        VkImageCopy copyInfo;
+        memset(&copyInfo, 0, sizeof(copyInfo));
+        copyInfo.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyInfo.srcSubresource.layerCount = 1;
+        copyInfo.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        copyInfo.dstSubresource.layerCount = 1;
+        copyInfo.extent.width = size.width();
+        copyInfo.extent.height = size.height();
+        copyInfo.extent.depth = 1;
+
+        df->vkCmdCopyImage(cb->cb,
+                           u.tex->stagingImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           u.tex->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1, &copyInfo);
+        u.tex->lastActiveFrameSlot = currentFrameSlot;
+
+        barrier.oldLayout = u.tex->stagingLayout;
+        barrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+        barrier.image = u.tex->stagingImage;
+        df->vkCmdPipelineBarrier(cb->cb,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_HOST_BIT,
+                                 0, 0, nullptr, 0, nullptr,
+                                 1, &barrier);
+        u.tex->stagingLayout = barrier.newLayout;
+
+        barrier.oldLayout = u.tex->layout;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.image = u.tex->image;
+        df->vkCmdPipelineBarrier(cb->cb,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 0, 0, nullptr, 0, nullptr,
+                                 1, &barrier);
+        u.tex->layout = barrier.newLayout;
     }
 }
 
-void QVkRender::setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
-                               QVkBuffer *indexBuf, quint32 indexOffset, IndexFormat indexFormat)
+void QVkRenderPrivate::activateTextureRenderTarget(QVkCommandBuffer *cb, QVkTextureRenderTarget *rt)
 {
-    QVarLengthArray<VkBuffer, 4> bufs;
-    QVarLengthArray<VkDeviceSize, 4> ofs;
-    for (int i = 0, ie = bindings.count(); i != ie; ++i) {
-        QVkBuffer *buf = bindings[i].first;
-        Q_ASSERT(buf->usage.testFlag(QVkBuffer::VertexBuffer));
-        d->prepareBufferForUse(buf);
-        const int idx = buf->isStatic() ? 0 : d->currentFrameSlot;
-        bufs.append(buf->d[idx].buffer);
-        ofs.append(bindings[i].second);
-    }
-    if (!bufs.isEmpty())
-        d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+    rt->lastActiveFrameSlot = currentFrameSlot;
 
-    if (indexBuf) {
-        Q_ASSERT(indexBuf->usage.testFlag(QVkBuffer::IndexBuffer));
-        d->prepareBufferForUse(indexBuf);
-        const int idx = indexBuf->isStatic() ? 0 : d->currentFrameSlot;
-        const VkIndexType type = indexFormat == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-        d->df->vkCmdBindIndexBuffer(cb->cb, indexBuf->d[idx].buffer, indexOffset, type);
+    if (rt->texture->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+        VkImageMemoryBarrier barrier;
+        memset(&barrier, 0, sizeof(barrier));
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+
+        barrier.oldLayout = rt->texture->layout;
+        barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.image = rt->texture->image;
+        df->vkCmdPipelineBarrier(cb->cb,
+                                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                 0, 0, nullptr, 0, nullptr,
+                                 1, &barrier);
+        rt->texture->layout = barrier.newLayout;
     }
+}
+
+void QVkRenderPrivate::deactivateTextureRenderTarget(QVkCommandBuffer *, QVkTextureRenderTarget *rt)
+{
+    // already in the right layout when the renderpass ends
+    rt->texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+}
+
+void QVkRender::beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues, const PassUpdates &updates)
+{
+    Q_ASSERT(!d->inPass);
+
+    d->applyPassUpdates(cb, updates);
+
+    if (rt->type == QVkRenderTarget::RtTexture)
+        d->activateTextureRenderTarget(cb, static_cast<QVkTextureRenderTarget *>(rt));
+
+    cb->currentTarget = rt;
+
+    VkRenderPassBeginInfo rpBeginInfo;
+    memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
+    rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rpBeginInfo.renderPass = rt->rp.rp;
+    rpBeginInfo.framebuffer = rt->fb;
+    rpBeginInfo.renderArea.extent.width = rt->pixelSize.width();
+    rpBeginInfo.renderArea.extent.height = rt->pixelSize.height();
+    rpBeginInfo.clearValueCount = rt->attCount;
+    QVarLengthArray<VkClearValue, 4> cvs;
+    for (int i = 0; i < rt->attCount; ++i) {
+        VkClearValue cv;
+        if (clearValues[i].isDepthStencil)
+            cv.depthStencil = { clearValues[i].d, clearValues[i].s };
+        else
+            cv.color = { { clearValues[i].rgba.x(), clearValues[i].rgba.y(), clearValues[i].rgba.z(), clearValues[i].rgba.w() } };
+        cvs.append(cv);
+    }
+    rpBeginInfo.pClearValues = cvs.constData();
+
+    d->df->vkCmdBeginRenderPass(cb->cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    d->inPass = true;
+}
+
+void QVkRender::endPass(QVkCommandBuffer *cb)
+{
+    Q_ASSERT(d->inPass);
+    d->df->vkCmdEndRenderPass(cb->cb);
+    d->inPass = false;
+
+    if (cb->currentTarget->type == QVkRenderTarget::RtTexture)
+        d->deactivateTextureRenderTarget(cb, static_cast<QVkTextureRenderTarget *>(cb->currentTarget));
+
+    cb->currentTarget = nullptr;
 }
 
 void QVkRender::setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb)
 {
+    Q_ASSERT(d->inPass);
     Q_ASSERT(ps->pipeline);
 
     if (!srb)
@@ -2304,7 +2302,7 @@ void QVkRender::setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *p
         switch (b.type) {
         case QVkShaderResourceBindings::Binding::UniformBuffer:
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QVkBuffer::UniformBuffer));
-            d->prepareBufferForUse(b.ubuf.buf);
+            b.ubuf.buf->lastActiveFrameSlot = d->currentFrameSlot;
             if (!b.ubuf.buf->isStatic())
                 hasDynamicBuffer = true;
             break;
@@ -2333,6 +2331,33 @@ void QVkRender::setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *p
     }
 }
 
+void QVkRender::setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
+                               QVkBuffer *indexBuf, quint32 indexOffset, IndexFormat indexFormat)
+{
+    Q_ASSERT(d->inPass);
+
+    QVarLengthArray<VkBuffer, 4> bufs;
+    QVarLengthArray<VkDeviceSize, 4> ofs;
+    for (int i = 0, ie = bindings.count(); i != ie; ++i) {
+        QVkBuffer *buf = bindings[i].first;
+        Q_ASSERT(buf->usage.testFlag(QVkBuffer::VertexBuffer));
+        buf->lastActiveFrameSlot = d->currentFrameSlot;
+        const int idx = buf->isStatic() ? 0 : d->currentFrameSlot;
+        bufs.append(buf->d[idx].buffer);
+        ofs.append(bindings[i].second);
+    }
+    if (!bufs.isEmpty())
+        d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+
+    if (indexBuf) {
+        Q_ASSERT(indexBuf->usage.testFlag(QVkBuffer::IndexBuffer));
+        indexBuf->lastActiveFrameSlot = d->currentFrameSlot;
+        const int idx = indexBuf->isStatic() ? 0 : d->currentFrameSlot;
+        const VkIndexType type = indexFormat == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+        d->df->vkCmdBindIndexBuffer(cb->cb, indexBuf->d[idx].buffer, indexOffset, type);
+    }
+}
+
 static inline VkViewport toVkViewport(const QVkViewport &viewport)
 {
     VkViewport vp;
@@ -2347,6 +2372,7 @@ static inline VkViewport toVkViewport(const QVkViewport &viewport)
 
 void QVkRender::setViewport(QVkCommandBuffer *cb, const QVkViewport &viewport)
 {
+    Q_ASSERT(d->inPass);
     VkViewport vp = toVkViewport(viewport);
     d->df->vkCmdSetViewport(cb->cb, 0, 1, &vp);
 }
@@ -2363,30 +2389,35 @@ static inline VkRect2D toVkScissor(const QVkScissor &scissor)
 
 void QVkRender::setScissor(QVkCommandBuffer *cb, const QVkScissor &scissor)
 {
+    Q_ASSERT(d->inPass);
     VkRect2D s = toVkScissor(scissor);
     d->df->vkCmdSetScissor(cb->cb, 0, 1, &s);
 }
 
 void QVkRender::setBlendConstants(QVkCommandBuffer *cb, const QVector4D &c)
 {
+    Q_ASSERT(d->inPass);
     const float bc[4] = { c.x(), c.y(), c.z(), c.w() };
     d->df->vkCmdSetBlendConstants(cb->cb, bc);
 }
 
 void QVkRender::setStencilRef(QVkCommandBuffer *cb, quint32 refValue)
 {
+    Q_ASSERT(d->inPass);
     d->df->vkCmdSetStencilReference(cb->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
 }
 
 void QVkRender::draw(QVkCommandBuffer *cb, quint32 vertexCount,
                      quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
+    Q_ASSERT(d->inPass);
     d->df->vkCmdDraw(cb->cb, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void QVkRender::drawIndexed(QVkCommandBuffer *cb, quint32 indexCount,
                             quint32 instanceCount, quint32 firstIndex, qint32 vertexOffset, quint32 firstInstance)
 {
+    Q_ASSERT(d->inPass);
     d->df->vkCmdDrawIndexed(cb->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
@@ -2650,6 +2681,18 @@ VkSampleCountFlagBits QVkRenderPrivate::effectiveSampleCount(int sampleCount)
     }
 
     Q_UNREACHABLE();
+}
+
+QMatrix4x4 QVkRender::openGLCorrectionMatrix() const
+{
+    if (d->clipCorrectMatrix.isIdentity()) {
+        // NB the ctor takes row-major
+        d->clipCorrectMatrix = QMatrix4x4(1.0f, 0.0f, 0.0f, 0.0f,
+                                          0.0f, -1.0f, 0.0f, 0.0f,
+                                          0.0f, 0.0f, 0.5f, 0.5f,
+                                          0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    return d->clipCorrectMatrix;
 }
 
 QT_END_NAMESPACE

@@ -188,27 +188,31 @@ void TexturedCubeRenderer::releaseOutputDependentResources()
     }
 }
 
-void TexturedCubeRenderer::queueCopy(QVkCommandBuffer *cb)
+QVkRender::PassUpdates TexturedCubeRenderer::update()
 {
+    QVkRender::PassUpdates u;
+
     if (!m_vbufReady) {
         m_vbufReady = true;
-        m_r->uploadStaticBuffer(cb, m_vbuf, vertexData);
+        u.staticBufferUploads.append({ m_vbuf, vertexData });
     }
 
     if (!m_texReady) {
         m_texReady = true;
-        m_r->uploadTexture(cb, m_tex, m_image);
+        u.textureUploads.append({ m_tex, m_image });
     }
-}
 
-void TexturedCubeRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
-{
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.translate(m_translation);
     mvp.rotate(m_rotation, 0, 1, 0);
-    m_r->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
+    u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
 
+    return u;
+}
+
+void TexturedCubeRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
+{
     m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 

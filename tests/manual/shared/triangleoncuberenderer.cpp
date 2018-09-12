@@ -88,13 +88,10 @@ void TriangleOnCubeRenderer::initResources()
     m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64);
     m_r->createBuffer(m_ubuf);
 
-    QVkTexture::Flags textureFlags = QVkTexture::RenderTarget;
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         m_image = QImage(QLatin1String(":/qt256.png")).mirrored().scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
-    else
-        textureFlags |= QVkTexture::NoUploadContents;
 
-    m_tex = new QVkTexture(QVkTexture::RGBA8, OFFSCREEN_SIZE, textureFlags);
+    m_tex = new QVkTexture(QVkTexture::RGBA8, OFFSCREEN_SIZE, QVkTexture::RenderTarget);
     m_r->createTexture(m_tex);
 
     m_sampler = new QVkSampler(QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Repeat, QVkSampler::Repeat);

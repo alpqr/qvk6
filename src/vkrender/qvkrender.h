@@ -434,8 +434,7 @@ Q_VK_RES_PRIVATE(QVkRenderBuffer)
 struct QVkTexture
 {
     enum Flag {
-        NoUploadContents = 1 << 0,
-        RenderTarget = 1 << 1
+        RenderTarget = 1 << 0
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -467,10 +466,9 @@ Q_VK_RES_PRIVATE(QVkTexture)
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     QVkAlloc allocation = nullptr;
-    VkImage stagingImage = VK_NULL_HANDLE;
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    VkImageLayout stagingLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     int lastActiveFrameSlot = -1;
 };
 
@@ -734,7 +732,6 @@ public:
     bool createRenderBuffer(QVkRenderBuffer *rb);
 
     bool createTexture(QVkTexture *tex);
-    QVkTexture::SubImageInfo textureInfo(QVkTexture *tex, int mipLevel = 0, int layer = 0);
     bool createSampler(QVkSampler *sampler);
     bool createTextureRenderTarget(QVkTextureRenderTarget *rt);
 

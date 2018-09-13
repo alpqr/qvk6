@@ -53,7 +53,6 @@ private:
     void render();
 
     bool m_inited = false;
-    VkSurfaceKHR m_vkSurface;
     VkPhysicalDevice m_vkPhysDev;
     VkPhysicalDeviceProperties m_physDevProps;
     VkDevice m_vkDev = VK_NULL_HANDLE;
@@ -92,10 +91,6 @@ void VWindow::exposeEvent(QExposeEvent *)
 
 void VWindow::init()
 {
-    m_vkSurface = QVulkanInstance::surfaceForWindow(this);
-    if (!m_vkSurface)
-        qFatal("Failed to get surface for window");
-
     QVulkanInstance *inst = vulkanInstance();
     QVulkanFunctions *f = inst->functions();
     uint32_t devCount = 0;
@@ -250,8 +245,6 @@ void VWindow::releaseResources()
         vulkanInstance()->resetDeviceFunctions(m_vkDev);
         m_vkDev = VK_NULL_HANDLE;
     }
-
-    m_vkSurface = VK_NULL_HANDLE;
 }
 
 void VWindow::recreateSwapChain()
@@ -266,7 +259,7 @@ void VWindow::recreateSwapChain()
     }
     m_r->createRenderBuffer(m_ds);
 
-    m_hasSwapChain = m_r->importSurface(m_vkSurface, outputSize, QVkRender::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES, &m_sc);
+    m_hasSwapChain = m_r->importSurface(this, outputSize, QVkRender::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES, &m_sc);
     m_swapChainChanged = true;
 }
 

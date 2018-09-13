@@ -521,12 +521,18 @@ bool QVkRenderPrivate::createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthS
     return true;
 }
 
-bool QVkRender::importSurface(VkSurfaceKHR surface, const QSize &pixelSize,
+bool QVkRender::importSurface(QWindow *window, const QSize &pixelSize,
                               SurfaceImportFlags flags, QVkRenderBuffer *depthStencil,
                               int sampleCount, QVkSwapChain *outSwapChain)
 {
     // Can be called multiple times without a call to releaseSwapChain - this
     // is typical when a window is resized.
+
+    VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(window);
+    if (!surface) {
+        qWarning("Failed to get surface for window");
+        return false;
+    }
 
     if (!d->vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
         d->vkGetPhysicalDeviceSurfaceCapabilitiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(

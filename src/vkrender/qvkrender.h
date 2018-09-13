@@ -754,7 +754,7 @@ public:
            endPass(sc->currentFrameCommandBuffer())
            endFrame(sc) // this queues the Present, begin/endFrame manages double buffering internally
      */
-    bool importSurface(VkSurfaceKHR surface, const QSize &pixelSize, SurfaceImportFlags flags,
+    bool importSurface(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
                        QVkRenderBuffer *depthStencil, int sampleCount, QVkSwapChain *outSwapChain);
     void releaseSwapChain(QVkSwapChain *swapChain);
     FrameOpResult beginFrame(QVkSwapChain *sc);

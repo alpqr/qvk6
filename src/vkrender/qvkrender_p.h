@@ -116,7 +116,8 @@ public:
             : pool(pool_)
         { }
         VkDescriptorPool pool = VK_NULL_HANDLE;
-        int activeSets = 0;
+        int refCount = 0;
+        int allocedDescSets = 0;
     };
     QVector<DescriptorPoolData> descriptorPools;
 

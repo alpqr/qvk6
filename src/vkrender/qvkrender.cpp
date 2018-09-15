@@ -227,18 +227,23 @@ bool QVkRenderPrivate::allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocI
         allocInfo->descriptorPool = descriptorPools[poolIndex].pool;
         VkResult r = df->vkAllocateDescriptorSets(dev, allocInfo, result);
         if (r == VK_SUCCESS)
-            descriptorPools[poolIndex].activeSets += 1;
+            descriptorPools[poolIndex].refCount += 1;
         return r;
     };
 
     int lastPoolIdx = descriptorPools.count() - 1;
     for (int i = lastPoolIdx; i >= 0; --i) {
-        if (descriptorPools[i].activeSets == 0)
+        if (descriptorPools[i].refCount == 0) {
             df->vkResetDescriptorPool(dev, descriptorPools[i].pool, 0);
-        VkResult err = tryAllocate(i);
-        if (err == VK_SUCCESS) {
-            *resultPoolIndex = i;
-            return true;
+            descriptorPools[i].allocedDescSets = 0;
+        }
+        if (descriptorPools[i].allocedDescSets + allocInfo->descriptorSetCount <= QVK_DESC_SETS_PER_POOL) {
+            VkResult err = tryAllocate(i);
+            if (err == VK_SUCCESS) {
+                descriptorPools[i].allocedDescSets += allocInfo->descriptorSetCount;
+                *resultPoolIndex = i;
+                return true;
+            }
         }
     }
 
@@ -252,6 +257,7 @@ bool QVkRenderPrivate::allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocI
             qWarning("Failed to allocate descriptor set from new pool too, giving up: %d", err);
             return false;
         }
+        descriptorPools[lastPoolIdx].allocedDescSets += allocInfo->descriptorSetCount;
         *resultPoolIndex = lastPoolIdx;
         return true;
     } else {
@@ -2405,8 +2411,8 @@ void QVkRenderPrivate::executeDeferredReleases(bool forced)
             case QVkRenderPrivate::DeferredReleaseEntry::ShaderResourceBindings:
                 df->vkDestroyDescriptorSetLayout(dev, e.shaderResourceBindings.layout, nullptr);
                 if (e.shaderResourceBindings.poolIndex >= 0) {
-                    descriptorPools[e.shaderResourceBindings.poolIndex].activeSets -= 1;
-                    Q_ASSERT(descriptorPools[e.shaderResourceBindings.poolIndex].activeSets >= 0);
+                    descriptorPools[e.shaderResourceBindings.poolIndex].refCount -= 1;
+                    Q_ASSERT(descriptorPools[e.shaderResourceBindings.poolIndex].refCount >= 0);
                 }
                 break;
             case QVkRenderPrivate::DeferredReleaseEntry::Buffer:

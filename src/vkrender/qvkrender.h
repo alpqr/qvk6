@@ -52,7 +52,7 @@ class QVulkanWindow;
 
 static const int QVK_FRAMES_IN_FLIGHT = 2;
 
-struct QVkClearValue
+struct Q_VKR_EXPORT QVkClearValue
 {
     QVkClearValue() { }
     QVkClearValue(const QVector4D &rgba_) : rgba(rgba_), isDepthStencil(false) { }
@@ -63,7 +63,7 @@ struct QVkClearValue
     bool isDepthStencil;
 };
 
-struct QVkViewport
+struct Q_VKR_EXPORT QVkViewport
 {
     QVkViewport() { }
     QVkViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
@@ -74,7 +74,7 @@ struct QVkViewport
     float maxDepth;
 };
 
-struct QVkScissor
+struct Q_VKR_EXPORT QVkScissor
 {
     QVkScissor() { }
     QVkScissor(float x, float y, float w, float h)
@@ -84,7 +84,7 @@ struct QVkScissor
 };
 
 // should be mappable to D3D12_INPUT_ELEMENT_DESC + D3D12_VERTEX_BUFFER_VIEW...
-struct QVkVertexInputLayout
+struct Q_VKR_EXPORT QVkVertexInputLayout
 {
     struct Binding {
         enum Classification {
@@ -127,7 +127,7 @@ struct QVkVertexInputLayout
     QVector<Attribute> attributes;
 };
 
-struct QVkGraphicsShaderStage
+struct Q_VKR_EXPORT QVkGraphicsShaderStage
 {
     enum Type {
         Vertex,
@@ -155,7 +155,7 @@ protected: \
     friend class QVkRender; \
     friend class QVkRenderPrivate;
 
-struct QVkRenderPass
+struct Q_VKR_EXPORT QVkRenderPass
 {
 Q_VK_RES_PRIVATE(QVkRenderPass)
     VkRenderPass rp = VK_NULL_HANDLE;
@@ -165,7 +165,7 @@ struct QVkBuffer;
 struct QVkTexture;
 struct QVkSampler;
 
-struct QVkShaderResourceBindings
+struct Q_VKR_EXPORT QVkShaderResourceBindings
 {
     struct Binding {
         enum Type {
@@ -234,7 +234,7 @@ Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
 
-struct QVkGraphicsPipeline
+struct Q_VKR_EXPORT QVkGraphicsPipeline
 {
     enum Flag {
         UsesBlendConstants = 1 << 0,
@@ -374,7 +374,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipeline::ColorMask)
 
 typedef void * QVkAlloc;
 
-struct QVkBuffer
+struct Q_VKR_EXPORT QVkBuffer
 {
     enum Type {
         StaticType,
@@ -390,7 +390,12 @@ struct QVkBuffer
 
     QVkBuffer(Type type_, UsageFlags usage_, int size_)
         : type(type_), usage(usage_), size(size_)
-    { }
+    {
+        for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+            buffers[i] = VK_NULL_HANDLE;
+            allocations[i] = nullptr;
+        }
+    }
 
     Type type;
     UsageFlags usage;
@@ -399,10 +404,8 @@ struct QVkBuffer
     bool isStatic() const { return type == StaticType; }
 
 Q_VK_RES_PRIVATE(QVkBuffer)
-    struct {
-        VkBuffer buffer = VK_NULL_HANDLE;
-        QVkAlloc allocation = nullptr;
-    } d[QVK_FRAMES_IN_FLIGHT]; // only [0] is used for Static
+    VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
+    QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     int lastActiveFrameSlot = -1;
@@ -410,7 +413,7 @@ Q_VK_RES_PRIVATE(QVkBuffer)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkBuffer::UsageFlags)
 
-struct QVkRenderBuffer
+struct Q_VKR_EXPORT QVkRenderBuffer
 {
     enum Type {
         DepthStencil
@@ -431,7 +434,7 @@ Q_VK_RES_PRIVATE(QVkRenderBuffer)
     int lastActiveFrameSlot = -1;
 };
 
-struct QVkTexture
+struct Q_VKR_EXPORT QVkTexture
 {
     enum Flag {
         RenderTarget = 1 << 0
@@ -474,7 +477,7 @@ Q_VK_RES_PRIVATE(QVkTexture)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTexture::Flags)
 
-struct QVkSampler
+struct Q_VKR_EXPORT QVkSampler
 {
     enum Filter {
         Nearest,
@@ -505,7 +508,7 @@ Q_VK_RES_PRIVATE(QVkSampler)
     int lastActiveFrameSlot = -1;
 };
 
-struct QVkRenderTarget
+struct Q_VKR_EXPORT QVkRenderTarget
 {
     QSize sizeInPixels() const { return pixelSize; }
     const QVkRenderPass *renderPass() const { return &rp; }
@@ -522,7 +525,7 @@ Q_VK_RES_PRIVATE(QVkRenderTarget)
     Type type = RtRef;
 };
 
-struct QVkTextureRenderTarget : public QVkRenderTarget
+struct Q_VKR_EXPORT QVkTextureRenderTarget : public QVkRenderTarget
 {
     enum Flag {
         PreserveColorContents = 1 << 0
@@ -553,7 +556,7 @@ Q_VK_RES_PRIVATE(QVkTextureRenderTarget)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTextureRenderTarget::Flags)
 
-struct QVkCommandBuffer
+struct Q_VKR_EXPORT QVkCommandBuffer
 {
 Q_VK_RES_PRIVATE(QVkCommandBuffer)
     VkCommandBuffer cb = VK_NULL_HANDLE;
@@ -568,7 +571,7 @@ Q_VK_RES_PRIVATE(QVkCommandBuffer)
     QVkShaderResourceBindings *currentSrb;
 };
 
-struct QVkSwapChain
+struct Q_VKR_EXPORT QVkSwapChain
 {
     QVkCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
     QVkRenderTarget *currentFrameRenderTarget() { return &rt; }

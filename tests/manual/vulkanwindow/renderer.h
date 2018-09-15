@@ -68,5 +68,6 @@ public:
 protected:
     QVulkanWindow *m_window;
     QVkRender *m_r;
+    QVkRenderPass m_rp;
     TriangleRenderer m_triRenderer;
 };

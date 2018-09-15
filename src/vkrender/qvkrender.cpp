@@ -1085,7 +1085,7 @@ static inline VkBufferUsageFlagBits toVkBufferUsage(QVkBuffer::UsageFlags usage)
 
 bool QVkRender::createBuffer(QVkBuffer *buf)
 {
-    if (buf->d[0].buffer) // no repeated create without a releaseLater first
+    if (buf->buffers[0]) // no repeated create without a releaseLater first
         return false;
 
     VkBufferCreateInfo bufferInfo;
@@ -1106,14 +1106,14 @@ bool QVkRender::createBuffer(QVkBuffer *buf)
 
     VkResult err = VK_SUCCESS;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        buf->d[i].allocation = VK_NULL_HANDLE;
-        buf->d[i].buffer = VK_NULL_HANDLE;
+        buf->buffers[i] = VK_NULL_HANDLE;
+        buf->allocations[i] = nullptr;
         if (i == 0 || !buf->isStatic()) {
             VmaAllocation allocation;
-            err = vmaCreateBuffer(d->allocator, &bufferInfo, &allocInfo, &buf->d[i].buffer, &allocation, nullptr);
+            err = vmaCreateBuffer(d->allocator, &bufferInfo, &allocInfo, &buf->buffers[i], &allocation, nullptr);
             if (err != VK_SUCCESS)
                 break;
-            buf->d[i].allocation = allocation;
+            buf->allocations[i] = allocation;
         }
     }
 
@@ -1966,7 +1966,7 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 VkDescriptorBufferInfo bufInfo;
                 QVkBuffer *buf = b.ubuf.buf;
-                bufInfo.buffer = buf->isStatic() ? buf->d[0].buffer : buf->d[i].buffer;
+                bufInfo.buffer = buf->isStatic() ? buf->buffers[0] : buf->buffers[i];
                 bufInfo.offset = b.ubuf.offset;
                 bufInfo.range = b.ubuf.size <= 0 ? buf->size : b.ubuf.size;
                 // be nice and assert when we know the vulkan device would die a horrible death due to non-aligned reads
@@ -2022,7 +2022,7 @@ void QVkRenderPrivate::bufferBarrier(QVkCommandBuffer *cb, QVkBuffer *buf)
 
     bufMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     bufMemBarrier.dstAccessMask = dstAccess;
-    bufMemBarrier.buffer = buf->d[0].buffer;
+    bufMemBarrier.buffer = buf->buffers[0];
     bufMemBarrier.size = buf->size;
 
     df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
@@ -2065,7 +2065,7 @@ void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::P
     for (const QVkRender::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
         Q_ASSERT(!u.buf->isStatic());
         void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(u.buf->d[currentFrameSlot].allocation);
+        VmaAllocation a = toVmaAllocation(u.buf->allocations[currentFrameSlot]);
         VkResult err = vmaMapMemory(allocator, a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
@@ -2080,7 +2080,7 @@ void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::P
             r.changeEnd = u.offset + u.data.size();
     }
     for (auto it = changeRanges.cbegin(), itEnd = changeRanges.cend(); it != itEnd; ++it) {
-        VmaAllocation a = toVmaAllocation(it.key()->d[currentFrameSlot].allocation);
+        VmaAllocation a = toVmaAllocation(it.key()->allocations[currentFrameSlot]);
         vmaFlushAllocation(allocator, a, it->changeBegin, it->changeEnd - it->changeBegin);
     }
 
@@ -2104,7 +2104,7 @@ void QVkRenderPrivate::applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::P
         memset(&copyInfo, 0, sizeof(copyInfo));
         copyInfo.size = u.buf->size;
 
-        df->vkCmdCopyBuffer(cb->cb, u.buf->stagingBuffer, u.buf->d[0].buffer, 1, &copyInfo);
+        df->vkCmdCopyBuffer(cb->cb, u.buf->stagingBuffer, u.buf->buffers[0], 1, &copyInfo);
         bufferBarrier(cb, u.buf);
         u.buf->lastActiveFrameSlot = currentFrameSlot;
     }
@@ -2297,7 +2297,7 @@ void QVkRender::setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVe
         Q_ASSERT(buf->usage.testFlag(QVkBuffer::VertexBuffer));
         buf->lastActiveFrameSlot = d->currentFrameSlot;
         const int idx = buf->isStatic() ? 0 : d->currentFrameSlot;
-        bufs.append(buf->d[idx].buffer);
+        bufs.append(buf->buffers[idx]);
         ofs.append(bindings[i].second);
     }
     if (!bufs.isEmpty())
@@ -2308,7 +2308,7 @@ void QVkRender::setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVe
         indexBuf->lastActiveFrameSlot = d->currentFrameSlot;
         const int idx = indexBuf->isStatic() ? 0 : d->currentFrameSlot;
         const VkIndexType type = indexFormat == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-        d->df->vkCmdBindIndexBuffer(cb->cb, indexBuf->d[idx].buffer, indexOffset, type);
+        d->df->vkCmdBindIndexBuffer(cb->cb, indexBuf->buffers[idx], indexOffset, type);
     }
 }
 
@@ -2481,7 +2481,7 @@ void QVkRender::releaseLater(QVkBuffer *buf)
 {
     int nullBufferCount = 0;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        if (!buf->d[i].buffer)
+        if (!buf->buffers[i])
             ++nullBufferCount;
     }
     if (nullBufferCount == QVK_FRAMES_IN_FLIGHT)
@@ -2498,11 +2498,11 @@ void QVkRender::releaseLater(QVkBuffer *buf)
     buf->stagingAlloc = nullptr;
 
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        e.buffer.buffers[i] = buf->d[i].buffer;
-        e.buffer.allocations[i] = buf->d[i].allocation;
+        e.buffer.buffers[i] = buf->buffers[i];
+        e.buffer.allocations[i] = buf->allocations[i];
 
-        buf->d[i].buffer = VK_NULL_HANDLE;
-        buf->d[i].allocation = nullptr;
+        buf->buffers[i] = VK_NULL_HANDLE;
+        buf->allocations[i] = nullptr;
     }
 
     d->releaseQueue.append(e);

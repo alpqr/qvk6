@@ -1134,6 +1134,7 @@ bool QVkRender::createBuffer(QVkBuffer *buf)
 
     if (err == VK_SUCCESS) {
         buf->lastActiveFrameSlot = -1;
+        buf->generation += 1;
         return true;
     } else {
         qWarning("Failed to create buffer: %d", err);
@@ -1177,6 +1178,7 @@ bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
     }
 
     rb->lastActiveFrameSlot = -1;
+    rb->generation += 1;
     return true;
 }
 
@@ -1294,6 +1296,7 @@ bool QVkRender::createTexture(QVkTexture *tex)
 
     tex->layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     tex->lastActiveFrameSlot = -1;
+    tex->generation += 1;
     return true;
 }
 
@@ -1364,6 +1367,7 @@ bool QVkRender::createSampler(QVkSampler *sampler)
     }
 
     sampler->lastActiveFrameSlot = -1;
+    sampler->generation += 1;
     return true;
 }
 
@@ -1456,6 +1460,7 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
     rt->type = QVkRenderTarget::RtTexture;
 
     rt->lastActiveFrameSlot = -1;
+    rt->generation += 1;
     return true;
 }
 
@@ -1876,6 +1881,7 @@ bool QVkRender::createGraphicsPipeline(QVkGraphicsPipeline *ps)
 
     if (err == VK_SUCCESS) {
         ps->lastActiveFrameSlot = -1;
+        ps->generation += 1;
         return true;
     } else {
         qWarning("Failed to create graphics pipeline: %d", err);
@@ -1958,7 +1964,7 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
     QVarLengthArray<VkDescriptorImageInfo, 4> imageInfos;
     QVarLengthArray<VkWriteDescriptorSet, 8> writeInfos;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        for (const QVkShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
+        for (QVkShaderResourceBindings::Binding &b : srb->bindings) {
             VkWriteDescriptorSet writeInfo;
             memset(&writeInfo, 0, sizeof(writeInfo));
             writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1970,8 +1976,9 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
             case QVkShaderResourceBindings::Binding::UniformBuffer:
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                VkDescriptorBufferInfo bufInfo;
                 QVkBuffer *buf = b.ubuf.buf;
+                b.ubuf.bufGeneration = buf->generation;
+                VkDescriptorBufferInfo bufInfo;
                 bufInfo.buffer = buf->isStatic() ? buf->buffers[0] : buf->buffers[i];
                 bufInfo.offset = b.ubuf.offset;
                 bufInfo.range = b.ubuf.size <= 0 ? buf->size : b.ubuf.size;
@@ -1984,6 +1991,8 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
             case QVkShaderResourceBindings::Binding::SampledTexture:
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                b.stex.texGeneration = b.stex.tex->generation;
+                b.stex.samplerGeneration = b.stex.sampler->generation;
                 VkDescriptorImageInfo imageInfo;
                 imageInfo.sampler = b.stex.sampler->sampler;
                 imageInfo.imageView = b.stex.tex->imageView;
@@ -2257,16 +2266,26 @@ void QVkRender::setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *p
     if (!srb)
         srb = ps->shaderResourceBindings;
 
+    auto rebuildSrbIf = [this, srb](bool e) {
+        if (e) {
+            releaseLater(srb);
+            createShaderResourceBindings(srb);
+        }
+    };
+
     bool hasDynamicBuffer = false; // excluding vertex and index
     for (const QVkShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
         switch (b.type) {
         case QVkShaderResourceBindings::Binding::UniformBuffer:
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QVkBuffer::UniformBuffer));
+            rebuildSrbIf(b.ubuf.buf->generation != b.ubuf.bufGeneration);
             b.ubuf.buf->lastActiveFrameSlot = d->currentFrameSlot;
             if (!b.ubuf.buf->isStatic())
                 hasDynamicBuffer = true;
             break;
         case QVkShaderResourceBindings::Binding::SampledTexture:
+            rebuildSrbIf(b.stex.tex->generation != b.stex.texGeneration
+                    || b.stex.sampler->generation != b.stex.samplerGeneration);
             b.stex.tex->lastActiveFrameSlot = d->currentFrameSlot;
             b.stex.sampler->lastActiveFrameSlot = d->currentFrameSlot;
             break;

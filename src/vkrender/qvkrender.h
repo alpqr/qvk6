@@ -150,6 +150,7 @@ struct Q_VKR_EXPORT QVkGraphicsShaderStage
 #define Q_VK_RES_PRIVATE(Class) \
 public: \
     Class() { } \
+    uint generation = 0; \
 protected: \
     Q_DISABLE_COPY(Class) \
     friend class QVkRender; \
@@ -210,12 +211,15 @@ struct Q_VKR_EXPORT QVkShaderResourceBindings
         Type type;
         struct UniformBufferData {
             QVkBuffer *buf;
+            uint bufGeneration;
             int offset;
             int size;
         };
         struct SampledTextureData {
             QVkTexture *tex;
+            uint texGeneration;
             QVkSampler *sampler;
+            uint samplerGeneration;
         };
         union {
             UniformBufferData ubuf;
@@ -785,7 +789,10 @@ public:
 
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
-    // the pipeline or desc.set are the same as in the last call in the same frame.
+    // the pipeline or desc.set are the same as in the last call in the same
+    // frame. Resources are rebuilt (release+create) as necessary (e.g. srb
+    // when buffer, texture or sampler is out of date due to having been
+    // rebuilt since the last createShaderResourceBindings)
     void setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb = nullptr);
 
     using VertexInput = QPair<QVkBuffer *, quint32>; // buffer, offset

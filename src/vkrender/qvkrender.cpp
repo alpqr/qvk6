@@ -1178,7 +1178,6 @@ bool QVkRender::createRenderBuffer(QVkRenderBuffer *rb)
     }
 
     rb->lastActiveFrameSlot = -1;
-    rb->generation += 1;
     return true;
 }
 
@@ -1460,7 +1459,6 @@ bool QVkRender::createTextureRenderTarget(QVkTextureRenderTarget *rt)
     rt->type = QVkRenderTarget::RtTexture;
 
     rt->lastActiveFrameSlot = -1;
-    rt->generation += 1;
     return true;
 }
 
@@ -1881,7 +1879,6 @@ bool QVkRender::createGraphicsPipeline(QVkGraphicsPipeline *ps)
 
     if (err == VK_SUCCESS) {
         ps->lastActiveFrameSlot = -1;
-        ps->generation += 1;
         return true;
     } else {
         qWarning("Failed to create graphics pipeline: %d", err);
@@ -1963,7 +1960,6 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
     d->updateShaderResourceBindings(srb);
 
     srb->lastActiveFrameSlot = -1;
-    srb->generation += 1;
     return true;
 }
 

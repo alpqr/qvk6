@@ -150,7 +150,6 @@ struct Q_VKR_EXPORT QVkGraphicsShaderStage
 #define Q_VK_RES_PRIVATE(Class) \
 public: \
     Class() { } \
-    uint generation = 0; \
 protected: \
     Q_DISABLE_COPY(Class) \
     friend class QVkRender; \
@@ -428,6 +427,7 @@ Q_VK_RES_PRIVATE(QVkBuffer)
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     int lastActiveFrameSlot = -1;
+    uint generation = 0;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkBuffer::UsageFlags)
@@ -492,6 +492,7 @@ Q_VK_RES_PRIVATE(QVkTexture)
     QVkAlloc stagingAlloc = nullptr;
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     int lastActiveFrameSlot = -1;
+    uint generation = 0;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTexture::Flags)
@@ -525,6 +526,7 @@ struct Q_VKR_EXPORT QVkSampler
 Q_VK_RES_PRIVATE(QVkSampler)
     VkSampler sampler = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
+    uint generation = 0;
 };
 
 struct Q_VKR_EXPORT QVkRenderTarget

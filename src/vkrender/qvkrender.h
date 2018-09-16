@@ -211,15 +211,12 @@ struct Q_VKR_EXPORT QVkShaderResourceBindings
         Type type;
         struct UniformBufferData {
             QVkBuffer *buf;
-            uint bufGeneration;
             int offset;
             int size;
         };
         struct SampledTextureData {
             QVkTexture *tex;
-            uint texGeneration;
             QVkSampler *sampler;
-            uint samplerGeneration;
         };
         union {
             UniformBufferData ubuf;
@@ -234,6 +231,24 @@ Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
     int lastActiveFrameSlot = -1;
+
+    // Keep track of the generation number of each referenced QVk* to be able
+    // to detect that the underlying descriptor set became out of date and they
+    // need to be written again with the up-to-date VkBuffer etc. objects.
+    struct BoundUniformBufferData {
+        uint generation;
+    };
+    struct BoundSampledTextureData {
+        uint texGeneration;
+        uint samplerGeneration;
+    };
+    struct BoundResourceData {
+        union {
+            BoundUniformBufferData ubuf;
+            BoundSampledTextureData stex;
+        };
+    };
+    QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
@@ -790,9 +805,10 @@ public:
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
     // the pipeline or desc.set are the same as in the last call in the same
-    // frame. Resources are rebuilt (release+create) as necessary (e.g. srb
-    // when buffer, texture or sampler is out of date due to having been
-    // rebuilt since the last createShaderResourceBindings)
+    // frame; srb is updated automatically at this point whenever a referenced
+    // buffer, texture, etc. is out of date internally (due to release+create
+    // since the creation of the srb) - hence no need to manually recreate the
+    // srb in case a QVkBuffer is "resized" etc.
     void setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb = nullptr);
 
     using VertexInput = QPair<QVkBuffer *, quint32>; // buffer, offset

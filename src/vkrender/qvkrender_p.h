@@ -89,6 +89,11 @@ public:
                       VkAccessFlags srcAccess, VkAccessFlags dstAccess,
                       VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
 
+    // Lighter than release+create, does not allow layout change, but pulls in
+    // any new underlying resources from the referenced buffers, textures, etc.
+    // in case they changed in the meantime.
+    void updateShaderResourceBindings(QVkShaderResourceBindings *srb, int descSetIdx = -1);
+
     QVkRender *q;
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;

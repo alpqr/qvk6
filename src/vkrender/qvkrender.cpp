@@ -1960,15 +1960,31 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
     if (!d->allocateDescriptorSet(&allocInfo, srb->descSets, &srb->poolIndex))
         return false;
 
+    d->updateShaderResourceBindings(srb);
+
+    srb->lastActiveFrameSlot = -1;
+    srb->generation += 1;
+    return true;
+}
+
+void QVkRenderPrivate::updateShaderResourceBindings(QVkShaderResourceBindings *srb, int descSetIdx)
+{
     QVarLengthArray<VkDescriptorBufferInfo, 4> bufferInfos;
     QVarLengthArray<VkDescriptorImageInfo, 4> imageInfos;
     QVarLengthArray<VkWriteDescriptorSet, 8> writeInfos;
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        for (QVkShaderResourceBindings::Binding &b : srb->bindings) {
+
+    const bool updateAll = descSetIdx < 0;
+    int frameSlot = updateAll ? 0 : descSetIdx;
+    while (frameSlot < (updateAll ? QVK_FRAMES_IN_FLIGHT : descSetIdx + 1)) {
+        srb->boundResourceData[frameSlot].resize(srb->bindings.count());
+        for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
+            const QVkShaderResourceBindings::Binding &b(srb->bindings[i]);
+            QVkShaderResourceBindings::BoundResourceData &bd(srb->boundResourceData[frameSlot][i]);
+
             VkWriteDescriptorSet writeInfo;
             memset(&writeInfo, 0, sizeof(writeInfo));
             writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeInfo.dstSet = srb->descSets[i];
+            writeInfo.dstSet = srb->descSets[frameSlot];
             writeInfo.dstBinding = b.binding;
             writeInfo.descriptorCount = 1;
 
@@ -1977,13 +1993,13 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 QVkBuffer *buf = b.ubuf.buf;
-                b.ubuf.bufGeneration = buf->generation;
+                bd.ubuf.generation = buf->generation;
                 VkDescriptorBufferInfo bufInfo;
-                bufInfo.buffer = buf->isStatic() ? buf->buffers[0] : buf->buffers[i];
+                bufInfo.buffer = buf->isStatic() ? buf->buffers[0] : buf->buffers[frameSlot];
                 bufInfo.offset = b.ubuf.offset;
                 bufInfo.range = b.ubuf.size <= 0 ? buf->size : b.ubuf.size;
                 // be nice and assert when we know the vulkan device would die a horrible death due to non-aligned reads
-                Q_ASSERT(aligned(bufInfo.offset, d->ubufAlign) == bufInfo.offset);
+                Q_ASSERT(aligned(bufInfo.offset, ubufAlign) == bufInfo.offset);
                 bufferInfos.append(bufInfo);
                 writeInfo.pBufferInfo = &bufferInfos.last();
             }
@@ -1991,8 +2007,8 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
             case QVkShaderResourceBindings::Binding::SampledTexture:
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                b.stex.texGeneration = b.stex.tex->generation;
-                b.stex.samplerGeneration = b.stex.sampler->generation;
+                bd.stex.texGeneration = b.stex.tex->generation;
+                bd.stex.samplerGeneration = b.stex.sampler->generation;
                 VkDescriptorImageInfo imageInfo;
                 imageInfo.sampler = b.stex.sampler->sampler;
                 imageInfo.imageView = b.stex.tex->imageView;
@@ -2007,12 +2023,10 @@ bool QVkRender::createShaderResourceBindings(QVkShaderResourceBindings *srb)
 
             writeInfos.append(writeInfo);
         }
+        ++frameSlot;
     }
 
-    d->df->vkUpdateDescriptorSets(d->dev, writeInfos.count(), writeInfos.constData(), 0, nullptr);
-
-    srb->lastActiveFrameSlot = -1;
-    return true;
+    df->vkUpdateDescriptorSets(dev, writeInfos.count(), writeInfos.constData(), 0, nullptr);
 }
 
 void QVkRenderPrivate::bufferBarrier(QVkCommandBuffer *cb, QVkBuffer *buf)
@@ -2266,26 +2280,16 @@ void QVkRender::setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *p
     if (!srb)
         srb = ps->shaderResourceBindings;
 
-    auto rebuildSrbIf = [this, srb](bool e) {
-        if (e) {
-            releaseLater(srb);
-            createShaderResourceBindings(srb);
-        }
-    };
-
-    bool hasDynamicBuffer = false; // excluding vertex and index
+    bool hasDynamicBufferInSrb = false;
     for (const QVkShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
         switch (b.type) {
         case QVkShaderResourceBindings::Binding::UniformBuffer:
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QVkBuffer::UniformBuffer));
-            rebuildSrbIf(b.ubuf.buf->generation != b.ubuf.bufGeneration);
             b.ubuf.buf->lastActiveFrameSlot = d->currentFrameSlot;
             if (!b.ubuf.buf->isStatic())
-                hasDynamicBuffer = true;
+                hasDynamicBufferInSrb = true;
             break;
         case QVkShaderResourceBindings::Binding::SampledTexture:
-            rebuildSrbIf(b.stex.tex->generation != b.stex.texGeneration
-                    || b.stex.sampler->generation != b.stex.samplerGeneration);
             b.stex.tex->lastActiveFrameSlot = d->currentFrameSlot;
             b.stex.sampler->lastActiveFrameSlot = d->currentFrameSlot;
             break;
@@ -2295,15 +2299,44 @@ void QVkRender::setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *p
         }
     }
 
+    // ensure the descriptor set we are going to bind refers to up-to-date Vk objects
+    const int descSetIdx = hasDynamicBufferInSrb ? d->currentFrameSlot : 0;
+    bool srbUpdate = false;
+    for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
+        const QVkShaderResourceBindings::Binding &b(srb->bindings[i]);
+        QVkShaderResourceBindings::BoundResourceData &bd(srb->boundResourceData[descSetIdx][i]);
+        switch (b.type) {
+        case QVkShaderResourceBindings::Binding::UniformBuffer:
+            if (b.ubuf.buf->generation != bd.ubuf.generation) {
+                srbUpdate = true;
+                bd.ubuf.generation = b.ubuf.buf->generation;
+            }
+            break;
+        case QVkShaderResourceBindings::Binding::SampledTexture:
+            if (b.stex.tex->generation != bd.stex.texGeneration
+                    || b.stex.sampler->generation != bd.stex.samplerGeneration)
+            {
+                srbUpdate = true;
+                bd.stex.texGeneration = b.stex.tex->generation;
+                bd.stex.samplerGeneration = b.stex.sampler->generation;
+            }
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+    if (srbUpdate)
+        d->updateShaderResourceBindings(srb, descSetIdx);
+
     if (cb->currentPipeline != ps) {
         ps->lastActiveFrameSlot = d->currentFrameSlot;
         d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
         cb->currentPipeline = ps;
     }
 
-    if (hasDynamicBuffer || cb->currentSrb != srb) {
+    if (hasDynamicBufferInSrb || srbUpdate || cb->currentSrb != srb) {
         srb->lastActiveFrameSlot = d->currentFrameSlot;
-        const int descSetIdx = hasDynamicBuffer ? d->currentFrameSlot : 0;
         d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
                                        &srb->descSets[descSetIdx], 0, nullptr);
         cb->currentSrb = srb;

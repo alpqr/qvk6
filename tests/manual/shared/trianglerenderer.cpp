@@ -137,6 +137,17 @@ void TriangleRenderer::releaseOutputDependentResources()
 
 QVkRender::PassUpdates TriangleRenderer::update()
 {
+#if 0
+    static int messWithBufferTrigger = 0;
+    // recreate the underlying VkBuffer every second frame
+    // to exercise setGraphicsPipeline's built-in smartness
+    if (!(messWithBufferTrigger & 1)) {
+        m_r->releaseLater(m_ubuf);
+        m_r->createBuffer(m_ubuf);
+    }
+    ++messWithBufferTrigger;
+#endif
+
     QVkRender::PassUpdates u;
 
     if (!m_vbufReady) {

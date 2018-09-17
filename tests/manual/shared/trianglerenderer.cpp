@@ -66,7 +66,7 @@ void TriangleRenderer::initResources()
 // on the other hand, srb and buffers are referenced from the ps but can be reused.
 void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
 {
-    m_ps = new QRhiGraphicsPipeline;
+    m_ps = m_r->createGraphicsPipeline();
 
     QRhiGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
     premulAlphaBlend.enable = true;
@@ -98,7 +98,7 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
     m_ps->shaderResourceBindings = m_srb;
     m_ps->renderPass = rp;
 
-    m_r->createGraphicsPipeline(m_ps);
+    m_ps->build();
 
     m_proj = m_r->openGLCorrectionMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
@@ -129,7 +129,7 @@ void TriangleRenderer::releaseResources()
 void TriangleRenderer::releaseOutputDependentResources()
 {
     if (m_ps) {
-        m_r->releaseLater(m_ps);
+        m_ps->release();
         delete m_ps;
         m_ps = nullptr;
     }

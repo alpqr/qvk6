@@ -288,6 +288,7 @@ struct Q_VKR_EXPORT QRhiRenderPass
 {
 Q_VK_RES_PRIVATE(QRhiRenderPass)
     VkRenderPass rp = VK_NULL_HANDLE;
+    friend class QVkGraphicsPipeline;
 };
 
 struct Q_VKR_EXPORT QRhiRenderTarget
@@ -407,8 +408,9 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBindings::Binding::StageFlags)
 
-struct Q_VKR_EXPORT QRhiGraphicsPipeline
+class Q_VKR_EXPORT QRhiGraphicsPipeline : public QRhiResource
 {
+public:
     enum Flag {
         UsesBlendConstants = 1 << 0,
         UsesStencilRef = 1 << 1
@@ -535,10 +537,10 @@ struct Q_VKR_EXPORT QRhiGraphicsPipeline
     QRhiShaderResourceBindings *shaderResourceBindings = nullptr;
     const QRhiRenderPass *renderPass = nullptr;
 
-Q_VK_RES_PRIVATE(QRhiGraphicsPipeline)
-    VkPipelineLayout layout = VK_NULL_HANDLE;
-    VkPipeline pipeline = VK_NULL_HANDLE;
-    int lastActiveFrameSlot = -1;
+    virtual bool build() = 0;
+
+protected:
+    QRhiGraphicsPipeline(QRhi *rhi, QRhiResourcePrivate *d);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
@@ -679,7 +681,7 @@ public:
        when invoked on an object with valid resources underneath.
      */
 
-    bool createGraphicsPipeline(QRhiGraphicsPipeline *ps);
+    QRhiGraphicsPipeline *createGraphicsPipeline();
     QRhiShaderResourceBindings *createShaderResourceBindings();
 
     // Buffers are immutable like other resources but the underlying data can
@@ -706,7 +708,6 @@ public:
 
     bool createTextureRenderTarget(QRhiTextureRenderTarget *rt);
 
-    void releaseLater(QRhiGraphicsPipeline *ps);
     void releaseLater(QRhiTextureRenderTarget *rt);
 
     /*

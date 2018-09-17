@@ -119,7 +119,7 @@ void TriangleOnCubeRenderer::initResources()
 
 void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
 {
-    m_ps = new QRhiGraphicsPipeline;
+    m_ps = m_r->createGraphicsPipeline();
 
     m_ps->targetBlends = { QRhiGraphicsPipeline::TargetBlend() };
 
@@ -157,7 +157,7 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
     m_ps->shaderResourceBindings = m_srb;
     m_ps->renderPass = rp;
 
-    m_r->createGraphicsPipeline(m_ps);
+    m_ps->build();
 
     m_proj = m_r->openGLCorrectionMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
@@ -212,7 +212,7 @@ void TriangleOnCubeRenderer::releaseOutputDependentResources()
     m_offscreenTriangle.releaseOutputDependentResources();
 
     if (m_ps) {
-        m_r->releaseLater(m_ps);
+        m_ps->release();
         delete m_ps;
         m_ps = nullptr;
     }

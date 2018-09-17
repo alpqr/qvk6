@@ -167,6 +167,21 @@ struct QVkShaderResourceBindingsPrivate : public QRhiResourcePrivate
     QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
 };
 
+class QVkGraphicsPipeline : public QRhiGraphicsPipeline
+{
+public:
+    QVkGraphicsPipeline(QRhi *rhi);
+    void release() override;
+    bool build() override;
+};
+
+struct QVkGraphicsPipelinePrivate : public QRhiResourcePrivate
+{
+    VkPipelineLayout layout = VK_NULL_HANDLE;
+    VkPipeline pipeline = VK_NULL_HANDLE;
+    int lastActiveFrameSlot = -1;
+};
+
 class QVkSwapChain : public QRhiSwapChain
 {
 public:

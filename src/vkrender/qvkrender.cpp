@@ -1583,174 +1583,9 @@ static inline void fillVkStencilOpState(VkStencilOpState *dst, const QRhiGraphic
     dst->compareOp = toVkCompareOp(src.compareOp);
 }
 
-bool QRhi::createGraphicsPipeline(QRhiGraphicsPipeline *ps)
+QRhiGraphicsPipeline *QRhi::createGraphicsPipeline()
 {
-    if (ps->pipeline)
-        releaseLater(ps);
-
-    RHI_D(QRhiVulkan);
-    if (!d->ensurePipelineCache())
-        return false;
-
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo;
-    memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    QVkShaderResourceBindingsPrivate *srbD = RES_GET_D(QVkShaderResourceBindings, ps->shaderResourceBindings);
-    Q_ASSERT(ps->shaderResourceBindings && srbD->layout);
-    pipelineLayoutInfo.pSetLayouts = &srbD->layout;
-    VkResult err = d->df->vkCreatePipelineLayout(d->dev, &pipelineLayoutInfo, nullptr, &ps->layout);
-    if (err != VK_SUCCESS)
-        qWarning("Failed to create pipeline layout: %d", err);
-
-    VkGraphicsPipelineCreateInfo pipelineInfo;
-    memset(&pipelineInfo, 0, sizeof(pipelineInfo));
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-
-    QVarLengthArray<VkShaderModule, 4> shaders;
-    QVarLengthArray<VkPipelineShaderStageCreateInfo, 4> shaderStageCreateInfos;
-    for (const QRhiGraphicsShaderStage &shaderStage : ps->shaderStages) {
-        VkShaderModule shader = d->createShader(shaderStage.shader);
-        if (shader) {
-            shaders.append(shader);
-            VkPipelineShaderStageCreateInfo shaderInfo;
-            memset(&shaderInfo, 0, sizeof(shaderInfo));
-            shaderInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            shaderInfo.stage = toVkShaderStage(shaderStage.type);
-            shaderInfo.module = shader;
-            shaderInfo.pName = shaderStage.name;
-            shaderStageCreateInfos.append(shaderInfo);
-        }
-    }
-    pipelineInfo.stageCount = shaderStageCreateInfos.count();
-    pipelineInfo.pStages = shaderStageCreateInfos.constData();
-
-    QVarLengthArray<VkVertexInputBindingDescription, 4> vertexBindings;
-    for (int i = 0, ie = ps->vertexInputLayout.bindings.count(); i != ie; ++i) {
-        const QRhiVertexInputLayout::Binding &binding(ps->vertexInputLayout.bindings[i]);
-        VkVertexInputBindingDescription bindingInfo = {
-            uint32_t(i),
-            binding.stride,
-            binding.classification == QRhiVertexInputLayout::Binding::PerVertex ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE
-        };
-        vertexBindings.append(bindingInfo);
-    }
-    QVarLengthArray<VkVertexInputAttributeDescription, 4> vertexAttributes;
-    for (const QRhiVertexInputLayout::Attribute &attribute : ps->vertexInputLayout.attributes) {
-        VkVertexInputAttributeDescription attributeInfo = {
-            uint32_t(attribute.location),
-            uint32_t(attribute.binding),
-            toVkAttributeFormat(attribute.format),
-            attribute.offset
-        };
-        vertexAttributes.append(attributeInfo);
-    }
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo;
-    memset(&vertexInputInfo, 0, sizeof(vertexInputInfo));
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount = vertexBindings.count();
-    vertexInputInfo.pVertexBindingDescriptions = vertexBindings.constData();
-    vertexInputInfo.vertexAttributeDescriptionCount = vertexAttributes.count();
-    vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.constData();
-    pipelineInfo.pVertexInputState = &vertexInputInfo;
-
-    QVarLengthArray<VkDynamicState, 8> dynEnable;
-    dynEnable << VK_DYNAMIC_STATE_VIEWPORT;
-    dynEnable << VK_DYNAMIC_STATE_SCISSOR;
-    if (ps->flags.testFlag(QRhiGraphicsPipeline::UsesBlendConstants))
-        dynEnable << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
-    if (ps->flags.testFlag(QRhiGraphicsPipeline::UsesStencilRef))
-        dynEnable << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
-
-    VkPipelineDynamicStateCreateInfo dynamicInfo;
-    memset(&dynamicInfo, 0, sizeof(dynamicInfo));
-    dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicInfo.dynamicStateCount = dynEnable.count();
-    dynamicInfo.pDynamicStates = dynEnable.constData();
-    pipelineInfo.pDynamicState = &dynamicInfo;
-
-    VkPipelineViewportStateCreateInfo viewportInfo;
-    memset(&viewportInfo, 0, sizeof(viewportInfo));
-    viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportInfo.viewportCount = 1;
-    viewportInfo.scissorCount = 1;
-    pipelineInfo.pViewportState = &viewportInfo;
-
-    VkPipelineInputAssemblyStateCreateInfo inputAsmInfo;
-    memset(&inputAsmInfo, 0, sizeof(inputAsmInfo));
-    inputAsmInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAsmInfo.topology = toVkTopology(ps->topology);
-    pipelineInfo.pInputAssemblyState = &inputAsmInfo;
-
-    VkPipelineRasterizationStateCreateInfo rastInfo;
-    memset(&rastInfo, 0, sizeof(rastInfo));
-    rastInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rastInfo.rasterizerDiscardEnable = ps->rasterizerDiscard;
-    rastInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rastInfo.cullMode = toVkCullMode(ps->cullMode);
-    rastInfo.frontFace = toVkFrontFace(ps->frontFace);
-    rastInfo.lineWidth = 1.0f;
-    pipelineInfo.pRasterizationState = &rastInfo;
-
-    VkPipelineMultisampleStateCreateInfo msInfo;
-    memset(&msInfo, 0, sizeof(msInfo));
-    msInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    msInfo.rasterizationSamples = d->effectiveSampleCount(ps->sampleCount);
-    pipelineInfo.pMultisampleState = &msInfo;
-
-    VkPipelineDepthStencilStateCreateInfo dsInfo;
-    memset(&dsInfo, 0, sizeof(dsInfo));
-    dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    dsInfo.depthTestEnable = ps->depthTest;
-    dsInfo.depthWriteEnable = ps->depthWrite;
-    dsInfo.depthCompareOp = toVkCompareOp(ps->depthOp);
-    dsInfo.stencilTestEnable = ps->stencilTest;
-    fillVkStencilOpState(&dsInfo.front, ps->stencilFront);
-    dsInfo.front.compareMask = ps->stencilReadMask;
-    dsInfo.front.writeMask = ps->stencilWriteMask;
-    fillVkStencilOpState(&dsInfo.back, ps->stencilBack);
-    dsInfo.back.compareMask = ps->stencilReadMask;
-    dsInfo.back.writeMask = ps->stencilWriteMask;
-    pipelineInfo.pDepthStencilState = &dsInfo;
-
-    VkPipelineColorBlendStateCreateInfo blendInfo;
-    memset(&blendInfo, 0, sizeof(blendInfo));
-    blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    QVarLengthArray<VkPipelineColorBlendAttachmentState, 4> targetBlends;
-    for (const QRhiGraphicsPipeline::TargetBlend &b : qAsConst(ps->targetBlends)) {
-        VkPipelineColorBlendAttachmentState blend;
-        memset(&blend, 0, sizeof(blend));
-        blend.blendEnable = b.enable;
-        blend.srcColorBlendFactor = toVkBlendFactor(b.srcColor);
-        blend.dstColorBlendFactor = toVkBlendFactor(b.dstColor);
-        blend.colorBlendOp = toVkBlendOp(b.opColor);
-        blend.srcAlphaBlendFactor = toVkBlendFactor(b.srcAlpha);
-        blend.dstAlphaBlendFactor = toVkBlendFactor(b.dstAlpha);
-        blend.alphaBlendOp = toVkBlendOp(b.opAlpha);
-        blend.colorWriteMask = toVkColorComponents(b.colorWrite);
-        targetBlends.append(blend);
-    }
-    blendInfo.attachmentCount = targetBlends.count();
-    blendInfo.pAttachments = targetBlends.constData();
-    pipelineInfo.pColorBlendState = &blendInfo;
-
-    pipelineInfo.layout = ps->layout;
-
-    Q_ASSERT(ps->renderPass && ps->renderPass->rp);
-    pipelineInfo.renderPass = ps->renderPass->rp;
-
-    err = d->df->vkCreateGraphicsPipelines(d->dev, d->pipelineCache, 1, &pipelineInfo, nullptr, &ps->pipeline);
-
-    for (VkShaderModule shader : shaders)
-        d->df->vkDestroyShaderModule(d->dev, shader, nullptr);
-
-    if (err == VK_SUCCESS) {
-        ps->lastActiveFrameSlot = -1;
-        return true;
-    } else {
-        qWarning("Failed to create graphics pipeline: %d", err);
-        return false;
-    }
+    return new QVkGraphicsPipeline(this);
 }
 
 static inline VkDescriptorType toVkDescriptorType(QRhiShaderResourceBindings::Binding::Type type)
@@ -2104,7 +1939,8 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
 {
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
-    Q_ASSERT(ps->pipeline);
+    QVkGraphicsPipelinePrivate *psD = RES_GET_D(QVkGraphicsPipeline, ps);
+    Q_ASSERT(psD->pipeline);
 
     if (!srb)
         srb = ps->shaderResourceBindings;
@@ -2160,14 +1996,14 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
         d->updateShaderResourceBindings(srb, descSetIdx);
 
     if (cb->currentPipeline != ps) {
-        ps->lastActiveFrameSlot = d->currentFrameSlot;
-        d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->pipeline);
+        psD->lastActiveFrameSlot = d->currentFrameSlot;
+        d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
         cb->currentPipeline = ps;
     }
 
     if (hasDynamicBufferInSrb || srbUpdate || cb->currentSrb != srb) {
         srbD->lastActiveFrameSlot = d->currentFrameSlot;
-        d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
+        d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
                                        &srbD->descSets[descSetIdx], 0, nullptr);
         cb->currentSrb = srb;
     }
@@ -2336,25 +2172,6 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
     }
 }
 
-void QRhi::releaseLater(QRhiGraphicsPipeline *ps)
-{
-    if (!ps->pipeline && !ps->layout)
-        return;
-
-    QRhiVulkan::DeferredReleaseEntry e;
-    e.type = QRhiVulkan::DeferredReleaseEntry::Pipeline;
-    e.lastActiveFrameSlot = ps->lastActiveFrameSlot;
-
-    e.pipelineState.pipeline = ps->pipeline;
-    e.pipelineState.layout = ps->layout;
-
-    ps->pipeline = VK_NULL_HANDLE;
-    ps->layout = VK_NULL_HANDLE;
-
-    RHI_D(QRhiVulkan);
-    d->releaseQueue.append(e);
-}
-
 void QRhi::releaseLater(QRhiTextureRenderTarget *rt)
 {
     if (!rt->fb)
@@ -2484,6 +2301,11 @@ QRhiSampler::QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
 }
 
 QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhi *rhi, QRhiResourcePrivate *d)
+    : QRhiResource(rhi, d)
+{
+}
+
+QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhi *rhi, QRhiResourcePrivate *d)
     : QRhiResource(rhi, d)
 {
 }
@@ -2859,7 +2681,7 @@ bool QVkShaderResourceBindings::build()
     VkDescriptorSetLayoutCreateInfo layoutInfo;
     memset(&layoutInfo, 0, sizeof(layoutInfo));
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = uint32_t(bindings.count());
+    layoutInfo.bindingCount = uint32_t(vkbindings.count());
     layoutInfo.pBindings = vkbindings.constData();
 
     RES_RHI(QRhiVulkan);
@@ -2884,6 +2706,202 @@ bool QVkShaderResourceBindings::build()
 
     d->lastActiveFrameSlot = -1;
     return true;
+}
+
+QVkGraphicsPipeline::QVkGraphicsPipeline(QRhi *rhi)
+    : QRhiGraphicsPipeline(rhi, new QVkGraphicsPipelinePrivate)
+{
+}
+
+void QVkGraphicsPipeline::release()
+{
+    RES_D(QVkGraphicsPipeline);
+    if (!d->pipeline && !d->layout)
+        return;
+
+    QRhiVulkan::DeferredReleaseEntry e;
+    e.type = QRhiVulkan::DeferredReleaseEntry::Pipeline;
+    e.lastActiveFrameSlot = d->lastActiveFrameSlot;
+
+    e.pipelineState.pipeline = d->pipeline;
+    e.pipelineState.layout = d->layout;
+
+    d->pipeline = VK_NULL_HANDLE;
+    d->layout = VK_NULL_HANDLE;
+
+    RES_RHI(QRhiVulkan);
+    rhiD->releaseQueue.append(e);
+}
+
+bool QVkGraphicsPipeline::build()
+{
+    RES_D(QVkGraphicsPipeline);
+    if (d->pipeline)
+        release();
+
+    RES_RHI(QRhiVulkan);
+    if (!rhiD->ensurePipelineCache())
+        return false;
+
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo;
+    memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
+    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutInfo.setLayoutCount = 1;
+    QVkShaderResourceBindingsPrivate *srbD = RES_GET_D(QVkShaderResourceBindings, shaderResourceBindings);
+    Q_ASSERT(shaderResourceBindings && srbD->layout);
+    pipelineLayoutInfo.pSetLayouts = &srbD->layout;
+    VkResult err = rhiD->df->vkCreatePipelineLayout(rhiD->dev, &pipelineLayoutInfo, nullptr, &d->layout);
+    if (err != VK_SUCCESS)
+        qWarning("Failed to create pipeline layout: %d", err);
+
+    VkGraphicsPipelineCreateInfo pipelineInfo;
+    memset(&pipelineInfo, 0, sizeof(pipelineInfo));
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+    QVarLengthArray<VkShaderModule, 4> shaders;
+    QVarLengthArray<VkPipelineShaderStageCreateInfo, 4> shaderStageCreateInfos;
+    for (const QRhiGraphicsShaderStage &shaderStage : shaderStages) {
+        VkShaderModule shader = rhiD->createShader(shaderStage.shader);
+        if (shader) {
+            shaders.append(shader);
+            VkPipelineShaderStageCreateInfo shaderInfo;
+            memset(&shaderInfo, 0, sizeof(shaderInfo));
+            shaderInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            shaderInfo.stage = toVkShaderStage(shaderStage.type);
+            shaderInfo.module = shader;
+            shaderInfo.pName = shaderStage.name;
+            shaderStageCreateInfos.append(shaderInfo);
+        }
+    }
+    pipelineInfo.stageCount = shaderStageCreateInfos.count();
+    pipelineInfo.pStages = shaderStageCreateInfos.constData();
+
+    QVarLengthArray<VkVertexInputBindingDescription, 4> vertexBindings;
+    for (int i = 0, ie = vertexInputLayout.bindings.count(); i != ie; ++i) {
+        const QRhiVertexInputLayout::Binding &binding(vertexInputLayout.bindings[i]);
+        VkVertexInputBindingDescription bindingInfo = {
+            uint32_t(i),
+            binding.stride,
+            binding.classification == QRhiVertexInputLayout::Binding::PerVertex ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE
+        };
+        vertexBindings.append(bindingInfo);
+    }
+    QVarLengthArray<VkVertexInputAttributeDescription, 4> vertexAttributes;
+    for (const QRhiVertexInputLayout::Attribute &attribute : vertexInputLayout.attributes) {
+        VkVertexInputAttributeDescription attributeInfo = {
+            uint32_t(attribute.location),
+            uint32_t(attribute.binding),
+            toVkAttributeFormat(attribute.format),
+            attribute.offset
+        };
+        vertexAttributes.append(attributeInfo);
+    }
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo;
+    memset(&vertexInputInfo, 0, sizeof(vertexInputInfo));
+    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.vertexBindingDescriptionCount = vertexBindings.count();
+    vertexInputInfo.pVertexBindingDescriptions = vertexBindings.constData();
+    vertexInputInfo.vertexAttributeDescriptionCount = vertexAttributes.count();
+    vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.constData();
+    pipelineInfo.pVertexInputState = &vertexInputInfo;
+
+    QVarLengthArray<VkDynamicState, 8> dynEnable;
+    dynEnable << VK_DYNAMIC_STATE_VIEWPORT;
+    dynEnable << VK_DYNAMIC_STATE_SCISSOR;
+    if (flags.testFlag(QRhiGraphicsPipeline::UsesBlendConstants))
+        dynEnable << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+    if (flags.testFlag(QRhiGraphicsPipeline::UsesStencilRef))
+        dynEnable << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
+
+    VkPipelineDynamicStateCreateInfo dynamicInfo;
+    memset(&dynamicInfo, 0, sizeof(dynamicInfo));
+    dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicInfo.dynamicStateCount = dynEnable.count();
+    dynamicInfo.pDynamicStates = dynEnable.constData();
+    pipelineInfo.pDynamicState = &dynamicInfo;
+
+    VkPipelineViewportStateCreateInfo viewportInfo;
+    memset(&viewportInfo, 0, sizeof(viewportInfo));
+    viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportInfo.viewportCount = 1;
+    viewportInfo.scissorCount = 1;
+    pipelineInfo.pViewportState = &viewportInfo;
+
+    VkPipelineInputAssemblyStateCreateInfo inputAsmInfo;
+    memset(&inputAsmInfo, 0, sizeof(inputAsmInfo));
+    inputAsmInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAsmInfo.topology = toVkTopology(topology);
+    pipelineInfo.pInputAssemblyState = &inputAsmInfo;
+
+    VkPipelineRasterizationStateCreateInfo rastInfo;
+    memset(&rastInfo, 0, sizeof(rastInfo));
+    rastInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rastInfo.rasterizerDiscardEnable = rasterizerDiscard;
+    rastInfo.polygonMode = VK_POLYGON_MODE_FILL;
+    rastInfo.cullMode = toVkCullMode(cullMode);
+    rastInfo.frontFace = toVkFrontFace(frontFace);
+    rastInfo.lineWidth = 1.0f;
+    pipelineInfo.pRasterizationState = &rastInfo;
+
+    VkPipelineMultisampleStateCreateInfo msInfo;
+    memset(&msInfo, 0, sizeof(msInfo));
+    msInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    msInfo.rasterizationSamples = rhiD->effectiveSampleCount(sampleCount);
+    pipelineInfo.pMultisampleState = &msInfo;
+
+    VkPipelineDepthStencilStateCreateInfo dsInfo;
+    memset(&dsInfo, 0, sizeof(dsInfo));
+    dsInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    dsInfo.depthTestEnable = depthTest;
+    dsInfo.depthWriteEnable = depthWrite;
+    dsInfo.depthCompareOp = toVkCompareOp(depthOp);
+    dsInfo.stencilTestEnable = stencilTest;
+    fillVkStencilOpState(&dsInfo.front, stencilFront);
+    dsInfo.front.compareMask = stencilReadMask;
+    dsInfo.front.writeMask = stencilWriteMask;
+    fillVkStencilOpState(&dsInfo.back, stencilBack);
+    dsInfo.back.compareMask = stencilReadMask;
+    dsInfo.back.writeMask = stencilWriteMask;
+    pipelineInfo.pDepthStencilState = &dsInfo;
+
+    VkPipelineColorBlendStateCreateInfo blendInfo;
+    memset(&blendInfo, 0, sizeof(blendInfo));
+    blendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    QVarLengthArray<VkPipelineColorBlendAttachmentState, 4> vktargetBlends;
+    for (const QRhiGraphicsPipeline::TargetBlend &b : qAsConst(targetBlends)) {
+        VkPipelineColorBlendAttachmentState blend;
+        memset(&blend, 0, sizeof(blend));
+        blend.blendEnable = b.enable;
+        blend.srcColorBlendFactor = toVkBlendFactor(b.srcColor);
+        blend.dstColorBlendFactor = toVkBlendFactor(b.dstColor);
+        blend.colorBlendOp = toVkBlendOp(b.opColor);
+        blend.srcAlphaBlendFactor = toVkBlendFactor(b.srcAlpha);
+        blend.dstAlphaBlendFactor = toVkBlendFactor(b.dstAlpha);
+        blend.alphaBlendOp = toVkBlendOp(b.opAlpha);
+        blend.colorWriteMask = toVkColorComponents(b.colorWrite);
+        vktargetBlends.append(blend);
+    }
+    blendInfo.attachmentCount = vktargetBlends.count();
+    blendInfo.pAttachments = vktargetBlends.constData();
+    pipelineInfo.pColorBlendState = &blendInfo;
+
+    pipelineInfo.layout = d->layout;
+
+    Q_ASSERT(renderPass && renderPass->rp);
+    pipelineInfo.renderPass = renderPass->rp;
+
+    err = rhiD->df->vkCreateGraphicsPipelines(rhiD->dev, rhiD->pipelineCache, 1, &pipelineInfo, nullptr, &d->pipeline);
+
+    for (VkShaderModule shader : shaders)
+        rhiD->df->vkDestroyShaderModule(rhiD->dev, shader, nullptr);
+
+    if (err == VK_SUCCESS) {
+        d->lastActiveFrameSlot = -1;
+        return true;
+    } else {
+        qWarning("Failed to create graphics pipeline: %d", err);
+        return false;
+    }
 }
 
 QVkSwapChain::QVkSwapChain(QRhi *rhi)

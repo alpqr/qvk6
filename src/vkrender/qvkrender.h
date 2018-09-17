@@ -92,8 +92,8 @@ struct Q_VKR_EXPORT QRhiVertexInputLayout
             PerInstance
         };
         Binding() { }
-        Binding(quint32 stride_, Classification k = PerVertex)
-            : stride(stride_), classification(k)
+        Binding(quint32 stride_, Classification cls = PerVertex)
+            : stride(stride_), classification(cls)
         { }
         quint32 stride; // if another api needs this in setVertexBuffer (d3d12), make the cb store a ptr to the current ps and look up the stride via that
         Classification classification;
@@ -138,13 +138,29 @@ struct Q_VKR_EXPORT QRhiGraphicsShaderStage
     };
 
     QRhiGraphicsShaderStage() { }
-    QRhiGraphicsShaderStage(Type type_, const QByteArray &spirv_, const char *name_ = "main")
-        : type(type_), spirv(spirv_), name(name_)
+    QRhiGraphicsShaderStage(Type type_, const QByteArray &shader_, const char *name_ = "main")
+        : type(type_), shader(shader_), name(name_)
     { }
 
     Type type;
-    QByteArray spirv;
+    QByteArray shader;
     const char *name;
+};
+
+class QRhi;
+class QRhiResourcePrivate;
+
+class QRhiResource
+{
+public:
+    virtual ~QRhiResource();
+    virtual void release() = 0;
+
+protected:
+    QRhiResource(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiResourcePrivate *d_ptr = nullptr;
+    friend class QRhiResourcePrivate;
+    Q_DISABLE_COPY(QRhiResource)
 };
 
 #define Q_VK_RES_PRIVATE(Class) \
@@ -153,7 +169,7 @@ public: \
 protected: \
     Q_DISABLE_COPY(Class) \
     friend class QRhi; \
-    friend class QRhiPrivate;
+    friend class QRhiVulkan;
 
 struct Q_VKR_EXPORT QRhiRenderPass
 {
@@ -161,9 +177,192 @@ Q_VK_RES_PRIVATE(QRhiRenderPass)
     VkRenderPass rp = VK_NULL_HANDLE;
 };
 
-struct QRhiBuffer;
-struct QRhiTexture;
-struct QRhiSampler;
+typedef void * QVkAlloc;
+
+struct Q_VKR_EXPORT QRhiBuffer
+{
+    enum Type {
+        StaticType,
+        DynamicType
+    };
+
+    enum UsageFlag {
+        VertexBuffer = 1 << 0,
+        IndexBuffer = 1 << 1,
+        UniformBuffer = 1 << 2
+    };
+    Q_DECLARE_FLAGS(UsageFlags, UsageFlag)
+
+    QRhiBuffer(Type type_, UsageFlags usage_, int size_)
+        : type(type_), usage(usage_), size(size_)
+    {
+        for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+            buffers[i] = VK_NULL_HANDLE;
+            allocations[i] = nullptr;
+        }
+    }
+
+    Type type;
+    UsageFlags usage;
+    int size;
+
+    bool isStatic() const { return type == StaticType; }
+
+Q_VK_RES_PRIVATE(QRhiBuffer)
+    VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
+    QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    QVkAlloc stagingAlloc = nullptr;
+    int lastActiveFrameSlot = -1;
+    uint generation = 0;
+};
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
+
+struct Q_VKR_EXPORT QRhiRenderBuffer
+{
+    enum Type {
+        DepthStencil
+    };
+
+    QRhiRenderBuffer(Type type_, const QSize &pixelSize_, int sampleCount_ = 1)
+        : type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
+    { }
+
+    Type type;
+    QSize pixelSize;
+    int sampleCount;
+
+Q_VK_RES_PRIVATE(QRhiRenderBuffer)
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImage image;
+    VkImageView imageView;
+    int lastActiveFrameSlot = -1;
+};
+
+struct Q_VKR_EXPORT QRhiTexture
+{
+    enum Flag {
+        RenderTarget = 1 << 0
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
+    enum Format {
+        RGBA8,
+        BGRA8,
+        R8,
+        R16,
+
+        D16,
+        D32
+    };
+
+    struct SubImageInfo {
+        int size = 0;
+        int stride = 0;
+        int offset = 0;
+    };
+
+    QRhiTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0)
+        : format(format_), pixelSize(pixelSize_), flags(flags_)
+    { }
+
+    Format format;
+    QSize pixelSize;
+    Flags flags;
+
+Q_VK_RES_PRIVATE(QRhiTexture)
+    VkImage image = VK_NULL_HANDLE;
+    VkImageView imageView = VK_NULL_HANDLE;
+    QVkAlloc allocation = nullptr;
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    QVkAlloc stagingAlloc = nullptr;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    int lastActiveFrameSlot = -1;
+    uint generation = 0;
+};
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
+
+struct Q_VKR_EXPORT QRhiSampler
+{
+    enum Filter {
+        Nearest,
+        Linear
+    };
+
+    enum AddressMode {
+        Repeat,
+        ClampToEdge,
+        Border,
+        Mirror,
+        MirrorOnce
+    };
+
+    QRhiSampler(Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
+        : magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
+          addressU(u_), addressV(v_)
+    { }
+
+    Filter magFilter;
+    Filter minFilter;
+    Filter mipmapMode;
+    AddressMode addressU;
+    AddressMode addressV;
+
+Q_VK_RES_PRIVATE(QRhiSampler)
+    VkSampler sampler = VK_NULL_HANDLE;
+    int lastActiveFrameSlot = -1;
+    uint generation = 0;
+};
+
+struct Q_VKR_EXPORT QRhiRenderTarget
+{
+    QSize sizeInPixels() const { return pixelSize; }
+    const QRhiRenderPass *renderPass() const { return &rp; }
+
+Q_VK_RES_PRIVATE(QRhiRenderTarget)
+    VkFramebuffer fb = VK_NULL_HANDLE;
+    QRhiRenderPass rp;
+    QSize pixelSize;
+    int attCount = 0;
+    enum Type {
+        RtRef,
+        RtTexture
+    };
+    Type type = RtRef;
+};
+
+struct Q_VKR_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
+{
+    enum Flag {
+        PreserveColorContents = 1 << 0
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
+    // color only
+    QRhiTextureRenderTarget(QRhiTexture *texture_, Flags flags_ = 0)
+        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
+    { }
+    // color and depth-stencil, only color accessed afterwards
+    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
+        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
+    { }
+    // color and depth, both as textures accessible afterwards
+    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_ = 0)
+        : texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
+    { }
+
+    QRhiTexture *texture;
+    QRhiTexture *depthTexture;
+    QRhiRenderBuffer *depthStencilBuffer;
+    Flags flags;
+
+Q_VK_RES_PRIVATE(QRhiTextureRenderTarget)
+    int lastActiveFrameSlot = -1;
+};
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
 
 struct Q_VKR_EXPORT QRhiShaderResourceBindings
 {
@@ -390,193 +589,6 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::CullMode)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 
-typedef void * QVkAlloc;
-
-struct Q_VKR_EXPORT QRhiBuffer
-{
-    enum Type {
-        StaticType,
-        DynamicType
-    };
-
-    enum UsageFlag {
-        VertexBuffer = 1 << 0,
-        IndexBuffer = 1 << 1,
-        UniformBuffer = 1 << 2
-    };
-    Q_DECLARE_FLAGS(UsageFlags, UsageFlag)
-
-    QRhiBuffer(Type type_, UsageFlags usage_, int size_)
-        : type(type_), usage(usage_), size(size_)
-    {
-        for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-            buffers[i] = VK_NULL_HANDLE;
-            allocations[i] = nullptr;
-        }
-    }
-
-    Type type;
-    UsageFlags usage;
-    int size;
-
-    bool isStatic() const { return type == StaticType; }
-
-Q_VK_RES_PRIVATE(QRhiBuffer)
-    VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
-    QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    QVkAlloc stagingAlloc = nullptr;
-    int lastActiveFrameSlot = -1;
-    uint generation = 0;
-};
-
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
-
-struct Q_VKR_EXPORT QRhiRenderBuffer
-{
-    enum Type {
-        DepthStencil
-    };
-
-    QRhiRenderBuffer(Type type_, const QSize &pixelSize_, int sampleCount_ = 1)
-        : type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
-    { }
-
-    Type type;
-    QSize pixelSize;
-    int sampleCount;
-
-Q_VK_RES_PRIVATE(QRhiRenderBuffer)
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkImage image;
-    VkImageView imageView;
-    int lastActiveFrameSlot = -1;
-};
-
-struct Q_VKR_EXPORT QRhiTexture
-{
-    enum Flag {
-        RenderTarget = 1 << 0
-    };
-    Q_DECLARE_FLAGS(Flags, Flag)
-
-    enum Format {
-        RGBA8,
-        BGRA8,
-        R8,
-        R16,
-
-        D16,
-        D32
-    };
-
-    struct SubImageInfo {
-        int size = 0;
-        int stride = 0;
-        int offset = 0;
-    };
-
-    QRhiTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0)
-        : format(format_), pixelSize(pixelSize_), flags(flags_)
-    { }
-
-    Format format;
-    QSize pixelSize;
-    Flags flags;
-
-Q_VK_RES_PRIVATE(QRhiTexture)
-    VkImage image = VK_NULL_HANDLE;
-    VkImageView imageView = VK_NULL_HANDLE;
-    QVkAlloc allocation = nullptr;
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    QVkAlloc stagingAlloc = nullptr;
-    VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    int lastActiveFrameSlot = -1;
-    uint generation = 0;
-};
-
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
-
-struct Q_VKR_EXPORT QRhiSampler
-{
-    enum Filter {
-        Nearest,
-        Linear
-    };
-
-    enum AddressMode {
-        Repeat,
-        ClampToEdge,
-        Border,
-        Mirror,
-        MirrorOnce
-    };
-
-    QRhiSampler(Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
-        : magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
-          addressU(u_), addressV(v_)
-    { }
-
-    Filter magFilter;
-    Filter minFilter;
-    Filter mipmapMode;
-    AddressMode addressU;
-    AddressMode addressV;
-
-Q_VK_RES_PRIVATE(QRhiSampler)
-    VkSampler sampler = VK_NULL_HANDLE;
-    int lastActiveFrameSlot = -1;
-    uint generation = 0;
-};
-
-struct Q_VKR_EXPORT QRhiRenderTarget
-{
-    QSize sizeInPixels() const { return pixelSize; }
-    const QRhiRenderPass *renderPass() const { return &rp; }
-
-Q_VK_RES_PRIVATE(QRhiRenderTarget)
-    VkFramebuffer fb = VK_NULL_HANDLE;
-    QRhiRenderPass rp;
-    QSize pixelSize;
-    int attCount = 0;
-    enum Type {
-        RtRef,
-        RtTexture
-    };
-    Type type = RtRef;
-};
-
-struct Q_VKR_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
-{
-    enum Flag {
-        PreserveColorContents = 1 << 0
-    };
-    Q_DECLARE_FLAGS(Flags, Flag)
-
-    // color only
-    QRhiTextureRenderTarget(QRhiTexture *texture_, Flags flags_ = 0)
-        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
-    { }
-    // color and depth-stencil, only color accessed afterwards
-    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
-        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
-    { }
-    // color and depth, both as textures accessible afterwards
-    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_ = 0)
-        : texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
-    { }
-
-    QRhiTexture *texture;
-    QRhiTexture *depthTexture;
-    QRhiRenderBuffer *depthStencilBuffer;
-    Flags flags;
-
-Q_VK_RES_PRIVATE(QRhiTextureRenderTarget)
-    int lastActiveFrameSlot = -1;
-};
-
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
-
 struct Q_VKR_EXPORT QRhiCommandBuffer
 {
 Q_VK_RES_PRIVATE(QRhiCommandBuffer)
@@ -592,51 +604,29 @@ Q_VK_RES_PRIVATE(QRhiCommandBuffer)
     QRhiShaderResourceBindings *currentSrb;
 };
 
-struct Q_VKR_EXPORT QRhiSwapChain
+class Q_VKR_EXPORT QRhiSwapChain : public QRhiResource
 {
-    QRhiCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
-    QRhiRenderTarget *currentFrameRenderTarget() { return &rt; }
-    const QRhiRenderPass *defaultRenderPass() const { return rt.renderPass(); }
-    QSize sizeInPixels() const { return pixelSize; }
+public:
+    enum SurfaceImportFlag {
+        UseDepthStencil = 1 << 0,
+        SurfaceHasPreMulAlpha = 1 << 1,
+        SurfaceHasNonPreMulAlpha = 1 << 2
+    };
+    Q_DECLARE_FLAGS(SurfaceImportFlags, SurfaceImportFlag)
 
-Q_VK_RES_PRIVATE(QRhiSwapChain)
-    static const int DEFAULT_BUFFER_COUNT = 2;
-    static const int MAX_BUFFER_COUNT = 3;
+    virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
+    virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
+    virtual const QRhiRenderPass *defaultRenderPass() const = 0;
+    virtual QSize sizeInPixels() const = 0;
 
-    QSize pixelSize;
-    bool supportsReadback = false;
-    VkSwapchainKHR sc = VK_NULL_HANDLE;
-    int bufferCount = 0;
-    VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
-    VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-    QRhiRenderBuffer *depthStencil = nullptr;
-    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
-    VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
+    virtual bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
+                       QRhiRenderBuffer *depthStencil, int sampleCount) = 0;
 
-    struct ImageResources {
-        VkImage image = VK_NULL_HANDLE;
-        VkImageView imageView = VK_NULL_HANDLE;
-        QRhiCommandBuffer cmdBuf;
-        VkFence cmdFence = VK_NULL_HANDLE;
-        bool cmdFenceWaitable = false;
-        VkFramebuffer fb = VK_NULL_HANDLE;
-        VkImage msaaImage = VK_NULL_HANDLE;
-        VkImageView msaaImageView = VK_NULL_HANDLE;
-    } imageRes[MAX_BUFFER_COUNT];
-
-    struct FrameResources {
-        VkFence fence = VK_NULL_HANDLE;
-        bool fenceWaitable = false;
-        VkSemaphore imageSem = VK_NULL_HANDLE;
-        VkSemaphore drawSem = VK_NULL_HANDLE;
-        bool imageAcquired = false;
-        bool imageSemWaitable = false;
-    } frameRes[QVK_FRAMES_IN_FLIGHT];
-
-    quint32 currentImage = 0; // index in imageRes
-    quint32 currentFrame = 0; // index in frameRes
-    QRhiRenderTarget rt;
+protected:
+    QRhiSwapChain(QRhi *rhi, QRhiResourcePrivate *d);
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
 
 class Q_VKR_EXPORT QRhi
 {
@@ -648,13 +638,6 @@ public:
         VkCommandPool cmdPool = VK_NULL_HANDLE;
         VkQueue gfxQueue = VK_NULL_HANDLE;
     };
-
-    enum SurfaceImportFlag {
-        UseDepthStencil = 1 << 0,
-        SurfaceHasPreMulAlpha = 1 << 1,
-        SurfaceHasNonPreMulAlpha = 1 << 2
-    };
-    Q_DECLARE_FLAGS(SurfaceImportFlags, SurfaceImportFlag)
 
     enum FrameOpResult {
         FrameOpSuccess = 0,
@@ -721,19 +704,23 @@ public:
     QVector<int> supportedSampleCounts() const;
 
     /*
-       The underlying graphics resources are created when calling create* and
-       put on the release queue by releaseLater (so this is safe even when
-       the resource is used by the still executing/pending frame(s)).
+       The underlying graphics resources are created when calling build() and
+       put on the release queue by release() (so this is safe even when the
+       resource is used by the still executing/pending frame(s)).
 
        The QRhi* instance itself is not destroyed by the release and it is safe
-       to destroy it right away after calling releaseLater.
+       to destroy it right away after calling release().
 
        Changing any value needs explicit release and rebuilding of the
        underlying resource before it can take effect.
 
-       create(res); <change something>; releaseLater(res); create(res); ...
+       res->build(); <change something>; res->release(); res->build(); ...
        is therefore perfectly valid and can be used to recreate things (when
        buffer or texture size changes f.ex.)
+
+       In addition, just doing res->build(); ...; res->build() is valid too and
+       has the same effect due to an implicit release() call made by build()
+       when invoked on an object with valid resources underneath.
      */
 
     bool createGraphicsPipeline(QRhiGraphicsPipeline *ps);
@@ -769,8 +756,9 @@ public:
 
     /*
       Render to a QWindow (must be VulkanSurface):
-        Call importSurface to create a swapchain and call it whenever the size is different than before.
-        Call releaseSwapChain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
+        Create a swapchain.
+        Call build() on the swapchain whenever the size is different than before.
+        Call release() on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
         Then on every frame:
            beginFrame(sc)
            beginPass(sc->currentFrameRenderTarget(), sc->currentFrameCommandBuffer(), clearValues, updates)
@@ -778,11 +766,9 @@ public:
            endPass(sc->currentFrameCommandBuffer())
            endFrame(sc) // this queues the Present, begin/endFrame manages double buffering internally
      */
-    bool importSurface(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
-                       QRhiRenderBuffer *depthStencil, int sampleCount, QRhiSwapChain *outSwapChain);
-    void releaseSwapChain(QRhiSwapChain *swapChain);
-    FrameOpResult beginFrame(QRhiSwapChain *sc);
-    FrameOpResult endFrame(QRhiSwapChain *sc);
+    QRhiSwapChain *createSwapChain();
+    FrameOpResult beginFrame(QRhiSwapChain *swapChain);
+    FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
     /*
       Render to a QVulkanWindow from a startNextFrame() implementation:
@@ -831,10 +817,10 @@ public:
     QMatrix4x4 openGLCorrectionMatrix() const;
 
 private:
-    QRhiPrivate *d;
+    QRhiPrivate *d_ptr;
+    friend class QRhiPrivate;
+    Q_DISABLE_COPY(QRhi)
 };
-
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::SurfaceImportFlags)
 
 QT_END_NAMESPACE
 

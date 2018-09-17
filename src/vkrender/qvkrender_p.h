@@ -54,10 +54,77 @@ static const int QVK_DESC_SETS_PER_POOL = 128;
 static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
 static const int QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL = 256;
 
+class QRhiResourcePrivate
+{
+public:
+    virtual ~QRhiResourcePrivate();
+    static QRhiResourcePrivate *get(QRhiResource *r) { return r->d_ptr; }
+    QRhi *rhi = nullptr;
+};
+
+class Q_VKR_EXPORT QVkSwapChain : public QRhiSwapChain
+{
+public:
+    QVkSwapChain(QRhi *rhi);
+    void release() override;
+    QRhiCommandBuffer *currentFrameCommandBuffer() override;
+    QRhiRenderTarget *currentFrameRenderTarget() override;
+    const QRhiRenderPass *defaultRenderPass() const override;
+    QSize sizeInPixels() const override;
+    bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
+               QRhiRenderBuffer *depthStencil, int sampleCount) override;
+};
+
+struct QVkSwapChainPrivate : public QRhiResourcePrivate
+{
+    static const int DEFAULT_BUFFER_COUNT = 2;
+    static const int MAX_BUFFER_COUNT = 3;
+
+    QSize pixelSize;
+    bool supportsReadback = false;
+    VkSwapchainKHR sc = VK_NULL_HANDLE;
+    int bufferCount = 0;
+    VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    QRhiRenderBuffer *depthStencil = nullptr;
+    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
+
+    struct ImageResources {
+        VkImage image = VK_NULL_HANDLE;
+        VkImageView imageView = VK_NULL_HANDLE;
+        QRhiCommandBuffer cmdBuf;
+        VkFence cmdFence = VK_NULL_HANDLE;
+        bool cmdFenceWaitable = false;
+        VkFramebuffer fb = VK_NULL_HANDLE;
+        VkImage msaaImage = VK_NULL_HANDLE;
+        VkImageView msaaImageView = VK_NULL_HANDLE;
+    } imageRes[MAX_BUFFER_COUNT];
+
+    struct FrameResources {
+        VkFence fence = VK_NULL_HANDLE;
+        bool fenceWaitable = false;
+        VkSemaphore imageSem = VK_NULL_HANDLE;
+        VkSemaphore drawSem = VK_NULL_HANDLE;
+        bool imageAcquired = false;
+        bool imageSemWaitable = false;
+    } frameRes[QVK_FRAMES_IN_FLIGHT];
+
+    quint32 currentImage = 0; // index in imageRes
+    quint32 currentFrame = 0; // index in frameRes
+    QRhiRenderTarget rt;
+};
+
 class QRhiPrivate
 {
 public:
-    QRhiPrivate(QRhi *q_ptr) : q(q_ptr) { }
+    static QRhiPrivate *get(QRhi *r) { return r->d_ptr; }
+};
+
+class QRhiVulkan : public QRhiPrivate
+{
+public:
+    QRhiVulkan(QRhi *q_ptr) : q(q_ptr) { }
     void create();
     void destroy();
     VkResult createDescriptorPool(VkDescriptorPool *pool);
@@ -67,8 +134,12 @@ public:
                               VkImageAspectFlags aspectMask, VkSampleCountFlagBits sampleCount,
                               VkDeviceMemory *mem, VkImage *images, VkImageView *views, int count);
 
-    bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QRhi::SurfaceImportFlags flags, QRhiSwapChain *swapChain);
-    void releaseSwapChain(QRhiSwapChain *swapChain);
+    bool rebuildSwapChain(QWindow *window, const QSize &pixelSize,
+                          QRhiSwapChain::SurfaceImportFlags flags, QRhiRenderBuffer *depthStencil,
+                          int sampleCount, QRhiSwapChain *outSwapChain);
+    bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QRhiSwapChain::SurfaceImportFlags flags,
+                           QRhiSwapChain *swapChain);
+    void releaseSwapChainResources(QRhiSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();
     VkSampleCountFlagBits effectiveSampleCount(int sampleCount);

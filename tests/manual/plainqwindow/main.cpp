@@ -64,7 +64,7 @@ private:
     QRhi *m_r = nullptr;
     bool m_hasSwapChain = false;
     bool m_swapChainChanged = false;
-    QRhiSwapChain m_sc;
+    QRhiSwapChain *m_sc = nullptr;
     QRhiRenderBuffer *m_ds = nullptr;
 
     TriangleRenderer m_triRenderer;
@@ -212,6 +212,8 @@ void VWindow::init()
     m_liveTexCubeRenderer.setRhi(m_r);
     m_liveTexCubeRenderer.initResources();
     m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
+
+    m_sc = m_r->createSwapChain();
 }
 
 void VWindow::releaseResources()
@@ -229,6 +231,9 @@ void VWindow::releaseResources()
 
     m_liveTexCubeRenderer.releaseOutputDependentResources();
     m_liveTexCubeRenderer.releaseResources();
+
+    delete m_sc;
+    m_sc = nullptr;
 
     delete m_r;
     m_r = nullptr;
@@ -259,7 +264,7 @@ void VWindow::recreateSwapChain()
     }
     m_r->createRenderBuffer(m_ds);
 
-    m_hasSwapChain = m_r->importSurface(this, outputSize, QRhi::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES, &m_sc);
+    m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES);
     m_swapChainChanged = true;
 }
 
@@ -267,7 +272,7 @@ void VWindow::releaseSwapChain()
 {
     if (m_hasSwapChain) {
         m_hasSwapChain = false;
-        m_r->releaseSwapChain(&m_sc);
+        m_sc->release();
     }
     if (m_ds) {
         m_r->releaseLater(m_ds);
@@ -281,18 +286,18 @@ void VWindow::render()
     if (!m_hasSwapChain)
         return;
 
-    if (m_sc.sizeInPixels() != size() * devicePixelRatio()) {
+    if (m_sc->sizeInPixels() != size() * devicePixelRatio()) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;
     }
 
-    QRhi::FrameOpResult r = m_r->beginFrame(&m_sc);
+    QRhi::FrameOpResult r = m_r->beginFrame(m_sc);
     if (r == QRhi::FrameOpSwapChainOutOfDate) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;
-        r = m_r->beginFrame(&m_sc);
+        r = m_r->beginFrame(m_sc);
     }
     if (r != QRhi::FrameOpSuccess) {
         requestUpdate();
@@ -307,13 +312,13 @@ void VWindow::render()
     }
 
     if (!m_triRenderer.isPipelineInitialized()) {
-        const QRhiRenderPass *rp = m_sc.defaultRenderPass();
-        m_triRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
-        m_cubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
-        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
+        const QRhiRenderPass *rp = m_sc->defaultRenderPass();
+        m_triRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
     }
 
-    QRhiCommandBuffer *cb = m_sc.currentFrameCommandBuffer();
+    QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
     m_liveTexCubeRenderer.queueOffscreenPass(cb);
 
     QRhi::PassUpdates u;
@@ -327,13 +332,13 @@ void VWindow::render()
         QRhiClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
-    m_r->beginPass(m_sc.currentFrameRenderTarget(), cb, clearValues, u);
-    m_triRenderer.queueDraw(cb, m_sc.sizeInPixels());
-    m_cubeRenderer.queueDraw(cb, m_sc.sizeInPixels());
-    m_liveTexCubeRenderer.queueDraw(cb, m_sc.sizeInPixels());
+    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
+    m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_liveTexCubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
     m_r->endPass(cb);
 
-    m_r->endFrame(&m_sc);
+    m_r->endFrame(m_sc);
 
     requestUpdate(); // render continuously, throttled by the presentation rate
 }

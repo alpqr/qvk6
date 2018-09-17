@@ -1596,8 +1596,9 @@ bool QRhi::createGraphicsPipeline(QRhiGraphicsPipeline *ps)
     memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    Q_ASSERT(ps->shaderResourceBindings && ps->shaderResourceBindings->layout);
-    pipelineLayoutInfo.pSetLayouts = &ps->shaderResourceBindings->layout;
+    QVkShaderResourceBindingsPrivate *srbD = RES_GET_D(QVkShaderResourceBindings, ps->shaderResourceBindings);
+    Q_ASSERT(ps->shaderResourceBindings && srbD->layout);
+    pipelineLayoutInfo.pSetLayouts = &srbD->layout;
     VkResult err = d->df->vkCreatePipelineLayout(d->dev, &pipelineLayoutInfo, nullptr, &ps->layout);
     if (err != VK_SUCCESS)
         qWarning("Failed to create pipeline layout: %d", err);
@@ -1781,58 +1782,15 @@ static inline VkShaderStageFlags toVkShaderStageFlags(QRhiShaderResourceBindings
     return VkShaderStageFlags(s);
 }
 
-bool QRhi::createShaderResourceBindings(QRhiShaderResourceBindings *srb)
+QRhiShaderResourceBindings *QRhi::createShaderResourceBindings()
 {
-    if (srb->layout)
-        releaseLater(srb);
-
-    RHI_D(QRhiVulkan);
-
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-        srb->descSets[i] = VK_NULL_HANDLE;
-
-    QVarLengthArray<VkDescriptorSetLayoutBinding, 4> bindings;
-    for (const QRhiShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
-        VkDescriptorSetLayoutBinding binding;
-        memset(&binding, 0, sizeof(binding));
-        binding.binding = b.binding;
-        binding.descriptorType = toVkDescriptorType(b.type);
-        binding.descriptorCount = 1; // no array support yet
-        binding.stageFlags = toVkShaderStageFlags(b.stage);
-        bindings.append(binding);
-    }
-
-    VkDescriptorSetLayoutCreateInfo layoutInfo;
-    memset(&layoutInfo, 0, sizeof(layoutInfo));
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = uint32_t(bindings.count());
-    layoutInfo.pBindings = bindings.constData();
-
-    VkResult err = d->df->vkCreateDescriptorSetLayout(d->dev, &layoutInfo, nullptr, &srb->layout);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to create descriptor set layout: %d", err);
-        return false;
-    }
-
-    VkDescriptorSetAllocateInfo allocInfo;
-    memset(&allocInfo, 0, sizeof(allocInfo));
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorSetCount = QVK_FRAMES_IN_FLIGHT;
-    VkDescriptorSetLayout layouts[QVK_FRAMES_IN_FLIGHT];
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-        layouts[i] = srb->layout;
-    allocInfo.pSetLayouts = layouts;
-    if (!d->allocateDescriptorSet(&allocInfo, srb->descSets, &srb->poolIndex))
-        return false;
-
-    d->updateShaderResourceBindings(srb);
-
-    srb->lastActiveFrameSlot = -1;
-    return true;
+    return new QVkShaderResourceBindings(this);
 }
 
 void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx)
 {
+    QVkShaderResourceBindingsPrivate *srbD = RES_GET_D(QVkShaderResourceBindings, srb);
+
     QVarLengthArray<VkDescriptorBufferInfo, 4> bufferInfos;
     QVarLengthArray<VkDescriptorImageInfo, 4> imageInfos;
     QVarLengthArray<VkWriteDescriptorSet, 8> writeInfos;
@@ -1840,15 +1798,15 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
     const bool updateAll = descSetIdx < 0;
     int frameSlot = updateAll ? 0 : descSetIdx;
     while (frameSlot < (updateAll ? QVK_FRAMES_IN_FLIGHT : descSetIdx + 1)) {
-        srb->boundResourceData[frameSlot].resize(srb->bindings.count());
+        srbD->boundResourceData[frameSlot].resize(srb->bindings.count());
         for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
             const QRhiShaderResourceBindings::Binding &b(srb->bindings[i]);
-            QRhiShaderResourceBindings::BoundResourceData &bd(srb->boundResourceData[frameSlot][i]);
+            QVkShaderResourceBindingsPrivate::BoundResourceData &bd(srbD->boundResourceData[frameSlot][i]);
 
             VkWriteDescriptorSet writeInfo;
             memset(&writeInfo, 0, sizeof(writeInfo));
             writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeInfo.dstSet = srb->descSets[frameSlot];
+            writeInfo.dstSet = srbD->descSets[frameSlot];
             writeInfo.dstBinding = b.binding;
             writeInfo.descriptorCount = 1;
 
@@ -2171,11 +2129,12 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
     }
 
     // ensure the descriptor set we are going to bind refers to up-to-date Vk objects
+    QVkShaderResourceBindingsPrivate *srbD = RES_GET_D(QVkShaderResourceBindings, srb);
     const int descSetIdx = hasDynamicBufferInSrb ? d->currentFrameSlot : 0;
     bool srbUpdate = false;
     for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBindings::Binding &b(srb->bindings[i]);
-        QRhiShaderResourceBindings::BoundResourceData &bd(srb->boundResourceData[descSetIdx][i]);
+        QVkShaderResourceBindingsPrivate::BoundResourceData &bd(srbD->boundResourceData[descSetIdx][i]);
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
             if (RES_GET_D(QVkBuffer, b.ubuf.buf)->generation != bd.ubuf.generation) {
@@ -2207,9 +2166,9 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
     }
 
     if (hasDynamicBufferInSrb || srbUpdate || cb->currentSrb != srb) {
-        srb->lastActiveFrameSlot = d->currentFrameSlot;
+        srbD->lastActiveFrameSlot = d->currentFrameSlot;
         d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, ps->layout, 0, 1,
-                                       &srb->descSets[descSetIdx], 0, nullptr);
+                                       &srbD->descSets[descSetIdx], 0, nullptr);
         cb->currentSrb = srb;
     }
 }
@@ -2396,27 +2355,6 @@ void QRhi::releaseLater(QRhiGraphicsPipeline *ps)
     d->releaseQueue.append(e);
 }
 
-void QRhi::releaseLater(QRhiShaderResourceBindings *srb)
-{
-    if (!srb->layout)
-        return;
-
-    QRhiVulkan::DeferredReleaseEntry e;
-    e.type = QRhiVulkan::DeferredReleaseEntry::ShaderResourceBindings;
-    e.lastActiveFrameSlot = srb->lastActiveFrameSlot;
-
-    e.shaderResourceBindings.poolIndex = srb->poolIndex;
-    e.shaderResourceBindings.layout = srb->layout;
-
-    srb->poolIndex = -1;
-    srb->layout = VK_NULL_HANDLE;
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-        srb->descSets[i] = VK_NULL_HANDLE;
-
-    RHI_D(QRhiVulkan);
-    d->releaseQueue.append(e);
-}
-
 void QRhi::releaseLater(QRhiTextureRenderTarget *rt)
 {
     if (!rt->fb)
@@ -2542,6 +2480,11 @@ QRhiSampler::QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
     : QRhiResource(rhi, d),
       magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
       addressU(u_), addressV(v_)
+{
+}
+
+QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhi *rhi, QRhiResourcePrivate *d)
+    : QRhiResource(rhi, d)
 {
 }
 
@@ -2863,6 +2806,83 @@ bool QVkSampler::build()
 
     d->lastActiveFrameSlot = -1;
     d->generation += 1;
+    return true;
+}
+
+QVkShaderResourceBindings::QVkShaderResourceBindings(QRhi *rhi)
+    : QRhiShaderResourceBindings(rhi, new QVkShaderResourceBindingsPrivate)
+{
+}
+
+void QVkShaderResourceBindings::release()
+{
+    RES_D(QVkShaderResourceBindings);
+    if (!d->layout)
+        return;
+
+    QRhiVulkan::DeferredReleaseEntry e;
+    e.type = QRhiVulkan::DeferredReleaseEntry::ShaderResourceBindings;
+    e.lastActiveFrameSlot = d->lastActiveFrameSlot;
+
+    e.shaderResourceBindings.poolIndex = d->poolIndex;
+    e.shaderResourceBindings.layout = d->layout;
+
+    d->poolIndex = -1;
+    d->layout = VK_NULL_HANDLE;
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        d->descSets[i] = VK_NULL_HANDLE;
+
+    RES_RHI(QRhiVulkan);
+    rhiD->releaseQueue.append(e);
+}
+
+bool QVkShaderResourceBindings::build()
+{
+    RES_D(QVkShaderResourceBindings);
+    if (d->layout)
+        release();
+
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        d->descSets[i] = VK_NULL_HANDLE;
+
+    QVarLengthArray<VkDescriptorSetLayoutBinding, 4> vkbindings;
+    for (const QRhiShaderResourceBindings::Binding &b : qAsConst(bindings)) {
+        VkDescriptorSetLayoutBinding binding;
+        memset(&binding, 0, sizeof(binding));
+        binding.binding = b.binding;
+        binding.descriptorType = toVkDescriptorType(b.type);
+        binding.descriptorCount = 1; // no array support yet
+        binding.stageFlags = toVkShaderStageFlags(b.stage);
+        vkbindings.append(binding);
+    }
+
+    VkDescriptorSetLayoutCreateInfo layoutInfo;
+    memset(&layoutInfo, 0, sizeof(layoutInfo));
+    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutInfo.bindingCount = uint32_t(bindings.count());
+    layoutInfo.pBindings = vkbindings.constData();
+
+    RES_RHI(QRhiVulkan);
+    VkResult err = rhiD->df->vkCreateDescriptorSetLayout(rhiD->dev, &layoutInfo, nullptr, &d->layout);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create descriptor set layout: %d", err);
+        return false;
+    }
+
+    VkDescriptorSetAllocateInfo allocInfo;
+    memset(&allocInfo, 0, sizeof(allocInfo));
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorSetCount = QVK_FRAMES_IN_FLIGHT;
+    VkDescriptorSetLayout layouts[QVK_FRAMES_IN_FLIGHT];
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        layouts[i] = d->layout;
+    allocInfo.pSetLayouts = layouts;
+    if (!rhiD->allocateDescriptorSet(&allocInfo, d->descSets, &d->poolIndex))
+        return false;
+
+    rhiD->updateShaderResourceBindings(this);
+
+    d->lastActiveFrameSlot = -1;
     return true;
 }
 

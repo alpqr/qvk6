@@ -338,8 +338,9 @@ Q_VK_RES_PRIVATE(QRhiTextureRenderTarget)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
 
-struct Q_VKR_EXPORT QRhiShaderResourceBindings
+class Q_VKR_EXPORT QRhiShaderResourceBindings : public QRhiResource
 {
+public:
     struct Binding {
         enum Type {
             UniformBuffer,
@@ -398,29 +399,10 @@ struct Q_VKR_EXPORT QRhiShaderResourceBindings
 
     QVector<Binding> bindings;
 
-Q_VK_RES_PRIVATE(QRhiShaderResourceBindings)
-    int poolIndex = -1;
-    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-    VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
-    int lastActiveFrameSlot = -1;
+    virtual bool build() = 0;
 
-    // Keep track of the generation number of each referenced QRhi* to be able
-    // to detect that the underlying descriptor set became out of date and they
-    // need to be written again with the up-to-date VkBuffer etc. objects.
-    struct BoundUniformBufferData {
-        uint generation;
-    };
-    struct BoundSampledTextureData {
-        uint texGeneration;
-        uint samplerGeneration;
-    };
-    struct BoundResourceData {
-        union {
-            BoundUniformBufferData ubuf;
-            BoundSampledTextureData stex;
-        };
-    };
-    QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
+protected:
+    QRhiShaderResourceBindings(QRhi *rhi, QRhiResourcePrivate *d);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBindings::Binding::StageFlags)
@@ -698,7 +680,7 @@ public:
      */
 
     bool createGraphicsPipeline(QRhiGraphicsPipeline *ps);
-    bool createShaderResourceBindings(QRhiShaderResourceBindings *srb);
+    QRhiShaderResourceBindings *createShaderResourceBindings();
 
     // Buffers are immutable like other resources but the underlying data can
     // change. (its size cannot) Having multiple frames in flight is handled
@@ -725,7 +707,6 @@ public:
     bool createTextureRenderTarget(QRhiTextureRenderTarget *rt);
 
     void releaseLater(QRhiGraphicsPipeline *ps);
-    void releaseLater(QRhiShaderResourceBindings *srb);
     void releaseLater(QRhiTextureRenderTarget *rt);
 
     /*

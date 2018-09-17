@@ -97,13 +97,13 @@ void TriangleOnCubeRenderer::initResources()
     m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
     m_sampler->build();
 
-    m_srb = new QRhiShaderResourceBindings;
+    m_srb = m_r->createShaderResourceBindings();
     const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
         QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
         QRhiShaderResourceBindings::Binding::sampledTexture(1, QRhiShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
     };
-    m_r->createShaderResourceBindings(m_srb);
+    m_srb->build();
 
     QRhiTextureRenderTarget::Flags rtFlags = 0;
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
@@ -171,7 +171,7 @@ void TriangleOnCubeRenderer::releaseResources()
     m_offscreenTriangle.releaseResources();
 
     if (m_srb) {
-        m_r->releaseLater(m_srb);
+        m_srb->release();
         delete m_srb;
         m_srb = nullptr;
     }

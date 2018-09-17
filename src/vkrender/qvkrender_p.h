@@ -133,6 +133,40 @@ struct QVkSamplerPrivate : public QRhiResourcePrivate
     uint generation = 0;
 };
 
+class QVkShaderResourceBindings : public QRhiShaderResourceBindings
+{
+public:
+    QVkShaderResourceBindings(QRhi *rhi);
+    void release() override;
+    bool build() override;
+};
+
+struct QVkShaderResourceBindingsPrivate : public QRhiResourcePrivate
+{
+    int poolIndex = -1;
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
+    int lastActiveFrameSlot = -1;
+
+    // Keep track of the generation number of each referenced QRhi* to be able
+    // to detect that the underlying descriptor set became out of date and they
+    // need to be written again with the up-to-date VkBuffer etc. objects.
+    struct BoundUniformBufferData {
+        uint generation;
+    };
+    struct BoundSampledTextureData {
+        uint texGeneration;
+        uint samplerGeneration;
+    };
+    struct BoundResourceData {
+        union {
+            BoundUniformBufferData ubuf;
+            BoundSampledTextureData stex;
+        };
+    };
+    QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
+};
+
 class QVkSwapChain : public QRhiSwapChain
 {
 public:

@@ -54,12 +54,12 @@ void TriangleRenderer::initResources()
     m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 68);
     m_ubuf->build();
 
-    m_srb = new QRhiShaderResourceBindings;
+    m_srb = m_r->createShaderResourceBindings();
     const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
         QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 68)
     };
-    m_r->createShaderResourceBindings(m_srb);
+    m_srb->build();
 }
 
 // the ps depends on the renderpass -> so it is tied to the swapchain.
@@ -108,7 +108,7 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
 void TriangleRenderer::releaseResources()
 {
     if (m_srb) {
-        m_r->releaseLater(m_srb);
+        m_srb->release();
         delete m_srb;
         m_srb = nullptr;
     }

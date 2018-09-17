@@ -81,12 +81,12 @@ static const QSize OFFSCREEN_SIZE(512, 512);
 
 void TriangleOnCubeRenderer::initResources()
 {
-    m_vbuf = new QRhiBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
-    m_r->createBuffer(m_vbuf);
+    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = new QRhiBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
-    m_r->createBuffer(m_ubuf);
+    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
+    m_ubuf->build();
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         m_image = QImage(QLatin1String(":/qt256.png")).mirrored().scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
@@ -195,13 +195,13 @@ void TriangleOnCubeRenderer::releaseResources()
     }
 
     if (m_ubuf) {
-        m_r->releaseLater(m_ubuf);
+        m_ubuf->release();
         delete m_ubuf;
         m_ubuf = nullptr;
     }
 
     if (m_vbuf) {
-        m_r->releaseLater(m_vbuf);
+        m_vbuf->release();
         delete m_vbuf;
         m_vbuf = nullptr;
     }

@@ -257,12 +257,12 @@ void VWindow::recreateSwapChain()
     const QSize outputSize = size() * devicePixelRatio();
 
     if (!m_ds) {
-        m_ds = new QRhiRenderBuffer(QRhiRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
+        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
     } else {
-        m_r->releaseLater(m_ds);
+        m_ds->release();
         m_ds->pixelSize = outputSize;
     }
-    m_r->createRenderBuffer(m_ds);
+    m_ds->build();
 
     m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES);
     m_swapChainChanged = true;
@@ -275,7 +275,7 @@ void VWindow::releaseSwapChain()
         m_sc->release();
     }
     if (m_ds) {
-        m_r->releaseLater(m_ds);
+        m_ds->release();
         delete m_ds;
         m_ds = nullptr;
     }

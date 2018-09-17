@@ -75,12 +75,12 @@ static QBakedShader getShader(const QString &name)
 
 void TexturedCubeRenderer::initResources()
 {
-    m_vbuf = new QRhiBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
-    m_r->createBuffer(m_vbuf);
+    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = new QRhiBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
-    m_r->createBuffer(m_ubuf);
+    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
+    m_ubuf->build();
 
     m_image = QImage(QLatin1String(":/qt256.png")).mirrored().convertToFormat(QImage::Format_RGBA8888);
     m_tex = new QRhiTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()));
@@ -166,13 +166,13 @@ void TexturedCubeRenderer::releaseResources()
     }
 
     if (m_ubuf) {
-        m_r->releaseLater(m_ubuf);
+        m_ubuf->release();
         delete m_ubuf;
         m_ubuf = nullptr;
     }
 
     if (m_vbuf) {
-        m_r->releaseLater(m_vbuf);
+        m_vbuf->release();
         delete m_vbuf;
         m_vbuf = nullptr;
     }

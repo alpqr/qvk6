@@ -603,7 +603,7 @@ bool QRhiVulkan::rebuildSwapChain(QWindow *window, const QSize &pixelSize,
 
         VkImageView views[3] = {
             image.imageView,
-            swapChainD->depthStencil ? swapChainD->depthStencil->imageView : VK_NULL_HANDLE,
+            swapChainD->depthStencil ? RES_GET_D(QVkRenderBuffer, swapChainD->depthStencil)->imageView : VK_NULL_HANDLE,
             swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
         };
         VkFramebufferCreateInfo fbInfo;
@@ -986,7 +986,7 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
 
     d->currentFrameSlot = swapChainD->currentFrame;
     if (swapChainD->depthStencil)
-        swapChainD->depthStencil->lastActiveFrameSlot = d->currentFrameSlot;
+        RES_GET_D(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = d->currentFrameSlot;
 
     d->prepareNewFrame(&image.cmdBuf);
 
@@ -1112,58 +1112,9 @@ static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage
     return VkBufferUsageFlagBits(u);
 }
 
-bool QRhi::createBuffer(QRhiBuffer *buf)
+QRhiBuffer *QRhi::createBuffer(QRhiBuffer::Type type, QRhiBuffer::UsageFlags usage, int size)
 {
-    if (buf->buffers[0])
-        releaseLater(buf);
-
-    RHI_D(QRhiVulkan);
-    VkBufferCreateInfo bufferInfo;
-    memset(&bufferInfo, 0, sizeof(bufferInfo));
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = buf->size;
-    bufferInfo.usage = toVkBufferUsage(buf->usage);
-
-    VmaAllocationCreateInfo allocInfo;
-    memset(&allocInfo, 0, sizeof(allocInfo));
-
-    if (buf->isStatic()) {
-        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
-        bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    } else {
-        allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
-    }
-
-    VkResult err = VK_SUCCESS;
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        buf->buffers[i] = VK_NULL_HANDLE;
-        buf->allocations[i] = nullptr;
-        if (i == 0 || !buf->isStatic()) {
-            VmaAllocation allocation;
-            err = vmaCreateBuffer(d->allocator, &bufferInfo, &allocInfo, &buf->buffers[i], &allocation, nullptr);
-            if (err != VK_SUCCESS)
-                break;
-            buf->allocations[i] = allocation;
-        }
-    }
-
-    if (err == VK_SUCCESS && buf->isStatic()) {
-        allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        VmaAllocation allocation;
-        err = vmaCreateBuffer(d->allocator, &bufferInfo, &allocInfo, &buf->stagingBuffer, &allocation, nullptr);
-        if (err == VK_SUCCESS)
-            buf->stagingAlloc = allocation;
-    }
-
-    if (err == VK_SUCCESS) {
-        buf->lastActiveFrameSlot = -1;
-        buf->generation += 1;
-        return true;
-    } else {
-        qWarning("Failed to create buffer: %d", err);
-        return false;
-    }
+    return new QVkBuffer(this, type, usage, size);
 }
 
 int QRhi::ubufAlignment() const
@@ -1178,34 +1129,9 @@ int QRhi::ubufAligned(int v) const
     return aligned(v, d->ubufAlign);
 }
 
-bool QRhi::createRenderBuffer(QRhiRenderBuffer *rb)
+QRhiRenderBuffer *QRhi::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount)
 {
-    if (rb->memory)
-        releaseLater(rb);
-
-    RHI_D(QRhiVulkan);
-    switch (rb->type) {
-    case QRhiRenderBuffer::DepthStencil:
-        if (!d->createTransientImage(d->optimalDepthStencilFormat(),
-                                     rb->pixelSize,
-                                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                                     VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                                     d->effectiveSampleCount(rb->sampleCount),
-                                     &rb->memory,
-                                     &rb->image,
-                                     &rb->imageView,
-                                     1))
-        {
-            return false;
-        }
-        break;
-    default:
-        Q_UNREACHABLE();
-        break;
-    }
-
-    rb->lastActiveFrameSlot = -1;
-    return true;
+    return new QVkRenderBuffer(this, type, pixelSize, sampleCount);
 }
 
 static inline VkFormat toVkTextureFormat(QRhiTexture::Format format)
@@ -1444,7 +1370,7 @@ bool QRhi::createTextureRenderTarget(QRhiTextureRenderTarget *rt)
 
     const VkImageView views[] = {
         rt->texture->imageView,
-        hasDepthStencil ? (rt->depthTexture ? rt->depthTexture->imageView : rt->depthStencilBuffer->imageView) : VK_NULL_HANDLE
+        hasDepthStencil ? (rt->depthTexture ? rt->depthTexture->imageView : RES_GET_D(QVkRenderBuffer, rt->depthStencilBuffer)->imageView) : VK_NULL_HANDLE
     };
     const int attCount = hasDepthStencil ? 2 : 1;
 
@@ -2002,9 +1928,10 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 QRhiBuffer *buf = b.ubuf.buf;
-                bd.ubuf.generation = buf->generation;
+                QVkBufferPrivate *bufD = RES_GET_D(QVkBuffer, buf);
+                bd.ubuf.generation = bufD->generation;
                 VkDescriptorBufferInfo bufInfo;
-                bufInfo.buffer = buf->isStatic() ? buf->buffers[0] : buf->buffers[frameSlot];
+                bufInfo.buffer = buf->isStatic() ? bufD->buffers[0] : bufD->buffers[frameSlot];
                 bufInfo.offset = b.ubuf.offset;
                 bufInfo.range = b.ubuf.size <= 0 ? buf->size : b.ubuf.size;
                 // be nice and assert when we know the vulkan device would die a horrible death due to non-aligned reads
@@ -2060,7 +1987,7 @@ void QRhiVulkan::bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf)
 
     bufMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     bufMemBarrier.dstAccessMask = dstAccess;
-    bufMemBarrier.buffer = buf->buffers[0];
+    bufMemBarrier.buffer = RES_GET_D(QVkBuffer, buf)->buffers[0];
     bufMemBarrier.size = buf->size;
 
     df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
@@ -2103,7 +2030,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
     for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
         Q_ASSERT(!u.buf->isStatic());
         void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(u.buf->allocations[currentFrameSlot]);
+        VmaAllocation a = toVmaAllocation(RES_GET_D(QVkBuffer, u.buf)->allocations[currentFrameSlot]);
         VkResult err = vmaMapMemory(allocator, a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
@@ -2118,17 +2045,18 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
             r.changeEnd = u.offset + u.data.size();
     }
     for (auto it = changeRanges.cbegin(), itEnd = changeRanges.cend(); it != itEnd; ++it) {
-        VmaAllocation a = toVmaAllocation(it.key()->allocations[currentFrameSlot]);
+        VmaAllocation a = toVmaAllocation(RES_GET_D(QVkBuffer, it.key())->allocations[currentFrameSlot]);
         vmaFlushAllocation(allocator, a, it->changeBegin, it->changeEnd - it->changeBegin);
     }
 
     for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
+        QVkBufferPrivate *ubufD = RES_GET_D(QVkBuffer, u.buf);
         Q_ASSERT(u.buf->isStatic());
-        Q_ASSERT(u.buf->stagingBuffer);
+        Q_ASSERT(ubufD->stagingBuffer);
         Q_ASSERT(u.data.size() == u.buf->size);
 
         void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(u.buf->stagingAlloc);
+        VmaAllocation a = toVmaAllocation(ubufD->stagingAlloc);
         VkResult err = vmaMapMemory(allocator, a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
@@ -2142,9 +2070,9 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
         memset(&copyInfo, 0, sizeof(copyInfo));
         copyInfo.size = u.buf->size;
 
-        df->vkCmdCopyBuffer(cb->cb, u.buf->stagingBuffer, u.buf->buffers[0], 1, &copyInfo);
+        df->vkCmdCopyBuffer(cb->cb, ubufD->stagingBuffer, ubufD->buffers[0], 1, &copyInfo);
         bufferBarrier(cb, u.buf);
-        u.buf->lastActiveFrameSlot = currentFrameSlot;
+        ubufD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     for (const QRhi::TextureUpload &u : updates.textureUploads) {
@@ -2297,7 +2225,7 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
-            b.ubuf.buf->lastActiveFrameSlot = d->currentFrameSlot;
+            RES_GET_D(QVkBuffer, b.ubuf.buf)->lastActiveFrameSlot = d->currentFrameSlot;
             if (!b.ubuf.buf->isStatic())
                 hasDynamicBufferInSrb = true;
             break;
@@ -2319,9 +2247,9 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
         QRhiShaderResourceBindings::BoundResourceData &bd(srb->boundResourceData[descSetIdx][i]);
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
-            if (b.ubuf.buf->generation != bd.ubuf.generation) {
+            if (RES_GET_D(QVkBuffer, b.ubuf.buf)->generation != bd.ubuf.generation) {
                 srbUpdate = true;
-                bd.ubuf.generation = b.ubuf.buf->generation;
+                bd.ubuf.generation = RES_GET_D(QVkBuffer, b.ubuf.buf)->generation;
             }
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
@@ -2365,21 +2293,23 @@ void QRhi::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector
     QVarLengthArray<VkDeviceSize, 4> ofs;
     for (int i = 0, ie = bindings.count(); i != ie; ++i) {
         QRhiBuffer *buf = bindings[i].first;
+        QVkBufferPrivate *bufD = RES_GET_D(QVkBuffer, buf);
         Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
-        buf->lastActiveFrameSlot = d->currentFrameSlot;
+        bufD->lastActiveFrameSlot = d->currentFrameSlot;
         const int idx = buf->isStatic() ? 0 : d->currentFrameSlot;
-        bufs.append(buf->buffers[idx]);
+        bufs.append(bufD->buffers[idx]);
         ofs.append(bindings[i].second);
     }
     if (!bufs.isEmpty())
         d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
 
     if (indexBuf) {
+        QVkBufferPrivate *bufD = RES_GET_D(QVkBuffer, indexBuf);
         Q_ASSERT(indexBuf->usage.testFlag(QRhiBuffer::IndexBuffer));
-        indexBuf->lastActiveFrameSlot = d->currentFrameSlot;
+        bufD->lastActiveFrameSlot = d->currentFrameSlot;
         const int idx = indexBuf->isStatic() ? 0 : d->currentFrameSlot;
         const VkIndexType type = indexFormat == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-        d->df->vkCmdBindIndexBuffer(cb->cb, indexBuf->buffers[idx], indexOffset, type);
+        d->df->vkCmdBindIndexBuffer(cb->cb, bufD->buffers[idx], indexOffset, type);
     }
 }
 
@@ -2556,59 +2486,6 @@ void QRhi::releaseLater(QRhiShaderResourceBindings *srb)
     d->releaseQueue.append(e);
 }
 
-void QRhi::releaseLater(QRhiBuffer *buf)
-{
-    int nullBufferCount = 0;
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        if (!buf->buffers[i])
-            ++nullBufferCount;
-    }
-    if (nullBufferCount == QVK_FRAMES_IN_FLIGHT)
-        return;
-
-    QRhiVulkan::DeferredReleaseEntry e;
-    e.type = QRhiVulkan::DeferredReleaseEntry::Buffer;
-    e.lastActiveFrameSlot = buf->lastActiveFrameSlot;
-
-    e.buffer.stagingBuffer = buf->stagingBuffer;
-    e.buffer.stagingAlloc = buf->stagingAlloc;
-
-    buf->stagingBuffer = VK_NULL_HANDLE;
-    buf->stagingAlloc = nullptr;
-
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        e.buffer.buffers[i] = buf->buffers[i];
-        e.buffer.allocations[i] = buf->allocations[i];
-
-        buf->buffers[i] = VK_NULL_HANDLE;
-        buf->allocations[i] = nullptr;
-    }
-
-    RHI_D(QRhiVulkan);
-    d->releaseQueue.append(e);
-}
-
-void QRhi::releaseLater(QRhiRenderBuffer *rb)
-{
-    if (!rb->memory)
-        return;
-
-    QRhiVulkan::DeferredReleaseEntry e;
-    e.type = QRhiVulkan::DeferredReleaseEntry::RenderBuffer;
-    e.lastActiveFrameSlot = rb->lastActiveFrameSlot;
-
-    e.renderBuffer.memory = rb->memory;
-    e.renderBuffer.image = rb->image;
-    e.renderBuffer.imageView = rb->imageView;
-
-    rb->memory = VK_NULL_HANDLE;
-    rb->image = VK_NULL_HANDLE;
-    rb->imageView = VK_NULL_HANDLE;
-
-    RHI_D(QRhiVulkan);
-    d->releaseQueue.append(e);
-}
-
 void QRhi::releaseLater(QRhiTexture *tex)
 {
     if (!tex->image)
@@ -2734,6 +2611,20 @@ QRhiResource::~QRhiResource()
     delete d_ptr;
 }
 
+QRhiBuffer::QRhiBuffer(QRhi *rhi, QRhiResourcePrivate *d,
+                       Type type_, UsageFlags usage_, int size_)
+    : QRhiResource(rhi, d),
+      type(type_), usage(usage_), size(size_)
+{
+}
+
+QRhiRenderBuffer::QRhiRenderBuffer(QRhi *rhi, QRhiResourcePrivate *d,
+                                   Type type_, const QSize &pixelSize_, int sampleCount_)
+    : QRhiResource(rhi, d),
+      type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
+{
+}
+
 QRhiSampler::QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
                          Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
     : QRhiResource(rhi, d),
@@ -2745,6 +2636,162 @@ QRhiSampler::QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
 QRhiSwapChain::QRhiSwapChain(QRhi *rhi, QRhiResourcePrivate *d)
     : QRhiResource(rhi, d)
 {
+}
+
+QVkBuffer::QVkBuffer(QRhi *rhi, Type type, UsageFlags usage, int size)
+    : QRhiBuffer(rhi, new QVkBufferPrivate, type, usage, size)
+{
+    RES_D(QVkBuffer);
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        d->buffers[i] = VK_NULL_HANDLE;
+        d->allocations[i] = nullptr;
+    }
+}
+
+void QVkBuffer::release()
+{
+    RES_D(QVkBuffer);
+    int nullBufferCount = 0;
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        if (!d->buffers[i])
+            ++nullBufferCount;
+    }
+    if (nullBufferCount == QVK_FRAMES_IN_FLIGHT)
+        return;
+
+    QRhiVulkan::DeferredReleaseEntry e;
+    e.type = QRhiVulkan::DeferredReleaseEntry::Buffer;
+    e.lastActiveFrameSlot = d->lastActiveFrameSlot;
+
+    e.buffer.stagingBuffer = d->stagingBuffer;
+    e.buffer.stagingAlloc = d->stagingAlloc;
+
+    d->stagingBuffer = VK_NULL_HANDLE;
+    d->stagingAlloc = nullptr;
+
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        e.buffer.buffers[i] = d->buffers[i];
+        e.buffer.allocations[i] = d->allocations[i];
+
+        d->buffers[i] = VK_NULL_HANDLE;
+        d->allocations[i] = nullptr;
+    }
+
+    RES_RHI(QRhiVulkan);
+    rhiD->releaseQueue.append(e);
+}
+
+bool QVkBuffer::build()
+{
+    RES_D(QVkBuffer);
+    if (d->buffers[0])
+        release();
+
+    VkBufferCreateInfo bufferInfo;
+    memset(&bufferInfo, 0, sizeof(bufferInfo));
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = size;
+    bufferInfo.usage = toVkBufferUsage(usage);
+
+    VmaAllocationCreateInfo allocInfo;
+    memset(&allocInfo, 0, sizeof(allocInfo));
+
+    if (isStatic()) {
+        allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    } else {
+        allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    }
+
+    RES_RHI(QRhiVulkan);
+    VkResult err = VK_SUCCESS;
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        d->buffers[i] = VK_NULL_HANDLE;
+        d->allocations[i] = nullptr;
+        if (i == 0 || !isStatic()) {
+            VmaAllocation allocation;
+            err = vmaCreateBuffer(rhiD->allocator, &bufferInfo, &allocInfo, &d->buffers[i], &allocation, nullptr);
+            if (err != VK_SUCCESS)
+                break;
+            d->allocations[i] = allocation;
+        }
+    }
+
+    if (err == VK_SUCCESS && isStatic()) {
+        allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+        VmaAllocation allocation;
+        err = vmaCreateBuffer(rhiD->allocator, &bufferInfo, &allocInfo, &d->stagingBuffer, &allocation, nullptr);
+        if (err == VK_SUCCESS)
+            d->stagingAlloc = allocation;
+    }
+
+    if (err == VK_SUCCESS) {
+        d->lastActiveFrameSlot = -1;
+        d->generation += 1;
+        return true;
+    } else {
+        qWarning("Failed to create buffer: %d", err);
+        return false;
+    }
+}
+
+QVkRenderBuffer::QVkRenderBuffer(QRhi *rhi, Type type, const QSize &pixelSize, int sampleCount)
+    : QRhiRenderBuffer(rhi, new QVkRenderBufferPrivate, type, pixelSize, sampleCount)
+{
+}
+
+void QVkRenderBuffer::release()
+{
+    RES_D(QVkRenderBuffer);
+    if (!d->memory)
+        return;
+
+    QRhiVulkan::DeferredReleaseEntry e;
+    e.type = QRhiVulkan::DeferredReleaseEntry::RenderBuffer;
+    e.lastActiveFrameSlot = d->lastActiveFrameSlot;
+
+    e.renderBuffer.memory = d->memory;
+    e.renderBuffer.image = d->image;
+    e.renderBuffer.imageView = d->imageView;
+
+    d->memory = VK_NULL_HANDLE;
+    d->image = VK_NULL_HANDLE;
+    d->imageView = VK_NULL_HANDLE;
+
+    RES_RHI(QRhiVulkan);
+    rhiD->releaseQueue.append(e);
+}
+
+bool QVkRenderBuffer::build()
+{
+    RES_D(QVkRenderBuffer);
+    if (d->memory)
+        release();
+
+    RES_RHI(QRhiVulkan);
+    switch (type) {
+    case QRhiRenderBuffer::DepthStencil:
+        if (!rhiD->createTransientImage(rhiD->optimalDepthStencilFormat(),
+                                        pixelSize,
+                                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                                        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                                        rhiD->effectiveSampleCount(sampleCount),
+                                        &d->memory,
+                                        &d->image,
+                                        &d->imageView,
+                                        1))
+        {
+            return false;
+        }
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
+    d->lastActiveFrameSlot = -1;
+    return true;
 }
 
 QVkSampler::QVkSampler(QRhi *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)

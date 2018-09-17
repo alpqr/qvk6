@@ -177,10 +177,9 @@ Q_VK_RES_PRIVATE(QRhiRenderPass)
     VkRenderPass rp = VK_NULL_HANDLE;
 };
 
-typedef void * QVkAlloc;
-
-struct Q_VKR_EXPORT QRhiBuffer
+class Q_VKR_EXPORT QRhiBuffer : public QRhiResource
 {
+public:
     enum Type {
         StaticType,
         DynamicType
@@ -193,52 +192,39 @@ struct Q_VKR_EXPORT QRhiBuffer
     };
     Q_DECLARE_FLAGS(UsageFlags, UsageFlag)
 
-    QRhiBuffer(Type type_, UsageFlags usage_, int size_)
-        : type(type_), usage(usage_), size(size_)
-    {
-        for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-            buffers[i] = VK_NULL_HANDLE;
-            allocations[i] = nullptr;
-        }
-    }
-
     Type type;
     UsageFlags usage;
     int size;
 
     bool isStatic() const { return type == StaticType; }
 
-Q_VK_RES_PRIVATE(QRhiBuffer)
-    VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
-    QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    QVkAlloc stagingAlloc = nullptr;
-    int lastActiveFrameSlot = -1;
-    uint generation = 0;
+    virtual bool build() = 0;
+
+protected:
+    QRhiBuffer(QRhi *rhi, QRhiResourcePrivate *d, Type type_, UsageFlags usage_, int size_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
 
-struct Q_VKR_EXPORT QRhiRenderBuffer
+class Q_VKR_EXPORT QRhiRenderBuffer : public QRhiResource
 {
+public:
     enum Type {
         DepthStencil
     };
-
-    QRhiRenderBuffer(Type type_, const QSize &pixelSize_, int sampleCount_ = 1)
-        : type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
-    { }
 
     Type type;
     QSize pixelSize;
     int sampleCount;
 
-Q_VK_RES_PRIVATE(QRhiRenderBuffer)
-    VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkImage image;
-    VkImageView imageView;
-    int lastActiveFrameSlot = -1;
+    virtual bool build() = 0;
+
+protected:
+    QRhiRenderBuffer(QRhi *rhi, QRhiResourcePrivate *d,
+                     Type type_, const QSize &pixelSize_, int sampleCount_);
 };
+
+typedef void * QVkAlloc;
 
 struct Q_VKR_EXPORT QRhiTexture
 {
@@ -730,14 +716,14 @@ public:
     // buffers. For best performance, static buffers may be copied to device
     // local (not necessarily host visible) memory via a staging (host visible)
     // buffer. Hence separate update-dynamic and upload-static operations.
-    bool createBuffer(QRhiBuffer *buf);
+    QRhiBuffer *createBuffer(QRhiBuffer::Type type, QRhiBuffer::UsageFlags usage, int size);
 
     int ubufAlignment() const;
     int ubufAligned(int v) const;
 
     // Transient image, backed by lazily allocated memory (ideal for tiled
     // GPUs). To be used for depth-stencil.
-    bool createRenderBuffer(QRhiRenderBuffer *rb);
+    QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount = 1);
 
     bool createTexture(QRhiTexture *tex);
 
@@ -749,8 +735,6 @@ public:
 
     void releaseLater(QRhiGraphicsPipeline *ps);
     void releaseLater(QRhiShaderResourceBindings *srb);
-    void releaseLater(QRhiBuffer *buf);
-    void releaseLater(QRhiRenderBuffer *rb);
     void releaseLater(QRhiTexture *tex);
     void releaseLater(QRhiTextureRenderTarget *rt);
 

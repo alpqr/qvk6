@@ -62,6 +62,40 @@ public:
     QRhi *rhi = nullptr;
 };
 
+class QVkBuffer : public QRhiBuffer
+{
+public:
+    QVkBuffer(QRhi *rhi, Type type, UsageFlags usage, int size);
+    void release() override;
+    bool build() override;
+};
+
+struct QVkBufferPrivate : public QRhiResourcePrivate
+{
+    VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
+    QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    QVkAlloc stagingAlloc = nullptr;
+    int lastActiveFrameSlot = -1;
+    uint generation = 0;
+};
+
+class QVkRenderBuffer : public QRhiRenderBuffer
+{
+public:
+    QVkRenderBuffer(QRhi *rhi, Type type, const QSize &pixelSize, int sampleCount);
+    void release() override;
+    bool build() override;
+};
+
+struct QVkRenderBufferPrivate : public QRhiResourcePrivate
+{
+    VkDeviceMemory memory = VK_NULL_HANDLE;
+    VkImage image;
+    VkImageView imageView;
+    int lastActiveFrameSlot = -1;
+};
+
 class QVkSampler : public QRhiSampler
 {
 public:

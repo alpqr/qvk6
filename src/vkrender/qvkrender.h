@@ -171,12 +171,6 @@ protected: \
     friend class QRhi; \
     friend class QRhiVulkan;
 
-struct Q_VKR_EXPORT QRhiRenderPass
-{
-Q_VK_RES_PRIVATE(QRhiRenderPass)
-    VkRenderPass rp = VK_NULL_HANDLE;
-};
-
 class Q_VKR_EXPORT QRhiBuffer : public QRhiResource
 {
 public:
@@ -224,10 +218,9 @@ protected:
                      Type type_, const QSize &pixelSize_, int sampleCount_);
 };
 
-typedef void * QVkAlloc;
-
-struct Q_VKR_EXPORT QRhiTexture
+class Q_VKR_EXPORT QRhiTexture : public QRhiResource
 {
+public:
     enum Flag {
         RenderTarget = 1 << 0
     };
@@ -249,23 +242,15 @@ struct Q_VKR_EXPORT QRhiTexture
         int offset = 0;
     };
 
-    QRhiTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0)
-        : format(format_), pixelSize(pixelSize_), flags(flags_)
-    { }
-
     Format format;
     QSize pixelSize;
     Flags flags;
 
-Q_VK_RES_PRIVATE(QRhiTexture)
-    VkImage image = VK_NULL_HANDLE;
-    VkImageView imageView = VK_NULL_HANDLE;
-    QVkAlloc allocation = nullptr;
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    QVkAlloc stagingAlloc = nullptr;
-    VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    int lastActiveFrameSlot = -1;
-    uint generation = 0;
+    virtual bool build() = 0;
+
+protected:
+    QRhiTexture(QRhi *rhi, QRhiResourcePrivate *d,
+                Format format_, const QSize &pixelSize_, Flags flags_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
@@ -297,6 +282,12 @@ public:
 protected:
     QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
                 Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_);
+};
+
+struct Q_VKR_EXPORT QRhiRenderPass
+{
+Q_VK_RES_PRIVATE(QRhiRenderPass)
+    VkRenderPass rp = VK_NULL_HANDLE;
 };
 
 struct Q_VKR_EXPORT QRhiRenderTarget
@@ -725,7 +716,7 @@ public:
     // GPUs). To be used for depth-stencil.
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount = 1);
 
-    bool createTexture(QRhiTexture *tex);
+    QRhiTexture *createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags = 0);
 
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
@@ -735,7 +726,6 @@ public:
 
     void releaseLater(QRhiGraphicsPipeline *ps);
     void releaseLater(QRhiShaderResourceBindings *srb);
-    void releaseLater(QRhiTexture *tex);
     void releaseLater(QRhiTextureRenderTarget *rt);
 
     /*

@@ -83,8 +83,8 @@ void TexturedCubeRenderer::initResources()
     m_ubuf->build();
 
     m_image = QImage(QLatin1String(":/qt256.png")).mirrored().convertToFormat(QImage::Format_RGBA8888);
-    m_tex = new QRhiTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()));
-    m_r->createTexture(m_tex);
+    m_tex = m_r->createTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()));
+    m_tex->build();
 
     m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
     m_sampler->build();
@@ -160,7 +160,7 @@ void TexturedCubeRenderer::releaseResources()
     }
 
     if (m_tex) {
-        m_r->releaseLater(m_tex);
+        m_tex->release();
         delete m_tex;
         m_tex = nullptr;
     }

@@ -91,8 +91,8 @@ void TriangleOnCubeRenderer::initResources()
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         m_image = QImage(QLatin1String(":/qt256.png")).mirrored().scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
 
-    m_tex = new QRhiTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
-    m_r->createTexture(m_tex);
+    m_tex = m_r->createTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+    m_tex->build();
 
     m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
     m_sampler->build();
@@ -189,7 +189,7 @@ void TriangleOnCubeRenderer::releaseResources()
     }
 
     if (m_tex) {
-        m_r->releaseLater(m_tex);
+        m_tex->release();
         delete m_tex;
         m_tex = nullptr;
     }

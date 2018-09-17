@@ -62,6 +62,8 @@ public:
     QRhi *rhi = nullptr;
 };
 
+typedef void * QVkAlloc;
+
 class QVkBuffer : public QRhiBuffer
 {
 public:
@@ -94,6 +96,26 @@ struct QVkRenderBufferPrivate : public QRhiResourcePrivate
     VkImage image;
     VkImageView imageView;
     int lastActiveFrameSlot = -1;
+};
+
+class QVkTexture : public QRhiTexture
+{
+public:
+    QVkTexture(QRhi *rhi, Format format, const QSize &pixelSize, Flags flags);
+    void release() override;
+    bool build() override;
+};
+
+struct QVkTexturePrivate : public QRhiResourcePrivate
+{
+    VkImage image = VK_NULL_HANDLE;
+    VkImageView imageView = VK_NULL_HANDLE;
+    QVkAlloc allocation = nullptr;
+    VkBuffer stagingBuffer = VK_NULL_HANDLE;
+    QVkAlloc stagingAlloc = nullptr;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    int lastActiveFrameSlot = -1;
+    uint generation = 0;
 };
 
 class QVkSampler : public QRhiSampler

@@ -54,10 +54,10 @@ static const int QVK_DESC_SETS_PER_POOL = 128;
 static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
 static const int QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL = 256;
 
-class QVkRenderPrivate
+class QRhiPrivate
 {
 public:
-    QVkRenderPrivate(QVkRender *q_ptr) : q(q_ptr) { }
+    QRhiPrivate(QRhi *q_ptr) : q(q_ptr) { }
     void create();
     void destroy();
     VkResult createDescriptorPool(VkDescriptorPool *pool);
@@ -67,24 +67,24 @@ public:
                               VkImageAspectFlags aspectMask, VkSampleCountFlagBits sampleCount,
                               VkDeviceMemory *mem, VkImage *images, VkImageView *views, int count);
 
-    bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QVkRender::SurfaceImportFlags flags, QVkSwapChain *swapChain);
-    void releaseSwapChain(QVkSwapChain *swapChain);
+    bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QRhi::SurfaceImportFlags flags, QRhiSwapChain *swapChain);
+    void releaseSwapChain(QRhiSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();
     VkSampleCountFlagBits effectiveSampleCount(int sampleCount);
-    bool createDefaultRenderPass(QVkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
+    bool createDefaultRenderPass(QRhiRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 
-    void prepareNewFrame(QVkCommandBuffer *cb);
+    void prepareNewFrame(QRhiCommandBuffer *cb);
     void finishFrame();
-    void applyPassUpdates(QVkCommandBuffer *cb, const QVkRender::PassUpdates &updates);
-    void activateTextureRenderTarget(QVkCommandBuffer *cb, QVkTextureRenderTarget *rt);
-    void deactivateTextureRenderTarget(QVkCommandBuffer *cb, QVkTextureRenderTarget *rt);
+    void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
+    void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
+    void deactivateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void executeDeferredReleases(bool forced = false);
 
-    void bufferBarrier(QVkCommandBuffer *cb, QVkBuffer *buf);
-    void imageBarrier(QVkCommandBuffer *cb, QVkTexture *tex,
+    void bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf);
+    void imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                       VkImageLayout newLayout,
                       VkAccessFlags srcAccess, VkAccessFlags dstAccess,
                       VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
@@ -92,9 +92,9 @@ public:
     // Lighter than release+create, does not allow layout change, but pulls in
     // any new underlying resources from the referenced buffers, textures, etc.
     // in case they changed in the meantime.
-    void updateShaderResourceBindings(QVkShaderResourceBindings *srb, int descSetIdx = -1);
+    void updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx = -1);
 
-    QVkRender *q;
+    QRhi *q;
     QVulkanInstance *inst;
     VkPhysicalDevice physDev;
     VkDevice dev;

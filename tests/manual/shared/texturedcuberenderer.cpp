@@ -75,41 +75,41 @@ static QBakedShader getShader(const QString &name)
 
 void TexturedCubeRenderer::initResources()
 {
-    m_vbuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = new QRhiBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_r->createBuffer(m_vbuf);
     m_vbufReady = false;
 
-    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64);
+    m_ubuf = new QRhiBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
     m_r->createBuffer(m_ubuf);
 
     m_image = QImage(QLatin1String(":/qt256.png")).mirrored().convertToFormat(QImage::Format_RGBA8888);
-    m_tex = new QVkTexture(QVkTexture::RGBA8, QSize(m_image.width(), m_image.height()));
+    m_tex = new QRhiTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()));
     m_r->createTexture(m_tex);
 
-    m_sampler = new QVkSampler(QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Repeat, QVkSampler::Repeat);
+    m_sampler = new QRhiSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
     m_r->createSampler(m_sampler);
 
-    m_srb = new QVkShaderResourceBindings;
-    const auto ubufVisibility = QVkShaderResourceBindings::Binding::VertexStage | QVkShaderResourceBindings::Binding::FragmentStage;
+    m_srb = new QRhiShaderResourceBindings;
+    const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
-        QVkShaderResourceBindings::Binding::sampledTexture(1, QVkShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
+        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
+        QRhiShaderResourceBindings::Binding::sampledTexture(1, QRhiShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
     };
     m_r->createShaderResourceBindings(m_srb);
 }
 
-void TexturedCubeRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
+void TexturedCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
 {
-    m_ps = new QVkGraphicsPipeline;
+    m_ps = new QRhiGraphicsPipeline;
 
-    m_ps->targetBlends = { QVkGraphicsPipeline::TargetBlend() };
+    m_ps->targetBlends = { QRhiGraphicsPipeline::TargetBlend() };
 
     m_ps->depthTest = true;
     m_ps->depthWrite = true;
-    m_ps->depthOp = QVkGraphicsPipeline::Less;
+    m_ps->depthOp = QRhiGraphicsPipeline::Less;
 
-    m_ps->cullMode = QVkGraphicsPipeline::Back;
-    m_ps->frontFace = QVkGraphicsPipeline::CW;
+    m_ps->cullMode = QRhiGraphicsPipeline::Back;
+    m_ps->frontFace = QRhiGraphicsPipeline::CW;
 
     m_ps->sampleCount = SAMPLES;
 
@@ -118,20 +118,20 @@ void TexturedCubeRenderer::initOutputDependentResources(const QVkRenderPass *rp,
     QBakedShader fs = getShader(QLatin1String(":/texture.frag.qsb"));
     Q_ASSERT(fs.isValid());
     m_ps->shaderStages = {
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
+        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Vertex,
         vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Fragment,
+        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Fragment,
         fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
     };
 
-    QVkVertexInputLayout inputLayout;
+    QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        QVkVertexInputLayout::Binding(3 * sizeof(float)),
-        QVkVertexInputLayout::Binding(2 * sizeof(float))
+        QRhiVertexInputLayout::Binding(3 * sizeof(float)),
+        QRhiVertexInputLayout::Binding(2 * sizeof(float))
     };
     inputLayout.attributes = {
-        QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float3, 0, "POSITION"),
-        QVkVertexInputLayout::Attribute(1, 1, QVkVertexInputLayout::Attribute::Float2, 0, "TEXCOORD")
+        QRhiVertexInputLayout::Attribute(0, 0, QRhiVertexInputLayout::Attribute::Float3, 0, "POSITION"),
+        QRhiVertexInputLayout::Attribute(1, 1, QRhiVertexInputLayout::Attribute::Float2, 0, "TEXCOORD")
     };
 
     m_ps->vertexInputLayout = inputLayout;
@@ -187,9 +187,9 @@ void TexturedCubeRenderer::releaseOutputDependentResources()
     }
 }
 
-QVkRender::PassUpdates TexturedCubeRenderer::update()
+QRhi::PassUpdates TexturedCubeRenderer::update()
 {
-    QVkRender::PassUpdates u;
+    QRhi::PassUpdates u;
 
     if (!m_vbufReady) {
         m_vbufReady = true;
@@ -210,10 +210,10 @@ QVkRender::PassUpdates TexturedCubeRenderer::update()
     return u;
 }
 
-void TexturedCubeRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
+void TexturedCubeRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
-    m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
-    m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setViewport(cb, QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setScissor(cb, QRhiScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
     m_r->setGraphicsPipeline(cb, m_ps);
     m_r->setVertexInput(cb, 0, { { m_vbuf, 0 }, { m_vbuf, 36 * 3 * sizeof(float) } });

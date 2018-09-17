@@ -47,26 +47,26 @@
 
 QT_BEGIN_NAMESPACE
 
-class QVkRenderPrivate;
+class QRhiPrivate;
 class QVulkanWindow;
 
 static const int QVK_FRAMES_IN_FLIGHT = 2;
 
-struct Q_VKR_EXPORT QVkClearValue
+struct Q_VKR_EXPORT QRhiClearValue
 {
-    QVkClearValue() { }
-    QVkClearValue(const QVector4D &rgba_) : rgba(rgba_), isDepthStencil(false) { }
-    QVkClearValue(float d_, quint32 s_) : d(d_), s(s_), isDepthStencil(true) { }
+    QRhiClearValue() { }
+    QRhiClearValue(const QVector4D &rgba_) : rgba(rgba_), isDepthStencil(false) { }
+    QRhiClearValue(float d_, quint32 s_) : d(d_), s(s_), isDepthStencil(true) { }
     QVector4D rgba;
     float d;
     quint32 s;
     bool isDepthStencil;
 };
 
-struct Q_VKR_EXPORT QVkViewport
+struct Q_VKR_EXPORT QRhiViewport
 {
-    QVkViewport() { }
-    QVkViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
+    QRhiViewport() { }
+    QRhiViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
         : r(x, y, w, h), minDepth(minDepth_), maxDepth(maxDepth_)
     { }
     QRectF r;
@@ -74,17 +74,17 @@ struct Q_VKR_EXPORT QVkViewport
     float maxDepth;
 };
 
-struct Q_VKR_EXPORT QVkScissor
+struct Q_VKR_EXPORT QRhiScissor
 {
-    QVkScissor() { }
-    QVkScissor(float x, float y, float w, float h)
+    QRhiScissor() { }
+    QRhiScissor(float x, float y, float w, float h)
         : r(x, y, w, h)
     { }
     QRectF r;
 };
 
 // should be mappable to D3D12_INPUT_ELEMENT_DESC + D3D12_VERTEX_BUFFER_VIEW...
-struct Q_VKR_EXPORT QVkVertexInputLayout
+struct Q_VKR_EXPORT QRhiVertexInputLayout
 {
     struct Binding {
         enum Classification {
@@ -127,7 +127,7 @@ struct Q_VKR_EXPORT QVkVertexInputLayout
     QVector<Attribute> attributes;
 };
 
-struct Q_VKR_EXPORT QVkGraphicsShaderStage
+struct Q_VKR_EXPORT QRhiGraphicsShaderStage
 {
     enum Type {
         Vertex,
@@ -137,8 +137,8 @@ struct Q_VKR_EXPORT QVkGraphicsShaderStage
         TessellationEvaluation // Domain
     };
 
-    QVkGraphicsShaderStage() { }
-    QVkGraphicsShaderStage(Type type_, const QByteArray &spirv_, const char *name_ = "main")
+    QRhiGraphicsShaderStage() { }
+    QRhiGraphicsShaderStage(Type type_, const QByteArray &spirv_, const char *name_ = "main")
         : type(type_), spirv(spirv_), name(name_)
     { }
 
@@ -152,20 +152,20 @@ public: \
     Class() { } \
 protected: \
     Q_DISABLE_COPY(Class) \
-    friend class QVkRender; \
-    friend class QVkRenderPrivate;
+    friend class QRhi; \
+    friend class QRhiPrivate;
 
-struct Q_VKR_EXPORT QVkRenderPass
+struct Q_VKR_EXPORT QRhiRenderPass
 {
-Q_VK_RES_PRIVATE(QVkRenderPass)
+Q_VK_RES_PRIVATE(QRhiRenderPass)
     VkRenderPass rp = VK_NULL_HANDLE;
 };
 
-struct QVkBuffer;
-struct QVkTexture;
-struct QVkSampler;
+struct QRhiBuffer;
+struct QRhiTexture;
+struct QRhiSampler;
 
-struct Q_VKR_EXPORT QVkShaderResourceBindings
+struct Q_VKR_EXPORT QRhiShaderResourceBindings
 {
     struct Binding {
         enum Type {
@@ -182,7 +182,7 @@ struct Q_VKR_EXPORT QVkShaderResourceBindings
         };
         Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
-        static Binding uniformBuffer(int binding_, StageFlags stage_, QVkBuffer *buf_, int offset_ = 0, int size_ = 0)
+        static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_ = 0, int size_ = 0)
         {
             Binding b;
             b.binding = binding_;
@@ -194,7 +194,7 @@ struct Q_VKR_EXPORT QVkShaderResourceBindings
             return b;
         }
 
-        static Binding sampledTexture(int binding_, StageFlags stage_, QVkTexture *tex_, QVkSampler *sampler_)
+        static Binding sampledTexture(int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_)
         {
             Binding b;
             b.binding = binding_;
@@ -209,13 +209,13 @@ struct Q_VKR_EXPORT QVkShaderResourceBindings
         StageFlags stage;
         Type type;
         struct UniformBufferData {
-            QVkBuffer *buf;
+            QRhiBuffer *buf;
             int offset;
             int size;
         };
         struct SampledTextureData {
-            QVkTexture *tex;
-            QVkSampler *sampler;
+            QRhiTexture *tex;
+            QRhiSampler *sampler;
         };
         union {
             UniformBufferData ubuf;
@@ -225,13 +225,13 @@ struct Q_VKR_EXPORT QVkShaderResourceBindings
 
     QVector<Binding> bindings;
 
-Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
+Q_VK_RES_PRIVATE(QRhiShaderResourceBindings)
     int poolIndex = -1;
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
     int lastActiveFrameSlot = -1;
 
-    // Keep track of the generation number of each referenced QVk* to be able
+    // Keep track of the generation number of each referenced QRhi* to be able
     // to detect that the underlying descriptor set became out of date and they
     // need to be written again with the up-to-date VkBuffer etc. objects.
     struct BoundUniformBufferData {
@@ -250,9 +250,9 @@ Q_VK_RES_PRIVATE(QVkShaderResourceBindings)
     QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkShaderResourceBindings::Binding::StageFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBindings::Binding::StageFlags)
 
-struct Q_VKR_EXPORT QVkGraphicsPipeline
+struct Q_VKR_EXPORT QRhiGraphicsPipeline
 {
     enum Flag {
         UsesBlendConstants = 1 << 0,
@@ -375,24 +375,24 @@ struct Q_VKR_EXPORT QVkGraphicsPipeline
     quint32 stencilReadMask = 0xFF;
     quint32 stencilWriteMask = 0xFF;
     int sampleCount = 1; // MSAA, swapchain+depthstencil must match
-    QVector<QVkGraphicsShaderStage> shaderStages;
-    QVkVertexInputLayout vertexInputLayout;
-    QVkShaderResourceBindings *shaderResourceBindings = nullptr;
-    const QVkRenderPass *renderPass = nullptr;
+    QVector<QRhiGraphicsShaderStage> shaderStages;
+    QRhiVertexInputLayout vertexInputLayout;
+    QRhiShaderResourceBindings *shaderResourceBindings = nullptr;
+    const QRhiRenderPass *renderPass = nullptr;
 
-Q_VK_RES_PRIVATE(QVkGraphicsPipeline)
+Q_VK_RES_PRIVATE(QRhiGraphicsPipeline)
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipeline::Flags)
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipeline::CullMode)
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkGraphicsPipeline::ColorMask)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::CullMode)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 
 typedef void * QVkAlloc;
 
-struct Q_VKR_EXPORT QVkBuffer
+struct Q_VKR_EXPORT QRhiBuffer
 {
     enum Type {
         StaticType,
@@ -406,7 +406,7 @@ struct Q_VKR_EXPORT QVkBuffer
     };
     Q_DECLARE_FLAGS(UsageFlags, UsageFlag)
 
-    QVkBuffer(Type type_, UsageFlags usage_, int size_)
+    QRhiBuffer(Type type_, UsageFlags usage_, int size_)
         : type(type_), usage(usage_), size(size_)
     {
         for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
@@ -421,7 +421,7 @@ struct Q_VKR_EXPORT QVkBuffer
 
     bool isStatic() const { return type == StaticType; }
 
-Q_VK_RES_PRIVATE(QVkBuffer)
+Q_VK_RES_PRIVATE(QRhiBuffer)
     VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
@@ -430,15 +430,15 @@ Q_VK_RES_PRIVATE(QVkBuffer)
     uint generation = 0;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkBuffer::UsageFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
 
-struct Q_VKR_EXPORT QVkRenderBuffer
+struct Q_VKR_EXPORT QRhiRenderBuffer
 {
     enum Type {
         DepthStencil
     };
 
-    QVkRenderBuffer(Type type_, const QSize &pixelSize_, int sampleCount_ = 1)
+    QRhiRenderBuffer(Type type_, const QSize &pixelSize_, int sampleCount_ = 1)
         : type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
     { }
 
@@ -446,14 +446,14 @@ struct Q_VKR_EXPORT QVkRenderBuffer
     QSize pixelSize;
     int sampleCount;
 
-Q_VK_RES_PRIVATE(QVkRenderBuffer)
+Q_VK_RES_PRIVATE(QRhiRenderBuffer)
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImage image;
     VkImageView imageView;
     int lastActiveFrameSlot = -1;
 };
 
-struct Q_VKR_EXPORT QVkTexture
+struct Q_VKR_EXPORT QRhiTexture
 {
     enum Flag {
         RenderTarget = 1 << 0
@@ -476,7 +476,7 @@ struct Q_VKR_EXPORT QVkTexture
         int offset = 0;
     };
 
-    QVkTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0)
+    QRhiTexture(Format format_, const QSize &pixelSize_, Flags flags_ = 0)
         : format(format_), pixelSize(pixelSize_), flags(flags_)
     { }
 
@@ -484,7 +484,7 @@ struct Q_VKR_EXPORT QVkTexture
     QSize pixelSize;
     Flags flags;
 
-Q_VK_RES_PRIVATE(QVkTexture)
+Q_VK_RES_PRIVATE(QRhiTexture)
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     QVkAlloc allocation = nullptr;
@@ -495,9 +495,9 @@ Q_VK_RES_PRIVATE(QVkTexture)
     uint generation = 0;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTexture::Flags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
 
-struct Q_VKR_EXPORT QVkSampler
+struct Q_VKR_EXPORT QRhiSampler
 {
     enum Filter {
         Nearest,
@@ -512,7 +512,7 @@ struct Q_VKR_EXPORT QVkSampler
         MirrorOnce
     };
 
-    QVkSampler(Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
+    QRhiSampler(Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
         : magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
           addressU(u_), addressV(v_)
     { }
@@ -523,20 +523,20 @@ struct Q_VKR_EXPORT QVkSampler
     AddressMode addressU;
     AddressMode addressV;
 
-Q_VK_RES_PRIVATE(QVkSampler)
+Q_VK_RES_PRIVATE(QRhiSampler)
     VkSampler sampler = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
     uint generation = 0;
 };
 
-struct Q_VKR_EXPORT QVkRenderTarget
+struct Q_VKR_EXPORT QRhiRenderTarget
 {
     QSize sizeInPixels() const { return pixelSize; }
-    const QVkRenderPass *renderPass() const { return &rp; }
+    const QRhiRenderPass *renderPass() const { return &rp; }
 
-Q_VK_RES_PRIVATE(QVkRenderTarget)
+Q_VK_RES_PRIVATE(QRhiRenderTarget)
     VkFramebuffer fb = VK_NULL_HANDLE;
-    QVkRenderPass rp;
+    QRhiRenderPass rp;
     QSize pixelSize;
     int attCount = 0;
     enum Type {
@@ -546,7 +546,7 @@ Q_VK_RES_PRIVATE(QVkRenderTarget)
     Type type = RtRef;
 };
 
-struct Q_VKR_EXPORT QVkTextureRenderTarget : public QVkRenderTarget
+struct Q_VKR_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
     enum Flag {
         PreserveColorContents = 1 << 0
@@ -554,32 +554,32 @@ struct Q_VKR_EXPORT QVkTextureRenderTarget : public QVkRenderTarget
     Q_DECLARE_FLAGS(Flags, Flag)
 
     // color only
-    QVkTextureRenderTarget(QVkTexture *texture_, Flags flags_ = 0)
+    QRhiTextureRenderTarget(QRhiTexture *texture_, Flags flags_ = 0)
         : texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
     { }
     // color and depth-stencil, only color accessed afterwards
-    QVkTextureRenderTarget(QVkTexture *texture_, QVkRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
+    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
         : texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
     { }
     // color and depth, both as textures accessible afterwards
-    QVkTextureRenderTarget(QVkTexture *texture_, QVkTexture *depthTexture_, Flags flags_ = 0)
+    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_ = 0)
         : texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
     { }
 
-    QVkTexture *texture;
-    QVkTexture *depthTexture;
-    QVkRenderBuffer *depthStencilBuffer;
+    QRhiTexture *texture;
+    QRhiTexture *depthTexture;
+    QRhiRenderBuffer *depthStencilBuffer;
     Flags flags;
 
-Q_VK_RES_PRIVATE(QVkTextureRenderTarget)
+Q_VK_RES_PRIVATE(QRhiTextureRenderTarget)
     int lastActiveFrameSlot = -1;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkTextureRenderTarget::Flags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
 
-struct Q_VKR_EXPORT QVkCommandBuffer
+struct Q_VKR_EXPORT QRhiCommandBuffer
 {
-Q_VK_RES_PRIVATE(QVkCommandBuffer)
+Q_VK_RES_PRIVATE(QRhiCommandBuffer)
     VkCommandBuffer cb = VK_NULL_HANDLE;
 
     void resetState() {
@@ -587,19 +587,19 @@ Q_VK_RES_PRIVATE(QVkCommandBuffer)
         currentPipeline = nullptr;
         currentSrb = nullptr;
     }
-    QVkRenderTarget *currentTarget;
-    QVkGraphicsPipeline *currentPipeline;
-    QVkShaderResourceBindings *currentSrb;
+    QRhiRenderTarget *currentTarget;
+    QRhiGraphicsPipeline *currentPipeline;
+    QRhiShaderResourceBindings *currentSrb;
 };
 
-struct Q_VKR_EXPORT QVkSwapChain
+struct Q_VKR_EXPORT QRhiSwapChain
 {
-    QVkCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
-    QVkRenderTarget *currentFrameRenderTarget() { return &rt; }
-    const QVkRenderPass *defaultRenderPass() const { return rt.renderPass(); }
+    QRhiCommandBuffer *currentFrameCommandBuffer() { return &imageRes[currentImage].cmdBuf; }
+    QRhiRenderTarget *currentFrameRenderTarget() { return &rt; }
+    const QRhiRenderPass *defaultRenderPass() const { return rt.renderPass(); }
     QSize sizeInPixels() const { return pixelSize; }
 
-Q_VK_RES_PRIVATE(QVkSwapChain)
+Q_VK_RES_PRIVATE(QRhiSwapChain)
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
 
@@ -609,14 +609,14 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
     int bufferCount = 0;
     VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR colorSpace = VkColorSpaceKHR(0); // this is in fact VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
-    QVkRenderBuffer *depthStencil = nullptr;
+    QRhiRenderBuffer *depthStencil = nullptr;
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
 
     struct ImageResources {
         VkImage image = VK_NULL_HANDLE;
         VkImageView imageView = VK_NULL_HANDLE;
-        QVkCommandBuffer cmdBuf;
+        QRhiCommandBuffer cmdBuf;
         VkFence cmdFence = VK_NULL_HANDLE;
         bool cmdFenceWaitable = false;
         VkFramebuffer fb = VK_NULL_HANDLE;
@@ -635,10 +635,10 @@ Q_VK_RES_PRIVATE(QVkSwapChain)
 
     quint32 currentImage = 0; // index in imageRes
     quint32 currentFrame = 0; // index in frameRes
-    QVkRenderTarget rt;
+    QRhiRenderTarget rt;
 };
 
-class Q_VKR_EXPORT QVkRender
+class Q_VKR_EXPORT QRhi
 {
 public:
     struct InitParams {
@@ -670,32 +670,32 @@ public:
 
     struct DynamicBufferUpdate {
         DynamicBufferUpdate() { }
-        DynamicBufferUpdate(QVkBuffer *buf_, int offset_, int size_, const void *data_)
+        DynamicBufferUpdate(QRhiBuffer *buf_, int offset_, int size_, const void *data_)
             : buf(buf_), offset(offset_), data(reinterpret_cast<const char *>(data_), size_)
         { }
 
-        QVkBuffer *buf = nullptr;
+        QRhiBuffer *buf = nullptr;
         int offset = 0;
         QByteArray data;
     };
 
     struct StaticBufferUpload {
         StaticBufferUpload() { }
-        StaticBufferUpload(QVkBuffer *buf_, const void *data_)
+        StaticBufferUpload(QRhiBuffer *buf_, const void *data_)
             : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size)
         { }
 
-        QVkBuffer *buf = nullptr;
+        QRhiBuffer *buf = nullptr;
         QByteArray data;
     };
 
     struct TextureUpload {
         TextureUpload() { }
-        TextureUpload(QVkTexture *tex_, const QImage &image_, int mipLevel_ = 0, int layer_ = 0)
+        TextureUpload(QRhiTexture *tex_, const QImage &image_, int mipLevel_ = 0, int layer_ = 0)
             : tex(tex_), image(image_), mipLevel(mipLevel_), layer(layer_)
         { }
 
-        QVkTexture *tex = nullptr;
+        QRhiTexture *tex = nullptr;
         QImage image;
         int mipLevel = 0;
         int layer = 0;
@@ -715,8 +715,8 @@ public:
         }
     };
 
-    QVkRender(const InitParams &params);
-    ~QVkRender();
+    QRhi(const InitParams &params);
+    ~QRhi();
 
     QVector<int> supportedSampleCounts() const;
 
@@ -725,7 +725,7 @@ public:
        put on the release queue by releaseLater (so this is safe even when
        the resource is used by the still executing/pending frame(s)).
 
-       The QVk* instance itself is not destroyed by the release and it is safe
+       The QRhi* instance itself is not destroyed by the release and it is safe
        to destroy it right away after calling releaseLater.
 
        Changing any value needs explicit release and rebuilding of the
@@ -736,8 +736,8 @@ public:
        buffer or texture size changes f.ex.)
      */
 
-    bool createGraphicsPipeline(QVkGraphicsPipeline *ps);
-    bool createShaderResourceBindings(QVkShaderResourceBindings *srb);
+    bool createGraphicsPipeline(QRhiGraphicsPipeline *ps);
+    bool createShaderResourceBindings(QRhiShaderResourceBindings *srb);
 
     // Buffers are immutable like other resources but the underlying data can
     // change. (its size cannot) Having multiple frames in flight is handled
@@ -746,26 +746,26 @@ public:
     // buffers. For best performance, static buffers may be copied to device
     // local (not necessarily host visible) memory via a staging (host visible)
     // buffer. Hence separate update-dynamic and upload-static operations.
-    bool createBuffer(QVkBuffer *buf);
+    bool createBuffer(QRhiBuffer *buf);
 
     int ubufAlignment() const;
     int ubufAligned(int v) const;
 
     // Transient image, backed by lazily allocated memory (ideal for tiled
     // GPUs). To be used for depth-stencil.
-    bool createRenderBuffer(QVkRenderBuffer *rb);
+    bool createRenderBuffer(QRhiRenderBuffer *rb);
 
-    bool createTexture(QVkTexture *tex);
-    bool createSampler(QVkSampler *sampler);
-    bool createTextureRenderTarget(QVkTextureRenderTarget *rt);
+    bool createTexture(QRhiTexture *tex);
+    bool createSampler(QRhiSampler *sampler);
+    bool createTextureRenderTarget(QRhiTextureRenderTarget *rt);
 
-    void releaseLater(QVkGraphicsPipeline *ps);
-    void releaseLater(QVkShaderResourceBindings *srb);
-    void releaseLater(QVkBuffer *buf);
-    void releaseLater(QVkRenderBuffer *rb);
-    void releaseLater(QVkTexture *tex);
-    void releaseLater(QVkSampler *sampler);
-    void releaseLater(QVkTextureRenderTarget *rt);
+    void releaseLater(QRhiGraphicsPipeline *ps);
+    void releaseLater(QRhiShaderResourceBindings *srb);
+    void releaseLater(QRhiBuffer *buf);
+    void releaseLater(QRhiRenderBuffer *rb);
+    void releaseLater(QRhiTexture *tex);
+    void releaseLater(QRhiSampler *sampler);
+    void releaseLater(QRhiTextureRenderTarget *rt);
 
     /*
       Render to a QWindow (must be VulkanSurface):
@@ -779,15 +779,15 @@ public:
            endFrame(sc) // this queues the Present, begin/endFrame manages double buffering internally
      */
     bool importSurface(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
-                       QVkRenderBuffer *depthStencil, int sampleCount, QVkSwapChain *outSwapChain);
-    void releaseSwapChain(QVkSwapChain *swapChain);
-    FrameOpResult beginFrame(QVkSwapChain *sc);
-    FrameOpResult endFrame(QVkSwapChain *sc);
+                       QRhiRenderBuffer *depthStencil, int sampleCount, QRhiSwapChain *outSwapChain);
+    void releaseSwapChain(QRhiSwapChain *swapChain);
+    FrameOpResult beginFrame(QRhiSwapChain *sc);
+    FrameOpResult endFrame(QRhiSwapChain *sc);
 
     /*
       Render to a QVulkanWindow from a startNextFrame() implementation:
-         QVkRenderTarget currentFrameRenderTarget;
-         QVkCommandBuffer currentFrameCommandBuffer;
+         QRhiRenderTarget currentFrameRenderTarget;
+         QRhiCommandBuffer currentFrameCommandBuffer;
          beginFrame(window, &currentFrameRenderTarget, &currentFrameCommandBuffer)
          beginPass(currentFrameRenderTarget, currentFrameCommandBuffer, clearValues, updates)
          ...
@@ -795,14 +795,14 @@ public:
          endFrame(window)
      */
     void beginFrame(QVulkanWindow *window,
-                    QVkRenderTarget *outCurrentFrameRenderTarget,
-                    QVkCommandBuffer *outCurrentFrameCommandBuffer);
+                    QRhiRenderTarget *outCurrentFrameRenderTarget,
+                    QRhiCommandBuffer *outCurrentFrameCommandBuffer);
     void endFrame(QVulkanWindow *window);
     // the renderpass may be needed before beginFrame can be called
-    void importVulkanWindowRenderPass(QVulkanWindow *window, QVkRenderPass *outRenderPass);
+    void importVulkanWindowRenderPass(QVulkanWindow *window, QRhiRenderPass *outRenderPass);
 
-    void beginPass(QVkRenderTarget *rt, QVkCommandBuffer *cb, const QVkClearValue *clearValues, const PassUpdates &updates);
-    void endPass(QVkCommandBuffer *cb);
+    void beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const PassUpdates &updates);
+    void endPass(QRhiCommandBuffer *cb);
 
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
@@ -810,31 +810,31 @@ public:
     // frame; srb is updated automatically at this point whenever a referenced
     // buffer, texture, etc. is out of date internally (due to release+create
     // since the creation of the srb) - hence no need to manually recreate the
-    // srb in case a QVkBuffer is "resized" etc.
-    void setGraphicsPipeline(QVkCommandBuffer *cb, QVkGraphicsPipeline *ps, QVkShaderResourceBindings *srb = nullptr);
+    // srb in case a QRhiBuffer is "resized" etc.
+    void setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb = nullptr);
 
-    using VertexInput = QPair<QVkBuffer *, quint32>; // buffer, offset
-    void setVertexInput(QVkCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
-                        QVkBuffer *indexBuf = nullptr, quint32 indexOffset = 0, IndexFormat indexFormat = IndexUInt16);
+    using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
+    void setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
+                        QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0, IndexFormat indexFormat = IndexUInt16);
 
-    void setViewport(QVkCommandBuffer *cb, const QVkViewport &viewport);
-    void setScissor(QVkCommandBuffer *cb, const QVkScissor &scissor);
-    void setBlendConstants(QVkCommandBuffer *cb, const QVector4D &c);
-    void setStencilRef(QVkCommandBuffer *cb, quint32 refValue);
+    void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport);
+    void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor);
+    void setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c);
+    void setStencilRef(QRhiCommandBuffer *cb, quint32 refValue);
 
-    void draw(QVkCommandBuffer *cb, quint32 vertexCount,
+    void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
               quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0);
-    void drawIndexed(QVkCommandBuffer *cb, quint32 indexCount,
+    void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                      quint32 instanceCount = 1, quint32 firstIndex = 0, qint32 vertexOffset = 0, quint32 firstInstance = 0);
 
     // make Y up and viewport.min/maxDepth 0/1
     QMatrix4x4 openGLCorrectionMatrix() const;
 
 private:
-    QVkRenderPrivate *d;
+    QRhiPrivate *d;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QVkRender::SurfaceImportFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::SurfaceImportFlags)
 
 QT_END_NAMESPACE
 

@@ -81,54 +81,54 @@ static const QSize OFFSCREEN_SIZE(512, 512);
 
 void TriangleOnCubeRenderer::initResources()
 {
-    m_vbuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = new QRhiBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_r->createBuffer(m_vbuf);
     m_vbufReady = false;
 
-    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 64);
+    m_ubuf = new QRhiBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
     m_r->createBuffer(m_ubuf);
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         m_image = QImage(QLatin1String(":/qt256.png")).mirrored().scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
 
-    m_tex = new QVkTexture(QVkTexture::RGBA8, OFFSCREEN_SIZE, QVkTexture::RenderTarget);
+    m_tex = new QRhiTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
     m_r->createTexture(m_tex);
 
-    m_sampler = new QVkSampler(QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Linear, QVkSampler::Repeat, QVkSampler::Repeat);
+    m_sampler = new QRhiSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
     m_r->createSampler(m_sampler);
 
-    m_srb = new QVkShaderResourceBindings;
-    const auto ubufVisibility = QVkShaderResourceBindings::Binding::VertexStage | QVkShaderResourceBindings::Binding::FragmentStage;
+    m_srb = new QRhiShaderResourceBindings;
+    const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
-        QVkShaderResourceBindings::Binding::sampledTexture(1, QVkShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
+        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
+        QRhiShaderResourceBindings::Binding::sampledTexture(1, QRhiShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
     };
     m_r->createShaderResourceBindings(m_srb);
 
-    QVkTextureRenderTarget::Flags rtFlags = 0;
+    QRhiTextureRenderTarget::Flags rtFlags = 0;
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
-        rtFlags |= QVkTextureRenderTarget::PreserveColorContents;
+        rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
 
-    m_rt = new QVkTextureRenderTarget(m_tex, rtFlags);
+    m_rt = new QRhiTextureRenderTarget(m_tex, rtFlags);
     m_r->createTextureRenderTarget(m_rt);
 
-    m_offscreenTriangle.setVkRender(m_r);
+    m_offscreenTriangle.setRhi(m_r);
     m_offscreenTriangle.initResources();
     m_offscreenTriangle.setScale(2);
 }
 
-void TriangleOnCubeRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
+void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
 {
-    m_ps = new QVkGraphicsPipeline;
+    m_ps = new QRhiGraphicsPipeline;
 
-    m_ps->targetBlends = { QVkGraphicsPipeline::TargetBlend() };
+    m_ps->targetBlends = { QRhiGraphicsPipeline::TargetBlend() };
 
     m_ps->depthTest = true;
     m_ps->depthWrite = true;
-    m_ps->depthOp = QVkGraphicsPipeline::Less;
+    m_ps->depthOp = QRhiGraphicsPipeline::Less;
 
-    m_ps->cullMode = QVkGraphicsPipeline::Back;
-    m_ps->frontFace = QVkGraphicsPipeline::CW;
+    m_ps->cullMode = QRhiGraphicsPipeline::Back;
+    m_ps->frontFace = QRhiGraphicsPipeline::CW;
 
     m_ps->sampleCount = SAMPLES;
 
@@ -137,20 +137,20 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QVkRenderPass *r
     QBakedShader fs = getShader(QLatin1String(":/texture.frag.qsb"));
     Q_ASSERT(fs.isValid());
     m_ps->shaderStages = {
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
+        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Vertex,
         vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Fragment,
+        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Fragment,
         fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
     };
 
-    QVkVertexInputLayout inputLayout;
+    QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        QVkVertexInputLayout::Binding(3 * sizeof(float)),
-        QVkVertexInputLayout::Binding(2 * sizeof(float))
+        QRhiVertexInputLayout::Binding(3 * sizeof(float)),
+        QRhiVertexInputLayout::Binding(2 * sizeof(float))
     };
     inputLayout.attributes = {
-        QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float3, 0, "POSITION"),
-        QVkVertexInputLayout::Attribute(1, 1, QVkVertexInputLayout::Attribute::Float2, 0, "TEXCOORD")
+        QRhiVertexInputLayout::Attribute(0, 0, QRhiVertexInputLayout::Attribute::Float3, 0, "POSITION"),
+        QRhiVertexInputLayout::Attribute(1, 1, QRhiVertexInputLayout::Attribute::Float2, 0, "TEXCOORD")
     };
 
     m_ps->vertexInputLayout = inputLayout;
@@ -218,9 +218,9 @@ void TriangleOnCubeRenderer::releaseOutputDependentResources()
     }
 }
 
-QVkRender::PassUpdates TriangleOnCubeRenderer::update()
+QRhi::PassUpdates TriangleOnCubeRenderer::update()
 {
-    QVkRender::PassUpdates u;
+    QRhi::PassUpdates u;
 
     if (!m_vbufReady) {
         m_vbufReady = true;
@@ -236,9 +236,9 @@ QVkRender::PassUpdates TriangleOnCubeRenderer::update()
     return u;
 }
 
-void TriangleOnCubeRenderer::queueOffscreenPass(QVkCommandBuffer *cb)
+void TriangleOnCubeRenderer::queueOffscreenPass(QRhiCommandBuffer *cb)
 {
-    QVkRender::PassUpdates u = m_offscreenTriangle.update();
+    QRhi::PassUpdates u = m_offscreenTriangle.update();
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING && !m_image.isNull()) {
         u.textureUploads.append({ m_tex, m_image });
@@ -247,9 +247,9 @@ void TriangleOnCubeRenderer::queueOffscreenPass(QVkCommandBuffer *cb)
     }
 
     const QVector4D clearColor(0.0f, 0.4f, 0.7f, 1.0f);
-    const QVkClearValue clearValues[] = {
+    const QRhiClearValue clearValues[] = {
         clearColor,
-        QVkClearValue(1.0f, 0)
+        QRhiClearValue(1.0f, 0)
     };
 
     m_r->beginPass(m_rt, cb, clearValues, u);
@@ -257,10 +257,10 @@ void TriangleOnCubeRenderer::queueOffscreenPass(QVkCommandBuffer *cb)
     m_r->endPass(cb);
 }
 
-void TriangleOnCubeRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
+void TriangleOnCubeRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
-    m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
-    m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setViewport(cb, QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setScissor(cb, QRhiScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
     m_r->setGraphicsPipeline(cb, m_ps);
     m_r->setVertexInput(cb, 0, { { m_vbuf, 0 }, { m_vbuf, 36 * 3 * sizeof(float) } });

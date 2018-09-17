@@ -59,15 +59,15 @@ Renderer::Renderer(QVulkanWindow *w)
 
 void Renderer::initResources()
 {
-    QVkRender::InitParams params;
+    QRhi::InitParams params;
     params.inst = m_window->vulkanInstance();
     params.physDev = m_window->physicalDevice();
     params.dev = m_window->device();
     params.cmdPool = m_window->graphicsCommandPool();
     params.gfxQueue = m_window->graphicsQueue();
-    m_r = new QVkRender(params);
+    m_r = new QRhi(params);
 
-    m_triRenderer.setVkRender(m_r);
+    m_triRenderer.setRhi(m_r);
     m_triRenderer.initResources();
 }
 
@@ -93,16 +93,16 @@ void Renderer::releaseResources()
 
 void Renderer::startNextFrame()
 {
-    QVkRenderTarget rt;
-    QVkCommandBuffer cb;
+    QRhiRenderTarget rt;
+    QRhiCommandBuffer cb;
     m_r->beginFrame(m_window, &rt, &cb);
 
-    QVkRender::PassUpdates u = m_triRenderer.update();
+    QRhi::PassUpdates u = m_triRenderer.update();
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
-    const QVkClearValue clearValues[] = {
+    const QRhiClearValue clearValues[] = {
         clearColor,
-        QVkClearValue(1.0f, 0), // depth, stencil
+        QRhiClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
     m_r->beginPass(&rt, &cb, clearValues, u);

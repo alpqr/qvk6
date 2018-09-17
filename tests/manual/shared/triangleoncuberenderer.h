@@ -34,30 +34,30 @@
 class TriangleOnCubeRenderer
 {
 public:
-    void setVkRender(QVkRender *r) { m_r = r; }
+    void setRhi(QRhi *r) { m_r = r; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
     bool isPipelineInitialized() const { return m_ps != nullptr; }
     void initResources();
     void releaseResources();
-    void initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize);
+    void initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize);
     void releaseOutputDependentResources();
-    QVkRender::PassUpdates update();
-    void queueOffscreenPass(QVkCommandBuffer *cb);
-    void queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels);
+    QRhi::PassUpdates update();
+    void queueOffscreenPass(QRhiCommandBuffer *cb);
+    void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
 
     static const int SAMPLES = 1; // 1 (or 0) = no MSAA; 2, 4, 8 = MSAA
 
 private:
-    QVkRender *m_r;
+    QRhi *m_r;
 
-    QVkBuffer *m_vbuf = nullptr;
+    QRhiBuffer *m_vbuf = nullptr;
     bool m_vbufReady = false;
-    QVkBuffer *m_ubuf = nullptr;
-    QVkTexture *m_tex = nullptr;
-    QVkSampler *m_sampler = nullptr;
-    QVkTextureRenderTarget *m_rt = nullptr;
-    QVkShaderResourceBindings *m_srb = nullptr;
-    QVkGraphicsPipeline *m_ps = nullptr;
+    QRhiBuffer *m_ubuf = nullptr;
+    QRhiTexture *m_tex = nullptr;
+    QRhiSampler *m_sampler = nullptr;
+    QRhiTextureRenderTarget *m_rt = nullptr;
+    QRhiShaderResourceBindings *m_srb = nullptr;
+    QRhiGraphicsPipeline *m_ps = nullptr;
 
     QVector3D m_translation;
     QMatrix4x4 m_proj;

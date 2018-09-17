@@ -47,28 +47,28 @@ static QBakedShader getShader(const QString &name)
 
 void TriangleRenderer::initResources()
 {
-    m_vbuf = new QVkBuffer(QVkBuffer::StaticType, QVkBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = new QRhiBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_r->createBuffer(m_vbuf);
     m_vbufReady = false;
 
-    m_ubuf = new QVkBuffer(QVkBuffer::DynamicType, QVkBuffer::UniformBuffer, 68);
+    m_ubuf = new QRhiBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 68);
     m_r->createBuffer(m_ubuf);
 
-    m_srb = new QVkShaderResourceBindings;
-    const auto ubufVisibility = QVkShaderResourceBindings::Binding::VertexStage | QVkShaderResourceBindings::Binding::FragmentStage;
+    m_srb = new QRhiShaderResourceBindings;
+    const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QVkShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 68)
+        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 68)
     };
     m_r->createShaderResourceBindings(m_srb);
 }
 
 // the ps depends on the renderpass -> so it is tied to the swapchain.
 // on the other hand, srb and buffers are referenced from the ps but can be reused.
-void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, const QSize &pixelSize)
+void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
 {
-    m_ps = new QVkGraphicsPipeline;
+    m_ps = new QRhiGraphicsPipeline;
 
-    QVkGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
+    QRhiGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
     premulAlphaBlend.enable = true;
     m_ps->targetBlends = { premulAlphaBlend };
 
@@ -79,19 +79,19 @@ void TriangleRenderer::initOutputDependentResources(const QVkRenderPass *rp, con
     QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
     Q_ASSERT(fs.isValid());
     m_ps->shaderStages = {
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Vertex,
+        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Vertex,
         vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
-        QVkGraphicsShaderStage(QVkGraphicsShaderStage::Fragment,
+        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Fragment,
         fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
     };
 
-    QVkVertexInputLayout inputLayout;
+    QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        QVkVertexInputLayout::Binding(7 * sizeof(float))
+        QRhiVertexInputLayout::Binding(7 * sizeof(float))
     };
     inputLayout.attributes = {
-        QVkVertexInputLayout::Attribute(0, 0, QVkVertexInputLayout::Attribute::Float2, 0, "POSITION"),
-        QVkVertexInputLayout::Attribute(0, 1, QVkVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR")
+        QRhiVertexInputLayout::Attribute(0, 0, QRhiVertexInputLayout::Attribute::Float2, 0, "POSITION"),
+        QRhiVertexInputLayout::Attribute(0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR")
     };
 
     m_ps->vertexInputLayout = inputLayout;
@@ -135,7 +135,7 @@ void TriangleRenderer::releaseOutputDependentResources()
     }
 }
 
-QVkRender::PassUpdates TriangleRenderer::update()
+QRhi::PassUpdates TriangleRenderer::update()
 {
 #if 0
     static int messWithBufferTrigger = 0;
@@ -148,7 +148,7 @@ QVkRender::PassUpdates TriangleRenderer::update()
     ++messWithBufferTrigger;
 #endif
 
-    QVkRender::PassUpdates u;
+    QRhi::PassUpdates u;
 
     if (!m_vbufReady) {
         m_vbufReady = true;
@@ -172,10 +172,10 @@ QVkRender::PassUpdates TriangleRenderer::update()
     return u;
 }
 
-void TriangleRenderer::queueDraw(QVkCommandBuffer *cb, const QSize &outputSizeInPixels)
+void TriangleRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
-    m_r->setViewport(cb, QVkViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
-    m_r->setScissor(cb, QVkScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setViewport(cb, QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setScissor(cb, QRhiScissor(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
 
     m_r->setGraphicsPipeline(cb, m_ps);
     m_r->setVertexInput(cb, 0, { { m_vbuf, 0 } });

@@ -59,6 +59,7 @@ class QRhiResourcePrivate
 public:
     virtual ~QRhiResourcePrivate();
     static QRhiResourcePrivate *get(QRhiResource *r) { return r->d_ptr; }
+    static const QRhiResourcePrivate *get(const QRhiResource *r) { return r->d_ptr; }
     QRhi *rhi = nullptr;
 };
 
@@ -131,6 +132,62 @@ struct QVkSamplerPrivate : public QRhiResourcePrivate
     VkSampler sampler = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
     uint generation = 0;
+};
+
+class QVkRenderPass : public QRhiRenderPass
+{
+public:
+    QVkRenderPass(QRhi *rhi);
+    void release() override;
+};
+
+struct QVkRenderPassPrivate : public QRhiResourcePrivate
+{
+    VkRenderPass rp = VK_NULL_HANDLE;
+    int lastActiveFrameSlot = -1;
+};
+
+struct QVkRenderTargetPrivate;
+
+class QVkRenderTarget : public QRhiRenderTarget
+{
+public:
+    QVkRenderTarget(QRhi *rhi);
+    void release() override;
+    QSize sizeInPixels() const override;
+    const QRhiRenderPass *renderPass() const override;
+
+protected:
+    QVkRenderTarget(QRhi *rhi, QVkRenderTargetPrivate *d);
+};
+
+struct QVkRenderTargetPrivate : public QRhiResourcePrivate
+{
+    VkFramebuffer fb = VK_NULL_HANDLE;
+    QRhiRenderPass *rp = nullptr;
+    QSize pixelSize;
+    int attCount = 0;
+    enum Type {
+        RtRef,
+        RtTexture
+    };
+    Type type = RtRef;
+};
+
+class QVkTextureRenderTarget : public QRhiTextureRenderTarget
+{
+public:
+    QVkTextureRenderTarget(QRhi *rhi);
+    void release() override;
+    bool build() override;
+    QSize sizeInPixels() const override;
+    const QRhiRenderPass *renderPass() const override;
+};
+
+struct QVkTextureRenderTargetPrivate : public QVkRenderTargetPrivate
+{
+    QVkTextureRenderTargetPrivate() { type = RtTexture; }
+    int lastActiveFrameSlot = -1;
 };
 
 class QVkShaderResourceBindings : public QRhiShaderResourceBindings
@@ -232,7 +289,7 @@ struct QVkSwapChainPrivate : public QRhiResourcePrivate
 
     quint32 currentImage = 0; // index in imageRes
     quint32 currentFrame = 0; // index in frameRes
-    QRhiRenderTarget rt;
+    QRhiRenderTarget *rt = nullptr;
 };
 
 class QRhiPrivate
@@ -333,7 +390,8 @@ public:
             RenderBuffer,
             Texture,
             Sampler,
-            TextureRenderTarget
+            TextureRenderTarget,
+            RenderPass
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -369,8 +427,10 @@ public:
             } sampler;
             struct {
                 VkFramebuffer fb;
-                VkRenderPass rp;
             } textureRenderTarget;
+            struct {
+                VkRenderPass rp;
+            } renderPass;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

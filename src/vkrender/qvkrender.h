@@ -284,57 +284,52 @@ protected:
                 Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_);
 };
 
-struct Q_VKR_EXPORT QRhiRenderPass
+class Q_VKR_EXPORT QRhiRenderPass : public QRhiResource
 {
-Q_VK_RES_PRIVATE(QRhiRenderPass)
-    VkRenderPass rp = VK_NULL_HANDLE;
-    friend class QVkGraphicsPipeline;
+protected:
+    QRhiRenderPass(QRhi *rhi, QRhiResourcePrivate *d);
 };
 
-struct Q_VKR_EXPORT QRhiRenderTarget
+class Q_VKR_EXPORT QRhiRenderTarget : public QRhiResource
 {
-    QSize sizeInPixels() const { return pixelSize; }
-    const QRhiRenderPass *renderPass() const { return &rp; }
+public:
+    virtual QSize sizeInPixels() const = 0;
+    virtual const QRhiRenderPass *renderPass() const = 0;
 
-Q_VK_RES_PRIVATE(QRhiRenderTarget)
-    VkFramebuffer fb = VK_NULL_HANDLE;
-    QRhiRenderPass rp;
-    QSize pixelSize;
-    int attCount = 0;
-    enum Type {
-        RtRef,
-        RtTexture
-    };
-    Type type = RtRef;
+protected:
+    QRhiRenderTarget(QRhi *rhi, QRhiResourcePrivate *d);
 };
 
-struct Q_VKR_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
+class Q_VKR_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
+public:
     enum Flag {
         PreserveColorContents = 1 << 0
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
-    // color only
-    QRhiTextureRenderTarget(QRhiTexture *texture_, Flags flags_ = 0)
-        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
-    { }
-    // color and depth-stencil, only color accessed afterwards
-    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
-        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
-    { }
-    // color and depth, both as textures accessible afterwards
-    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_ = 0)
-        : texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
-    { }
+//    // color only
+//    QRhiTextureRenderTarget(QRhiTexture *texture_, Flags flags_ = 0)
+//        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
+//    { }
+//    // color and depth-stencil, only color accessed afterwards
+//    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
+//        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
+//    { }
+//    // color and depth, both as textures accessible afterwards
+//    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_ = 0)
+//        : texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
+//    { }
 
     QRhiTexture *texture;
     QRhiTexture *depthTexture;
     QRhiRenderBuffer *depthStencilBuffer;
     Flags flags;
 
-Q_VK_RES_PRIVATE(QRhiTextureRenderTarget)
-    int lastActiveFrameSlot = -1;
+    virtual bool build() = 0;
+
+protected:
+    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
@@ -706,9 +701,7 @@ public:
                                QRhiSampler::Filter mipmapMode,
                                QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v);
 
-    bool createTextureRenderTarget(QRhiTextureRenderTarget *rt);
-
-    void releaseLater(QRhiTextureRenderTarget *rt);
+    QRhiTextureRenderTarget *createTextureRenderTarget();
 
     /*
       Render to a QWindow (must be VulkanSurface):

@@ -86,8 +86,8 @@ void TexturedCubeRenderer::initResources()
     m_tex = new QRhiTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()));
     m_r->createTexture(m_tex);
 
-    m_sampler = new QRhiSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
-    m_r->createSampler(m_sampler);
+    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
+    m_sampler->build();
 
     m_srb = new QRhiShaderResourceBindings;
     const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
@@ -154,7 +154,7 @@ void TexturedCubeRenderer::releaseResources()
     }
 
     if (m_sampler) {
-        m_r->releaseLater(m_sampler);
+        m_sampler->release();
         delete m_sampler;
         m_sampler = nullptr;
     }

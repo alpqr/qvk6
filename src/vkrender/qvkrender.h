@@ -284,8 +284,9 @@ Q_VK_RES_PRIVATE(QRhiTexture)
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
 
-struct Q_VKR_EXPORT QRhiSampler
+class Q_VKR_EXPORT QRhiSampler : public QRhiResource
 {
+public:
     enum Filter {
         Nearest,
         Linear
@@ -299,21 +300,17 @@ struct Q_VKR_EXPORT QRhiSampler
         MirrorOnce
     };
 
-    QRhiSampler(Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
-        : magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
-          addressU(u_), addressV(v_)
-    { }
-
     Filter magFilter;
     Filter minFilter;
     Filter mipmapMode;
     AddressMode addressU;
     AddressMode addressV;
 
-Q_VK_RES_PRIVATE(QRhiSampler)
-    VkSampler sampler = VK_NULL_HANDLE;
-    int lastActiveFrameSlot = -1;
-    uint generation = 0;
+    virtual bool build() = 0;
+
+protected:
+    QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
+                Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_);
 };
 
 struct Q_VKR_EXPORT QRhiRenderTarget
@@ -743,7 +740,11 @@ public:
     bool createRenderBuffer(QRhiRenderBuffer *rb);
 
     bool createTexture(QRhiTexture *tex);
-    bool createSampler(QRhiSampler *sampler);
+
+    QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                               QRhiSampler::Filter mipmapMode,
+                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v);
+
     bool createTextureRenderTarget(QRhiTextureRenderTarget *rt);
 
     void releaseLater(QRhiGraphicsPipeline *ps);
@@ -751,7 +752,6 @@ public:
     void releaseLater(QRhiBuffer *buf);
     void releaseLater(QRhiRenderBuffer *rb);
     void releaseLater(QRhiTexture *tex);
-    void releaseLater(QRhiSampler *sampler);
     void releaseLater(QRhiTextureRenderTarget *rt);
 
     /*

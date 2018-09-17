@@ -62,7 +62,22 @@ public:
     QRhi *rhi = nullptr;
 };
 
-class Q_VKR_EXPORT QVkSwapChain : public QRhiSwapChain
+class QVkSampler : public QRhiSampler
+{
+public:
+    QVkSampler(QRhi *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
+    void release() override;
+    bool build() override;
+};
+
+struct QVkSamplerPrivate : public QRhiResourcePrivate
+{
+    VkSampler sampler = VK_NULL_HANDLE;
+    int lastActiveFrameSlot = -1;
+    uint generation = 0;
+};
+
+class QVkSwapChain : public QRhiSwapChain
 {
 public:
     QVkSwapChain(QRhi *rhi);

@@ -56,6 +56,7 @@ QT_BEGIN_NAMESPACE
 #define RES_GET_D(t, x) static_cast<t##Private *>(QRhiResourcePrivate::get(x))
 #define RHI_D(t) t *d = static_cast<t *>(d_ptr)
 #define RHI_GET_D(t, x) static_cast<t *>(QRhiPrivate::get(x))
+#define RES_RHI(t) t *rhiD = RHI_GET_D(t, d->rhi)
 
 QRhi::QRhi(const InitParams &params)
     : d_ptr(new QRhiVulkan(this))
@@ -1371,31 +1372,11 @@ static inline VkSamplerAddressMode toVkAddressMode(QRhiSampler::AddressMode m)
     }
 }
 
-bool QRhi::createSampler(QRhiSampler *sampler)
+QRhiSampler *QRhi::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                                 QRhiSampler::Filter mipmapMode,
+                                 QRhiSampler::AddressMode u, QRhiSampler::AddressMode v)
 {
-    if (sampler->sampler)
-        releaseLater(sampler);
-
-    RHI_D(QRhiVulkan);
-    VkSamplerCreateInfo samplerInfo;
-    memset(&samplerInfo, 0, sizeof(samplerInfo));
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = toVkFilter(sampler->magFilter);
-    samplerInfo.minFilter = toVkFilter(sampler->minFilter);
-    samplerInfo.mipmapMode = toVkMipmapMode(sampler->mipmapMode);
-    samplerInfo.addressModeU = toVkAddressMode(sampler->addressU);
-    samplerInfo.addressModeV = toVkAddressMode(sampler->addressV);
-    samplerInfo.maxAnisotropy = 1.0f;
-
-    VkResult err = d->df->vkCreateSampler(d->dev, &samplerInfo, nullptr, &sampler->sampler);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to create sampler: %d", err);
-        return false;
-    }
-
-    sampler->lastActiveFrameSlot = -1;
-    sampler->generation += 1;
-    return true;
+    return new QVkSampler(this, magFilter, minFilter, mipmapMode, u, v);
 }
 
 bool QRhi::createTextureRenderTarget(QRhiTextureRenderTarget *rt)
@@ -2036,9 +2017,9 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                 bd.stex.texGeneration = b.stex.tex->generation;
-                bd.stex.samplerGeneration = b.stex.sampler->generation;
+                bd.stex.samplerGeneration = RES_GET_D(QVkSampler, b.stex.sampler)->generation;
                 VkDescriptorImageInfo imageInfo;
-                imageInfo.sampler = b.stex.sampler->sampler;
+                imageInfo.sampler = RES_GET_D(QVkSampler, b.stex.sampler)->sampler;
                 imageInfo.imageView = b.stex.tex->imageView;
                 imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 imageInfos.append(imageInfo);
@@ -2322,7 +2303,7 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
             b.stex.tex->lastActiveFrameSlot = d->currentFrameSlot;
-            b.stex.sampler->lastActiveFrameSlot = d->currentFrameSlot;
+            RES_GET_D(QVkSampler, b.stex.sampler)->lastActiveFrameSlot = d->currentFrameSlot;
             break;
         default:
             Q_UNREACHABLE();
@@ -2345,11 +2326,11 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
             if (b.stex.tex->generation != bd.stex.texGeneration
-                    || b.stex.sampler->generation != bd.stex.samplerGeneration)
+                    || RES_GET_D(QVkSampler, b.stex.sampler)->generation != bd.stex.samplerGeneration)
             {
                 srbUpdate = true;
                 bd.stex.texGeneration = b.stex.tex->generation;
-                bd.stex.samplerGeneration = b.stex.sampler->generation;
+                bd.stex.samplerGeneration = RES_GET_D(QVkSampler, b.stex.sampler)->generation;
             }
             break;
         default:
@@ -2653,22 +2634,6 @@ void QRhi::releaseLater(QRhiTexture *tex)
     d->releaseQueue.append(e);
 }
 
-void QRhi::releaseLater(QRhiSampler *sampler)
-{
-    if (!sampler->sampler)
-        return;
-
-    QRhiVulkan::DeferredReleaseEntry e;
-    e.type = QRhiVulkan::DeferredReleaseEntry::Sampler;
-    e.lastActiveFrameSlot = sampler->lastActiveFrameSlot;
-
-    e.sampler.sampler = sampler->sampler;
-    sampler->sampler = VK_NULL_HANDLE;
-
-    RHI_D(QRhiVulkan);
-    d->releaseQueue.append(e);
-}
-
 void QRhi::releaseLater(QRhiTextureRenderTarget *rt)
 {
     if (!rt->fb)
@@ -2769,9 +2734,67 @@ QRhiResource::~QRhiResource()
     delete d_ptr;
 }
 
+QRhiSampler::QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
+                         Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
+    : QRhiResource(rhi, d),
+      magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
+      addressU(u_), addressV(v_)
+{
+}
+
 QRhiSwapChain::QRhiSwapChain(QRhi *rhi, QRhiResourcePrivate *d)
     : QRhiResource(rhi, d)
 {
+}
+
+QVkSampler::QVkSampler(QRhi *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)
+    : QRhiSampler(rhi, new QVkSamplerPrivate, magFilter, minFilter, mipmapMode, u, v)
+{
+}
+
+void QVkSampler::release()
+{
+    RES_D(QVkSampler);
+    if (!d->sampler)
+        return;
+
+    QRhiVulkan::DeferredReleaseEntry e;
+    e.type = QRhiVulkan::DeferredReleaseEntry::Sampler;
+    e.lastActiveFrameSlot = d->lastActiveFrameSlot;
+
+    e.sampler.sampler = d->sampler;
+    d->sampler = VK_NULL_HANDLE;
+
+    RES_RHI(QRhiVulkan);
+    rhiD->releaseQueue.append(e);
+}
+
+bool QVkSampler::build()
+{
+    RES_D(QVkSampler);
+    if (d->sampler)
+        release();
+
+    VkSamplerCreateInfo samplerInfo;
+    memset(&samplerInfo, 0, sizeof(samplerInfo));
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = toVkFilter(magFilter);
+    samplerInfo.minFilter = toVkFilter(minFilter);
+    samplerInfo.mipmapMode = toVkMipmapMode(mipmapMode);
+    samplerInfo.addressModeU = toVkAddressMode(addressU);
+    samplerInfo.addressModeV = toVkAddressMode(addressV);
+    samplerInfo.maxAnisotropy = 1.0f;
+
+    RES_RHI(QRhiVulkan);
+    VkResult err = rhiD->df->vkCreateSampler(rhiD->dev, &samplerInfo, nullptr, &d->sampler);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create sampler: %d", err);
+        return false;
+    }
+
+    d->lastActiveFrameSlot = -1;
+    d->generation += 1;
+    return true;
 }
 
 QVkSwapChain::QVkSwapChain(QRhi *rhi)
@@ -2782,7 +2805,8 @@ QVkSwapChain::QVkSwapChain(QRhi *rhi)
 void QVkSwapChain::release()
 {
     RES_D(QVkSwapChain);
-    RHI_GET_D(QRhiVulkan, d->rhi)->releaseSwapChainResources(this);
+    RES_RHI(QRhiVulkan);
+    rhiD->releaseSwapChainResources(this);
 }
 
 QRhiCommandBuffer *QVkSwapChain::currentFrameCommandBuffer()
@@ -2813,7 +2837,8 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize, SurfaceImportF
                          QRhiRenderBuffer *depthStencil, int sampleCount)
 {
     RES_D(QVkSwapChain);
-    return RHI_GET_D(QRhiVulkan, d->rhi)->rebuildSwapChain(window, pixelSize, flags, depthStencil, sampleCount, this);
+    RES_RHI(QRhiVulkan);
+    return rhiD->rebuildSwapChain(window, pixelSize, flags, depthStencil, sampleCount, this);
 }
 
 QT_END_NAMESPACE

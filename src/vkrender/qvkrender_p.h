@@ -275,21 +275,29 @@ class QVkSwapChain : public QRhiSwapChain
 public:
     QVkSwapChain(QRhi *rhi);
     void release() override;
+
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
     const QRhiRenderPass *defaultRenderPass() const override;
     QSize sizeInPixels() const override;
+
     bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
                QRhiRenderBuffer *depthStencil, int sampleCount) override;
+
+    bool build(QObject *target) override;
 };
 
 struct QVkSwapChainPrivate : public QRhiResourcePrivate
 {
-    QVkSwapChainPrivate(QRhi *rhi) : rtWrapper(rhi) { }
+    QVkSwapChainPrivate(QRhi *rhi)
+        : rtWrapper(rhi),
+          cbWrapper(rhi)
+    { }
 
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
 
+    QVulkanWindow *wrapWindow = nullptr;
     QSize pixelSize;
     bool supportsReadback = false;
     VkSwapchainKHR sc = VK_NULL_HANDLE;
@@ -301,12 +309,12 @@ struct QVkSwapChainPrivate : public QRhiResourcePrivate
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
     VkRenderPass rp;
     QVkRenderTarget rtWrapper;
+    QVkCommandBuffer cbWrapper;
 
     struct ImageResources {
         VkImage image = VK_NULL_HANDLE;
         VkImageView imageView = VK_NULL_HANDLE;
         VkCommandBuffer cmdBuf = VK_NULL_HANDLE;
-        QVkCommandBuffer *cmdBufWrapper = nullptr;
         VkFence cmdFence = VK_NULL_HANDLE;
         bool cmdFenceWaitable = false;
         VkFramebuffer fb = VK_NULL_HANDLE;
@@ -346,9 +354,6 @@ public:
                               VkImageAspectFlags aspectMask, VkSampleCountFlagBits sampleCount,
                               VkDeviceMemory *mem, VkImage *images, VkImageView *views, int count);
 
-    bool rebuildSwapChain(QWindow *window, const QSize &pixelSize,
-                          QRhiSwapChain::SurfaceImportFlags flags, QRhiRenderBuffer *depthStencil,
-                          int sampleCount, QRhiSwapChain *outSwapChain);
     bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QRhiSwapChain::SurfaceImportFlags flags,
                            QRhiSwapChain *swapChain);
     void releaseSwapChainResources(QRhiSwapChain *swapChain);
@@ -359,6 +364,13 @@ public:
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 
+    QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain);
+
+    QRhi::FrameOpResult beginWrapperFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult endWrapperFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void finishFrame();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);

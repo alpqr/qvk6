@@ -67,7 +67,7 @@ public:
 
 protected:
     QVulkanWindow *m_window;
-    QRhi *m_r;
-    QRhiRenderPass m_rp;
+    QRhi *m_r = nullptr;
+    QRhiSwapChain *m_sc = nullptr;
     TriangleRenderer m_triRenderer;
 };

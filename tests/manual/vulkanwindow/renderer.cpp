@@ -69,13 +69,14 @@ void Renderer::initResources()
 
     m_triRenderer.setRhi(m_r);
     m_triRenderer.initResources();
+
+    m_sc = m_r->createSwapChain();
 }
 
 void Renderer::initSwapChainResources()
 {
-    m_r->importVulkanWindowRenderPass(m_window, &m_rp);
-
-    m_triRenderer.initOutputDependentResources(&m_rp, m_window->swapChainImageSize());
+    m_sc->build(m_window);
+    m_triRenderer.initOutputDependentResources(m_sc->defaultRenderPass(), m_sc->sizeInPixels());
 }
 
 void Renderer::releaseSwapChainResources()
@@ -87,15 +88,17 @@ void Renderer::releaseResources()
 {
     m_triRenderer.releaseResources();
 
+    delete m_sc;
+    m_sc = nullptr;
+
     delete m_r;
     m_r = nullptr;
 }
 
 void Renderer::startNextFrame()
 {
-    QRhiRenderTarget rt;
-    QRhiCommandBuffer cb;
-    m_r->beginFrame(m_window, &rt, &cb);
+    m_r->beginFrame(m_sc);
+    QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
 
     QRhi::PassUpdates u = m_triRenderer.update();
 
@@ -105,11 +108,11 @@ void Renderer::startNextFrame()
         QRhiClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
-    m_r->beginPass(&rt, &cb, clearValues, u);
-    m_triRenderer.queueDraw(&cb, rt.sizeInPixels());
-    m_r->endPass(&cb);
+    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
+    m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_r->endPass(cb);
 
-    m_r->endFrame(m_window);
+    m_r->endFrame(m_sc);
 
     m_window->frameReady();
     m_window->requestUpdate(); // render continuously, throttled by the presentation rate

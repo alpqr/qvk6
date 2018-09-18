@@ -541,92 +541,6 @@ QRhiSwapChain *QRhi::createSwapChain()
     return new QVkSwapChain(this);
 }
 
-bool QRhiVulkan::rebuildSwapChain(QWindow *window, const QSize &pixelSize,
-                                  QRhiSwapChain::SurfaceImportFlags flags, QRhiRenderBuffer *depthStencil,
-                                  int sampleCount, QRhiSwapChain *outSwapChain)
-{
-    // Can be called multiple times without a call to releaseSwapChainResources
-    // - this is typical when a window is resized.
-
-    VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(window);
-    if (!surface) {
-        qWarning("Failed to get surface for window");
-        return false;
-    }
-
-    if (!vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(
-            inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
-        vkGetPhysicalDeviceSurfaceFormatsKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>(
-            inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceFormatsKHR"));
-        if (!vkGetPhysicalDeviceSurfaceCapabilitiesKHR || !vkGetPhysicalDeviceSurfaceFormatsKHR) {
-            qWarning("Physical device surface queries not available");
-            return false;
-        }
-    }
-
-    quint32 formatCount = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(physDev, surface, &formatCount, nullptr);
-    QVector<VkSurfaceFormatKHR> formats(formatCount);
-    if (formatCount)
-        vkGetPhysicalDeviceSurfaceFormatsKHR(physDev, surface, &formatCount, formats.data());
-
-    QVkSwapChainPrivate *swapChainD = RES_GET_D(QVkSwapChain, outSwapChain);
-
-    // Pick the preferred format, if there is one.
-    if (!formats.isEmpty() && formats[0].format != VK_FORMAT_UNDEFINED) {
-        swapChainD->colorFormat = formats[0].format;
-        swapChainD->colorSpace = formats[0].colorSpace;
-    }
-
-    swapChainD->depthStencil = flags.testFlag(QRhiSwapChain::UseDepthStencil) ? depthStencil : nullptr;
-    if (swapChainD->depthStencil && swapChainD->depthStencil->sampleCount != sampleCount) {
-        qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
-                 swapChainD->depthStencil->sampleCount, sampleCount);
-    }
-    swapChainD->sampleCount = effectiveSampleCount(sampleCount);
-
-    if (!recreateSwapChain(surface, pixelSize, flags, outSwapChain))
-        return false;
-
-    QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &swapChainD->rtWrapper);
-    createDefaultRenderPass(&swapChainD->rp, swapChainD->depthStencil != nullptr,
-                            swapChainD->sampleCount, swapChainD->colorFormat);
-
-    RES_GET_D(QVkRenderPass, &rtD->rp)->rp = swapChainD->rp;
-    rtD->attCount = 1;
-    if (swapChainD->depthStencil)
-        rtD->attCount += 1;
-    if (swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT)
-        rtD->attCount += 1;
-
-    for (int i = 0; i < swapChainD->bufferCount; ++i) {
-        QVkSwapChainPrivate::ImageResources &image(swapChainD->imageRes[i]);
-
-        VkImageView views[3] = {
-            image.imageView,
-            swapChainD->depthStencil ? RES_GET_D(QVkRenderBuffer, swapChainD->depthStencil)->imageView : VK_NULL_HANDLE,
-            swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
-        };
-        VkFramebufferCreateInfo fbInfo;
-        memset(&fbInfo, 0, sizeof(fbInfo));
-        fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = RES_GET_D(QVkRenderPass, &rtD->rp)->rp;
-        fbInfo.attachmentCount = rtD->attCount;
-        fbInfo.pAttachments = views;
-        fbInfo.width = swapChainD->pixelSize.width();
-        fbInfo.height = swapChainD->pixelSize.height();
-        fbInfo.layers = 1;
-        VkResult err = df->vkCreateFramebuffer(dev, &fbInfo, nullptr, &image.fb);
-        if (err != VK_SUCCESS) {
-            qWarning("Failed to create framebuffer: %d", err);
-            return false;
-        }
-    }
-
-    return true;
-}
-
 bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
                                     QRhiSwapChain::SurfaceImportFlags flags, QRhiSwapChain *swapChain)
 {
@@ -873,8 +787,6 @@ void QRhiVulkan::releaseSwapChainResources(QRhiSwapChain *swapChain)
             df->vkFreeCommandBuffers(dev, cmdPool, 1, &image.cmdBuf);
             image.cmdBuf = VK_NULL_HANDLE;
         }
-        delete image.cmdBufWrapper;
-        image.cmdBufWrapper = nullptr;
         if (image.msaaImageView) {
             df->vkDestroyImageView(dev, image.msaaImageView, nullptr);
             image.msaaImageView = VK_NULL_HANDLE;
@@ -911,115 +823,163 @@ static inline bool checkDeviceLost(VkResult err)
 QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
 {
     RHI_D(QRhiVulkan);
-    QVkSwapChainPrivate *swapChainD = RES_GET_D(QVkSwapChain, swapChain);
+    return d->beginFrame(swapChain);
+}
 
+QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
+{
+    RHI_D(QRhiVulkan);
+    return d->endFrame(swapChain);
+}
+
+QRhi::FrameOpResult QRhiVulkan::beginFrame(QRhiSwapChain *swapChain)
+{
+    if (RES_GET_D(QVkSwapChain, swapChain)->wrapWindow)
+        return beginWrapperFrame(swapChain);
+    else
+        return beginNonWrapperFrame(swapChain);
+}
+
+QRhi::FrameOpResult QRhiVulkan::endFrame(QRhiSwapChain *swapChain)
+{
+    if (RES_GET_D(QVkSwapChain, swapChain)->wrapWindow)
+        return endWrapperFrame(swapChain);
+    else
+        return endNonWrapperFrame(swapChain);
+}
+
+QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
+{
+    QVkSwapChainPrivate *swapChainD = RES_GET_D(QVkSwapChain, swapChain);
+    QVulkanWindow *w = swapChainD->wrapWindow;
+
+    RES_GET_D(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = w->currentCommandBuffer();
+
+    QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &swapChainD->rtWrapper);
+    rtD->fb = w->currentFramebuffer();
+    swapChainD->pixelSize = rtD->pixelSize = w->swapChainImageSize();
+
+    currentFrameSlot = w->currentFrame();
+
+    prepareNewFrame(&swapChainD->cbWrapper);
+
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::endWrapperFrame(QRhiSwapChain *swapChain)
+{
+    Q_UNUSED(swapChain);
+
+    finishFrame();
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
+{
+    QVkSwapChainPrivate *swapChainD = RES_GET_D(QVkSwapChain, swapChain);
     QVkSwapChainPrivate::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
 
     if (!frame.imageAcquired) {
         // Wait if we are too far ahead, i.e. the thread gets throttled based on the presentation rate
         // (note that we are using FIFO mode -> vsync)
         if (frame.fenceWaitable) {
-            d->df->vkWaitForFences(d->dev, 1, &frame.fence, VK_TRUE, UINT64_MAX);
-            d->df->vkResetFences(d->dev, 1, &frame.fence);
+            df->vkWaitForFences(dev, 1, &frame.fence, VK_TRUE, UINT64_MAX);
+            df->vkResetFences(dev, 1, &frame.fence);
             frame.fenceWaitable = false;
         }
 
         // move on to next swapchain image
-        VkResult err = d->vkAcquireNextImageKHR(d->dev, swapChainD->sc, UINT64_MAX,
-                                                frame.imageSem, frame.fence, &swapChainD->currentImage);
+        VkResult err = vkAcquireNextImageKHR(dev, swapChainD->sc, UINT64_MAX,
+                                             frame.imageSem, frame.fence, &swapChainD->currentImage);
         if (err == VK_SUCCESS || err == VK_SUBOPTIMAL_KHR) {
             frame.imageSemWaitable = true;
             frame.imageAcquired = true;
             frame.fenceWaitable = true;
         } else if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-            return FrameOpSwapChainOutOfDate;
+            return QRhi::FrameOpSwapChainOutOfDate;
         } else {
             if (checkDeviceLost(err))
-                return FrameOpDeviceLost;
+                return QRhi::FrameOpDeviceLost;
             else
                 qWarning("Failed to acquire next swapchain image: %d", err);
-            return FrameOpError;
+            return QRhi::FrameOpError;
         }
     }
 
     // make sure the previous draw for the same image has finished
     QVkSwapChainPrivate::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
     if (image.cmdFenceWaitable) {
-        d->df->vkWaitForFences(d->dev, 1, &image.cmdFence, VK_TRUE, UINT64_MAX);
-        d->df->vkResetFences(d->dev, 1, &image.cmdFence);
+        df->vkWaitForFences(dev, 1, &image.cmdFence, VK_TRUE, UINT64_MAX);
+        df->vkResetFences(dev, 1, &image.cmdFence);
         image.cmdFenceWaitable = false;
     }
 
     // build new draw command buffer
     if (image.cmdBuf) {
-        d->df->vkFreeCommandBuffers(d->dev, d->cmdPool, 1, &image.cmdBuf);
+        df->vkFreeCommandBuffers(dev, cmdPool, 1, &image.cmdBuf);
         image.cmdBuf = VK_NULL_HANDLE;
     }
 
     VkCommandBufferAllocateInfo cmdBufInfo;
     memset(&cmdBufInfo, 0, sizeof(cmdBufInfo));
     cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdBufInfo.commandPool = d->cmdPool;
+    cmdBufInfo.commandPool = cmdPool;
     cmdBufInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmdBufInfo.commandBufferCount = 1;
 
-    VkResult err = d->df->vkAllocateCommandBuffers(d->dev, &cmdBufInfo, &image.cmdBuf);
+    VkResult err = df->vkAllocateCommandBuffers(dev, &cmdBufInfo, &image.cmdBuf);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
-            return FrameOpDeviceLost;
+            return QRhi::FrameOpDeviceLost;
         else
             qWarning("Failed to allocate frame command buffer: %d", err);
-        return FrameOpError;
+        return QRhi::FrameOpError;
     }
 
     VkCommandBufferBeginInfo cmdBufBeginInfo;
     memset(&cmdBufBeginInfo, 0, sizeof(cmdBufBeginInfo));
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    err = d->df->vkBeginCommandBuffer(image.cmdBuf, &cmdBufBeginInfo);
+    err = df->vkBeginCommandBuffer(image.cmdBuf, &cmdBufBeginInfo);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
-            return FrameOpDeviceLost;
+            return QRhi::FrameOpDeviceLost;
         else
             qWarning("Failed to begin frame command buffer: %d", err);
-        return FrameOpError;
+        return QRhi::FrameOpError;
     }
 
-    if (!image.cmdBufWrapper)
-        image.cmdBufWrapper = new QVkCommandBuffer(this);
-
-    RES_GET_D(QVkCommandBuffer, image.cmdBufWrapper)->cb = image.cmdBuf;
+    RES_GET_D(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = image.cmdBuf;
 
     QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &swapChainD->rtWrapper);
     rtD->fb = image.fb;
     rtD->pixelSize = swapChainD->pixelSize;
 
-    d->currentFrameSlot = swapChainD->currentFrame;
+    currentFrameSlot = swapChainD->currentFrame;
     if (swapChainD->depthStencil)
-        RES_GET_D(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = d->currentFrameSlot;
+        RES_GET_D(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = currentFrameSlot;
 
-    d->prepareNewFrame(image.cmdBufWrapper);
+    prepareNewFrame(&swapChainD->cbWrapper);
 
-    return FrameOpSuccess;
+    return QRhi::FrameOpSuccess;
 }
 
-QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 {
-    RHI_D(QRhiVulkan);
     QVkSwapChainPrivate *swapChainD = RES_GET_D(QVkSwapChain, swapChain);
 
-    d->finishFrame();
+    finishFrame();
 
     QVkSwapChainPrivate::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
     QVkSwapChainPrivate::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
 
-    VkResult err = d->df->vkEndCommandBuffer(image.cmdBuf);
+    VkResult err = df->vkEndCommandBuffer(image.cmdBuf);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
-            return FrameOpDeviceLost;
+            return QRhi::FrameOpDeviceLost;
         else
             qWarning("Failed to end frame command buffer: %d", err);
-        return FrameOpError;
+        return QRhi::FrameOpError;
     }
 
     // submit draw calls
@@ -1040,16 +1000,16 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
 
     Q_ASSERT(!image.cmdFenceWaitable);
 
-    err = d->df->vkQueueSubmit(d->gfxQueue, 1, &submitInfo, image.cmdFence);
+    err = df->vkQueueSubmit(gfxQueue, 1, &submitInfo, image.cmdFence);
     if (err == VK_SUCCESS) {
         frame.imageSemWaitable = false;
         image.cmdFenceWaitable = true;
     } else {
         if (checkDeviceLost(err))
-            return FrameOpDeviceLost;
+            return QRhi::FrameOpDeviceLost;
         else
             qWarning("Failed to submit to graphics queue: %d", err);
-        return FrameOpError;
+        return QRhi::FrameOpError;
     }
 
     VkPresentInfoKHR presInfo;
@@ -1061,16 +1021,16 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
     presInfo.waitSemaphoreCount = 1;
     presInfo.pWaitSemaphores = &frame.drawSem; // gfxQueueFamilyIdx == presQueueFamilyIdx ? &frame.drawSem : &frame.presTransSem;
 
-    err = d->vkQueuePresentKHR(d->gfxQueue, &presInfo);
+    err = vkQueuePresentKHR(gfxQueue, &presInfo);
     if (err != VK_SUCCESS) {
         if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-            return FrameOpSwapChainOutOfDate;
+            return QRhi::FrameOpSwapChainOutOfDate;
         } else if (err != VK_SUBOPTIMAL_KHR) {
             if (checkDeviceLost(err))
-                return FrameOpDeviceLost;
+                return QRhi::FrameOpDeviceLost;
             else
                 qWarning("Failed to present: %d", err);
-            return FrameOpError;
+            return QRhi::FrameOpError;
         }
     }
 
@@ -1078,38 +1038,7 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
 
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QVK_FRAMES_IN_FLIGHT;
 
-    return FrameOpSuccess;
-}
-
-void QRhi::importVulkanWindowRenderPass(QVulkanWindow *window, QRhiRenderPass *outRp)
-{
-    // ###
-    //outRp->rp = window->defaultRenderPass();
-}
-
-void QRhi::beginFrame(QVulkanWindow *window,
-                      QRhiRenderTarget *outCurrentFrameRenderTarget,
-                      QRhiCommandBuffer *outCurrentFrameCommandBuffer)
-{
-    RHI_D(QRhiVulkan);
-
-    // ###
-//    outCurrentFrameRenderTarget->fb = window->currentFramebuffer();
-//    importVulkanWindowRenderPass(window, &outCurrentFrameRenderTarget->rp);
-//    outCurrentFrameRenderTarget->pixelSize = window->swapChainImageSize();
-//    outCurrentFrameRenderTarget->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-
-    //outCurrentFrameCommandBuffer->cb = window->currentCommandBuffer();
-
-    d->currentFrameSlot = window->currentFrame();
-    d->prepareNewFrame(outCurrentFrameCommandBuffer);
-}
-
-void QRhi::endFrame(QVulkanWindow *window)
-{
-    Q_UNUSED(window);
-    RHI_D(QRhiVulkan);
-    d->finishFrame();
+    return QRhi::FrameOpSuccess;
 }
 
 static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage)
@@ -3082,6 +3011,9 @@ QVkSwapChain::QVkSwapChain(QRhi *rhi)
 void QVkSwapChain::release()
 {
     RES_D(QVkSwapChain);
+    if (d->wrapWindow)
+        return;
+
     RES_RHI(QRhiVulkan);
     rhiD->releaseSwapChainResources(this);
 }
@@ -3089,7 +3021,7 @@ void QVkSwapChain::release()
 QRhiCommandBuffer *QVkSwapChain::currentFrameCommandBuffer()
 {
     RES_D(QVkSwapChain);
-    return d->imageRes[d->currentImage].cmdBufWrapper;
+    return &d->cbWrapper;
 }
 
 QRhiRenderTarget *QVkSwapChain::currentFrameRenderTarget()
@@ -3113,9 +3045,106 @@ QSize QVkSwapChain::sizeInPixels() const
 bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
                          QRhiRenderBuffer *depthStencil, int sampleCount)
 {
+    // Can be called multiple times without a call to release()
+    // - this is typical when a window is resized.
+
     RES_D(QVkSwapChain);
     RES_RHI(QRhiVulkan);
-    return rhiD->rebuildSwapChain(window, pixelSize, flags, depthStencil, sampleCount, this);
+
+    VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(window);
+    if (!surface) {
+        qWarning("Failed to get surface for window");
+        return false;
+    }
+
+    if (!rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
+        rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(
+                    rhiD->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
+        rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>(
+                    rhiD->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceFormatsKHR"));
+        if (!rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR || !rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR) {
+            qWarning("Physical device surface queries not available");
+            return false;
+        }
+    }
+
+    quint32 formatCount = 0;
+    rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR(rhiD->physDev, surface, &formatCount, nullptr);
+    QVector<VkSurfaceFormatKHR> formats(formatCount);
+    if (formatCount)
+        rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR(rhiD->physDev, surface, &formatCount, formats.data());
+
+    // Pick the preferred format, if there is one.
+    if (!formats.isEmpty() && formats[0].format != VK_FORMAT_UNDEFINED) {
+        d->colorFormat = formats[0].format;
+        d->colorSpace = formats[0].colorSpace;
+    }
+
+    d->depthStencil = flags.testFlag(QRhiSwapChain::UseDepthStencil) ? depthStencil : nullptr;
+    if (d->depthStencil && d->depthStencil->sampleCount != sampleCount) {
+        qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
+                 d->depthStencil->sampleCount, sampleCount);
+    }
+    d->sampleCount = rhiD->effectiveSampleCount(sampleCount);
+
+    if (!rhiD->recreateSwapChain(surface, pixelSize, flags, this))
+        return false;
+
+    QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &d->rtWrapper);
+    rhiD->createDefaultRenderPass(&d->rp, d->depthStencil != nullptr, d->sampleCount, d->colorFormat);
+
+    RES_GET_D(QVkRenderPass, &rtD->rp)->rp = d->rp;
+    rtD->attCount = 1;
+    if (d->depthStencil)
+        rtD->attCount += 1;
+    if (d->sampleCount > VK_SAMPLE_COUNT_1_BIT)
+        rtD->attCount += 1;
+
+    for (int i = 0; i < d->bufferCount; ++i) {
+        QVkSwapChainPrivate::ImageResources &image(d->imageRes[i]);
+
+        VkImageView views[3] = {
+            image.imageView,
+            d->depthStencil ? RES_GET_D(QVkRenderBuffer, d->depthStencil)->imageView : VK_NULL_HANDLE,
+            d->sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
+        };
+        VkFramebufferCreateInfo fbInfo;
+        memset(&fbInfo, 0, sizeof(fbInfo));
+        fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        fbInfo.renderPass = RES_GET_D(QVkRenderPass, &rtD->rp)->rp;
+        fbInfo.attachmentCount = rtD->attCount;
+        fbInfo.pAttachments = views;
+        fbInfo.width = d->pixelSize.width();
+        fbInfo.height = d->pixelSize.height();
+        fbInfo.layers = 1;
+        VkResult err = rhiD->df->vkCreateFramebuffer(rhiD->dev, &fbInfo, nullptr, &image.fb);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create framebuffer: %d", err);
+            return false;
+        }
+    }
+
+    d->wrapWindow = nullptr;
+    return true;
+}
+
+bool QVkSwapChain::build(QObject *target)
+{
+    RES_D(QVkSwapChain);
+    if (d->sc)
+        release();
+
+    QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(target);
+    if (vkw) {
+        QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &d->rtWrapper);
+        RES_GET_D(QVkRenderPass, &rtD->rp)->rp = vkw->defaultRenderPass();
+        d->pixelSize = rtD->pixelSize = vkw->swapChainImageSize();
+        rtD->attCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+        d->wrapWindow = vkw;
+        return true;
+    }
+
+    return false;
 }
 
 QT_END_NAMESPACE

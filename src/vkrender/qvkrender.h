@@ -550,6 +550,8 @@ public:
     virtual bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
                        QRhiRenderBuffer *depthStencil, int sampleCount) = 0;
 
+    virtual bool build(QObject *target) = 0; // integrate with an existing output mgmt fw, for instance, QVulkanWindow
+
 protected:
     QRhiSwapChain(QRhi *rhi, QRhiResourcePrivate *d);
 };
@@ -694,32 +696,17 @@ public:
         Call build() on the swapchain whenever the size is different than before.
         Call release() on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
         Then on every frame:
-           beginFrame(sc)
-           beginPass(sc->currentFrameRenderTarget(), sc->currentFrameCommandBuffer(), clearValues, updates)
+           beginFrame(sc);
+           beginPass(sc->currentFrameRenderTarget(), sc->currentFrameCommandBuffer(), clearValues, updates);
            ...
-           endPass(sc->currentFrameCommandBuffer())
-           endFrame(sc) // this queues the Present, begin/endFrame manages double buffering internally
+           endPass(sc->currentFrameCommandBuffer());
+           endFrame(sc); // this queues the Present, begin/endFrame manages double buffering internally
+
+      Also works with a QVulkanWindow from startNextFrame(). Use the overload of build() in initSwapChainResources().
      */
     QRhiSwapChain *createSwapChain();
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
-
-    /*
-      Render to a QVulkanWindow from a startNextFrame() implementation:
-         QRhiRenderTarget currentFrameRenderTarget;
-         QRhiCommandBuffer currentFrameCommandBuffer;
-         beginFrame(window, &currentFrameRenderTarget, &currentFrameCommandBuffer)
-         beginPass(currentFrameRenderTarget, currentFrameCommandBuffer, clearValues, updates)
-         ...
-         endPass(currentFrameCommandBuffer)
-         endFrame(window)
-     */
-    void beginFrame(QVulkanWindow *window,
-                    QRhiRenderTarget *outCurrentFrameRenderTarget,
-                    QRhiCommandBuffer *outCurrentFrameCommandBuffer);
-    void endFrame(QVulkanWindow *window);
-    // the renderpass may be needed before beginFrame can be called
-    void importVulkanWindowRenderPass(QVulkanWindow *window, QRhiRenderPass *outRenderPass);
 
     void beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const PassUpdates &updates);
     void endPass(QRhiCommandBuffer *cb);

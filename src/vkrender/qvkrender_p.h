@@ -359,6 +359,7 @@ public:
     void releaseSwapChainResources(QRhiSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();
+    QVector<int> supportedSampleCounts() const;
     VkSampleCountFlagBits effectiveSampleCount(int sampleCount);
     bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
     bool ensurePipelineCache();

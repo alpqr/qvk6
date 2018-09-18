@@ -462,7 +462,7 @@ VkFormat QRhiVulkan::optimalDepthStencilFormat()
     return optimalDsFormat;
 }
 
-bool QRhiVulkan::createDefaultRenderPass(QRhiRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat)
+bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat)
 {
     VkAttachmentDescription attDesc[3];
     memset(attDesc, 0, sizeof(attDesc));
@@ -527,7 +527,7 @@ bool QRhiVulkan::createDefaultRenderPass(QRhiRenderPass *rp, bool hasDepthStenci
         subPassDesc.pResolveAttachments = &resolveRef;
     }
 
-    VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, &rp->rp);
+    VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, rp);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create renderpass: %d", err);
         return false;
@@ -589,14 +589,16 @@ bool QRhiVulkan::rebuildSwapChain(QWindow *window, const QSize &pixelSize,
     if (!recreateSwapChain(surface, pixelSize, flags, outSwapChain))
         return false;
 
-    createDefaultRenderPass(&swapChainD->rt.rp, swapChainD->depthStencil != nullptr,
+    QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &swapChainD->rtWrapper);
+    createDefaultRenderPass(&swapChainD->rp, swapChainD->depthStencil != nullptr,
                             swapChainD->sampleCount, swapChainD->colorFormat);
 
-    swapChainD->rt.attCount = 1;
+    RES_GET_D(QVkRenderPass, &rtD->rp)->rp = swapChainD->rp;
+    rtD->attCount = 1;
     if (swapChainD->depthStencil)
-        swapChainD->rt.attCount += 1;
+        rtD->attCount += 1;
     if (swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT)
-        swapChainD->rt.attCount += 1;
+        rtD->attCount += 1;
 
     for (int i = 0; i < swapChainD->bufferCount; ++i) {
         QVkSwapChainPrivate::ImageResources &image(swapChainD->imageRes[i]);
@@ -609,8 +611,8 @@ bool QRhiVulkan::rebuildSwapChain(QWindow *window, const QSize &pixelSize,
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = swapChainD->rt.rp.rp;
-        fbInfo.attachmentCount = swapChainD->rt.attCount;
+        fbInfo.renderPass = RES_GET_D(QVkRenderPass, &rtD->rp)->rp;
+        fbInfo.attachmentCount = rtD->attCount;
         fbInfo.pAttachments = views;
         fbInfo.width = swapChainD->pixelSize.width();
         fbInfo.height = swapChainD->pixelSize.height();
@@ -886,15 +888,10 @@ void QRhiVulkan::releaseSwapChainResources(QRhiSwapChain *swapChain)
         swapChainD->msaaImageMem = VK_NULL_HANDLE;
     }
 
-    if (swapChainD->rt) {
-        swapChainD->rt->release();
-        delete swapChainD->rt;
-        swapChainD->rt = nullptr;
+    if (swapChainD->rp) {
+        df->vkDestroyRenderPass(dev, swapChainD->rp, nullptr);
+        swapChainD->rp = VK_NULL_HANDLE;
     }
-//    if (swapChainD->rt.rp.rp) {
-//        df->vkDestroyRenderPass(dev, swapChainD->rt.rp.rp, nullptr);
-//        swapChainD->rt.rp.rp = VK_NULL_HANDLE;
-//    }
 
     vkDestroySwapchainKHR(dev, swapChainD->sc, nullptr);
     swapChainD->sc = VK_NULL_HANDLE;
@@ -986,11 +983,11 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
         return FrameOpError;
     }
 
-    swapChainD->rt.fb = image.fb;
-    swapChainD->rt.pixelSize = swapChainD->pixelSize;
+    QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &swapChainD->rtWrapper);
+    rtD->fb = image.fb;
+    rtD->pixelSize = swapChainD->pixelSize;
 
     d->currentFrameSlot = swapChainD->currentFrame;
-    RES_GET_D(QVkRenderPass, swapChainD->rt.rp)->lastActiveFrameSlot = d->currentFrameSlot;
     if (swapChainD->depthStencil)
         RES_GET_D(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = d->currentFrameSlot;
 
@@ -1079,7 +1076,8 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
 
 void QRhi::importVulkanWindowRenderPass(QVulkanWindow *window, QRhiRenderPass *outRp)
 {
-    outRp->rp = window->defaultRenderPass();
+    // ###
+    //outRp->rp = window->defaultRenderPass();
 }
 
 void QRhi::beginFrame(QVulkanWindow *window,
@@ -1088,10 +1086,11 @@ void QRhi::beginFrame(QVulkanWindow *window,
 {
     RHI_D(QRhiVulkan);
 
-    outCurrentFrameRenderTarget->fb = window->currentFramebuffer();
-    importVulkanWindowRenderPass(window, &outCurrentFrameRenderTarget->rp);
-    outCurrentFrameRenderTarget->pixelSize = window->swapChainImageSize();
-    outCurrentFrameRenderTarget->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+    // ###
+//    outCurrentFrameRenderTarget->fb = window->currentFramebuffer();
+//    importVulkanWindowRenderPass(window, &outCurrentFrameRenderTarget->rp);
+//    outCurrentFrameRenderTarget->pixelSize = window->swapChainImageSize();
+//    outCurrentFrameRenderTarget->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
 
     outCurrentFrameCommandBuffer->cb = window->currentCommandBuffer();
 
@@ -1238,9 +1237,24 @@ QRhiSampler *QRhi::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Fil
     return new QVkSampler(this, magFilter, minFilter, mipmapMode, u, v);
 }
 
-QRhiTextureRenderTarget *QRhi::createTextureRenderTarget()
+QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
+                                                         QRhiTextureRenderTarget::Flags flags)
 {
-    return new QVkTextureRenderTarget(this);
+    return new QVkTextureRenderTarget(this, texture, flags);
+}
+
+QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
+                                                         QRhiRenderBuffer *depthStencilBuffer,
+                                                         QRhiTextureRenderTarget::Flags flags)
+{
+    return new QVkTextureRenderTarget(this, texture, depthStencilBuffer, flags);
+}
+
+QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
+                                                         QRhiTexture *depthTexture,
+                                                         QRhiTextureRenderTarget::Flags flags)
+{
+    return new QVkTextureRenderTarget(this, texture, depthTexture, flags);
 }
 
 VkShaderModule QRhiVulkan::createShader(const QByteArray &spirv)
@@ -1794,7 +1808,7 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
 {
     QVkTextureRenderTargetPrivate *rtD = RES_GET_D(QVkTextureRenderTarget, rt);
     rtD->lastActiveFrameSlot = currentFrameSlot;
-    RES_GET_D(QVkRenderPass, rtD->rp)->lastActiveFrameSlot = currentFrameSlot;
+    RES_GET_D(QVkRenderPass, &rtD->rp)->lastActiveFrameSlot = currentFrameSlot;
     // the renderpass will implicitly transition so no barrier needed here
     RES_GET_D(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 }
@@ -1821,7 +1835,7 @@ void QRhi::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClea
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
     rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = RES_GET_D(QVkRenderPass, rtD->rp)->rp;
+    rpBeginInfo.renderPass = RES_GET_D(QVkRenderPass, &rtD->rp)->rp;
     rpBeginInfo.framebuffer = rtD->fb;
     rpBeginInfo.renderArea.extent.width = rtD->pixelSize.width();
     rpBeginInfo.renderArea.extent.height = rtD->pixelSize.height();
@@ -2202,6 +2216,37 @@ QRhiSampler::QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
 {
 }
 
+QRhiRenderPass::QRhiRenderPass(QRhi *rhi, QRhiResourcePrivate *d)
+    : QRhiResource(rhi, d)
+{
+}
+
+QRhiRenderTarget::QRhiRenderTarget(QRhi *rhi, QRhiResourcePrivate *d)
+    : QRhiResource(rhi, d)
+{
+}
+
+QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+                                                 QRhiTexture *texture_, Flags flags_)
+    : QRhiRenderTarget(rhi, d),
+      texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
+{
+}
+
+QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+                                                 QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_)
+    : QRhiRenderTarget(rhi, d),
+      texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
+{
+}
+
+QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+                                                 QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_)
+    : QRhiRenderTarget(rhi, d),
+      texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
+{
+}
+
 QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhi *rhi, QRhiResourcePrivate *d)
     : QRhiResource(rhi, d)
 {
@@ -2557,7 +2602,7 @@ void QVkRenderPass::release()
 }
 
 QVkRenderTarget::QVkRenderTarget(QRhi *rhi)
-    : QRhiRenderTarget(rhi, new QVkRenderTargetPrivate)
+    : QRhiRenderTarget(rhi, new QVkRenderTargetPrivate(rhi))
 {
 }
 
@@ -2582,11 +2627,21 @@ QSize QVkRenderTarget::sizeInPixels() const
 const QRhiRenderPass *QVkRenderTarget::renderPass() const
 {
     RES_D(const QVkRenderTarget);
-    return d->rp;
+    return &d->rp;
 }
 
-QVkTextureRenderTarget::QVkTextureRenderTarget(QRhi *rhi)
-    : QRhiTextureRenderTarget(rhi, new QVkTextureRenderTargetPrivate)
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, Flags flags)
+    : QRhiTextureRenderTarget(rhi, new QVkTextureRenderTargetPrivate(rhi), texture, flags)
+{
+}
+
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags)
+    : QRhiTextureRenderTarget(rhi, new QVkTextureRenderTargetPrivate(rhi), texture, depthStencilBuffer, flags)
+{
+}
+
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags)
+    : QRhiTextureRenderTarget(rhi, new QVkTextureRenderTargetPrivate(rhi), texture, depthTexture, flags)
 {
 }
 
@@ -2597,7 +2652,7 @@ void QVkTextureRenderTarget::release()
     if (!d->fb)
         return;
 
-    d->rp->release();
+    d->rp.release();
 
     QRhiVulkan::DeferredReleaseEntry e;
     e.type = QRhiVulkan::DeferredReleaseEntry::TextureRenderTarget;
@@ -2669,7 +2724,7 @@ bool QVkTextureRenderTarget::build()
     if (hasDepthStencil)
         rpInfo.attachmentCount += 1;
 
-    VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, &RES_GET_D(QVkRenderPass, d->rp)->rp);
+    VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, &RES_GET_D(QVkRenderPass, &d->rp)->rp);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create renderpass: %d", err);
         return false;
@@ -2686,7 +2741,7 @@ bool QVkTextureRenderTarget::build()
     VkFramebufferCreateInfo fbInfo;
     memset(&fbInfo, 0, sizeof(fbInfo));
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbInfo.renderPass = RES_GET_D(QVkRenderPass, d->rp)->rp;
+    fbInfo.renderPass = RES_GET_D(QVkRenderPass, &d->rp)->rp;
     fbInfo.attachmentCount = attCount;
     fbInfo.pAttachments = views;
     fbInfo.width = texture->pixelSize.width();
@@ -2715,7 +2770,7 @@ QSize QVkTextureRenderTarget::sizeInPixels() const
 const QRhiRenderPass *QVkTextureRenderTarget::renderPass() const
 {
     RES_D(const QVkTextureRenderTarget);
-    return d->rp;
+    return &d->rp;
 }
 
 QVkShaderResourceBindings::QVkShaderResourceBindings(QRhi *rhi)
@@ -2992,7 +3047,7 @@ bool QVkGraphicsPipeline::build()
 }
 
 QVkSwapChain::QVkSwapChain(QRhi *rhi)
-    : QRhiSwapChain(rhi, new QVkSwapChainPrivate)
+    : QRhiSwapChain(rhi, new QVkSwapChainPrivate(rhi))
 {
 }
 
@@ -3012,13 +3067,13 @@ QRhiCommandBuffer *QVkSwapChain::currentFrameCommandBuffer()
 QRhiRenderTarget *QVkSwapChain::currentFrameRenderTarget()
 {
     RES_D(QVkSwapChain);
-    return &d->rt;
+    return &d->rtWrapper;
 }
 
 const QRhiRenderPass *QVkSwapChain::defaultRenderPass() const
 {
     RES_D(const QVkSwapChain);
-    return d->rt.renderPass();
+    return d->rtWrapper.renderPass();
 }
 
 QSize QVkSwapChain::sizeInPixels() const

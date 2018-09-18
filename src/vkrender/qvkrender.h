@@ -150,7 +150,7 @@ struct Q_VKR_EXPORT QRhiGraphicsShaderStage
 class QRhi;
 class QRhiResourcePrivate;
 
-class QRhiResource
+class Q_VKR_EXPORT QRhiResource
 {
 public:
     virtual ~QRhiResource();
@@ -308,19 +308,6 @@ public:
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
-//    // color only
-//    QRhiTextureRenderTarget(QRhiTexture *texture_, Flags flags_ = 0)
-//        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
-//    { }
-//    // color and depth-stencil, only color accessed afterwards
-//    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_ = 0)
-//        : texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
-//    { }
-//    // color and depth, both as textures accessible afterwards
-//    QRhiTextureRenderTarget(QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_ = 0)
-//        : texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
-//    { }
-
     QRhiTexture *texture;
     QRhiTexture *depthTexture;
     QRhiRenderBuffer *depthStencilBuffer;
@@ -329,7 +316,12 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+                            QRhiTexture *texture_, Flags flags_);
+    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+                            QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_);
+    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+                            QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
@@ -701,7 +693,14 @@ public:
                                QRhiSampler::Filter mipmapMode,
                                QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v);
 
-    QRhiTextureRenderTarget *createTextureRenderTarget();
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiTextureRenderTarget::Flags flags = 0);
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiRenderBuffer *depthStencilBuffer,
+                                                       QRhiTextureRenderTarget::Flags flags = 0);
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiTexture *depthTexture,
+                                                       QRhiTextureRenderTarget::Flags flags = 0);
 
     /*
       Render to a QWindow (must be VulkanSurface):

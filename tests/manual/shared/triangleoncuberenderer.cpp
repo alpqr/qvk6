@@ -109,8 +109,8 @@ void TriangleOnCubeRenderer::initResources()
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
 
-    m_rt = new QRhiTextureRenderTarget(m_tex, rtFlags);
-    m_r->createTextureRenderTarget(m_rt);
+    m_rt = m_r->createTextureRenderTarget(m_tex, rtFlags);
+    m_rt->build();
 
     m_offscreenTriangle.setRhi(m_r);
     m_offscreenTriangle.initResources();
@@ -177,7 +177,7 @@ void TriangleOnCubeRenderer::releaseResources()
     }
 
     if (m_rt) {
-        m_r->releaseLater(m_rt);
+        m_rt->release();
         delete m_rt;
         m_rt = nullptr;
     }

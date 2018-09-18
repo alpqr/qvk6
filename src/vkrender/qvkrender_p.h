@@ -163,13 +163,14 @@ protected:
 
 struct QVkRenderTargetPrivate : public QRhiResourcePrivate
 {
+    QVkRenderTargetPrivate(QRhi *rhi) : rp(rhi) { }
     VkFramebuffer fb = VK_NULL_HANDLE;
-    QRhiRenderPass *rp = nullptr;
+    QVkRenderPass rp;
     QSize pixelSize;
     int attCount = 0;
     enum Type {
-        RtRef,
-        RtTexture
+        RtRef,    // no Vk* are owned directly by the object
+        RtTexture // this is a QVkTextureRenderTarget, owns
     };
     Type type = RtRef;
 };
@@ -177,7 +178,9 @@ struct QVkRenderTargetPrivate : public QRhiResourcePrivate
 class QVkTextureRenderTarget : public QRhiTextureRenderTarget
 {
 public:
-    QVkTextureRenderTarget(QRhi *rhi);
+    QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, Flags flags);
+    QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags);
+    QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags);
     void release() override;
     bool build() override;
     QSize sizeInPixels() const override;
@@ -186,7 +189,12 @@ public:
 
 struct QVkTextureRenderTargetPrivate : public QVkRenderTargetPrivate
 {
-    QVkTextureRenderTargetPrivate() { type = RtTexture; }
+    QVkTextureRenderTargetPrivate(QRhi *rhi)
+        : QVkRenderTargetPrivate(rhi)
+    {
+        type = RtTexture;
+    }
+
     int lastActiveFrameSlot = -1;
 };
 
@@ -254,6 +262,8 @@ public:
 
 struct QVkSwapChainPrivate : public QRhiResourcePrivate
 {
+    QVkSwapChainPrivate(QRhi *rhi) : rtWrapper(rhi) { }
+
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
 
@@ -266,6 +276,8 @@ struct QVkSwapChainPrivate : public QRhiResourcePrivate
     QRhiRenderBuffer *depthStencil = nullptr;
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
+    VkRenderPass rp;
+    QVkRenderTarget rtWrapper;
 
     struct ImageResources {
         VkImage image = VK_NULL_HANDLE;
@@ -289,7 +301,6 @@ struct QVkSwapChainPrivate : public QRhiResourcePrivate
 
     quint32 currentImage = 0; // index in imageRes
     quint32 currentFrame = 0; // index in frameRes
-    QRhiRenderTarget *rt = nullptr;
 };
 
 class QRhiPrivate
@@ -320,7 +331,7 @@ public:
 
     VkFormat optimalDepthStencilFormat();
     VkSampleCountFlagBits effectiveSampleCount(int sampleCount);
-    bool createDefaultRenderPass(QRhiRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
+    bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 

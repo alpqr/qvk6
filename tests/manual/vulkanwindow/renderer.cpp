@@ -75,13 +75,14 @@ void Renderer::initResources()
 
 void Renderer::initSwapChainResources()
 {
-    m_sc->build(m_window);
+    m_sc->build(m_window); // this just wraps the window's swapchain
     m_triRenderer.initOutputDependentResources(m_sc->defaultRenderPass(), m_sc->sizeInPixels());
 }
 
 void Renderer::releaseSwapChainResources()
 {
     m_triRenderer.releaseOutputDependentResources();
+    m_sc->release(); // no-op, the real work is done by QVulkanWindow
 }
 
 void Renderer::releaseResources()

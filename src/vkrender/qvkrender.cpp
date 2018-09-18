@@ -869,10 +869,12 @@ void QRhiVulkan::releaseSwapChainResources(QRhiSwapChain *swapChain)
             df->vkDestroyImageView(dev, image.imageView, nullptr);
             image.imageView = VK_NULL_HANDLE;
         }
-        if (image.cmdBuf.cb) {
-            df->vkFreeCommandBuffers(dev, cmdPool, 1, &image.cmdBuf.cb);
-            image.cmdBuf.cb = VK_NULL_HANDLE;
+        if (image.cmdBuf) {
+            df->vkFreeCommandBuffers(dev, cmdPool, 1, &image.cmdBuf);
+            image.cmdBuf = VK_NULL_HANDLE;
         }
+        delete image.cmdBufWrapper;
+        image.cmdBufWrapper = nullptr;
         if (image.msaaImageView) {
             df->vkDestroyImageView(dev, image.msaaImageView, nullptr);
             image.msaaImageView = VK_NULL_HANDLE;
@@ -949,9 +951,9 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
     }
 
     // build new draw command buffer
-    if (image.cmdBuf.cb) {
-        d->df->vkFreeCommandBuffers(d->dev, d->cmdPool, 1, &image.cmdBuf.cb);
-        image.cmdBuf.cb = VK_NULL_HANDLE;
+    if (image.cmdBuf) {
+        d->df->vkFreeCommandBuffers(d->dev, d->cmdPool, 1, &image.cmdBuf);
+        image.cmdBuf = VK_NULL_HANDLE;
     }
 
     VkCommandBufferAllocateInfo cmdBufInfo;
@@ -961,7 +963,7 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
     cmdBufInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     cmdBufInfo.commandBufferCount = 1;
 
-    VkResult err = d->df->vkAllocateCommandBuffers(d->dev, &cmdBufInfo, &image.cmdBuf.cb);
+    VkResult err = d->df->vkAllocateCommandBuffers(d->dev, &cmdBufInfo, &image.cmdBuf);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
             return FrameOpDeviceLost;
@@ -974,7 +976,7 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
     memset(&cmdBufBeginInfo, 0, sizeof(cmdBufBeginInfo));
     cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    err = d->df->vkBeginCommandBuffer(image.cmdBuf.cb, &cmdBufBeginInfo);
+    err = d->df->vkBeginCommandBuffer(image.cmdBuf, &cmdBufBeginInfo);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
             return FrameOpDeviceLost;
@@ -982,6 +984,11 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
             qWarning("Failed to begin frame command buffer: %d", err);
         return FrameOpError;
     }
+
+    if (!image.cmdBufWrapper)
+        image.cmdBufWrapper = new QVkCommandBuffer(this);
+
+    RES_GET_D(QVkCommandBuffer, image.cmdBufWrapper)->cb = image.cmdBuf;
 
     QVkRenderTargetPrivate *rtD = RES_GET_D(QVkRenderTarget, &swapChainD->rtWrapper);
     rtD->fb = image.fb;
@@ -991,7 +998,7 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
     if (swapChainD->depthStencil)
         RES_GET_D(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = d->currentFrameSlot;
 
-    d->prepareNewFrame(&image.cmdBuf);
+    d->prepareNewFrame(image.cmdBufWrapper);
 
     return FrameOpSuccess;
 }
@@ -1006,7 +1013,7 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
     QVkSwapChainPrivate::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
     QVkSwapChainPrivate::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
 
-    VkResult err = d->df->vkEndCommandBuffer(image.cmdBuf.cb);
+    VkResult err = d->df->vkEndCommandBuffer(image.cmdBuf);
     if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
             return FrameOpDeviceLost;
@@ -1020,7 +1027,7 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
     memset(&submitInfo, 0, sizeof(submitInfo));
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &image.cmdBuf.cb;
+    submitInfo.pCommandBuffers = &image.cmdBuf;
     if (frame.imageSemWaitable) {
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = &frame.imageSem;
@@ -1092,7 +1099,7 @@ void QRhi::beginFrame(QVulkanWindow *window,
 //    outCurrentFrameRenderTarget->pixelSize = window->swapChainImageSize();
 //    outCurrentFrameRenderTarget->attCount = window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
 
-    outCurrentFrameCommandBuffer->cb = window->currentCommandBuffer();
+    //outCurrentFrameCommandBuffer->cb = window->currentCommandBuffer();
 
     d->currentFrameSlot = window->currentFrame();
     d->prepareNewFrame(outCurrentFrameCommandBuffer);
@@ -1642,7 +1649,7 @@ void QRhiVulkan::bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf)
     bufMemBarrier.buffer = RES_GET_D(QVkBuffer, buf)->buffers[0];
     bufMemBarrier.size = buf->size;
 
-    df->vkCmdPipelineBarrier(cb->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
+    df->vkCmdPipelineBarrier(RES_GET_D(QVkCommandBuffer, cb)->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
                              0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
 }
 
@@ -1664,7 +1671,7 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     barrier.dstAccessMask = dstAccess;
     barrier.image = texD->image;
 
-    df->vkCmdPipelineBarrier(cb->cb,
+    df->vkCmdPipelineBarrier(RES_GET_D(QVkCommandBuffer, cb)->cb,
                              srcStage,
                              dstStage,
                              0, 0, nullptr, 0, nullptr,
@@ -1675,6 +1682,8 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
 
 void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates)
 {
+    QVkCommandBufferPrivate *cbD = RES_GET_D(QVkCommandBuffer, cb);
+
     struct ChangeRange {
         int changeBegin = -1;
         int changeEnd = -1;
@@ -1723,7 +1732,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
         memset(&copyInfo, 0, sizeof(copyInfo));
         copyInfo.size = u.buf->size;
 
-        df->vkCmdCopyBuffer(cb->cb, ubufD->stagingBuffer, ubufD->buffers[0], 1, &copyInfo);
+        df->vkCmdCopyBuffer(cbD->cb, ubufD->stagingBuffer, ubufD->buffers[0], 1, &copyInfo);
         bufferBarrier(cb, u.buf);
         ubufD->lastActiveFrameSlot = currentFrameSlot;
     }
@@ -1794,7 +1803,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
         copyInfo.imageExtent.height = u.image.height();
         copyInfo.imageExtent.depth = 1;
 
-        df->vkCmdCopyBufferToImage(cb->cb, utexD->stagingBuffer, utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+        df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffer, utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
         utexD->lastActiveFrameSlot = currentFrameSlot;
 
         imageBarrier(cb, u.tex,
@@ -1830,7 +1839,8 @@ void QRhi::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClea
     if (rtD->type == QVkRenderTargetPrivate::RtTexture)
         d->activateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(rt));
 
-    cb->currentTarget = rt;
+    QVkCommandBufferPrivate *cbD = RES_GET_D(QVkCommandBuffer, cb);
+    cbD->currentTarget = rt;
 
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
@@ -1851,7 +1861,7 @@ void QRhi::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClea
     }
     rpBeginInfo.pClearValues = cvs.constData();
 
-    d->df->vkCmdBeginRenderPass(cb->cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+    d->df->vkCmdBeginRenderPass(cbD->cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
     d->inPass = true;
 }
 
@@ -1859,13 +1869,14 @@ void QRhi::endPass(QRhiCommandBuffer *cb)
 {
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
-    d->df->vkCmdEndRenderPass(cb->cb);
+    QVkCommandBufferPrivate *cbD = RES_GET_D(QVkCommandBuffer, cb);
+    d->df->vkCmdEndRenderPass(cbD->cb);
     d->inPass = false;
 
-    if (RES_GET_D(QVkRenderTarget, cb->currentTarget)->type == QVkRenderTargetPrivate::RtTexture)
-        d->deactivateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(cb->currentTarget));
+    if (RES_GET_D(QVkRenderTarget, cbD->currentTarget)->type == QVkRenderTargetPrivate::RtTexture)
+        d->deactivateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(cbD->currentTarget));
 
-    cb->currentTarget = nullptr;
+    cbD->currentTarget = nullptr;
 }
 
 void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
@@ -1928,17 +1939,18 @@ void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, 
     if (srbUpdate)
         d->updateShaderResourceBindings(srb, descSetIdx);
 
-    if (cb->currentPipeline != ps) {
+    QVkCommandBufferPrivate *cbD = RES_GET_D(QVkCommandBuffer, cb);
+    if (cbD->currentPipeline != ps) {
         psD->lastActiveFrameSlot = d->currentFrameSlot;
-        d->df->vkCmdBindPipeline(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
-        cb->currentPipeline = ps;
+        d->df->vkCmdBindPipeline(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
+        cbD->currentPipeline = ps;
     }
 
-    if (hasDynamicBufferInSrb || srbUpdate || cb->currentSrb != srb) {
+    if (hasDynamicBufferInSrb || srbUpdate || cbD->currentSrb != srb) {
         srbD->lastActiveFrameSlot = d->currentFrameSlot;
-        d->df->vkCmdBindDescriptorSets(cb->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
+        d->df->vkCmdBindDescriptorSets(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
                                        &srbD->descSets[descSetIdx], 0, nullptr);
-        cb->currentSrb = srb;
+        cbD->currentSrb = srb;
     }
 }
 
@@ -1959,8 +1971,9 @@ void QRhi::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector
         bufs.append(bufD->buffers[idx]);
         ofs.append(bindings[i].second);
     }
+    QVkCommandBufferPrivate *cbD = RES_GET_D(QVkCommandBuffer, cb);
     if (!bufs.isEmpty())
-        d->df->vkCmdBindVertexBuffers(cb->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+        d->df->vkCmdBindVertexBuffers(cbD->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
 
     if (indexBuf) {
         QVkBufferPrivate *bufD = RES_GET_D(QVkBuffer, indexBuf);
@@ -1968,7 +1981,7 @@ void QRhi::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector
         bufD->lastActiveFrameSlot = d->currentFrameSlot;
         const int idx = indexBuf->isStatic() ? 0 : d->currentFrameSlot;
         const VkIndexType type = indexFormat == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
-        d->df->vkCmdBindIndexBuffer(cb->cb, bufD->buffers[idx], indexOffset, type);
+        d->df->vkCmdBindIndexBuffer(cbD->cb, bufD->buffers[idx], indexOffset, type);
     }
 }
 
@@ -1989,7 +2002,7 @@ void QRhi::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
     VkViewport vp = toVkViewport(viewport);
-    d->df->vkCmdSetViewport(cb->cb, 0, 1, &vp);
+    d->df->vkCmdSetViewport(RES_GET_D(QVkCommandBuffer, cb)->cb, 0, 1, &vp);
 }
 
 static inline VkRect2D toVkScissor(const QRhiScissor &scissor)
@@ -2007,7 +2020,7 @@ void QRhi::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
     VkRect2D s = toVkScissor(scissor);
-    d->df->vkCmdSetScissor(cb->cb, 0, 1, &s);
+    d->df->vkCmdSetScissor(RES_GET_D(QVkCommandBuffer, cb)->cb, 0, 1, &s);
 }
 
 void QRhi::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
@@ -2015,14 +2028,14 @@ void QRhi::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
     const float bc[4] = { c.x(), c.y(), c.z(), c.w() };
-    d->df->vkCmdSetBlendConstants(cb->cb, bc);
+    d->df->vkCmdSetBlendConstants(RES_GET_D(QVkCommandBuffer, cb)->cb, bc);
 }
 
 void QRhi::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
 {
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
-    d->df->vkCmdSetStencilReference(cb->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
+    d->df->vkCmdSetStencilReference(RES_GET_D(QVkCommandBuffer, cb)->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
 }
 
 void QRhi::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
@@ -2030,7 +2043,7 @@ void QRhi::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
 {
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
-    d->df->vkCmdDraw(cb->cb, vertexCount, instanceCount, firstVertex, firstInstance);
+    d->df->vkCmdDraw(RES_GET_D(QVkCommandBuffer, cb)->cb, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void QRhi::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
@@ -2038,7 +2051,7 @@ void QRhi::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 {
     RHI_D(QRhiVulkan);
     Q_ASSERT(d->inPass);
-    d->df->vkCmdDrawIndexed(cb->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    d->df->vkCmdDrawIndexed(RES_GET_D(QVkCommandBuffer, cb)->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
@@ -2048,7 +2061,7 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 
     executeDeferredReleases();
 
-    cb->resetState();
+    RES_GET_D(QVkCommandBuffer, cb)->resetState();
 }
 
 void QRhiVulkan::finishFrame()
@@ -2258,6 +2271,11 @@ QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhi *rhi, QRhiResourcePrivate *d)
 }
 
 QRhiSwapChain::QRhiSwapChain(QRhi *rhi, QRhiResourcePrivate *d)
+    : QRhiResource(rhi, d)
+{
+}
+
+QRhiCommandBuffer::QRhiCommandBuffer(QRhi *rhi, QRhiResourcePrivate *d)
     : QRhiResource(rhi, d)
 {
 }
@@ -3046,6 +3064,16 @@ bool QVkGraphicsPipeline::build()
     }
 }
 
+QVkCommandBuffer::QVkCommandBuffer(QRhi *rhi)
+    : QRhiCommandBuffer(rhi, new QVkCommandBufferPrivate)
+{
+}
+
+void QVkCommandBuffer::release()
+{
+    Q_UNREACHABLE();
+}
+
 QVkSwapChain::QVkSwapChain(QRhi *rhi)
     : QRhiSwapChain(rhi, new QVkSwapChainPrivate(rhi))
 {
@@ -3061,7 +3089,7 @@ void QVkSwapChain::release()
 QRhiCommandBuffer *QVkSwapChain::currentFrameCommandBuffer()
 {
     RES_D(QVkSwapChain);
-    return &d->imageRes[d->currentImage].cmdBuf;
+    return d->imageRes[d->currentImage].cmdBufWrapper;
 }
 
 QRhiRenderTarget *QVkSwapChain::currentFrameRenderTarget()

@@ -163,14 +163,6 @@ protected:
     Q_DISABLE_COPY(QRhiResource)
 };
 
-#define Q_VK_RES_PRIVATE(Class) \
-public: \
-    Class() { } \
-protected: \
-    Q_DISABLE_COPY(Class) \
-    friend class QRhi; \
-    friend class QRhiVulkan;
-
 class Q_VKR_EXPORT QRhiBuffer : public QRhiResource
 {
 public:
@@ -534,19 +526,10 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::CullMode)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 
-struct Q_VKR_EXPORT QRhiCommandBuffer
+class Q_VKR_EXPORT QRhiCommandBuffer : public QRhiResource
 {
-Q_VK_RES_PRIVATE(QRhiCommandBuffer)
-    VkCommandBuffer cb = VK_NULL_HANDLE;
-
-    void resetState() {
-        currentTarget = nullptr;
-        currentPipeline = nullptr;
-        currentSrb = nullptr;
-    }
-    QRhiRenderTarget *currentTarget;
-    QRhiGraphicsPipeline *currentPipeline;
-    QRhiShaderResourceBindings *currentSrb;
+protected:
+    QRhiCommandBuffer(QRhi *rhi, QRhiResourcePrivate *d);
 };
 
 class Q_VKR_EXPORT QRhiSwapChain : public QRhiResource
@@ -693,11 +676,14 @@ public:
                                QRhiSampler::Filter mipmapMode,
                                QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v);
 
+    // color only
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiTextureRenderTarget::Flags flags = 0);
+    // color and depth-stencil, only color accessed afterwards
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiRenderBuffer *depthStencilBuffer,
                                                        QRhiTextureRenderTarget::Flags flags = 0);
+    // color and depth, both as textures accessible afterwards
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiTexture *depthTexture,
                                                        QRhiTextureRenderTarget::Flags flags = 0);

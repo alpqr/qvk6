@@ -247,6 +247,29 @@ struct QVkGraphicsPipelinePrivate : public QRhiResourcePrivate
     int lastActiveFrameSlot = -1;
 };
 
+class QVkCommandBuffer : public QRhiCommandBuffer
+{
+public:
+    QVkCommandBuffer(QRhi *rhi);
+    void release() override;
+};
+
+struct QVkCommandBufferPrivate : public QRhiResourcePrivate
+{
+    QVkCommandBufferPrivate() { resetState(); }
+
+    VkCommandBuffer cb = VK_NULL_HANDLE;
+
+    void resetState() {
+        currentTarget = nullptr;
+        currentPipeline = nullptr;
+        currentSrb = nullptr;
+    }
+    QRhiRenderTarget *currentTarget;
+    QRhiGraphicsPipeline *currentPipeline;
+    QRhiShaderResourceBindings *currentSrb;
+};
+
 class QVkSwapChain : public QRhiSwapChain
 {
 public:
@@ -282,7 +305,8 @@ struct QVkSwapChainPrivate : public QRhiResourcePrivate
     struct ImageResources {
         VkImage image = VK_NULL_HANDLE;
         VkImageView imageView = VK_NULL_HANDLE;
-        QRhiCommandBuffer cmdBuf;
+        VkCommandBuffer cmdBuf = VK_NULL_HANDLE;
+        QVkCommandBuffer *cmdBufWrapper = nullptr;
         VkFence cmdFence = VK_NULL_HANDLE;
         bool cmdFenceWaitable = false;
         VkFramebuffer fb = VK_NULL_HANDLE;
@@ -348,7 +372,7 @@ public:
                       VkAccessFlags srcAccess, VkAccessFlags dstAccess,
                       VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage);
 
-    // Lighter than release+create, does not allow layout change, but pulls in
+    // Lighter than release+build, does not allow layout change, but pulls in
     // any new underlying resources from the referenced buffers, textures, etc.
     // in case they changed in the meantime.
     void updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx = -1);

@@ -50,8 +50,6 @@ QT_BEGIN_NAMESPACE
 class QRhiPrivate;
 class QVulkanWindow;
 
-static const int QVK_FRAMES_IN_FLIGHT = 2;
-
 struct Q_VKR_EXPORT QRhiClearValue
 {
     QRhiClearValue() { }

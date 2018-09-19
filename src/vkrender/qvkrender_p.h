@@ -50,6 +50,8 @@ class QVulkanFunctions;
 class QVulkanDeviceFunctions;
 class QWindow;
 
+static const int QVK_FRAMES_IN_FLIGHT = 2;
+
 static const int QVK_DESC_SETS_PER_POOL = 128;
 static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
 static const int QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL = 256;

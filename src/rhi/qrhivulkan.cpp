@@ -3,7 +3,7 @@
 ** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the Qt VkRender module
+** This file is part of the Qt RHI module
 **
 ** $QT_BEGIN_LICENSE:LGPL3$
 ** Commercial License Usage
@@ -34,7 +34,7 @@
 **
 ****************************************************************************/
 
-#include "qvkrender.h"
+#include "qrhivulkan_p.h"
 
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
@@ -44,11 +44,8 @@
 #endif
 #include "vk_mem_alloc.h"
 
-#include "qvkrender_p.h"
-
 #include <QVulkanFunctions>
 #include <QVulkanWindow>
-#include <QElapsedTimer>
 
 QT_BEGIN_NAMESPACE
 
@@ -142,9 +139,19 @@ void VKAPI_PTR wrap_vkDestroyImage(VkDevice device, VkImage image, const VkAlloc
     globalVulkanInstance->deviceFunctions(device)->vkDestroyImage(device, image, pAllocator);
 }
 
+static inline VmaAllocation toVmaAllocation(QVkAlloc a)
+{
+    return reinterpret_cast<VmaAllocation>(a);
+}
+
+static inline VmaAllocator toVmaAllocator(QVkAllocator a)
+{
+    return reinterpret_cast<VmaAllocator>(a);
+}
+
 QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
 {
-    QVulkanRhiInitParams *vkparams = static_cast<QVulkanRhiInitParams *>(params);
+    QRhiVulkanInitParams *vkparams = static_cast<QRhiVulkanInitParams *>(params);
     inst = vkparams->inst;
     physDev = vkparams->physDev;
     dev = vkparams->dev;
@@ -194,10 +201,16 @@ void QRhiVulkan::create()
     allocatorInfo.physicalDevice = physDev;
     allocatorInfo.device = dev;
     allocatorInfo.pVulkanFunctions = &afuncs;
-    vmaCreateAllocator(&allocatorInfo, &allocator);
+    VmaAllocator vmaallocator;
+    VkResult err = vmaCreateAllocator(&allocatorInfo, &vmaallocator);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create allocator: %d", err);
+        return;
+    }
+    allocator = vmaallocator;
 
     VkDescriptorPool pool;
-    VkResult err = createDescriptorPool(&pool);
+    err = createDescriptorPool(&pool);
     if (err == VK_SUCCESS)
         descriptorPools.append(pool);
     else
@@ -223,7 +236,7 @@ void QRhiVulkan::destroy()
 
     descriptorPools.clear();
 
-    vmaDestroyAllocator(allocator);
+    vmaDestroyAllocator(toVmaAllocator(allocator));
 
     f = nullptr;
     df = nullptr;
@@ -420,11 +433,6 @@ bool QRhiVulkan::createTransientImage(VkFormat format,
     }
 
     return true;
-}
-
-static inline VmaAllocation toVmaAllocation(QVkAlloc a)
-{
-    return reinterpret_cast<VmaAllocation>(a);
 }
 
 static const VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -1277,13 +1285,13 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
         Q_ASSERT(!u.buf->isStatic());
         void *p = nullptr;
         VmaAllocation a = toVmaAllocation(RES(QVkBuffer, u.buf)->allocations[currentFrameSlot]);
-        VkResult err = vmaMapMemory(allocator, a, &p);
+        VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
             continue;
         }
         memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
-        vmaUnmapMemory(allocator, a);
+        vmaUnmapMemory(toVmaAllocator(allocator), a);
         ChangeRange &r(changeRanges[u.buf]);
         if (r.changeBegin == -1 || u.offset < r.changeBegin)
             r.changeBegin = u.offset;
@@ -1292,7 +1300,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
     }
     for (auto it = changeRanges.cbegin(), itEnd = changeRanges.cend(); it != itEnd; ++it) {
         VmaAllocation a = toVmaAllocation(RES(QVkBuffer, it.key())->allocations[currentFrameSlot]);
-        vmaFlushAllocation(allocator, a, it->changeBegin, it->changeEnd - it->changeBegin);
+        vmaFlushAllocation(toVmaAllocator(allocator), a, it->changeBegin, it->changeEnd - it->changeBegin);
     }
 
     for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
@@ -1303,14 +1311,14 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
 
         void *p = nullptr;
         VmaAllocation a = toVmaAllocation(ubufD->stagingAlloc);
-        VkResult err = vmaMapMemory(allocator, a, &p);
+        VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
             continue;
         }
         memcpy(p, u.data.constData(), u.buf->size);
-        vmaUnmapMemory(allocator, a);
-        vmaFlushAllocation(allocator, a, 0, u.buf->size);
+        vmaUnmapMemory(toVmaAllocator(allocator), a);
+        vmaFlushAllocation(toVmaAllocator(allocator), a, 0, u.buf->size);
 
         VkBufferCopy copyInfo;
         memset(&copyInfo, 0, sizeof(copyInfo));
@@ -1346,7 +1354,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
             allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
             VmaAllocation allocation;
-            VkResult err = vmaCreateBuffer(allocator, &bufferInfo, &allocInfo, &utexD->stagingBuffer, &allocation, nullptr);
+            VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &utexD->stagingBuffer, &allocation, nullptr);
             if (err != VK_SUCCESS) {
                 qWarning("Failed to create image staging buffer of size %d: %d", imageSize, err);
                 continue;
@@ -1356,14 +1364,14 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
 
         void *mp = nullptr;
         VmaAllocation a = toVmaAllocation(utexD->stagingAlloc);
-        VkResult err = vmaMapMemory(allocator, a, &mp);
+        VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &mp);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map image data: %d", err);
             continue;
         }
         memcpy(mp, u.image.constBits(), imageSize);
-        vmaUnmapMemory(allocator, a);
-        vmaFlushAllocation(allocator, a, 0, imageSize);
+        vmaUnmapMemory(toVmaAllocator(allocator), a);
+        vmaFlushAllocation(toVmaAllocator(allocator), a, 0, imageSize);
 
         if (utexD->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
             if (utexD->layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
@@ -1416,8 +1424,8 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-                    vmaDestroyBuffer(allocator, e.buffer.buffers[i], toVmaAllocation(e.buffer.allocations[i]));
-                vmaDestroyBuffer(allocator, e.buffer.stagingBuffer, toVmaAllocation(e.buffer.stagingAlloc));
+                    vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.buffers[i], toVmaAllocation(e.buffer.allocations[i]));
+                vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.stagingBuffer, toVmaAllocation(e.buffer.stagingAlloc));
                 break;
             case QRhiVulkan::DeferredReleaseEntry::RenderBuffer:
                 df->vkDestroyImageView(dev, e.renderBuffer.imageView, nullptr);
@@ -1426,8 +1434,8 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Texture:
                 df->vkDestroyImageView(dev, e.texture.imageView, nullptr);
-                vmaDestroyImage(allocator, e.texture.image, toVmaAllocation(e.texture.allocation));
-                vmaDestroyBuffer(allocator, e.texture.stagingBuffer, toVmaAllocation(e.texture.stagingAlloc));
+                vmaDestroyImage(toVmaAllocator(allocator), e.texture.image, toVmaAllocation(e.texture.allocation));
+                vmaDestroyBuffer(toVmaAllocator(allocator), e.texture.stagingBuffer, toVmaAllocation(e.texture.stagingAlloc));
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Sampler:
                 df->vkDestroySampler(dev, e.sampler.sampler, nullptr);
@@ -2147,7 +2155,7 @@ bool QVkBuffer::build()
         allocations[i] = nullptr;
         if (i == 0 || !isStatic()) {
             VmaAllocation allocation;
-            err = vmaCreateBuffer(rhiD->allocator, &bufferInfo, &allocInfo, &buffers[i], &allocation, nullptr);
+            err = vmaCreateBuffer(toVmaAllocator(rhiD->allocator), &bufferInfo, &allocInfo, &buffers[i], &allocation, nullptr);
             if (err != VK_SUCCESS)
                 break;
             allocations[i] = allocation;
@@ -2158,7 +2166,7 @@ bool QVkBuffer::build()
         allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
         bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         VmaAllocation allocation;
-        err = vmaCreateBuffer(rhiD->allocator, &bufferInfo, &allocInfo, &stagingBuffer, &allocation, nullptr);
+        err = vmaCreateBuffer(toVmaAllocator(rhiD->allocator), &bufferInfo, &allocInfo, &stagingBuffer, &allocation, nullptr);
         if (err == VK_SUCCESS)
             stagingAlloc = allocation;
     }
@@ -2304,7 +2312,7 @@ bool QVkTexture::build()
     allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
     VmaAllocation allocation;
-    VkResult err = vmaCreateImage(rhiD->allocator, &imageInfo, &allocInfo, &image, &allocation, nullptr);
+    VkResult err = vmaCreateImage(toVmaAllocator(rhiD->allocator), &imageInfo, &allocInfo, &image, &allocation, nullptr);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create image: %d", err);
         return false;
@@ -2994,138 +3002,6 @@ bool QVkSwapChain::build(QObject *target)
     }
 
     return false;
-}
-
-
-// **********
-
-QRhiResource::QRhiResource(QRhi *rhi_)
-    : rhi(rhi_)
-{
-}
-
-QRhiResource::~QRhiResource()
-{
-}
-
-QRhiBuffer::QRhiBuffer(QRhi *rhi, Type type_, UsageFlags usage_, int size_)
-    : QRhiResource(rhi),
-      type(type_), usage(usage_), size(size_)
-{
-}
-
-QRhiRenderBuffer::QRhiRenderBuffer(QRhi *rhi, Type type_, const QSize &pixelSize_, int sampleCount_)
-    : QRhiResource(rhi),
-      type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
-{
-}
-
-QRhiTexture::QRhiTexture(QRhi *rhi, Format format_, const QSize &pixelSize_, Flags flags_)
-    : QRhiResource(rhi),
-      format(format_), pixelSize(pixelSize_), flags(flags_)
-{
-}
-
-QRhiSampler::QRhiSampler(QRhi *rhi,
-                         Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
-    : QRhiResource(rhi),
-      magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
-      addressU(u_), addressV(v_)
-{
-}
-
-QRhiRenderPass::QRhiRenderPass(QRhi *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-QRhiRenderTarget::QRhiRenderTarget(QRhi *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhi *rhi)
-    : QRhiRenderTarget(rhi)
-{
-}
-
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi,
-                                                 QRhiTexture *texture_, Flags flags_)
-    : QRhiRenderTarget(rhi),
-      texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
-{
-}
-
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi,
-                                                 QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_)
-    : QRhiRenderTarget(rhi),
-      texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
-{
-}
-
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi,
-                                                 QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_)
-    : QRhiRenderTarget(rhi),
-      texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
-{
-}
-
-QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhi *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhi *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-QRhiSwapChain::QRhiSwapChain(QRhi *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-QRhiCommandBuffer::QRhiCommandBuffer(QRhi *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-QRhi::QRhi()
-{
-}
-
-QRhi::~QRhi()
-{
-}
-
-QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
-{
-    switch (impl) {
-    case Vulkan:
-        return new QRhiVulkan(params);
-    default:
-        break;
-    }
-    return nullptr;
-}
-
-int QRhi::ubufAligned(int v) const
-{
-    const int byteAlign = ubufAlignment();
-    return (v + byteAlign - 1) & ~(byteAlign - 1);
-}
-
-QMatrix4x4 QRhi::openGLCorrectionMatrix() const
-{
-    static QMatrix4x4 m;
-    if (m.isIdentity()) {
-        // NB the ctor takes row-major
-        m = QMatrix4x4(1.0f, 0.0f, 0.0f, 0.0f,
-                       0.0f, -1.0f, 0.0f, 0.0f,
-                       0.0f, 0.0f, 0.5f, 0.5f,
-                       0.0f, 0.0f, 0.0f, 1.0f);
-    }
-    return m;
 }
 
 QT_END_NAMESPACE

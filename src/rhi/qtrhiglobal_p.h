@@ -3,7 +3,7 @@
 ** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the Qt VkRender module
+** This file is part of the Qt RHI module
 **
 ** $QT_BEGIN_LICENSE:GPL$
 ** Commercial License Usage
@@ -27,8 +27,8 @@
 **
 ****************************************************************************/
 
-#ifndef QTVKRGLOBAL_P_H
-#define QTVKRGLOBAL_P_H
+#ifndef QTRHIGLOBAL_P_H
+#define QTRHIGLOBAL_P_H
 
 //
 //  W A R N I N G
@@ -41,8 +41,8 @@
 // We mean it.
 //
 
-#include "qtvkrglobal.h"
+#include "qtrhiglobal.h"
 
-#define Q_VKR_PRIVATE_EXPORT Q_VKR_EXPORT
+#define Q_RHI_PRIVATE_EXPORT Q_RHI_EXPORT
 
 #endif

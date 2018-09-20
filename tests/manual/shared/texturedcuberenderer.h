@@ -29,7 +29,7 @@
 #ifndef TEXTUREDCUBERENDERER_H
 #define TEXTUREDCUBERENDERER_H
 
-#include <QVkRender>
+#include <QRhi>
 
 class TexturedCubeRenderer
 {

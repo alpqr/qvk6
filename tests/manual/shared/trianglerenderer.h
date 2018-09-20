@@ -29,7 +29,7 @@
 #ifndef TRIANGLERENDERER_H
 #define TRIANGLERENDERER_H
 
-#include <QVkRender>
+#include <QRhi>
 
 class TriangleRenderer
 {

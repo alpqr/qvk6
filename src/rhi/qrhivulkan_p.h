@@ -3,7 +3,7 @@
 ** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the Qt VkRender module
+** This file is part of the Qt RHI module
 **
 ** $QT_BEGIN_LICENSE:GPL$
 ** Commercial License Usage
@@ -27,8 +27,8 @@
 **
 ****************************************************************************/
 
-#ifndef QVKRENDER_P_H
-#define QVKRENDER_P_H
+#ifndef QRHIVULKAN_P_H
+#define QRHIVULKAN_P_H
 
 //
 //  W A R N I N G
@@ -41,14 +41,15 @@
 // We mean it.
 //
 
-#include "qvkrender.h"
+#include "qrhivulkan.h"
+#include "qtrhiglobal_p.h"
 #include <QVector>
 
 QT_BEGIN_NAMESPACE
 
 class QVulkanFunctions;
 class QVulkanDeviceFunctions;
-class QWindow;
+class QVulkanWindow;
 
 static const int QVK_FRAMES_IN_FLIGHT = 2;
 
@@ -56,7 +57,9 @@ static const int QVK_DESC_SETS_PER_POOL = 128;
 static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
 static const int QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL = 256;
 
+// no vk_mem_alloc.h available here, void* is good enough
 typedef void * QVkAlloc;
+typedef void * QVkAllocator;
 
 struct QVkBuffer : public QRhiBuffer
 {
@@ -269,7 +272,7 @@ struct QVkSwapChain : public QRhiSwapChain
     quint32 currentFrame = 0; // index in frameRes
 };
 
-class Q_VKR_EXPORT QRhiVulkan : public QRhi
+class QRhiVulkan : public QRhi
 {
 public:
     QRhiVulkan(QRhiInitParams *params);
@@ -379,7 +382,7 @@ public:
     VkDevice dev;
     VkCommandPool cmdPool;
     VkQueue gfxQueue;
-    VmaAllocator allocator;
+    QVkAllocator allocator;
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;
     VkPhysicalDeviceProperties physDevProperties;

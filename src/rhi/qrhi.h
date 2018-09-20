@@ -3,7 +3,7 @@
 ** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the Qt VkRender module
+** This file is part of the Qt RHI module
 **
 ** $QT_BEGIN_LICENSE:LGPL3$
 ** Commercial License Usage
@@ -34,10 +34,10 @@
 **
 ****************************************************************************/
 
-#ifndef QVKRENDER_H
-#define QVKRENDER_H
+#ifndef QRHI_H
+#define QRHI_H
 
-#include <QtVkRender/qtvkrglobal.h>
+#include <QtRhi/qtrhiglobal.h>
 #include <QVector4D>
 #include <QVector2D>
 #include <QSize>
@@ -47,10 +47,9 @@
 
 QT_BEGIN_NAMESPACE
 
-class QRhiPrivate;
-class QVulkanWindow;
+class QWindow;
 
-struct Q_VKR_EXPORT QRhiClearValue
+struct Q_RHI_EXPORT QRhiClearValue
 {
     QRhiClearValue() { }
     QRhiClearValue(const QVector4D &rgba_) : rgba(rgba_), isDepthStencil(false) { }
@@ -61,7 +60,7 @@ struct Q_VKR_EXPORT QRhiClearValue
     bool isDepthStencil;
 };
 
-struct Q_VKR_EXPORT QRhiViewport
+struct Q_RHI_EXPORT QRhiViewport
 {
     QRhiViewport() { }
     QRhiViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
@@ -72,7 +71,7 @@ struct Q_VKR_EXPORT QRhiViewport
     float maxDepth;
 };
 
-struct Q_VKR_EXPORT QRhiScissor
+struct Q_RHI_EXPORT QRhiScissor
 {
     QRhiScissor() { }
     QRhiScissor(float x, float y, float w, float h)
@@ -82,7 +81,7 @@ struct Q_VKR_EXPORT QRhiScissor
 };
 
 // should be mappable to D3D12_INPUT_ELEMENT_DESC + D3D12_VERTEX_BUFFER_VIEW...
-struct Q_VKR_EXPORT QRhiVertexInputLayout
+struct Q_RHI_EXPORT QRhiVertexInputLayout
 {
     struct Binding {
         enum Classification {
@@ -125,7 +124,7 @@ struct Q_VKR_EXPORT QRhiVertexInputLayout
     QVector<Attribute> attributes;
 };
 
-struct Q_VKR_EXPORT QRhiGraphicsShaderStage
+struct Q_RHI_EXPORT QRhiGraphicsShaderStage
 {
     enum Type {
         Vertex,
@@ -147,7 +146,7 @@ struct Q_VKR_EXPORT QRhiGraphicsShaderStage
 
 class QRhi;
 
-class Q_VKR_EXPORT QRhiResource
+class Q_RHI_EXPORT QRhiResource
 {
 public:
     virtual ~QRhiResource();
@@ -159,7 +158,7 @@ protected:
     Q_DISABLE_COPY(QRhiResource)
 };
 
-class Q_VKR_EXPORT QRhiBuffer : public QRhiResource
+class Q_RHI_EXPORT QRhiBuffer : public QRhiResource
 {
 public:
     enum Type {
@@ -188,7 +187,7 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
 
-class Q_VKR_EXPORT QRhiRenderBuffer : public QRhiResource
+class Q_RHI_EXPORT QRhiRenderBuffer : public QRhiResource
 {
 public:
     enum Type {
@@ -205,7 +204,7 @@ protected:
     QRhiRenderBuffer(QRhi *rhi, Type type_, const QSize &pixelSize_, int sampleCount_);
 };
 
-class Q_VKR_EXPORT QRhiTexture : public QRhiResource
+class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 {
 public:
     enum Flag {
@@ -241,7 +240,7 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
 
-class Q_VKR_EXPORT QRhiSampler : public QRhiResource
+class Q_RHI_EXPORT QRhiSampler : public QRhiResource
 {
 public:
     enum Filter {
@@ -270,13 +269,13 @@ protected:
                 Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_);
 };
 
-class Q_VKR_EXPORT QRhiRenderPass : public QRhiResource
+class Q_RHI_EXPORT QRhiRenderPass : public QRhiResource
 {
 protected:
     QRhiRenderPass(QRhi *rhi);
 };
 
-class Q_VKR_EXPORT QRhiRenderTarget : public QRhiResource
+class Q_RHI_EXPORT QRhiRenderTarget : public QRhiResource
 {
 public:
     enum Type {
@@ -292,13 +291,13 @@ protected:
     QRhiRenderTarget(QRhi *rhi);
 };
 
-class Q_VKR_EXPORT QRhiReferenceRenderTarget : public QRhiRenderTarget
+class Q_RHI_EXPORT QRhiReferenceRenderTarget : public QRhiRenderTarget
 {
 protected:
     QRhiReferenceRenderTarget(QRhi *rhi);
 };
 
-class Q_VKR_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
+class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
 public:
     enum Flag {
@@ -324,7 +323,7 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
 
-class Q_VKR_EXPORT QRhiShaderResourceBindings : public QRhiResource
+class Q_RHI_EXPORT QRhiShaderResourceBindings : public QRhiResource
 {
 public:
     struct Binding {
@@ -393,7 +392,7 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBindings::Binding::StageFlags)
 
-class Q_VKR_EXPORT QRhiGraphicsPipeline : public QRhiResource
+class Q_RHI_EXPORT QRhiGraphicsPipeline : public QRhiResource
 {
 public:
     enum Flag {
@@ -532,13 +531,13 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::CullMode)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 
-class Q_VKR_EXPORT QRhiCommandBuffer : public QRhiResource
+class Q_RHI_EXPORT QRhiCommandBuffer : public QRhiResource
 {
 protected:
     QRhiCommandBuffer(QRhi *rhi);
 };
 
-class Q_VKR_EXPORT QRhiSwapChain : public QRhiResource
+class Q_RHI_EXPORT QRhiSwapChain : public QRhiResource
 {
 public:
     enum SurfaceImportFlag {
@@ -564,20 +563,11 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
 
-struct Q_VKR_EXPORT QRhiInitParams
+struct Q_RHI_EXPORT QRhiInitParams
 {
 };
 
-struct Q_VKR_EXPORT QVulkanRhiInitParams : public QRhiInitParams
-{
-    QVulkanInstance *inst = nullptr;
-    VkPhysicalDevice physDev = VK_NULL_HANDLE;
-    VkDevice dev = VK_NULL_HANDLE;
-    VkCommandPool cmdPool = VK_NULL_HANDLE;
-    VkQueue gfxQueue = VK_NULL_HANDLE;
-};
-
-class Q_VKR_EXPORT QRhi
+class Q_RHI_EXPORT QRhi
 {
 public:
     enum Implementation {

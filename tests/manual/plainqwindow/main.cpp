@@ -32,6 +32,9 @@
 #include <QVulkanInstance>
 #include <QVulkanFunctions>
 #include <QPlatformSurfaceEvent>
+
+#include <QRhiVulkanInitParams>
+
 #include "trianglerenderer.h"
 #include "texturedcuberenderer.h"
 #include "triangleoncuberenderer.h"
@@ -193,7 +196,7 @@ void VWindow::init()
     if (err != VK_SUCCESS)
         qFatal("Failed to create command pool: %d", err);
 
-    QVulkanRhiInitParams params;
+    QRhiVulkanInitParams params;
     params.inst = vulkanInstance();
     params.physDev = m_vkPhysDev;
     params.dev = m_vkDev;

@@ -50,6 +50,7 @@
 
 #include "renderer.h"
 #include <QVulkanFunctions>
+#include <QRhiVulkanInitParams>
 
 Renderer::Renderer(QVulkanWindow *w)
     : m_window(w)
@@ -59,7 +60,7 @@ Renderer::Renderer(QVulkanWindow *w)
 
 void Renderer::initResources()
 {
-    QVulkanRhiInitParams params;
+    QRhiVulkanInitParams params;
     params.inst = m_window->vulkanInstance();
     params.physDev = m_window->physicalDevice();
     params.dev = m_window->device();

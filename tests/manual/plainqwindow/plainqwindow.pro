@@ -1,6 +1,6 @@
 TEMPLATE = app
 
-QT += shadertools vkrender
+QT += shadertools rhi
 
 SOURCES = \
     main.cpp \

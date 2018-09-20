@@ -564,15 +564,24 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
 
+struct Q_VKR_EXPORT QRhiInitParams
+{
+};
+
+struct Q_VKR_EXPORT QVulkanRhiInitParams : public QRhiInitParams
+{
+    QVulkanInstance *inst = nullptr;
+    VkPhysicalDevice physDev = VK_NULL_HANDLE;
+    VkDevice dev = VK_NULL_HANDLE;
+    VkCommandPool cmdPool = VK_NULL_HANDLE;
+    VkQueue gfxQueue = VK_NULL_HANDLE;
+};
+
 class Q_VKR_EXPORT QRhi
 {
 public:
-    struct InitParams {
-        QVulkanInstance *inst = nullptr;
-        VkPhysicalDevice physDev = VK_NULL_HANDLE;
-        VkDevice dev = VK_NULL_HANDLE;
-        VkCommandPool cmdPool = VK_NULL_HANDLE;
-        VkQueue gfxQueue = VK_NULL_HANDLE;
+    enum Implementation {
+        Vulkan
     };
 
     enum FrameOpResult {
@@ -634,10 +643,9 @@ public:
         }
     };
 
-    QRhi(const InitParams &params);
-    ~QRhi();
+    virtual ~QRhi();
 
-    QVector<int> supportedSampleCounts() const;
+    static QRhi *create(Implementation impl, QRhiInitParams *params);
 
     /*
        The underlying graphics resources are created when calling build() and
@@ -659,8 +667,8 @@ public:
        when invoked on an object with valid resources underneath.
      */
 
-    QRhiGraphicsPipeline *createGraphicsPipeline();
-    QRhiShaderResourceBindings *createShaderResourceBindings();
+    virtual QRhiGraphicsPipeline *createGraphicsPipeline() = 0;
+    virtual QRhiShaderResourceBindings *createShaderResourceBindings() = 0;
 
     // Buffers are immutable like other resources but the underlying data can
     // change. (its size cannot) Having multiple frames in flight is handled
@@ -669,32 +677,35 @@ public:
     // buffers. For best performance, static buffers may be copied to device
     // local (not necessarily host visible) memory via a staging (host visible)
     // buffer. Hence separate update-dynamic and upload-static operations.
-    QRhiBuffer *createBuffer(QRhiBuffer::Type type, QRhiBuffer::UsageFlags usage, int size);
-
-    int ubufAlignment() const;
-    int ubufAligned(int v) const;
+    virtual QRhiBuffer *createBuffer(QRhiBuffer::Type type,
+                                     QRhiBuffer::UsageFlags usage,
+                                     int size) = 0;
 
     // Transient image, backed by lazily allocated memory (ideal for tiled
     // GPUs). To be used for depth-stencil.
-    QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount = 1);
+    virtual QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
+                                                 const QSize &pixelSize,
+                                                 int sampleCount = 1) = 0;
 
-    QRhiTexture *createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags = 0);
+    virtual QRhiTexture *createTexture(QRhiTexture::Format format,
+                                       const QSize &pixelSize,
+                                       QRhiTexture::Flags flags = 0) = 0;
 
-    QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
-                               QRhiSampler::Filter mipmapMode,
-                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v);
+    virtual QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                                       QRhiSampler::Filter mipmapMode,
+                                       QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) = 0;
 
     // color only
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTextureRenderTarget::Flags flags = 0);
+    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                               QRhiTextureRenderTarget::Flags flags = 0) = 0;
     // color and depth-stencil, only color accessed afterwards
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiRenderBuffer *depthStencilBuffer,
-                                                       QRhiTextureRenderTarget::Flags flags = 0);
+    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                               QRhiRenderBuffer *depthStencilBuffer,
+                                                               QRhiTextureRenderTarget::Flags flags = 0) = 0;
     // color and depth, both as textures accessible afterwards
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTexture *depthTexture,
-                                                       QRhiTextureRenderTarget::Flags flags = 0);
+    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                               QRhiTexture *depthTexture,
+                                                               QRhiTextureRenderTarget::Flags flags = 0) = 0;
 
     /*
       Render to a QWindow (must be VulkanSurface):
@@ -710,12 +721,15 @@ public:
 
       Also works with a QVulkanWindow from startNextFrame(). Use the overload of build() in initSwapChainResources().
      */
-    QRhiSwapChain *createSwapChain();
-    FrameOpResult beginFrame(QRhiSwapChain *swapChain);
-    FrameOpResult endFrame(QRhiSwapChain *swapChain);
+    virtual QRhiSwapChain *createSwapChain() = 0;
+    virtual FrameOpResult beginFrame(QRhiSwapChain *swapChain) = 0;
+    virtual FrameOpResult endFrame(QRhiSwapChain *swapChain) = 0;
 
-    void beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const PassUpdates &updates);
-    void endPass(QRhiCommandBuffer *cb);
+    virtual void beginPass(QRhiRenderTarget *rt,
+                           QRhiCommandBuffer *cb,
+                           const QRhiClearValue *clearValues,
+                           const PassUpdates &updates) = 0;
+    virtual void endPass(QRhiCommandBuffer *cb) = 0;
 
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
@@ -724,28 +738,39 @@ public:
     // buffer, texture, etc. is out of date internally (due to release+create
     // since the creation of the srb) - hence no need to manually recreate the
     // srb in case a QRhiBuffer is "resized" etc.
-    void setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb = nullptr);
+    virtual void setGraphicsPipeline(QRhiCommandBuffer *cb,
+                                     QRhiGraphicsPipeline *ps,
+                                     QRhiShaderResourceBindings *srb = nullptr) = 0;
 
     using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
-    void setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
-                        QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0, IndexFormat indexFormat = IndexUInt16);
+    virtual void setVertexInput(QRhiCommandBuffer *cb,
+                                int startBinding, const QVector<VertexInput> &bindings,
+                                QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,
+                                IndexFormat indexFormat = IndexUInt16) = 0;
 
-    void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport);
-    void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor);
-    void setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c);
-    void setStencilRef(QRhiCommandBuffer *cb, quint32 refValue);
+    virtual void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) = 0;
+    virtual void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) = 0;
+    virtual void setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c) = 0;
+    virtual void setStencilRef(QRhiCommandBuffer *cb, quint32 refValue) = 0;
 
-    void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
-              quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0);
-    void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
-                     quint32 instanceCount = 1, quint32 firstIndex = 0, qint32 vertexOffset = 0, quint32 firstInstance = 0);
+    virtual void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
+                      quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0) = 0;
+    virtual void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
+                             quint32 instanceCount = 1, quint32 firstIndex = 0,
+                             qint32 vertexOffset = 0, quint32 firstInstance = 0) = 0;
+
+    virtual QVector<int> supportedSampleCounts() const = 0;
+    virtual int ubufAlignment() const = 0;
+
+    int ubufAligned(int v) const;
 
     // make Y up and viewport.min/maxDepth 0/1
     QMatrix4x4 openGLCorrectionMatrix() const;
 
+protected:
+    QRhi();
+
 private:
-    QRhiPrivate *d_ptr;
-    friend class QRhiPrivate;
     Q_DISABLE_COPY(QRhi)
 };
 

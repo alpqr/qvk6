@@ -269,16 +269,69 @@ struct QVkSwapChain : public QRhiSwapChain
     quint32 currentFrame = 0; // index in frameRes
 };
 
-class QRhiPrivate
+class Q_VKR_EXPORT QRhiVulkan : public QRhi
 {
 public:
-    static QRhiPrivate *get(QRhi *r) { return r->d_ptr; }
-};
+    QRhiVulkan(QRhiInitParams *params);
+    ~QRhiVulkan();
 
-class QRhiVulkan : public QRhiPrivate
-{
-public:
-    QRhiVulkan(QRhi *q_ptr) : q(q_ptr) { }
+    QRhiGraphicsPipeline *createGraphicsPipeline() override;
+    QRhiShaderResourceBindings *createShaderResourceBindings() override;
+    QRhiBuffer *createBuffer(QRhiBuffer::Type type,
+                             QRhiBuffer::UsageFlags usage,
+                             int size) override;
+    QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
+                                         const QSize &pixelSize,
+                                         int sampleCount) override;
+    QRhiTexture *createTexture(QRhiTexture::Format format,
+                               const QSize &pixelSize,
+                               QRhiTexture::Flags flags) override;
+    QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                               QRhiSampler::Filter mipmapMode,
+                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) override;
+
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiTextureRenderTarget::Flags flags) override;
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiRenderBuffer *depthStencilBuffer,
+                                                       QRhiTextureRenderTarget::Flags flags) override;
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiTexture *depthTexture,
+                                                       QRhiTextureRenderTarget::Flags flags) override;
+
+    QRhiSwapChain *createSwapChain() override;
+    FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
+    FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+
+    void beginPass(QRhiRenderTarget *rt,
+                   QRhiCommandBuffer *cb,
+                   const QRhiClearValue *clearValues,
+                   const PassUpdates &updates) override;
+    void endPass(QRhiCommandBuffer *cb) override;
+
+    void setGraphicsPipeline(QRhiCommandBuffer *cb,
+                             QRhiGraphicsPipeline *ps,
+                             QRhiShaderResourceBindings *srb = nullptr) override;
+
+    void setVertexInput(QRhiCommandBuffer *cb,
+                        int startBinding, const QVector<VertexInput> &bindings,
+                        QRhiBuffer *indexBuf, quint32 indexOffset,
+                        IndexFormat indexFormat) override;
+
+    void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) override;
+    void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) override;
+    void setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c) override;
+    void setStencilRef(QRhiCommandBuffer *cb, quint32 refValue) override;
+
+    void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
+              quint32 instanceCount, quint32 firstVertex, quint32 firstInstance) override;
+    void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
+                     quint32 instanceCount, quint32 firstIndex,
+                     qint32 vertexOffset, quint32 firstInstance) override;
+
+    QVector<int> supportedSampleCounts() const override;
+    int ubufAlignment() const override;
+
     void create();
     void destroy();
     VkResult createDescriptorPool(VkDescriptorPool *pool);
@@ -293,14 +346,10 @@ public:
     void releaseSwapChainResources(QRhiSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();
-    QVector<int> supportedSampleCounts() const;
     VkSampleCountFlagBits effectiveSampleCount(int sampleCount);
     bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
-
-    QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain);
-    QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
     QRhi::FrameOpResult beginWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endWrapperFrame(QRhiSwapChain *swapChain);

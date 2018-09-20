@@ -193,13 +193,13 @@ void VWindow::init()
     if (err != VK_SUCCESS)
         qFatal("Failed to create command pool: %d", err);
 
-    QRhi::InitParams params;
+    QVulkanRhiInitParams params;
     params.inst = vulkanInstance();
     params.physDev = m_vkPhysDev;
     params.dev = m_vkDev;
     params.cmdPool = m_vkCmdPool;
     params.gfxQueue = m_vkGfxQueue;
-    m_r = new QRhi(params);
+    m_r = QRhi::create(QRhi::Vulkan, &params);
 
     m_triRenderer.setRhi(m_r);
     m_triRenderer.initResources();

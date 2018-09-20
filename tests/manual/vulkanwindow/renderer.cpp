@@ -59,13 +59,13 @@ Renderer::Renderer(QVulkanWindow *w)
 
 void Renderer::initResources()
 {
-    QRhi::InitParams params;
+    QVulkanRhiInitParams params;
     params.inst = m_window->vulkanInstance();
     params.physDev = m_window->physicalDevice();
     params.dev = m_window->device();
     params.cmdPool = m_window->graphicsCommandPool();
     params.gfxQueue = m_window->graphicsQueue();
-    m_r = new QRhi(params);
+    m_r = QRhi::create(QRhi::Vulkan, &params);
 
     m_triRenderer.setRhi(m_r);
     m_triRenderer.initResources();

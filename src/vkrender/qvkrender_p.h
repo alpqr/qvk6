@@ -56,27 +56,14 @@ static const int QVK_DESC_SETS_PER_POOL = 128;
 static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
 static const int QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL = 256;
 
-class QRhiResourcePrivate
-{
-public:
-    virtual ~QRhiResourcePrivate();
-    static QRhiResourcePrivate *get(QRhiResource *r) { return r->d_ptr; }
-    static const QRhiResourcePrivate *get(const QRhiResource *r) { return r->d_ptr; }
-    QRhi *rhi = nullptr;
-};
-
 typedef void * QVkAlloc;
 
-class QVkBuffer : public QRhiBuffer
+struct QVkBuffer : public QRhiBuffer
 {
-public:
     QVkBuffer(QRhi *rhi, Type type, UsageFlags usage, int size);
     void release() override;
     bool build() override;
-};
 
-struct QVkBufferPrivate : public QRhiResourcePrivate
-{
     VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
@@ -85,35 +72,27 @@ struct QVkBufferPrivate : public QRhiResourcePrivate
     uint generation = 0;
 };
 
-class QVkRenderBuffer : public QRhiRenderBuffer
+struct QVkRenderBuffer : public QRhiRenderBuffer
 {
-public:
     QVkRenderBuffer(QRhi *rhi, Type type, const QSize &pixelSize, int sampleCount);
     void release() override;
     bool build() override;
-};
 
-struct QVkRenderBufferPrivate : public QRhiResourcePrivate
-{
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImage image;
     VkImageView imageView;
     int lastActiveFrameSlot = -1;
 };
 
-class QVkTexture : public QRhiTexture
+struct QVkTexture : public QRhiTexture
 {
-public:
     QVkTexture(QRhi *rhi, Format format, const QSize &pixelSize, Flags flags);
     void release() override;
     bool build() override;
-};
 
-struct QVkTexturePrivate : public QRhiResourcePrivate
-{
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
-    QVkAlloc allocation = nullptr;
+    QVkAlloc imageAlloc = nullptr;
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
@@ -121,95 +100,67 @@ struct QVkTexturePrivate : public QRhiResourcePrivate
     uint generation = 0;
 };
 
-class QVkSampler : public QRhiSampler
+struct QVkSampler : public QRhiSampler
 {
-public:
     QVkSampler(QRhi *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
     void release() override;
     bool build() override;
-};
 
-struct QVkSamplerPrivate : public QRhiResourcePrivate
-{
     VkSampler sampler = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
     uint generation = 0;
 };
 
-class QVkRenderPass : public QRhiRenderPass
+struct QVkRenderPass : public QRhiRenderPass
 {
-public:
     QVkRenderPass(QRhi *rhi);
     void release() override;
-};
 
-struct QVkRenderPassPrivate : public QRhiResourcePrivate
-{
     VkRenderPass rp = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
 };
 
-struct QVkRenderTargetPrivate;
-
-class QVkRenderTarget : public QRhiRenderTarget
+struct QVkBasicRenderTargetData
 {
-public:
-    QVkRenderTarget(QRhi *rhi);
-    void release() override;
-    QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
-
-protected:
-    QVkRenderTarget(QRhi *rhi, QVkRenderTargetPrivate *d);
-};
-
-struct QVkRenderTargetPrivate : public QRhiResourcePrivate
-{
-    QVkRenderTargetPrivate(QRhi *rhi) : rp(rhi) { }
+    QVkBasicRenderTargetData(QRhi *rhi) : rp(rhi) { }
     VkFramebuffer fb = VK_NULL_HANDLE;
     QVkRenderPass rp;
     QSize pixelSize;
     int attCount = 0;
-    enum Type {
-        RtRef,    // no Vk* are owned directly by the object
-        RtTexture // this is a QVkTextureRenderTarget, owns
-    };
-    Type type = RtRef;
 };
 
-class QVkTextureRenderTarget : public QRhiTextureRenderTarget
+struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
 {
-public:
+    QVkReferenceRenderTarget(QRhi *rhi);
+    void release() override;
+    Type type() const override;
+    QSize sizeInPixels() const override;
+    const QRhiRenderPass *renderPass() const override;
+
+    QVkBasicRenderTargetData d;
+};
+
+struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
+{
     QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, Flags flags);
     QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags);
     QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags);
     void release() override;
+    Type type() const override;
     bool build() override;
     QSize sizeInPixels() const override;
     const QRhiRenderPass *renderPass() const override;
-};
 
-struct QVkTextureRenderTargetPrivate : public QVkRenderTargetPrivate
-{
-    QVkTextureRenderTargetPrivate(QRhi *rhi)
-        : QVkRenderTargetPrivate(rhi)
-    {
-        type = RtTexture;
-    }
-
+    QVkBasicRenderTargetData d;
     int lastActiveFrameSlot = -1;
 };
 
-class QVkShaderResourceBindings : public QRhiShaderResourceBindings
+struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
 {
-public:
     QVkShaderResourceBindings(QRhi *rhi);
     void release() override;
     bool build() override;
-};
 
-struct QVkShaderResourceBindingsPrivate : public QRhiResourcePrivate
-{
     int poolIndex = -1;
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
@@ -234,31 +185,21 @@ struct QVkShaderResourceBindingsPrivate : public QRhiResourcePrivate
     QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
 };
 
-class QVkGraphicsPipeline : public QRhiGraphicsPipeline
+struct QVkGraphicsPipeline : public QRhiGraphicsPipeline
 {
-public:
     QVkGraphicsPipeline(QRhi *rhi);
     void release() override;
     bool build() override;
-};
 
-struct QVkGraphicsPipelinePrivate : public QRhiResourcePrivate
-{
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
 };
 
-class QVkCommandBuffer : public QRhiCommandBuffer
+struct QVkCommandBuffer : public QRhiCommandBuffer
 {
-public:
     QVkCommandBuffer(QRhi *rhi);
     void release() override;
-};
-
-struct QVkCommandBufferPrivate : public QRhiResourcePrivate
-{
-    QVkCommandBufferPrivate() { resetState(); }
 
     VkCommandBuffer cb = VK_NULL_HANDLE;
 
@@ -272,9 +213,8 @@ struct QVkCommandBufferPrivate : public QRhiResourcePrivate
     QRhiShaderResourceBindings *currentSrb;
 };
 
-class QVkSwapChain : public QRhiSwapChain
+struct QVkSwapChain : public QRhiSwapChain
 {
-public:
     QVkSwapChain(QRhi *rhi);
     void release() override;
 
@@ -287,14 +227,6 @@ public:
                QRhiRenderBuffer *depthStencil, int sampleCount) override;
 
     bool build(QObject *target) override;
-};
-
-struct QVkSwapChainPrivate : public QRhiResourcePrivate
-{
-    QVkSwapChainPrivate(QRhi *rhi)
-        : rtWrapper(rhi),
-          cbWrapper(rhi)
-    { }
 
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
@@ -310,7 +242,7 @@ struct QVkSwapChainPrivate : public QRhiResourcePrivate
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
     VkRenderPass rp;
-    QVkRenderTarget rtWrapper;
+    QVkReferenceRenderTarget rtWrapper;
     QVkCommandBuffer cbWrapper;
 
     struct ImageResources {

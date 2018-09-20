@@ -146,7 +146,6 @@ struct Q_VKR_EXPORT QRhiGraphicsShaderStage
 };
 
 class QRhi;
-class QRhiResourcePrivate;
 
 class Q_VKR_EXPORT QRhiResource
 {
@@ -155,9 +154,8 @@ public:
     virtual void release() = 0;
 
 protected:
-    QRhiResource(QRhi *rhi, QRhiResourcePrivate *d);
-    QRhiResourcePrivate *d_ptr = nullptr;
-    friend class QRhiResourcePrivate;
+    QRhi *rhi = nullptr;
+    QRhiResource(QRhi *rhi_);
     Q_DISABLE_COPY(QRhiResource)
 };
 
@@ -185,7 +183,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiBuffer(QRhi *rhi, QRhiResourcePrivate *d, Type type_, UsageFlags usage_, int size_);
+    QRhiBuffer(QRhi *rhi, Type type_, UsageFlags usage_, int size_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
@@ -204,8 +202,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiRenderBuffer(QRhi *rhi, QRhiResourcePrivate *d,
-                     Type type_, const QSize &pixelSize_, int sampleCount_);
+    QRhiRenderBuffer(QRhi *rhi, Type type_, const QSize &pixelSize_, int sampleCount_);
 };
 
 class Q_VKR_EXPORT QRhiTexture : public QRhiResource
@@ -239,8 +236,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiTexture(QRhi *rhi, QRhiResourcePrivate *d,
-                Format format_, const QSize &pixelSize_, Flags flags_);
+    QRhiTexture(QRhi *rhi, Format format_, const QSize &pixelSize_, Flags flags_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
@@ -270,24 +266,36 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiSampler(QRhi *rhi, QRhiResourcePrivate *d,
+    QRhiSampler(QRhi *rhi,
                 Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_);
 };
 
 class Q_VKR_EXPORT QRhiRenderPass : public QRhiResource
 {
 protected:
-    QRhiRenderPass(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiRenderPass(QRhi *rhi);
 };
 
 class Q_VKR_EXPORT QRhiRenderTarget : public QRhiResource
 {
 public:
+    enum Type {
+        RtRef,
+        RtTexture
+    };
+
+    virtual Type type() const = 0;
     virtual QSize sizeInPixels() const = 0;
     virtual const QRhiRenderPass *renderPass() const = 0;
 
 protected:
-    QRhiRenderTarget(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiRenderTarget(QRhi *rhi);
+};
+
+class Q_VKR_EXPORT QRhiReferenceRenderTarget : public QRhiRenderTarget
+{
+protected:
+    QRhiReferenceRenderTarget(QRhi *rhi);
 };
 
 class Q_VKR_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
@@ -306,11 +314,11 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+    QRhiTextureRenderTarget(QRhi *rhi,
                             QRhiTexture *texture_, Flags flags_);
-    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+    QRhiTextureRenderTarget(QRhi *rhi,
                             QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_);
-    QRhiTextureRenderTarget(QRhi *rhi, QRhiResourcePrivate *d,
+    QRhiTextureRenderTarget(QRhi *rhi,
                             QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_);
 };
 
@@ -380,7 +388,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiShaderResourceBindings(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiShaderResourceBindings(QRhi *rhi);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBindings::Binding::StageFlags)
@@ -517,7 +525,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiGraphicsPipeline(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiGraphicsPipeline(QRhi *rhi);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
@@ -527,7 +535,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 class Q_VKR_EXPORT QRhiCommandBuffer : public QRhiResource
 {
 protected:
-    QRhiCommandBuffer(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiCommandBuffer(QRhi *rhi);
 };
 
 class Q_VKR_EXPORT QRhiSwapChain : public QRhiResource
@@ -551,7 +559,7 @@ public:
     virtual bool build(QObject *target) = 0; // integrate with an existing output mgmt fw, for instance, QVulkanWindow
 
 protected:
-    QRhiSwapChain(QRhi *rhi, QRhiResourcePrivate *d);
+    QRhiSwapChain(QRhi *rhi);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)

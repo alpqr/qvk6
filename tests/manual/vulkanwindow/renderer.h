@@ -51,7 +51,7 @@
 #include <QVulkanWindow>
 #include "trianglerenderer.h"
 
-class QVkRender;
+class QRhi;
 
 class Renderer : public QVulkanWindowRenderer
 {
@@ -67,7 +67,7 @@ public:
 
 protected:
     QVulkanWindow *m_window;
-    QVkRender *m_r;
-    QVkRenderPass m_rp;
+    QRhi *m_r = nullptr;
+    QRhiSwapChain *m_sc = nullptr;
     TriangleRenderer m_triRenderer;
 };

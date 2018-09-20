@@ -32,6 +32,9 @@
 #include <QVulkanInstance>
 #include <QVulkanFunctions>
 #include <QPlatformSurfaceEvent>
+
+#include <QRhiVulkanInitParams>
+
 #include "trianglerenderer.h"
 #include "texturedcuberenderer.h"
 #include "triangleoncuberenderer.h"
@@ -61,11 +64,11 @@ private:
     VkQueue m_vkPresQueue;
     VkCommandPool m_vkCmdPool = VK_NULL_HANDLE;
 
-    QVkRender *m_r = nullptr;
+    QRhi *m_r = nullptr;
     bool m_hasSwapChain = false;
     bool m_swapChainChanged = false;
-    QVkSwapChain m_sc;
-    QVkRenderBuffer *m_ds = nullptr;
+    QRhiSwapChain *m_sc = nullptr;
+    QRhiRenderBuffer *m_ds = nullptr;
 
     TriangleRenderer m_triRenderer;
     TexturedCubeRenderer m_cubeRenderer;
@@ -193,25 +196,27 @@ void VWindow::init()
     if (err != VK_SUCCESS)
         qFatal("Failed to create command pool: %d", err);
 
-    QVkRender::InitParams params;
+    QRhiVulkanInitParams params;
     params.inst = vulkanInstance();
     params.physDev = m_vkPhysDev;
     params.dev = m_vkDev;
     params.cmdPool = m_vkCmdPool;
     params.gfxQueue = m_vkGfxQueue;
-    m_r = new QVkRender(params);
+    m_r = QRhi::create(QRhi::Vulkan, &params);
 
-    m_triRenderer.setVkRender(m_r);
+    m_triRenderer.setRhi(m_r);
     m_triRenderer.initResources();
     m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
 
-    m_cubeRenderer.setVkRender(m_r);
+    m_cubeRenderer.setRhi(m_r);
     m_cubeRenderer.initResources();
     m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
 
-    m_liveTexCubeRenderer.setVkRender(m_r);
+    m_liveTexCubeRenderer.setRhi(m_r);
     m_liveTexCubeRenderer.initResources();
     m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
+
+    m_sc = m_r->createSwapChain();
 }
 
 void VWindow::releaseResources()
@@ -229,6 +234,9 @@ void VWindow::releaseResources()
 
     m_liveTexCubeRenderer.releaseOutputDependentResources();
     m_liveTexCubeRenderer.releaseResources();
+
+    delete m_sc;
+    m_sc = nullptr;
 
     delete m_r;
     m_r = nullptr;
@@ -252,14 +260,14 @@ void VWindow::recreateSwapChain()
     const QSize outputSize = size() * devicePixelRatio();
 
     if (!m_ds) {
-        m_ds = new QVkRenderBuffer(QVkRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
+        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
     } else {
-        m_r->releaseLater(m_ds);
+        m_ds->release();
         m_ds->pixelSize = outputSize;
     }
-    m_r->createRenderBuffer(m_ds);
+    m_ds->build();
 
-    m_hasSwapChain = m_r->importSurface(this, outputSize, QVkRender::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES, &m_sc);
+    m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES);
     m_swapChainChanged = true;
 }
 
@@ -267,10 +275,10 @@ void VWindow::releaseSwapChain()
 {
     if (m_hasSwapChain) {
         m_hasSwapChain = false;
-        m_r->releaseSwapChain(&m_sc);
+        m_sc->release();
     }
     if (m_ds) {
-        m_r->releaseLater(m_ds);
+        m_ds->release();
         delete m_ds;
         m_ds = nullptr;
     }
@@ -281,20 +289,20 @@ void VWindow::render()
     if (!m_hasSwapChain)
         return;
 
-    if (m_sc.sizeInPixels() != size() * devicePixelRatio()) {
+    if (m_sc->sizeInPixels() != size() * devicePixelRatio()) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;
     }
 
-    QVkRender::FrameOpResult r = m_r->beginFrame(&m_sc);
-    if (r == QVkRender::FrameOpSwapChainOutOfDate) {
+    QRhi::FrameOpResult r = m_r->beginFrame(m_sc);
+    if (r == QRhi::FrameOpSwapChainOutOfDate) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;
-        r = m_r->beginFrame(&m_sc);
+        r = m_r->beginFrame(m_sc);
     }
-    if (r != QVkRender::FrameOpSuccess) {
+    if (r != QRhi::FrameOpSuccess) {
         requestUpdate();
         return;
     }
@@ -307,33 +315,33 @@ void VWindow::render()
     }
 
     if (!m_triRenderer.isPipelineInitialized()) {
-        const QVkRenderPass *rp = m_sc.defaultRenderPass();
-        m_triRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
-        m_cubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
-        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc.sizeInPixels());
+        const QRhiRenderPass *rp = m_sc->defaultRenderPass();
+        m_triRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
     }
 
-    QVkCommandBuffer *cb = m_sc.currentFrameCommandBuffer();
+    QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
     m_liveTexCubeRenderer.queueOffscreenPass(cb);
 
-    QVkRender::PassUpdates u;
+    QRhi::PassUpdates u;
     u += m_triRenderer.update();
     u += m_cubeRenderer.update();
     u += m_liveTexCubeRenderer.update();
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
-    const QVkClearValue clearValues[] = {
+    const QRhiClearValue clearValues[] = {
         clearColor,
-        QVkClearValue(1.0f, 0), // depth, stencil
+        QRhiClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
-    m_r->beginPass(m_sc.currentFrameRenderTarget(), cb, clearValues, u);
-    m_triRenderer.queueDraw(cb, m_sc.sizeInPixels());
-    m_cubeRenderer.queueDraw(cb, m_sc.sizeInPixels());
-    m_liveTexCubeRenderer.queueDraw(cb, m_sc.sizeInPixels());
+    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
+    m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_liveTexCubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
     m_r->endPass(cb);
 
-    m_r->endFrame(&m_sc);
+    m_r->endFrame(m_sc);
 
     requestUpdate(); // render continuously, throttled by the presentation rate
 }

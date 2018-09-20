@@ -50,6 +50,7 @@
 
 #include "renderer.h"
 #include <QVulkanFunctions>
+#include <QRhiVulkanInitParams>
 
 Renderer::Renderer(QVulkanWindow *w)
     : m_window(w)
@@ -59,33 +60,38 @@ Renderer::Renderer(QVulkanWindow *w)
 
 void Renderer::initResources()
 {
-    QVkRender::InitParams params;
+    QRhiVulkanInitParams params;
     params.inst = m_window->vulkanInstance();
     params.physDev = m_window->physicalDevice();
     params.dev = m_window->device();
     params.cmdPool = m_window->graphicsCommandPool();
     params.gfxQueue = m_window->graphicsQueue();
-    m_r = new QVkRender(params);
+    m_r = QRhi::create(QRhi::Vulkan, &params);
 
-    m_triRenderer.setVkRender(m_r);
+    m_triRenderer.setRhi(m_r);
     m_triRenderer.initResources();
+
+    m_sc = m_r->createSwapChain();
 }
 
 void Renderer::initSwapChainResources()
 {
-    m_r->importVulkanWindowRenderPass(m_window, &m_rp);
-
-    m_triRenderer.initOutputDependentResources(&m_rp, m_window->swapChainImageSize());
+    m_sc->build(m_window); // this just wraps the window's swapchain
+    m_triRenderer.initOutputDependentResources(m_sc->defaultRenderPass(), m_sc->sizeInPixels());
 }
 
 void Renderer::releaseSwapChainResources()
 {
     m_triRenderer.releaseOutputDependentResources();
+    m_sc->release(); // no-op, the real work is done by QVulkanWindow
 }
 
 void Renderer::releaseResources()
 {
     m_triRenderer.releaseResources();
+
+    delete m_sc;
+    m_sc = nullptr;
 
     delete m_r;
     m_r = nullptr;
@@ -93,23 +99,22 @@ void Renderer::releaseResources()
 
 void Renderer::startNextFrame()
 {
-    QVkRenderTarget rt;
-    QVkCommandBuffer cb;
-    m_r->beginFrame(m_window, &rt, &cb);
+    m_r->beginFrame(m_sc);
+    QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
 
-    QVkRender::PassUpdates u = m_triRenderer.update();
+    QRhi::PassUpdates u = m_triRenderer.update();
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
-    const QVkClearValue clearValues[] = {
+    const QRhiClearValue clearValues[] = {
         clearColor,
-        QVkClearValue(1.0f, 0), // depth, stencil
+        QRhiClearValue(1.0f, 0), // depth, stencil
         clearColor // 3 attachments when using MSAA
     };
-    m_r->beginPass(&rt, &cb, clearValues, u);
-    m_triRenderer.queueDraw(&cb, rt.sizeInPixels());
-    m_r->endPass(&cb);
+    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
+    m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_r->endPass(cb);
 
-    m_r->endFrame(m_window);
+    m_r->endFrame(m_sc);
 
     m_window->frameReady();
     m_window->requestUpdate(); // render continuously, throttled by the presentation rate

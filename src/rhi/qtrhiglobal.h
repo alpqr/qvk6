@@ -3,7 +3,7 @@
 ** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the Qt VkRender module
+** This file is part of the Qt RHI module
 **
 ** $QT_BEGIN_LICENSE:LGPL3$
 ** Commercial License Usage
@@ -34,23 +34,22 @@
 **
 ****************************************************************************/
 
-#ifndef QTVKRGLOBAL_H
-#define QTVKRGLOBAL_H
+#ifndef QTRHIGLOBAL_H
+#define QTRHIGLOBAL_H
 
 #include <QtCore/qglobal.h>
-#include <QtGui/qvulkaninstance.h> // this is where vulkan.h gets pulled in
 
 QT_BEGIN_NAMESPACE
 
-#ifndef Q_VKR_EXPORT
+#ifndef Q_RHI_EXPORT
 #  if !defined(QT_STATIC)
-#    if defined(QT_BUILD_VKR_LIB)
-#      define Q_VKR_EXPORT Q_DECL_EXPORT
+#    if defined(QT_BUILD_RHI_LIB)
+#      define Q_RHI_EXPORT Q_DECL_EXPORT
 #    else
-#      define Q_VKR_EXPORT Q_DECL_IMPORT
+#      define Q_RHI_EXPORT Q_DECL_IMPORT
 #    endif
 #  else
-#    define Q_VKR_EXPORT
+#    define Q_RHI_EXPORT
 #  endif
 #endif
 

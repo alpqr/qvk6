@@ -39,7 +39,7 @@
 
 QT_BEGIN_NAMESPACE
 
-QRhiResource::QRhiResource(QRhi *rhi_)
+QRhiResource::QRhiResource(QRhiImplementation *rhi_)
     : rhi(rhi_)
 {
 }
@@ -48,25 +48,25 @@ QRhiResource::~QRhiResource()
 {
 }
 
-QRhiBuffer::QRhiBuffer(QRhi *rhi, Type type_, UsageFlags usage_, int size_)
+QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
     : QRhiResource(rhi),
       type(type_), usage(usage_), size(size_)
 {
 }
 
-QRhiRenderBuffer::QRhiRenderBuffer(QRhi *rhi, Type type_, const QSize &pixelSize_, int sampleCount_)
+QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_, int sampleCount_)
     : QRhiResource(rhi),
       type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
 {
 }
 
-QRhiTexture::QRhiTexture(QRhi *rhi, Format format_, const QSize &pixelSize_, Flags flags_)
+QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_, Flags flags_)
     : QRhiResource(rhi),
       format(format_), pixelSize(pixelSize_), flags(flags_)
 {
 }
 
-QRhiSampler::QRhiSampler(QRhi *rhi,
+QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
                          Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
     : QRhiResource(rhi),
       magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
@@ -74,59 +74,88 @@ QRhiSampler::QRhiSampler(QRhi *rhi,
 {
 }
 
-QRhiRenderPass::QRhiRenderPass(QRhi *rhi)
+QRhiRenderPass::QRhiRenderPass(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
-QRhiRenderTarget::QRhiRenderTarget(QRhi *rhi)
+QRhiRenderTarget::QRhiRenderTarget(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
-QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhi *rhi)
+QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhiImplementation *rhi)
     : QRhiRenderTarget(rhi)
 {
 }
 
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi,
+QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
                                                  QRhiTexture *texture_, Flags flags_)
     : QRhiRenderTarget(rhi),
       texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
 {
 }
 
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi,
+QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
                                                  QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_)
     : QRhiRenderTarget(rhi),
       texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
 {
 }
 
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhi *rhi,
+QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
                                                  QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_)
     : QRhiRenderTarget(rhi),
       texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
 {
 }
 
-QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhi *rhi)
+QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
-QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhi *rhi)
+QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::uniformBuffer(
+        int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_)
+{
+    Binding b;
+    b.binding = binding_;
+    b.stage = stage_;
+    b.type = UniformBuffer;
+    b.ubuf.buf = buf_;
+    b.ubuf.offset = offset_;
+    b.ubuf.size = size_;
+    return b;
+}
+
+QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::sampledTexture(
+        int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_)
+{
+    Binding b;
+    b.binding = binding_;
+    b.stage = stage_;
+    b.type = SampledTexture;
+    b.stex.tex = tex_;
+    b.stex.sampler = sampler_;
+    return b;
+}
+
+QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
-QRhiSwapChain::QRhiSwapChain(QRhi *rhi)
+QRhiSwapChain::QRhiSwapChain(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
-QRhiCommandBuffer::QRhiCommandBuffer(QRhi *rhi)
+QRhiCommandBuffer::QRhiCommandBuffer(QRhiImplementation *rhi)
     : QRhiResource(rhi)
+{
+}
+
+QRhiImplementation::~QRhiImplementation()
 {
 }
 
@@ -136,17 +165,30 @@ QRhi::QRhi()
 
 QRhi::~QRhi()
 {
+    delete d;
 }
 
 QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
 {
     switch (impl) {
     case Vulkan:
-        return new QRhiVulkan(params);
+    {
+        QRhi *r = new QRhi;
+        r->d = new QRhiVulkan(params);
+        return r;
+    }
     default:
         break;
     }
     return nullptr;
+}
+
+QRhi::PassUpdates &QRhi::PassUpdates::operator+=(const QRhi::PassUpdates &u)
+{
+    dynamicBufferUpdates += u.dynamicBufferUpdates;
+    staticBufferUploads += u.staticBufferUploads;
+    textureUploads += u.textureUploads;
+    return *this;
 }
 
 int QRhi::ubufAligned(int v) const
@@ -166,6 +208,150 @@ QMatrix4x4 QRhi::openGLCorrectionMatrix() const
                        0.0f, 0.0f, 0.0f, 1.0f);
     }
     return m;
+}
+
+QRhiGraphicsPipeline *QRhi::createGraphicsPipeline()
+{
+    return d->createGraphicsPipeline();
+}
+
+QRhiShaderResourceBindings *QRhi::createShaderResourceBindings()
+{
+    return d->createShaderResourceBindings();
+}
+
+QRhiBuffer *QRhi::createBuffer(QRhiBuffer::Type type,
+                               QRhiBuffer::UsageFlags usage,
+                               int size)
+{
+    return d->createBuffer(type, usage, size);
+}
+
+QRhiRenderBuffer *QRhi::createRenderBuffer(QRhiRenderBuffer::Type type,
+                                           const QSize &pixelSize,
+                                           int sampleCount)
+{
+    return d->createRenderBuffer(type, pixelSize, sampleCount);
+}
+
+QRhiTexture *QRhi::createTexture(QRhiTexture::Format format,
+                                 const QSize &pixelSize,
+                                 QRhiTexture::Flags flags)
+{
+    return d->createTexture(format, pixelSize, flags);
+}
+
+QRhiSampler *QRhi::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                                 QRhiSampler::Filter mipmapMode,
+                                 QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v)
+{
+    return d->createSampler(magFilter, minFilter, mipmapMode, u, v);
+}
+
+QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
+                                                         QRhiTextureRenderTarget::Flags flags)
+{
+    return d->createTextureRenderTarget(texture, flags);
+}
+
+QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
+                                                         QRhiRenderBuffer *depthStencilBuffer,
+                                                         QRhiTextureRenderTarget::Flags flags)
+{
+    return d->createTextureRenderTarget(texture, depthStencilBuffer, flags);
+}
+
+QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
+                                                         QRhiTexture *depthTexture,
+                                                         QRhiTextureRenderTarget::Flags flags)
+{
+    return d->createTextureRenderTarget(texture, depthTexture, flags);
+}
+
+QRhiSwapChain *QRhi::createSwapChain()
+{
+    return d->createSwapChain();
+}
+
+QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
+{
+    return d->beginFrame(swapChain);
+}
+
+QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
+{
+    return d->endFrame(swapChain);
+}
+
+void QRhi::beginPass(QRhiRenderTarget *rt,
+                     QRhiCommandBuffer *cb,
+                     const QRhiClearValue *clearValues,
+                     const QRhi::PassUpdates &updates)
+{
+    d->beginPass(rt, cb, clearValues, updates);
+}
+
+void QRhi::endPass(QRhiCommandBuffer *cb)
+{
+    d->endPass(cb);
+}
+
+void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb,
+                               QRhiGraphicsPipeline *ps,
+                               QRhiShaderResourceBindings *srb)
+{
+    d->setGraphicsPipeline(cb, ps, srb);
+}
+
+void QRhi::setVertexInput(QRhiCommandBuffer *cb,
+                          int startBinding, const QVector<VertexInput> &bindings,
+                          QRhiBuffer *indexBuf, quint32 indexOffset,
+                          IndexFormat indexFormat)
+{
+    d->setVertexInput(cb, startBinding, bindings, indexBuf, indexOffset, indexFormat);
+}
+
+void QRhi::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
+{
+    d->setViewport(cb, viewport);
+}
+
+void QRhi::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
+{
+    d->setScissor(cb, scissor);
+}
+
+void QRhi::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
+{
+    d->setBlendConstants(cb, c);
+}
+
+void QRhi::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
+{
+    d->setStencilRef(cb, refValue);
+}
+
+void QRhi::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
+                quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
+{
+    d->draw(cb, vertexCount, instanceCount, firstVertex, firstInstance);
+}
+
+void QRhi::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
+                       quint32 instanceCount, quint32 firstIndex,
+                       qint32 vertexOffset, quint32 firstInstance)
+{
+    d->drawIndexed(cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+QVector<int> QRhi::supportedSampleCounts() const
+{
+    return d->supportedSampleCounts();
+}
+
+int QRhi::ubufAlignment() const
+{
+    return d->ubufAlignment();
 }
 
 QT_END_NAMESPACE

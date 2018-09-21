@@ -42,7 +42,7 @@
 //
 
 #include "qrhivulkan.h"
-#include "qtrhiglobal_p.h"
+#include "qrhi_p.h"
 #include <QVector>
 
 QT_BEGIN_NAMESPACE
@@ -63,7 +63,7 @@ typedef void * QVkAllocator;
 
 struct QVkBuffer : public QRhiBuffer
 {
-    QVkBuffer(QRhi *rhi, Type type, UsageFlags usage, int size);
+    QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
     void release() override;
     bool build() override;
 
@@ -77,7 +77,7 @@ struct QVkBuffer : public QRhiBuffer
 
 struct QVkRenderBuffer : public QRhiRenderBuffer
 {
-    QVkRenderBuffer(QRhi *rhi, Type type, const QSize &pixelSize, int sampleCount);
+    QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize, int sampleCount);
     void release() override;
     bool build() override;
 
@@ -89,7 +89,7 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
 
 struct QVkTexture : public QRhiTexture
 {
-    QVkTexture(QRhi *rhi, Format format, const QSize &pixelSize, Flags flags);
+    QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
     void release() override;
     bool build() override;
 
@@ -105,7 +105,7 @@ struct QVkTexture : public QRhiTexture
 
 struct QVkSampler : public QRhiSampler
 {
-    QVkSampler(QRhi *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
+    QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
     void release() override;
     bool build() override;
 
@@ -116,7 +116,7 @@ struct QVkSampler : public QRhiSampler
 
 struct QVkRenderPass : public QRhiRenderPass
 {
-    QVkRenderPass(QRhi *rhi);
+    QVkRenderPass(QRhiImplementation *rhi);
     void release() override;
 
     VkRenderPass rp = VK_NULL_HANDLE;
@@ -125,7 +125,7 @@ struct QVkRenderPass : public QRhiRenderPass
 
 struct QVkBasicRenderTargetData
 {
-    QVkBasicRenderTargetData(QRhi *rhi) : rp(rhi) { }
+    QVkBasicRenderTargetData(QRhiImplementation *rhi) : rp(rhi) { }
     VkFramebuffer fb = VK_NULL_HANDLE;
     QVkRenderPass rp;
     QSize pixelSize;
@@ -134,7 +134,7 @@ struct QVkBasicRenderTargetData
 
 struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
 {
-    QVkReferenceRenderTarget(QRhi *rhi);
+    QVkReferenceRenderTarget(QRhiImplementation *rhi);
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
@@ -145,9 +145,9 @@ struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
 
 struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
 {
-    QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, Flags flags);
-    QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags);
-    QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags);
+    QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags);
+    QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags);
+    QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags);
     void release() override;
     Type type() const override;
     bool build() override;
@@ -160,7 +160,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
 
 struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
 {
-    QVkShaderResourceBindings(QRhi *rhi);
+    QVkShaderResourceBindings(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
 
@@ -190,7 +190,7 @@ struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
 
 struct QVkGraphicsPipeline : public QRhiGraphicsPipeline
 {
-    QVkGraphicsPipeline(QRhi *rhi);
+    QVkGraphicsPipeline(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
 
@@ -201,7 +201,7 @@ struct QVkGraphicsPipeline : public QRhiGraphicsPipeline
 
 struct QVkCommandBuffer : public QRhiCommandBuffer
 {
-    QVkCommandBuffer(QRhi *rhi);
+    QVkCommandBuffer(QRhiImplementation *rhi);
     void release() override;
 
     VkCommandBuffer cb = VK_NULL_HANDLE;
@@ -218,7 +218,7 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
 
 struct QVkSwapChain : public QRhiSwapChain
 {
-    QVkSwapChain(QRhi *rhi);
+    QVkSwapChain(QRhiImplementation *rhi);
     void release() override;
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
@@ -272,7 +272,7 @@ struct QVkSwapChain : public QRhiSwapChain
     quint32 currentFrame = 0; // index in frameRes
 };
 
-class QRhiVulkan : public QRhi
+class QRhiVulkan : public QRhiImplementation
 {
 public:
     QRhiVulkan(QRhiInitParams *params);
@@ -303,23 +303,23 @@ public:
                                                        QRhiTextureRenderTarget::Flags flags) override;
 
     QRhiSwapChain *createSwapChain() override;
-    FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
-    FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
                    const QRhiClearValue *clearValues,
-                   const PassUpdates &updates) override;
+                   const QRhi::PassUpdates &updates) override;
     void endPass(QRhiCommandBuffer *cb) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
                              QRhiGraphicsPipeline *ps,
-                             QRhiShaderResourceBindings *srb = nullptr) override;
+                             QRhiShaderResourceBindings *srb) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
-                        int startBinding, const QVector<VertexInput> &bindings,
+                        int startBinding, const QVector<QRhi::VertexInput> &bindings,
                         QRhiBuffer *indexBuf, quint32 indexOffset,
-                        IndexFormat indexFormat) override;
+                        QRhi::IndexFormat indexFormat) override;
 
     void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) override;
     void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) override;

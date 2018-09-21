@@ -47,6 +47,7 @@
 
 QT_BEGIN_NAMESPACE
 
+class QRhiImplementation;
 class QWindow;
 
 struct Q_RHI_EXPORT QRhiClearValue
@@ -83,7 +84,7 @@ struct Q_RHI_EXPORT QRhiScissor
 // should be mappable to D3D12_INPUT_ELEMENT_DESC + D3D12_VERTEX_BUFFER_VIEW...
 struct Q_RHI_EXPORT QRhiVertexInputLayout
 {
-    struct Binding {
+    struct Q_RHI_EXPORT Binding {
         enum Classification {
             PerVertex,
             PerInstance
@@ -96,7 +97,7 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
         Classification classification;
     };
 
-    struct Attribute {
+    struct Q_RHI_EXPORT Attribute {
         enum Format {
             Float4,
             Float3,
@@ -153,8 +154,8 @@ public:
     virtual void release() = 0;
 
 protected:
-    QRhi *rhi = nullptr;
-    QRhiResource(QRhi *rhi_);
+    QRhiImplementation *rhi = nullptr;
+    QRhiResource(QRhiImplementation *rhi_);
     Q_DISABLE_COPY(QRhiResource)
 };
 
@@ -182,7 +183,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiBuffer(QRhi *rhi, Type type_, UsageFlags usage_, int size_);
+    QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
@@ -201,7 +202,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiRenderBuffer(QRhi *rhi, Type type_, const QSize &pixelSize_, int sampleCount_);
+    QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_, int sampleCount_);
 };
 
 class Q_RHI_EXPORT QRhiTexture : public QRhiResource
@@ -235,7 +236,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiTexture(QRhi *rhi, Format format_, const QSize &pixelSize_, Flags flags_);
+    QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_, Flags flags_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
@@ -265,14 +266,14 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiSampler(QRhi *rhi,
+    QRhiSampler(QRhiImplementation *rhi,
                 Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_);
 };
 
 class Q_RHI_EXPORT QRhiRenderPass : public QRhiResource
 {
 protected:
-    QRhiRenderPass(QRhi *rhi);
+    QRhiRenderPass(QRhiImplementation *rhi);
 };
 
 class Q_RHI_EXPORT QRhiRenderTarget : public QRhiResource
@@ -288,13 +289,13 @@ public:
     virtual const QRhiRenderPass *renderPass() const = 0;
 
 protected:
-    QRhiRenderTarget(QRhi *rhi);
+    QRhiRenderTarget(QRhiImplementation *rhi);
 };
 
 class Q_RHI_EXPORT QRhiReferenceRenderTarget : public QRhiRenderTarget
 {
 protected:
-    QRhiReferenceRenderTarget(QRhi *rhi);
+    QRhiReferenceRenderTarget(QRhiImplementation *rhi);
 };
 
 class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
@@ -313,11 +314,11 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiTextureRenderTarget(QRhi *rhi,
+    QRhiTextureRenderTarget(QRhiImplementation *rhi,
                             QRhiTexture *texture_, Flags flags_);
-    QRhiTextureRenderTarget(QRhi *rhi,
+    QRhiTextureRenderTarget(QRhiImplementation *rhi,
                             QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_);
-    QRhiTextureRenderTarget(QRhi *rhi,
+    QRhiTextureRenderTarget(QRhiImplementation *rhi,
                             QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_);
 };
 
@@ -326,7 +327,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
 class Q_RHI_EXPORT QRhiShaderResourceBindings : public QRhiResource
 {
 public:
-    struct Binding {
+    struct Q_RHI_EXPORT Binding {
         enum Type {
             UniformBuffer,
             SampledTexture
@@ -341,28 +342,8 @@ public:
         };
         Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
-        static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_ = 0, int size_ = 0)
-        {
-            Binding b;
-            b.binding = binding_;
-            b.stage = stage_;
-            b.type = UniformBuffer;
-            b.ubuf.buf = buf_;
-            b.ubuf.offset = offset_;
-            b.ubuf.size = size_;
-            return b;
-        }
-
-        static Binding sampledTexture(int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_)
-        {
-            Binding b;
-            b.binding = binding_;
-            b.stage = stage_;
-            b.type = SampledTexture;
-            b.stex.tex = tex_;
-            b.stex.sampler = sampler_;
-            return b;
-        }
+        static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_ = 0, int size_ = 0);
+        static Binding sampledTexture(int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_);
 
         int binding;
         StageFlags stage;
@@ -387,7 +368,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiShaderResourceBindings(QRhi *rhi);
+    QRhiShaderResourceBindings(QRhiImplementation *rhi);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBindings::Binding::StageFlags)
@@ -524,7 +505,7 @@ public:
     virtual bool build() = 0;
 
 protected:
-    QRhiGraphicsPipeline(QRhi *rhi);
+    QRhiGraphicsPipeline(QRhiImplementation *rhi);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
@@ -534,7 +515,7 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 class Q_RHI_EXPORT QRhiCommandBuffer : public QRhiResource
 {
 protected:
-    QRhiCommandBuffer(QRhi *rhi);
+    QRhiCommandBuffer(QRhiImplementation *rhi);
 };
 
 class Q_RHI_EXPORT QRhiSwapChain : public QRhiResource
@@ -558,7 +539,7 @@ public:
     virtual bool build(QObject *target) = 0; // integrate with an existing output mgmt fw, for instance, QVulkanWindow
 
 protected:
-    QRhiSwapChain(QRhi *rhi);
+    QRhiSwapChain(QRhiImplementation *rhi);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
@@ -586,7 +567,7 @@ public:
         IndexUInt32
     };
 
-    struct DynamicBufferUpdate {
+    struct Q_RHI_EXPORT DynamicBufferUpdate {
         DynamicBufferUpdate() { }
         DynamicBufferUpdate(QRhiBuffer *buf_, int offset_, int size_, const void *data_)
             : buf(buf_), offset(offset_), data(reinterpret_cast<const char *>(data_), size_)
@@ -597,7 +578,7 @@ public:
         QByteArray data;
     };
 
-    struct StaticBufferUpload {
+    struct Q_RHI_EXPORT StaticBufferUpload {
         StaticBufferUpload() { }
         StaticBufferUpload(QRhiBuffer *buf_, const void *data_)
             : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size)
@@ -607,7 +588,7 @@ public:
         QByteArray data;
     };
 
-    struct TextureUpload {
+    struct Q_RHI_EXPORT TextureUpload {
         TextureUpload() { }
         TextureUpload(QRhiTexture *tex_, const QImage &image_, int mipLevel_ = 0, int layer_ = 0)
             : tex(tex_), image(image_), mipLevel(mipLevel_), layer(layer_)
@@ -619,21 +600,15 @@ public:
         int layer = 0;
     };
 
-    struct PassUpdates {
+    struct Q_RHI_EXPORT PassUpdates {
         QVector<DynamicBufferUpdate> dynamicBufferUpdates;
         QVector<StaticBufferUpload> staticBufferUploads;
         QVector<TextureUpload> textureUploads;
 
-        PassUpdates &operator+=(const PassUpdates &u)
-        {
-            dynamicBufferUpdates += u.dynamicBufferUpdates;
-            staticBufferUploads += u.staticBufferUploads;
-            textureUploads += u.textureUploads;
-            return *this;
-        }
+        PassUpdates &operator+=(const PassUpdates &u);
     };
 
-    virtual ~QRhi();
+    ~QRhi();
 
     static QRhi *create(Implementation impl, QRhiInitParams *params);
 
@@ -657,8 +632,8 @@ public:
        when invoked on an object with valid resources underneath.
      */
 
-    virtual QRhiGraphicsPipeline *createGraphicsPipeline() = 0;
-    virtual QRhiShaderResourceBindings *createShaderResourceBindings() = 0;
+    QRhiGraphicsPipeline *createGraphicsPipeline();
+    QRhiShaderResourceBindings *createShaderResourceBindings();
 
     // Buffers are immutable like other resources but the underlying data can
     // change. (its size cannot) Having multiple frames in flight is handled
@@ -667,35 +642,35 @@ public:
     // buffers. For best performance, static buffers may be copied to device
     // local (not necessarily host visible) memory via a staging (host visible)
     // buffer. Hence separate update-dynamic and upload-static operations.
-    virtual QRhiBuffer *createBuffer(QRhiBuffer::Type type,
-                                     QRhiBuffer::UsageFlags usage,
-                                     int size) = 0;
+    QRhiBuffer *createBuffer(QRhiBuffer::Type type,
+                             QRhiBuffer::UsageFlags usage,
+                             int size);
 
     // Transient image, backed by lazily allocated memory (ideal for tiled
     // GPUs). To be used for depth-stencil.
-    virtual QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
-                                                 const QSize &pixelSize,
-                                                 int sampleCount = 1) = 0;
+    QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
+                                         const QSize &pixelSize,
+                                         int sampleCount = 1);
 
-    virtual QRhiTexture *createTexture(QRhiTexture::Format format,
-                                       const QSize &pixelSize,
-                                       QRhiTexture::Flags flags = 0) = 0;
+    QRhiTexture *createTexture(QRhiTexture::Format format,
+                               const QSize &pixelSize,
+                               QRhiTexture::Flags flags = 0);
 
-    virtual QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
-                                       QRhiSampler::Filter mipmapMode,
-                                       QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) = 0;
+    QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                               QRhiSampler::Filter mipmapMode,
+                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v);
 
     // color only
-    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                               QRhiTextureRenderTarget::Flags flags = 0) = 0;
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiTextureRenderTarget::Flags flags = 0);
     // color and depth-stencil, only color accessed afterwards
-    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                               QRhiRenderBuffer *depthStencilBuffer,
-                                                               QRhiTextureRenderTarget::Flags flags = 0) = 0;
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiRenderBuffer *depthStencilBuffer,
+                                                       QRhiTextureRenderTarget::Flags flags = 0);
     // color and depth, both as textures accessible afterwards
-    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                               QRhiTexture *depthTexture,
-                                                               QRhiTextureRenderTarget::Flags flags = 0) = 0;
+    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
+                                                       QRhiTexture *depthTexture,
+                                                       QRhiTextureRenderTarget::Flags flags = 0);
 
     /*
       Render to a QWindow (must be VulkanSurface):
@@ -711,15 +686,15 @@ public:
 
       Also works with a QVulkanWindow from startNextFrame(). Use the overload of build() in initSwapChainResources().
      */
-    virtual QRhiSwapChain *createSwapChain() = 0;
-    virtual FrameOpResult beginFrame(QRhiSwapChain *swapChain) = 0;
-    virtual FrameOpResult endFrame(QRhiSwapChain *swapChain) = 0;
+    QRhiSwapChain *createSwapChain();
+    FrameOpResult beginFrame(QRhiSwapChain *swapChain);
+    FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
-    virtual void beginPass(QRhiRenderTarget *rt,
-                           QRhiCommandBuffer *cb,
-                           const QRhiClearValue *clearValues,
-                           const PassUpdates &updates) = 0;
-    virtual void endPass(QRhiCommandBuffer *cb) = 0;
+    void beginPass(QRhiRenderTarget *rt,
+                   QRhiCommandBuffer *cb,
+                   const QRhiClearValue *clearValues,
+                   const PassUpdates &updates);
+    void endPass(QRhiCommandBuffer *cb);
 
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
@@ -728,29 +703,30 @@ public:
     // buffer, texture, etc. is out of date internally (due to release+create
     // since the creation of the srb) - hence no need to manually recreate the
     // srb in case a QRhiBuffer is "resized" etc.
-    virtual void setGraphicsPipeline(QRhiCommandBuffer *cb,
-                                     QRhiGraphicsPipeline *ps,
-                                     QRhiShaderResourceBindings *srb = nullptr) = 0;
+    void setGraphicsPipeline(QRhiCommandBuffer *cb,
+                             QRhiGraphicsPipeline *ps,
+                             QRhiShaderResourceBindings *srb = nullptr);
 
     using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
-    virtual void setVertexInput(QRhiCommandBuffer *cb,
-                                int startBinding, const QVector<VertexInput> &bindings,
-                                QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,
-                                IndexFormat indexFormat = IndexUInt16) = 0;
+    void setVertexInput(QRhiCommandBuffer *cb,
+                        int startBinding, const QVector<VertexInput> &bindings,
+                        QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,
+                        IndexFormat indexFormat = IndexUInt16);
 
-    virtual void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) = 0;
-    virtual void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) = 0;
-    virtual void setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c) = 0;
-    virtual void setStencilRef(QRhiCommandBuffer *cb, quint32 refValue) = 0;
+    void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport);
+    void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor);
+    void setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c);
+    void setStencilRef(QRhiCommandBuffer *cb, quint32 refValue);
 
-    virtual void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
-                      quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0) = 0;
-    virtual void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
-                             quint32 instanceCount = 1, quint32 firstIndex = 0,
-                             qint32 vertexOffset = 0, quint32 firstInstance = 0) = 0;
+    void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
+              quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0);
 
-    virtual QVector<int> supportedSampleCounts() const = 0;
-    virtual int ubufAlignment() const = 0;
+    void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
+                     quint32 instanceCount = 1, quint32 firstIndex = 0,
+                     qint32 vertexOffset = 0, quint32 firstInstance = 0);
+
+    QVector<int> supportedSampleCounts() const;
+    int ubufAlignment() const;
 
     int ubufAligned(int v) const;
 
@@ -762,6 +738,7 @@ protected:
 
 private:
     Q_DISABLE_COPY(QRhi)
+    QRhiImplementation *d = nullptr;
 };
 
 QT_END_NAMESPACE

@@ -49,9 +49,6 @@
 
 QT_BEGIN_NAMESPACE
 
-#define RES(t, x) static_cast<t *>(x)
-#define RES_RHI(t) t *rhiD = static_cast<t *>(rhi)
-
 static inline VkDeviceSize aligned(VkDeviceSize v, VkDeviceSize byteAlign)
 {
     return (v + byteAlign - 1) & ~(byteAlign - 1);
@@ -540,7 +537,7 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
 bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
                                     QRhiSwapChain::SurfaceImportFlags flags, QRhiSwapChain *swapChain)
 {
-    QVkSwapChain *swapChainD = RES(QVkSwapChain, swapChain);
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
 
     swapChainD->pixelSize = pixelSize;
     if (swapChainD->pixelSize.isEmpty())
@@ -736,7 +733,7 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
 
 void QRhiVulkan::releaseSwapChainResources(QRhiSwapChain *swapChain)
 {
-    QVkSwapChain *swapChainD = RES(QVkSwapChain, swapChain);
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
 
     if (swapChainD->sc == VK_NULL_HANDLE)
         return;
@@ -818,7 +815,7 @@ static inline bool checkDeviceLost(VkResult err)
 
 QRhi::FrameOpResult QRhiVulkan::beginFrame(QRhiSwapChain *swapChain)
 {
-    if (RES(QVkSwapChain, swapChain)->wrapWindow)
+    if (QRHI_RES(QVkSwapChain, swapChain)->wrapWindow)
         return beginWrapperFrame(swapChain);
     else
         return beginNonWrapperFrame(swapChain);
@@ -826,7 +823,7 @@ QRhi::FrameOpResult QRhiVulkan::beginFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::endFrame(QRhiSwapChain *swapChain)
 {
-    if (RES(QVkSwapChain, swapChain)->wrapWindow)
+    if (QRHI_RES(QVkSwapChain, swapChain)->wrapWindow)
         return endWrapperFrame(swapChain);
     else
         return endNonWrapperFrame(swapChain);
@@ -834,12 +831,12 @@ QRhi::FrameOpResult QRhiVulkan::endFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
 {
-    QVkSwapChain *swapChainD = RES(QVkSwapChain, swapChain);
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
     QVulkanWindow *w = swapChainD->wrapWindow;
 
-    RES(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = w->currentCommandBuffer();
+    QRHI_RES(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = w->currentCommandBuffer();
 
-    QVkReferenceRenderTarget *rtD = RES(QVkReferenceRenderTarget, &swapChainD->rtWrapper);
+    QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &swapChainD->rtWrapper);
     rtD->d.fb = w->currentFramebuffer();
     swapChainD->pixelSize = rtD->d.pixelSize = w->swapChainImageSize();
 
@@ -860,7 +857,7 @@ QRhi::FrameOpResult QRhiVulkan::endWrapperFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 {
-    QVkSwapChain *swapChainD = RES(QVkSwapChain, swapChain);
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
     QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
 
     if (!frame.imageAcquired) {
@@ -933,15 +930,15 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
         return QRhi::FrameOpError;
     }
 
-    RES(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = image.cmdBuf;
+    QRHI_RES(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = image.cmdBuf;
 
-    QVkReferenceRenderTarget *rtD = RES(QVkReferenceRenderTarget, &swapChainD->rtWrapper);
+    QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &swapChainD->rtWrapper);
     rtD->d.fb = image.fb;
     rtD->d.pixelSize = swapChainD->pixelSize;
 
     currentFrameSlot = swapChainD->currentFrame;
     if (swapChainD->depthStencil)
-        RES(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = currentFrameSlot;
+        QRHI_RES(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = currentFrameSlot;
 
     prepareNewFrame(&swapChainD->cbWrapper);
 
@@ -950,7 +947,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 {
-    QVkSwapChain *swapChainD = RES(QVkSwapChain, swapChain);
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
 
     finishFrame();
 
@@ -1027,17 +1024,17 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 
 void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
-    QVkTextureRenderTarget *rtD = RES(QVkTextureRenderTarget, rt);
+    QVkTextureRenderTarget *rtD = QRHI_RES(QVkTextureRenderTarget, rt);
     rtD->lastActiveFrameSlot = currentFrameSlot;
-    RES(QVkRenderPass, &rtD->d.rp)->lastActiveFrameSlot = currentFrameSlot;
+    QRHI_RES(QVkRenderPass, &rtD->d.rp)->lastActiveFrameSlot = currentFrameSlot;
     // the renderpass will implicitly transition so no barrier needed here
-    RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    QRHI_RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 }
 
 void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
     // already in the right layout when the renderpass ends
-    RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    QRHI_RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 
 void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
@@ -1047,7 +1044,7 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 
     executeDeferredReleases();
 
-    RES(QVkCommandBuffer, cb)->resetState();
+    QRHI_RES(QVkCommandBuffer, cb)->resetState();
 }
 
 void QRhiVulkan::finishFrame()
@@ -1057,7 +1054,7 @@ void QRhiVulkan::finishFrame()
     ++finishedFrameCount;
 }
 
-void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const PassUpdates &updates)
+void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const QRhi::PassUpdates &updates)
 {
     Q_ASSERT(!inPass);
 
@@ -1080,13 +1077,13 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QR
         break;
     }
 
-    QVkCommandBuffer *cbD = RES(QVkCommandBuffer, cb);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     cbD->currentTarget = rt;
 
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
     rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = RES(QVkRenderPass, &rtD->rp)->rp;
+    rpBeginInfo.renderPass = QRHI_RES(QVkRenderPass, &rtD->rp)->rp;
     rpBeginInfo.framebuffer = rtD->fb;
     rpBeginInfo.renderArea.extent.width = rtD->pixelSize.width();
     rpBeginInfo.renderArea.extent.height = rtD->pixelSize.height();
@@ -1109,7 +1106,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QR
 void QRhiVulkan::endPass(QRhiCommandBuffer *cb)
 {
     Q_ASSERT(inPass);
-    QVkCommandBuffer *cbD = RES(QVkCommandBuffer, cb);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     df->vkCmdEndRenderPass(cbD->cb);
     inPass = false;
 
@@ -1153,7 +1150,7 @@ bool QRhiVulkan::ensurePipelineCache()
 
 void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx)
 {
-    QVkShaderResourceBindings *srbD = RES(QVkShaderResourceBindings, srb);
+    QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
 
     QVarLengthArray<VkDescriptorBufferInfo, 4> bufferInfos;
     QVarLengthArray<VkDescriptorImageInfo, 4> imageInfos;
@@ -1179,7 +1176,7 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 QRhiBuffer *buf = b.ubuf.buf;
-                QVkBuffer *bufD = RES(QVkBuffer, buf);
+                QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
                 bd.ubuf.generation = bufD->generation;
                 VkDescriptorBufferInfo bufInfo;
                 bufInfo.buffer = buf->isStatic() ? bufD->buffers[0] : bufD->buffers[frameSlot];
@@ -1194,11 +1191,11 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
             case QRhiShaderResourceBindings::Binding::SampledTexture:
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                bd.stex.texGeneration = RES(QVkTexture, b.stex.tex)->generation;
-                bd.stex.samplerGeneration = RES(QVkSampler, b.stex.sampler)->generation;
+                bd.stex.texGeneration = QRHI_RES(QVkTexture, b.stex.tex)->generation;
+                bd.stex.samplerGeneration = QRHI_RES(QVkSampler, b.stex.sampler)->generation;
                 VkDescriptorImageInfo imageInfo;
-                imageInfo.sampler = RES(QVkSampler, b.stex.sampler)->sampler;
-                imageInfo.imageView = RES(QVkTexture, b.stex.tex)->imageView;
+                imageInfo.sampler = QRHI_RES(QVkSampler, b.stex.sampler)->sampler;
+                imageInfo.imageView = QRHI_RES(QVkTexture, b.stex.tex)->imageView;
                 imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 imageInfos.append(imageInfo);
                 writeInfo.pImageInfo = &imageInfos.last();
@@ -1238,10 +1235,10 @@ void QRhiVulkan::bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf)
 
     bufMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     bufMemBarrier.dstAccessMask = dstAccess;
-    bufMemBarrier.buffer = RES(QVkBuffer, buf)->buffers[0];
+    bufMemBarrier.buffer = QRHI_RES(QVkBuffer, buf)->buffers[0];
     bufMemBarrier.size = buf->size;
 
-    df->vkCmdPipelineBarrier(RES(QVkCommandBuffer, cb)->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
+    df->vkCmdPipelineBarrier(QRHI_RES(QVkCommandBuffer, cb)->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage,
                              0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
 }
 
@@ -1256,14 +1253,14 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
 
-    QVkTexture *texD = RES(QVkTexture, tex);
+    QVkTexture *texD = QRHI_RES(QVkTexture, tex);
     barrier.oldLayout = texD->layout;
     barrier.newLayout = newLayout;
     barrier.srcAccessMask = srcAccess;
     barrier.dstAccessMask = dstAccess;
     barrier.image = texD->image;
 
-    df->vkCmdPipelineBarrier(RES(QVkCommandBuffer, cb)->cb,
+    df->vkCmdPipelineBarrier(QRHI_RES(QVkCommandBuffer, cb)->cb,
                              srcStage,
                              dstStage,
                              0, 0, nullptr, 0, nullptr,
@@ -1272,9 +1269,9 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     texD->layout = newLayout;
 }
 
-void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &updates)
+void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates)
 {
-    QVkCommandBuffer *cbD = RES(QVkCommandBuffer, cb);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
 
     struct ChangeRange {
         int changeBegin = -1;
@@ -1284,7 +1281,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
     for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
         Q_ASSERT(!u.buf->isStatic());
         void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(RES(QVkBuffer, u.buf)->allocations[currentFrameSlot]);
+        VmaAllocation a = toVmaAllocation(QRHI_RES(QVkBuffer, u.buf)->allocations[currentFrameSlot]);
         VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
@@ -1299,12 +1296,12 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
             r.changeEnd = u.offset + u.data.size();
     }
     for (auto it = changeRanges.cbegin(), itEnd = changeRanges.cend(); it != itEnd; ++it) {
-        VmaAllocation a = toVmaAllocation(RES(QVkBuffer, it.key())->allocations[currentFrameSlot]);
+        VmaAllocation a = toVmaAllocation(QRHI_RES(QVkBuffer, it.key())->allocations[currentFrameSlot]);
         vmaFlushAllocation(toVmaAllocator(allocator), a, it->changeBegin, it->changeEnd - it->changeBegin);
     }
 
     for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
-        QVkBuffer *ubufD = RES(QVkBuffer, u.buf);
+        QVkBuffer *ubufD = QRHI_RES(QVkBuffer, u.buf);
         Q_ASSERT(u.buf->isStatic());
         Q_ASSERT(ubufD->stagingBuffer);
         Q_ASSERT(u.data.size() == u.buf->size);
@@ -1341,7 +1338,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const PassUpdates &upda
             continue;
         }
 
-        QVkTexture *utexD = RES(QVkTexture, u.tex);
+        QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
         if (!utexD->stagingBuffer) {
             VkBufferCreateInfo bufferInfo;
             memset(&bufferInfo, 0, sizeof(bufferInfo));
@@ -1571,7 +1568,7 @@ QRhiShaderResourceBindings *QRhiVulkan::createShaderResourceBindings()
 void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
 {
     Q_ASSERT(inPass);
-    QVkGraphicsPipeline *psD = RES(QVkGraphicsPipeline, ps);
+    QVkGraphicsPipeline *psD = QRHI_RES(QVkGraphicsPipeline, ps);
     Q_ASSERT(psD->pipeline);
 
     if (!srb)
@@ -1582,13 +1579,13 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
-            RES(QVkBuffer, b.ubuf.buf)->lastActiveFrameSlot = currentFrameSlot;
+            QRHI_RES(QVkBuffer, b.ubuf.buf)->lastActiveFrameSlot = currentFrameSlot;
             if (!b.ubuf.buf->isStatic())
                 hasDynamicBufferInSrb = true;
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
-            RES(QVkTexture, b.stex.tex)->lastActiveFrameSlot = currentFrameSlot;
-            RES(QVkSampler, b.stex.sampler)->lastActiveFrameSlot = currentFrameSlot;
+            QRHI_RES(QVkTexture, b.stex.tex)->lastActiveFrameSlot = currentFrameSlot;
+            QRHI_RES(QVkSampler, b.stex.sampler)->lastActiveFrameSlot = currentFrameSlot;
             break;
         default:
             Q_UNREACHABLE();
@@ -1597,7 +1594,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     }
 
     // ensure the descriptor set we are going to bind refers to up-to-date Vk objects
-    QVkShaderResourceBindings *srbD = RES(QVkShaderResourceBindings, srb);
+    QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
     const int descSetIdx = hasDynamicBufferInSrb ? currentFrameSlot : 0;
     bool srbUpdate = false;
     for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
@@ -1605,18 +1602,18 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
         QVkShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[descSetIdx][i]);
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
-            if (RES(QVkBuffer, b.ubuf.buf)->generation != bd.ubuf.generation) {
+            if (QRHI_RES(QVkBuffer, b.ubuf.buf)->generation != bd.ubuf.generation) {
                 srbUpdate = true;
-                bd.ubuf.generation = RES(QVkBuffer, b.ubuf.buf)->generation;
+                bd.ubuf.generation = QRHI_RES(QVkBuffer, b.ubuf.buf)->generation;
             }
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
-            if (RES(QVkTexture, b.stex.tex)->generation != bd.stex.texGeneration
-                    || RES(QVkSampler, b.stex.sampler)->generation != bd.stex.samplerGeneration)
+            if (QRHI_RES(QVkTexture, b.stex.tex)->generation != bd.stex.texGeneration
+                    || QRHI_RES(QVkSampler, b.stex.sampler)->generation != bd.stex.samplerGeneration)
             {
                 srbUpdate = true;
-                bd.stex.texGeneration = RES(QVkTexture, b.stex.tex)->generation;
-                bd.stex.samplerGeneration = RES(QVkSampler, b.stex.sampler)->generation;
+                bd.stex.texGeneration = QRHI_RES(QVkTexture, b.stex.tex)->generation;
+                bd.stex.samplerGeneration = QRHI_RES(QVkSampler, b.stex.sampler)->generation;
             }
             break;
         default:
@@ -1627,7 +1624,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     if (srbUpdate)
         updateShaderResourceBindings(srb, descSetIdx);
 
-    QVkCommandBuffer *cbD = RES(QVkCommandBuffer, cb);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     if (cbD->currentPipeline != ps) {
         psD->lastActiveFrameSlot = currentFrameSlot;
         df->vkCmdBindPipeline(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
@@ -1642,8 +1639,8 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     }
 }
 
-void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<VertexInput> &bindings,
-                          QRhiBuffer *indexBuf, quint32 indexOffset, IndexFormat indexFormat)
+void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
+                          QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
 
@@ -1651,23 +1648,23 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
     QVarLengthArray<VkDeviceSize, 4> ofs;
     for (int i = 0, ie = bindings.count(); i != ie; ++i) {
         QRhiBuffer *buf = bindings[i].first;
-        QVkBuffer *bufD = RES(QVkBuffer, buf);
+        QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
         Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
         bufD->lastActiveFrameSlot = currentFrameSlot;
         const int idx = buf->isStatic() ? 0 : currentFrameSlot;
         bufs.append(bufD->buffers[idx]);
         ofs.append(bindings[i].second);
     }
-    QVkCommandBuffer *cbD = RES(QVkCommandBuffer, cb);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     if (!bufs.isEmpty())
         df->vkCmdBindVertexBuffers(cbD->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
 
     if (indexBuf) {
-        QVkBuffer *bufD = RES(QVkBuffer, indexBuf);
+        QVkBuffer *bufD = QRHI_RES(QVkBuffer, indexBuf);
         Q_ASSERT(indexBuf->usage.testFlag(QRhiBuffer::IndexBuffer));
         bufD->lastActiveFrameSlot = currentFrameSlot;
         const int idx = indexBuf->isStatic() ? 0 : currentFrameSlot;
-        const VkIndexType type = indexFormat == IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+        const VkIndexType type = indexFormat == QRhi::IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
         df->vkCmdBindIndexBuffer(cbD->cb, bufD->buffers[idx], indexOffset, type);
     }
 }
@@ -1688,7 +1685,7 @@ void QRhiVulkan::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport
 {
     Q_ASSERT(inPass);
     VkViewport vp = toVkViewport(viewport);
-    df->vkCmdSetViewport(RES(QVkCommandBuffer, cb)->cb, 0, 1, &vp);
+    df->vkCmdSetViewport(QRHI_RES(QVkCommandBuffer, cb)->cb, 0, 1, &vp);
 }
 
 static inline VkRect2D toVkScissor(const QRhiScissor &scissor)
@@ -1705,34 +1702,34 @@ void QRhiVulkan::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
     Q_ASSERT(inPass);
     VkRect2D s = toVkScissor(scissor);
-    df->vkCmdSetScissor(RES(QVkCommandBuffer, cb)->cb, 0, 1, &s);
+    df->vkCmdSetScissor(QRHI_RES(QVkCommandBuffer, cb)->cb, 0, 1, &s);
 }
 
 void QRhiVulkan::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
 {
     Q_ASSERT(inPass);
     const float bc[4] = { c.x(), c.y(), c.z(), c.w() };
-    df->vkCmdSetBlendConstants(RES(QVkCommandBuffer, cb)->cb, bc);
+    df->vkCmdSetBlendConstants(QRHI_RES(QVkCommandBuffer, cb)->cb, bc);
 }
 
 void QRhiVulkan::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
 {
     Q_ASSERT(inPass);
-    df->vkCmdSetStencilReference(RES(QVkCommandBuffer, cb)->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
+    df->vkCmdSetStencilReference(QRHI_RES(QVkCommandBuffer, cb)->cb, VK_STENCIL_FRONT_AND_BACK, refValue);
 }
 
 void QRhiVulkan::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
                 quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
     Q_ASSERT(inPass);
-    df->vkCmdDraw(RES(QVkCommandBuffer, cb)->cb, vertexCount, instanceCount, firstVertex, firstInstance);
+    df->vkCmdDraw(QRHI_RES(QVkCommandBuffer, cb)->cb, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 void QRhiVulkan::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                        quint32 instanceCount, quint32 firstIndex, qint32 vertexOffset, quint32 firstInstance)
 {
     Q_ASSERT(inPass);
-    df->vkCmdDrawIndexed(RES(QVkCommandBuffer, cb)->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    df->vkCmdDrawIndexed(QRHI_RES(QVkCommandBuffer, cb)->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage)
@@ -2086,7 +2083,7 @@ static inline VkShaderStageFlags toVkShaderStageFlags(QRhiShaderResourceBindings
     return VkShaderStageFlags(s);
 }
 
-QVkBuffer::QVkBuffer(QRhi *rhi, Type type, UsageFlags usage, int size)
+QVkBuffer::QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
     : QRhiBuffer(rhi, type, usage, size)
 {
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
@@ -2123,7 +2120,7 @@ void QVkBuffer::release()
         allocations[i] = nullptr;
     }
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
@@ -2148,7 +2145,7 @@ bool QVkBuffer::build()
         allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
     }
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     VkResult err = VK_SUCCESS;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         buffers[i] = VK_NULL_HANDLE;
@@ -2181,7 +2178,7 @@ bool QVkBuffer::build()
     }
 }
 
-QVkRenderBuffer::QVkRenderBuffer(QRhi *rhi, Type type, const QSize &pixelSize, int sampleCount)
+QVkRenderBuffer::QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize, int sampleCount)
     : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount)
 {
 }
@@ -2203,7 +2200,7 @@ void QVkRenderBuffer::release()
     image = VK_NULL_HANDLE;
     imageView = VK_NULL_HANDLE;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
@@ -2212,7 +2209,7 @@ bool QVkRenderBuffer::build()
     if (memory)
         release();
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     switch (type) {
     case QRhiRenderBuffer::DepthStencil:
         if (!rhiD->createTransientImage(rhiD->optimalDepthStencilFormat(),
@@ -2237,7 +2234,7 @@ bool QVkRenderBuffer::build()
     return true;
 }
 
-QVkTexture::QVkTexture(QRhi *rhi, Format format, const QSize &pixelSize, Flags flags)
+QVkTexture::QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags)
     : QRhiTexture(rhi, format, pixelSize, flags)
 {
 }
@@ -2263,7 +2260,7 @@ void QVkTexture::release()
     stagingBuffer = VK_NULL_HANDLE;
     stagingAlloc = nullptr;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
@@ -2272,7 +2269,7 @@ bool QVkTexture::build()
     if (image)
         release();
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     VkFormat vkformat = toVkTextureFormat(format);
     VkFormatProperties props;
     rhiD->f->vkGetPhysicalDeviceFormatProperties(rhiD->physDev, vkformat, &props);
@@ -2345,7 +2342,7 @@ bool QVkTexture::build()
     return true;
 }
 
-QVkSampler::QVkSampler(QRhi *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)
+QVkSampler::QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)
     : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v)
 {
 }
@@ -2362,7 +2359,7 @@ void QVkSampler::release()
     e.sampler.sampler = sampler;
     sampler = VK_NULL_HANDLE;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
@@ -2381,7 +2378,7 @@ bool QVkSampler::build()
     samplerInfo.addressModeV = toVkAddressMode(addressV);
     samplerInfo.maxAnisotropy = 1.0f;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     VkResult err = rhiD->df->vkCreateSampler(rhiD->dev, &samplerInfo, nullptr, &sampler);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create sampler: %d", err);
@@ -2393,7 +2390,7 @@ bool QVkSampler::build()
     return true;
 }
 
-QVkRenderPass::QVkRenderPass(QRhi *rhi)
+QVkRenderPass::QVkRenderPass(QRhiImplementation *rhi)
     : QRhiRenderPass(rhi)
 {
 }
@@ -2411,11 +2408,11 @@ void QVkRenderPass::release()
 
     rp = VK_NULL_HANDLE;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
-QVkReferenceRenderTarget::QVkReferenceRenderTarget(QRhi *rhi)
+QVkReferenceRenderTarget::QVkReferenceRenderTarget(QRhiImplementation *rhi)
     : QRhiReferenceRenderTarget(rhi),
       d(rhi)
 {
@@ -2441,19 +2438,19 @@ const QRhiRenderPass *QVkReferenceRenderTarget::renderPass() const
     return &d.rp;
 }
 
-QVkTextureRenderTarget::QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, Flags flags)
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags)
     : QRhiTextureRenderTarget(rhi, texture, flags),
       d(rhi)
 {
 }
 
-QVkTextureRenderTarget::QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags)
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags)
     : QRhiTextureRenderTarget(rhi, texture, depthStencilBuffer, flags),
       d(rhi)
 {
 }
 
-QVkTextureRenderTarget::QVkTextureRenderTarget(QRhi *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags)
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags)
     : QRhiTextureRenderTarget(rhi, texture, depthTexture, flags),
       d(rhi)
 {
@@ -2474,7 +2471,7 @@ void QVkTextureRenderTarget::release()
 
     d.fb = VK_NULL_HANDLE;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
@@ -2502,7 +2499,7 @@ bool QVkTextureRenderTarget::build()
     attDesc[0].initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
     attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     if (hasDepthStencil) {
         attDesc[1].format = depthTexture ? toVkTextureFormat(depthTexture->format) : rhiD->optimalDepthStencilFormat();
         attDesc[1].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -2535,16 +2532,16 @@ bool QVkTextureRenderTarget::build()
     if (hasDepthStencil)
         rpInfo.attachmentCount += 1;
 
-    VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, &RES(QVkRenderPass, &d.rp)->rp);
+    VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, &QRHI_RES(QVkRenderPass, &d.rp)->rp);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create renderpass: %d", err);
         return false;
     }
 
     const VkImageView views[] = {
-        RES(QVkTexture, texture)->imageView,
-        hasDepthStencil ? (depthTexture ? RES(QVkTexture, depthTexture)->imageView
-                : RES(QVkRenderBuffer, depthStencilBuffer)->imageView)
+        QRHI_RES(QVkTexture, texture)->imageView,
+        hasDepthStencil ? (depthTexture ? QRHI_RES(QVkTexture, depthTexture)->imageView
+                : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->imageView)
             : VK_NULL_HANDLE
     };
     d.attCount = hasDepthStencil ? 2 : 1;
@@ -2552,7 +2549,7 @@ bool QVkTextureRenderTarget::build()
     VkFramebufferCreateInfo fbInfo;
     memset(&fbInfo, 0, sizeof(fbInfo));
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbInfo.renderPass = RES(QVkRenderPass, &d.rp)->rp;
+    fbInfo.renderPass = QRHI_RES(QVkRenderPass, &d.rp)->rp;
     fbInfo.attachmentCount = d.attCount;
     fbInfo.pAttachments = views;
     fbInfo.width = texture->pixelSize.width();
@@ -2586,7 +2583,7 @@ const QRhiRenderPass *QVkTextureRenderTarget::renderPass() const
     return &d.rp;
 }
 
-QVkShaderResourceBindings::QVkShaderResourceBindings(QRhi *rhi)
+QVkShaderResourceBindings::QVkShaderResourceBindings(QRhiImplementation *rhi)
     : QRhiShaderResourceBindings(rhi)
 {
 }
@@ -2608,7 +2605,7 @@ void QVkShaderResourceBindings::release()
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
         descSets[i] = VK_NULL_HANDLE;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
@@ -2637,7 +2634,7 @@ bool QVkShaderResourceBindings::build()
     layoutInfo.bindingCount = uint32_t(vkbindings.count());
     layoutInfo.pBindings = vkbindings.constData();
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     VkResult err = rhiD->df->vkCreateDescriptorSetLayout(rhiD->dev, &layoutInfo, nullptr, &layout);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create descriptor set layout: %d", err);
@@ -2661,7 +2658,7 @@ bool QVkShaderResourceBindings::build()
     return true;
 }
 
-QVkGraphicsPipeline::QVkGraphicsPipeline(QRhi *rhi)
+QVkGraphicsPipeline::QVkGraphicsPipeline(QRhiImplementation *rhi)
     : QRhiGraphicsPipeline(rhi)
 {
 }
@@ -2681,7 +2678,7 @@ void QVkGraphicsPipeline::release()
     pipeline = VK_NULL_HANDLE;
     layout = VK_NULL_HANDLE;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
@@ -2690,7 +2687,7 @@ bool QVkGraphicsPipeline::build()
     if (pipeline)
         release();
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     if (!rhiD->ensurePipelineCache())
         return false;
 
@@ -2698,7 +2695,7 @@ bool QVkGraphicsPipeline::build()
     memset(&pipelineLayoutInfo, 0, sizeof(pipelineLayoutInfo));
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    QVkShaderResourceBindings *srbD = RES(QVkShaderResourceBindings, shaderResourceBindings);
+    QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, shaderResourceBindings);
     Q_ASSERT(shaderResourceBindings && srbD->layout);
     pipelineLayoutInfo.pSetLayouts = &srbD->layout;
     VkResult err = rhiD->df->vkCreatePipelineLayout(rhiD->dev, &pipelineLayoutInfo, nullptr, &layout);
@@ -2838,8 +2835,8 @@ bool QVkGraphicsPipeline::build()
 
     pipelineInfo.layout = layout;
 
-    Q_ASSERT(renderPass && RES(const QVkRenderPass, renderPass)->rp);
-    pipelineInfo.renderPass = RES(const QVkRenderPass, renderPass)->rp;
+    Q_ASSERT(renderPass && QRHI_RES(const QVkRenderPass, renderPass)->rp);
+    pipelineInfo.renderPass = QRHI_RES(const QVkRenderPass, renderPass)->rp;
 
     err = rhiD->df->vkCreateGraphicsPipelines(rhiD->dev, rhiD->pipelineCache, 1, &pipelineInfo, nullptr, &pipeline);
 
@@ -2855,7 +2852,7 @@ bool QVkGraphicsPipeline::build()
     }
 }
 
-QVkCommandBuffer::QVkCommandBuffer(QRhi *rhi)
+QVkCommandBuffer::QVkCommandBuffer(QRhiImplementation *rhi)
     : QRhiCommandBuffer(rhi)
 {
     resetState();
@@ -2866,7 +2863,7 @@ void QVkCommandBuffer::release()
     Q_UNREACHABLE();
 }
 
-QVkSwapChain::QVkSwapChain(QRhi *rhi)
+QVkSwapChain::QVkSwapChain(QRhiImplementation *rhi)
     : QRhiSwapChain(rhi),
       rtWrapper(rhi),
       cbWrapper(rhi)
@@ -2878,7 +2875,7 @@ void QVkSwapChain::release()
     if (wrapWindow)
         return;
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseSwapChainResources(this);
 }
 
@@ -2914,7 +2911,7 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
         return false;
     }
 
-    RES_RHI(QRhiVulkan);
+    QRHI_RES_RHI(QRhiVulkan);
     if (!rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
         rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(
                     rhiD->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
@@ -2948,10 +2945,10 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
     if (!rhiD->recreateSwapChain(surface, pixelSize_, flags, this))
         return false;
 
-    QVkReferenceRenderTarget *rtD = RES(QVkReferenceRenderTarget, &rtWrapper);
+    QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &rtWrapper);
     rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat);
 
-    RES(QVkRenderPass, &rtD->d.rp)->rp = rp;
+    QRHI_RES(QVkRenderPass, &rtD->d.rp)->rp = rp;
     rtD->d.attCount = 1;
     if (depthStencil)
         rtD->d.attCount += 1;
@@ -2963,13 +2960,13 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
 
         VkImageView views[3] = {
             image.imageView,
-            depthStencil ? RES(QVkRenderBuffer, depthStencil)->imageView : VK_NULL_HANDLE,
+            depthStencil ? QRHI_RES(QVkRenderBuffer, depthStencil)->imageView : VK_NULL_HANDLE,
             sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
         };
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = RES(QVkRenderPass, &rtD->d.rp)->rp;
+        fbInfo.renderPass = QRHI_RES(QVkRenderPass, &rtD->d.rp)->rp;
         fbInfo.attachmentCount = rtD->d.attCount;
         fbInfo.pAttachments = views;
         fbInfo.width = pixelSize.width();
@@ -2993,8 +2990,8 @@ bool QVkSwapChain::build(QObject *target)
 
     QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(target);
     if (vkw) {
-        QVkReferenceRenderTarget *rtD = RES(QVkReferenceRenderTarget, &rtWrapper);
-        RES(QVkRenderPass, &rtD->d.rp)->rp = vkw->defaultRenderPass();
+        QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &rtWrapper);
+        QRHI_RES(QVkRenderPass, &rtD->d.rp)->rp = vkw->defaultRenderPass();
         pixelSize = rtD->d.pixelSize = vkw->swapChainImageSize();
         rtD->d.attCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
         wrapWindow = vkw;

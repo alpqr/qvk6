@@ -48,12 +48,12 @@ void GlWindow::init()
 {
     ctx = new QOpenGLContext;
     ctx->create();
+    ctx->makeCurrent(this);
 
     QRhiGles2InitParams params;
     params.context = ctx;
     m_r = QRhi::create(QRhi::OpenGLES2, &params);
 
-    ctx->makeCurrent(this);
     ExampleWindow::init();
 }
 
@@ -64,7 +64,6 @@ void GlWindow::releaseResources()
 
     ctx->makeCurrent(this);
     ExampleWindow::releaseResources();
-    ctx->doneCurrent();
 
     delete ctx;
     ctx = nullptr;

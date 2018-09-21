@@ -158,6 +158,7 @@ struct QGles2SwapChain : public QRhiSwapChain
 
     bool build(QObject *target) override;
 
+    QSurface *surface = nullptr;
     QSize pixelSize;
     QGles2ReferenceRenderTarget rtWrapper;
     QGles2CommandBuffer cbWrapper;
@@ -232,6 +233,7 @@ public:
 
     QOpenGLContext *ctx = nullptr;
     QOpenGLFunctions *f = nullptr;
+    bool inPass = false;
 };
 
 QT_END_NAMESPACE

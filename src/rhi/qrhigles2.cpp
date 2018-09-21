@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhigles2_p.h"
+#include <QWindow>
 
 QT_BEGIN_NAMESPACE
 
@@ -54,10 +55,16 @@ QRhiGles2::~QRhiGles2()
 void QRhiGles2::create()
 {
     Q_ASSERT(ctx);
+
+    f = ctx->functions();
 }
 
 void QRhiGles2::destroy()
 {
+    if (!f)
+        return;
+
+    f = nullptr;
 }
 
 QVector<int> QRhiGles2::supportedSampleCounts() const
@@ -129,37 +136,45 @@ QRhiShaderResourceBindings *QRhiGles2::createShaderResourceBindings()
 
 void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
 {
+    Q_ASSERT(inPass);
 }
 
 void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
                                QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
 {
+    Q_ASSERT(inPass);
 }
 
 void QRhiGles2::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
 {
+    Q_ASSERT(inPass);
 }
 
 void QRhiGles2::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
+    Q_ASSERT(inPass);
 }
 
 void QRhiGles2::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
 {
+    Q_ASSERT(inPass);
 }
 
 void QRhiGles2::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
 {
+    Q_ASSERT(inPass);
 }
 
 void QRhiGles2::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
                      quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
+    Q_ASSERT(inPass);
 }
 
 void QRhiGles2::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                             quint32 instanceCount, quint32 firstIndex, qint32 vertexOffset, quint32 firstInstance)
 {
+    Q_ASSERT(inPass);
 }
 
 QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
@@ -169,15 +184,52 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 {
+    QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
+    if (swapChainD->surface)
+        ctx->swapBuffers(swapChainD->surface);
+
     return QRhi::FrameOpSuccess;
 }
 
 void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const QRhi::PassUpdates &updates)
 {
+    Q_ASSERT(!inPass);
+
+    bool needsColorClear = true;
+    QGles2BasicRenderTargetData *rtD = nullptr;
+    switch (rt->type()) {
+    case QRhiRenderTarget::RtRef:
+        rtD = &static_cast<QGles2ReferenceRenderTarget *>(rt)->d;
+        break;
+    case QRhiRenderTarget::RtTexture:
+    {
+        QGles2TextureRenderTarget *rtTex = static_cast<QGles2TextureRenderTarget *>(rt);
+        rtD = &rtTex->d;
+        needsColorClear = !rtTex->flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
+        //activateTextureRenderTarget(cb, rtTex);
+    }
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
+    GLbitfield clearMask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+    if (needsColorClear) {
+        clearMask |= GL_COLOR_BUFFER_BIT;
+        const QVector4D &c(clearValues->rgba);
+        f->glClearColor(c.x(), c.y(), c.z(), c.w());
+    }
+    f->glClear(clearMask);
+
+    inPass = true;
 }
 
 void QRhiGles2::endPass(QRhiCommandBuffer *cb)
 {
+    Q_ASSERT(inPass);
+
+    inPass = false;
 }
 
 QGles2Buffer::QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
@@ -386,11 +438,15 @@ QSize QGles2SwapChain::sizeInPixels() const
 bool QGles2SwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount_)
 {
+    surface = window;
+    pixelSize = pixelSize_;
+
     return true;
 }
 
 bool QGles2SwapChain::build(QObject *target)
 {
+    // some day this could support QOpenGLWindow, OpenGLWidget, ...
     Q_UNUSED(target);
     return false;
 }

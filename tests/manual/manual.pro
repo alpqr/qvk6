@@ -1,4 +1,5 @@
 TEMPLATE = subdirs
 SUBDIRS += \
     vulkanwindow \
-    plainqwindow
+    plainqwindow_vulkan \
+    plainqwindow_gles2

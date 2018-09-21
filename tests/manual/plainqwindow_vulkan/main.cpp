@@ -27,35 +27,25 @@
  ****************************************************************************/
 
 #include <QGuiApplication>
-#include <QWindow>
 #include <QLoggingCategory>
 #include <QVulkanInstance>
 #include <QVulkanFunctions>
-#include <QPlatformSurfaceEvent>
 
 #include <QRhiVulkanInitParams>
 
-#include "trianglerenderer.h"
-#include "texturedcuberenderer.h"
-#include "triangleoncuberenderer.h"
+#include "examplewindow.h"
 
-class VWindow : public QWindow
+class VWindow : public ExampleWindow
 {
 public:
     VWindow() { setSurfaceType(VulkanSurface); }
     ~VWindow() { releaseResources(); }
 
 private:
-    void exposeEvent(QExposeEvent *) override;
-    bool event(QEvent *) override;
+    void init() override;
+    void prepareRender() override;
+    void releaseResources() override;
 
-    void init();
-    void releaseResources();
-    void recreateSwapChain();
-    void releaseSwapChain();
-    void render();
-
-    bool m_inited = false;
     VkPhysicalDevice m_vkPhysDev;
     VkPhysicalDeviceProperties m_physDevProps;
     VkDevice m_vkDev = VK_NULL_HANDLE;
@@ -63,34 +53,7 @@ private:
     VkQueue m_vkGfxQueue;
     VkQueue m_vkPresQueue;
     VkCommandPool m_vkCmdPool = VK_NULL_HANDLE;
-
-    QRhi *m_r = nullptr;
-    bool m_hasSwapChain = false;
-    bool m_swapChainChanged = false;
-    QRhiSwapChain *m_sc = nullptr;
-    QRhiRenderBuffer *m_ds = nullptr;
-
-    TriangleRenderer m_triRenderer;
-    TexturedCubeRenderer m_cubeRenderer;
-    TriangleOnCubeRenderer m_liveTexCubeRenderer;
 };
-
-void VWindow::exposeEvent(QExposeEvent *)
-{
-    if (isExposed() && !m_inited) {
-        m_inited = true;
-        init();
-        recreateSwapChain();
-        render();
-    }
-
-    // Release everything when unexposed - the meaning of which is platform specific.
-    if (!isExposed() && m_inited) {
-        m_inited = false;
-        releaseSwapChain();
-        releaseResources();
-    }
-}
 
 void VWindow::init()
 {
@@ -204,19 +167,7 @@ void VWindow::init()
     params.gfxQueue = m_vkGfxQueue;
     m_r = QRhi::create(QRhi::Vulkan, &params);
 
-    m_triRenderer.setRhi(m_r);
-    m_triRenderer.initResources();
-    m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
-
-    m_cubeRenderer.setRhi(m_r);
-    m_cubeRenderer.initResources();
-    m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
-
-    m_liveTexCubeRenderer.setRhi(m_r);
-    m_liveTexCubeRenderer.initResources();
-    m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
-
-    m_sc = m_r->createSwapChain();
+    ExampleWindow::init();
 }
 
 void VWindow::releaseResources()
@@ -226,20 +177,7 @@ void VWindow::releaseResources()
 
     m_devFuncs->vkDeviceWaitIdle(m_vkDev);
 
-    m_triRenderer.releaseOutputDependentResources();
-    m_triRenderer.releaseResources();
-
-    m_cubeRenderer.releaseOutputDependentResources();
-    m_cubeRenderer.releaseResources();
-
-    m_liveTexCubeRenderer.releaseOutputDependentResources();
-    m_liveTexCubeRenderer.releaseResources();
-
-    delete m_sc;
-    m_sc = nullptr;
-
-    delete m_r;
-    m_r = nullptr;
+    ExampleWindow::releaseResources();
 
     if (m_vkCmdPool) {
         m_devFuncs->vkDestroyCommandPool(m_vkDev, m_vkCmdPool, nullptr);
@@ -255,118 +193,8 @@ void VWindow::releaseResources()
     }
 }
 
-void VWindow::recreateSwapChain()
+void VWindow::prepareRender()
 {
-    const QSize outputSize = size() * devicePixelRatio();
-
-    if (!m_ds) {
-        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
-    } else {
-        m_ds->release();
-        m_ds->pixelSize = outputSize;
-    }
-    m_ds->build();
-
-    m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES);
-    m_swapChainChanged = true;
-}
-
-void VWindow::releaseSwapChain()
-{
-    if (m_hasSwapChain) {
-        m_hasSwapChain = false;
-        m_sc->release();
-    }
-    if (m_ds) {
-        m_ds->release();
-        delete m_ds;
-        m_ds = nullptr;
-    }
-}
-
-void VWindow::render()
-{
-    if (!m_hasSwapChain)
-        return;
-
-    if (m_sc->sizeInPixels() != size() * devicePixelRatio()) {
-        recreateSwapChain();
-        if (!m_hasSwapChain)
-            return;
-    }
-
-    QRhi::FrameOpResult r = m_r->beginFrame(m_sc);
-    if (r == QRhi::FrameOpSwapChainOutOfDate) {
-        recreateSwapChain();
-        if (!m_hasSwapChain)
-            return;
-        r = m_r->beginFrame(m_sc);
-    }
-    if (r != QRhi::FrameOpSuccess) {
-        requestUpdate();
-        return;
-    }
-
-    if (m_swapChainChanged) {
-        m_swapChainChanged = false;
-        m_triRenderer.releaseOutputDependentResources();
-        m_cubeRenderer.releaseOutputDependentResources();
-        m_liveTexCubeRenderer.releaseOutputDependentResources();
-    }
-
-    if (!m_triRenderer.isPipelineInitialized()) {
-        const QRhiRenderPass *rp = m_sc->defaultRenderPass();
-        m_triRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
-        m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
-        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
-    }
-
-    QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
-    m_liveTexCubeRenderer.queueOffscreenPass(cb);
-
-    QRhi::PassUpdates u;
-    u += m_triRenderer.update();
-    u += m_cubeRenderer.update();
-    u += m_liveTexCubeRenderer.update();
-
-    const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
-    const QRhiClearValue clearValues[] = {
-        clearColor,
-        QRhiClearValue(1.0f, 0), // depth, stencil
-        clearColor // 3 attachments when using MSAA
-    };
-    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
-    m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
-    m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
-    m_liveTexCubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
-    m_r->endPass(cb);
-
-    m_r->endFrame(m_sc);
-
-    requestUpdate(); // render continuously, throttled by the presentation rate
-}
-
-bool VWindow::event(QEvent *e)
-{
-    switch (e->type()) {
-    case QEvent::UpdateRequest:
-        render();
-        break;
-
-    // Now the fun part: the swapchain must be destroyed before the surface as per
-    // spec. This is not ideal for us because the surface is managed by the
-    // QPlatformWindow which may be gone already when the unexpose comes, making the
-    // validation layer scream. The solution is to listen to the PlatformSurface events.
-    case QEvent::PlatformSurface:
-        if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
-            releaseSwapChain();
-        break;
-
-    default:
-        break;
-    }
-
-    return QWindow::event(e);
 }
 
 int main(int argc, char **argv)

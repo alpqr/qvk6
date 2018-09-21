@@ -36,6 +36,7 @@
 
 #include "qrhi.h"
 #include "qrhivulkan_p.h"
+#include "qrhigles2_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -175,6 +176,12 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
     {
         QRhi *r = new QRhi;
         r->d = new QRhiVulkan(params);
+        return r;
+    }
+    case OpenGLES2:
+    {
+        QRhi *r = new QRhi;
+        r->d = new QRhiGles2(params);
         return r;
     }
     default:

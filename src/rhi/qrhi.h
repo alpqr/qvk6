@@ -553,7 +553,8 @@ class Q_RHI_EXPORT QRhi
 {
 public:
     enum Implementation {
-        Vulkan
+        Vulkan,
+        OpenGLES2
     };
 
     enum FrameOpResult {

@@ -43,7 +43,6 @@
 
 #include "qrhivulkan.h"
 #include "qrhi_p.h"
-#include <QVector>
 
 QT_BEGIN_NAMESPACE
 
@@ -328,6 +327,7 @@ public:
 
     void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
               quint32 instanceCount, quint32 firstVertex, quint32 firstInstance) override;
+
     void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;

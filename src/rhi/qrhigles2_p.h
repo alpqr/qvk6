@@ -52,6 +52,9 @@ struct QGles2Buffer : public QRhiBuffer
     QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
     void release() override;
     bool build() override;
+
+    uint buffer = 0;
+    GLenum target;
 };
 
 struct QGles2RenderBuffer : public QRhiRenderBuffer
@@ -133,14 +136,20 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
     QGles2CommandBuffer(QRhiImplementation *rhi);
     void release() override;
 
+    struct Command {
+    };
+
+    QVector<Command> commands;
+    QRhiRenderTarget *currentTarget;
+    QRhiGraphicsPipeline *currentPipeline;
+    QRhiShaderResourceBindings *currentSrb;
+
     void resetState() {
+        commands.clear();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentSrb = nullptr;
     }
-    QRhiRenderTarget *currentTarget;
-    QRhiGraphicsPipeline *currentPipeline;
-    QRhiShaderResourceBindings *currentSrb;
 };
 
 struct QGles2SwapChain : public QRhiSwapChain
@@ -161,7 +170,7 @@ struct QGles2SwapChain : public QRhiSwapChain
     QSurface *surface = nullptr;
     QSize pixelSize;
     QGles2ReferenceRenderTarget rtWrapper;
-    QGles2CommandBuffer cbWrapper;
+    QGles2CommandBuffer cb;
 };
 
 class QRhiGles2 : public QRhiImplementation
@@ -230,10 +239,28 @@ public:
 
     void create();
     void destroy();
+    void executeDeferredReleases();
+    void prepareNewFrame(QRhiCommandBuffer *cb);
+    void finishFrame();
 
     QOpenGLContext *ctx = nullptr;
     QOpenGLFunctions *f = nullptr;
+    bool inFrame = false;
+    int finishedFrameCount = 0;
     bool inPass = false;
+
+    struct DeferredReleaseEntry {
+        enum Type {
+            Buffer
+        };
+        Type type;
+        union {
+            struct {
+                uint buffer;
+            } buffer;
+        };
+    };
+    QVector<DeferredReleaseEntry> releaseQueue;
 };
 
 QT_END_NAMESPACE

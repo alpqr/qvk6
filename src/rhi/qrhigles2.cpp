@@ -54,7 +54,7 @@ QRhiGles2::~QRhiGles2()
 
 void QRhiGles2::create()
 {
-    Q_ASSERT(ctx);
+    Q_ASSERT(ctx && QOpenGLContext::currentContext() == ctx);
 
     f = ctx->functions();
 }
@@ -64,7 +64,25 @@ void QRhiGles2::destroy()
     if (!f)
         return;
 
+    executeDeferredReleases();
+
     f = nullptr;
+}
+
+void QRhiGles2::executeDeferredReleases()
+{
+    Q_ASSERT(QOpenGLContext::currentContext() == ctx);
+    for (int i = releaseQueue.count() - 1; i >= 0; --i) {
+        const QRhiGles2::DeferredReleaseEntry &e(releaseQueue[i]);
+        switch (e.type) {
+        case QRhiGles2::DeferredReleaseEntry::Buffer:
+            f->glDeleteBuffers(1, &e.buffer.buffer);
+            break;
+        default:
+            break;
+        }
+        releaseQueue.removeAt(i);
+    }
 }
 
 QVector<int> QRhiGles2::supportedSampleCounts() const
@@ -177,13 +195,35 @@ void QRhiGles2::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     Q_ASSERT(inPass);
 }
 
+void QRhiGles2::prepareNewFrame(QRhiCommandBuffer *cb)
+{
+    Q_ASSERT(!inFrame);
+    inFrame = true;
+
+    executeDeferredReleases();
+
+    QRHI_RES(QGles2CommandBuffer, cb)->resetState();
+}
+
+void QRhiGles2::finishFrame()
+{
+    Q_ASSERT(inFrame);
+    inFrame = false;
+    ++finishedFrameCount;
+}
+
 QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
 {
+    QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
+    prepareNewFrame(&swapChainD->cb);
+
     return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 {
+    finishFrame();
+
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
     if (swapChainD->surface)
         ctx->swapBuffers(swapChainD->surface);
@@ -194,6 +234,7 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const QRhi::PassUpdates &updates)
 {
     Q_ASSERT(!inPass);
+    Q_ASSERT(QOpenGLContext::currentContext() == ctx);
 
     bool needsColorClear = true;
     QGles2BasicRenderTargetData *rtD = nullptr;
@@ -239,10 +280,42 @@ QGles2Buffer::QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage,
 
 void QGles2Buffer::release()
 {
+    if (!buffer)
+        return;
+
+    QRhiGles2::DeferredReleaseEntry e;
+    e.type = QRhiGles2::DeferredReleaseEntry::Buffer;
+
+    e.buffer.buffer = buffer;
+
+    buffer = 0;
+
+    QRHI_RES_RHI(QRhiGles2);
+    rhiD->releaseQueue.append(e);
 }
 
 bool QGles2Buffer::build()
 {
+    QRHI_RES_RHI(QRhiGles2);
+    Q_ASSERT(QOpenGLContext::currentContext() == rhiD->ctx);
+
+    if (buffer)
+        release();
+
+    if (usage.testFlag(QRhiBuffer::UniformBuffer)) {
+        // special since we do not support uniform blocks in this backend
+        return true;
+    }
+
+    if (usage.testFlag(QRhiBuffer::VertexBuffer))
+        target = GL_ARRAY_BUFFER;
+    if (usage.testFlag(QRhiBuffer::IndexBuffer))
+        target = GL_ELEMENT_ARRAY_BUFFER;
+
+    rhiD->f->glGenBuffers(1, &buffer);
+    rhiD->f->glBindBuffer(target, buffer);
+    rhiD->f->glBufferData(target, size, nullptr, isStatic() ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
+
     return true;
 }
 
@@ -407,7 +480,7 @@ void QGles2CommandBuffer::release()
 QGles2SwapChain::QGles2SwapChain(QRhiImplementation *rhi)
     : QRhiSwapChain(rhi),
       rtWrapper(rhi),
-      cbWrapper(rhi)
+      cb(rhi)
 {
 }
 
@@ -417,7 +490,7 @@ void QGles2SwapChain::release()
 
 QRhiCommandBuffer *QGles2SwapChain::currentFrameCommandBuffer()
 {
-    return &cbWrapper;
+    return &cb;
 }
 
 QRhiRenderTarget *QGles2SwapChain::currentFrameRenderTarget()

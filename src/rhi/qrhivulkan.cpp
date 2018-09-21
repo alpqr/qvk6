@@ -1353,7 +1353,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
             VmaAllocation allocation;
             VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &utexD->stagingBuffer, &allocation, nullptr);
             if (err != VK_SUCCESS) {
-                qWarning("Failed to create image staging buffer of size %d: %d", imageSize, err);
+                qWarning("Failed to create image staging buffer of size %d: %d", int(imageSize), err);
                 continue;
             }
             utexD->stagingAlloc = allocation;

@@ -79,19 +79,17 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
     QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
     Q_ASSERT(fs.isValid());
     m_ps->shaderStages = {
-        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Vertex,
-        vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
-        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Fragment,
-        fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
+        { QRhiGraphicsShaderStage::Vertex, vs },
+        { QRhiGraphicsShaderStage::Fragment, fs }
     };
 
     QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        QRhiVertexInputLayout::Binding(7 * sizeof(float))
+        { 7 * sizeof(float) }
     };
     inputLayout.attributes = {
-        QRhiVertexInputLayout::Attribute(0, 0, QRhiVertexInputLayout::Attribute::Float2, 0, "POSITION"),
-        QRhiVertexInputLayout::Attribute(0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR")
+        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0, "POSITION" },
+        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR" }
     };
 
     m_ps->vertexInputLayout = inputLayout;

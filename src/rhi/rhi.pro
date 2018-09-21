@@ -2,6 +2,8 @@ TARGET = QtRhi
 
 load(qt_module)
 
+QT += shadertools
+
 !qtConfig(vulkan): error(This module requires Vulkan support)
 
 DEFINES += QT_BUILD_RHI_LIB

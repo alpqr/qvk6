@@ -44,6 +44,7 @@
 #include <QMatrix4x4>
 #include <QVector>
 #include <QImage>
+#include <QBakedShader>
 
 QT_BEGIN_NAMESPACE
 
@@ -136,12 +137,12 @@ struct Q_RHI_EXPORT QRhiGraphicsShaderStage
     };
 
     QRhiGraphicsShaderStage() { }
-    QRhiGraphicsShaderStage(Type type_, const QByteArray &shader_, const char *name_ = "main")
+    QRhiGraphicsShaderStage(Type type_, const QBakedShader &shader_, const char *name_ = "main")
         : type(type_), shader(shader_), name(name_)
     { }
 
     Type type;
-    QByteArray shader;
+    QBakedShader shader;
     const char *name;
 };
 

@@ -137,20 +137,18 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
     QBakedShader fs = getShader(QLatin1String(":/texture.frag.qsb"));
     Q_ASSERT(fs.isValid());
     m_ps->shaderStages = {
-        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Vertex,
-        vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader),
-        QRhiGraphicsShaderStage(QRhiGraphicsShaderStage::Fragment,
-        fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader)
+        { QRhiGraphicsShaderStage::Vertex, vs },
+        { QRhiGraphicsShaderStage::Fragment, fs }
     };
 
     QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        QRhiVertexInputLayout::Binding(3 * sizeof(float)),
-        QRhiVertexInputLayout::Binding(2 * sizeof(float))
+        { 3 * sizeof(float) },
+        { 2 * sizeof(float) }
     };
     inputLayout.attributes = {
-        QRhiVertexInputLayout::Attribute(0, 0, QRhiVertexInputLayout::Attribute::Float3, 0, "POSITION"),
-        QRhiVertexInputLayout::Attribute(1, 1, QRhiVertexInputLayout::Attribute::Float2, 0, "TEXCOORD")
+        { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0, "POSITION" },
+        { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0, "TEXCOORD" }
     };
 
     m_ps->vertexInputLayout = inputLayout;

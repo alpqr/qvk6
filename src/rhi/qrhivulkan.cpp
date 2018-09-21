@@ -2699,8 +2699,10 @@ bool QVkGraphicsPipeline::build()
     Q_ASSERT(shaderResourceBindings && srbD->layout);
     pipelineLayoutInfo.pSetLayouts = &srbD->layout;
     VkResult err = rhiD->df->vkCreatePipelineLayout(rhiD->dev, &pipelineLayoutInfo, nullptr, &layout);
-    if (err != VK_SUCCESS)
+    if (err != VK_SUCCESS) {
         qWarning("Failed to create pipeline layout: %d", err);
+        return false;
+    }
 
     VkGraphicsPipelineCreateInfo pipelineInfo;
     memset(&pipelineInfo, 0, sizeof(pipelineInfo));
@@ -2709,7 +2711,12 @@ bool QVkGraphicsPipeline::build()
     QVarLengthArray<VkShaderModule, 4> shaders;
     QVarLengthArray<VkPipelineShaderStageCreateInfo, 4> shaderStageCreateInfos;
     for (const QRhiGraphicsShaderStage &shaderStage : shaderStages) {
-        VkShaderModule shader = rhiD->createShader(shaderStage.shader);
+        const QByteArray spirv = shaderStage.shader.shader(QBakedShader::SpirvShader).shader;
+        if (spirv.isEmpty()) {
+            qWarning("No SPIR-V shader code found");
+            return false;
+        }
+        VkShaderModule shader = rhiD->createShader(spirv);
         if (shader) {
             shaders.append(shader);
             VkPipelineShaderStageCreateInfo shaderInfo;

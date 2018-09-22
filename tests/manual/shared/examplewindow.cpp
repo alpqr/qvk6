@@ -28,6 +28,8 @@
 
 #include "examplewindow.h"
 
+const int SAMPLES = 1;
+
 void ExampleWindow::exposeEvent(QExposeEvent *)
 {
     if (isExposed() && !m_inited) {
@@ -80,14 +82,17 @@ bool ExampleWindow::event(QEvent *e)
 void ExampleWindow::init()
 {
     m_triRenderer.setRhi(m_r);
+    m_triRenderer.setSampleCount(SAMPLES);
     m_triRenderer.initResources();
     m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
 
     m_cubeRenderer.setRhi(m_r);
+    m_cubeRenderer.setSampleCount(SAMPLES);
     m_cubeRenderer.initResources();
     m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
 
     m_liveTexCubeRenderer.setRhi(m_r);
+    m_liveTexCubeRenderer.setSampleCount(SAMPLES);
     m_liveTexCubeRenderer.initResources();
     m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
 
@@ -117,14 +122,14 @@ void ExampleWindow::recreateSwapChain()
     const QSize outputSize = size() * devicePixelRatio();
 
     if (!m_ds) {
-        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil, outputSize, TriangleRenderer::SAMPLES);
+        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil, outputSize, m_triRenderer.sampleCount());
     } else {
         m_ds->release();
         m_ds->pixelSize = outputSize;
     }
     m_ds->build();
 
-    m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, TriangleRenderer::SAMPLES);
+    m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, m_triRenderer.sampleCount());
     m_swapChainChanged = true;
 }
 

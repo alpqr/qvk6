@@ -115,6 +115,7 @@ void TriangleOnCubeRenderer::initResources()
     m_offscreenTriangle.setRhi(m_r);
     m_offscreenTriangle.initResources();
     m_offscreenTriangle.setScale(2);
+    // m_tex and the offscreen triangle are never multisample
 }
 
 void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
@@ -130,7 +131,7 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
     m_ps->cullMode = QRhiGraphicsPipeline::Back;
     m_ps->frontFace = QRhiGraphicsPipeline::CW;
 
-    m_ps->sampleCount = SAMPLES;
+    m_ps->sampleCount = m_sampleCount;
 
     QBakedShader vs = getShader(QLatin1String(":/texture.vert.qsb"));
     Q_ASSERT(vs.isValid());

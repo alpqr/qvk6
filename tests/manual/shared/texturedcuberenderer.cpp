@@ -111,7 +111,7 @@ void TexturedCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp
     m_ps->cullMode = QRhiGraphicsPipeline::Back;
     m_ps->frontFace = QRhiGraphicsPipeline::CW;
 
-    m_ps->sampleCount = SAMPLES;
+    m_ps->sampleCount = m_sampleCount;
 
     QBakedShader vs = getShader(QLatin1String(":/texture.vert.qsb"));
     Q_ASSERT(vs.isValid());

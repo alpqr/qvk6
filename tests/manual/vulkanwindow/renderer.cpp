@@ -52,10 +52,12 @@
 #include <QVulkanFunctions>
 #include <QRhiVulkanInitParams>
 
+const int SAMPLES = 1;
+
 Renderer::Renderer(QVulkanWindow *w)
     : m_window(w)
 {
-    m_window->setSampleCount(TriangleRenderer::SAMPLES);
+    m_window->setSampleCount(SAMPLES);
 }
 
 void Renderer::initResources()
@@ -69,6 +71,7 @@ void Renderer::initResources()
     m_r = QRhi::create(QRhi::Vulkan, &params);
 
     m_triRenderer.setRhi(m_r);
+    m_triRenderer.setSampleCount(SAMPLES);
     m_triRenderer.initResources();
 
     m_sc = m_r->createSwapChain();

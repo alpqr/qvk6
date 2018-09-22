@@ -35,6 +35,8 @@ class TriangleRenderer
 {
 public:
     void setRhi(QRhi *r) { m_r = r; }
+    void setSampleCount(int samples) { m_sampleCount = samples; }
+    int sampleCount() const { return m_sampleCount; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
     void setScale(float f) { m_scale = f; }
     bool isPipelineInitialized() const { return m_ps != nullptr; }
@@ -44,8 +46,6 @@ public:
     void releaseOutputDependentResources();
     QRhi::PassUpdates update();
     void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
-
-    static const int SAMPLES = 1; // 1 (or 0) = no MSAA; 2, 4, 8 = MSAA
 
 private:
     QRhi *m_r;
@@ -62,6 +62,7 @@ private:
     float m_rotation = 0;
     float m_opacity = 1;
     int m_opacityDir = -1;
+    int m_sampleCount = 1; // no MSAA by default
 };
 
 #endif

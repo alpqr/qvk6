@@ -72,7 +72,7 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
     premulAlphaBlend.enable = true;
     m_ps->targetBlends = { premulAlphaBlend };
 
-    m_ps->sampleCount = SAMPLES;
+    m_ps->sampleCount = m_sampleCount;
 
     QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());

@@ -35,6 +35,7 @@ class TexturedCubeRenderer
 {
 public:
     void setRhi(QRhi *r) { m_r = r; }
+    void setSampleCount(int samples) { m_sampleCount = samples; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
     bool isPipelineInitialized() const { return m_ps != nullptr; }
     void initResources();
@@ -43,8 +44,6 @@ public:
     void releaseOutputDependentResources();
     QRhi::PassUpdates update();
     void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
-
-    static const int SAMPLES = 1; // 1 (or 0) = no MSAA; 2, 4, 8 = MSAA
 
 private:
     QRhi *m_r;
@@ -61,6 +60,7 @@ private:
     QVector3D m_translation;
     QMatrix4x4 m_proj;
     float m_rotation = 0;
+    int m_sampleCount = 1; // no MSAA by default
 };
 
 #endif

@@ -55,6 +55,7 @@ struct QGles2Buffer : public QRhiBuffer
 
     uint buffer = 0;
     GLenum target;
+    QByteArray ubuf;
 };
 
 struct QGles2RenderBuffer : public QRhiRenderBuffer
@@ -241,6 +242,7 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases();
+    void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void finishFrame();
 

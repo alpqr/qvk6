@@ -259,9 +259,42 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates)
+{
+    Q_UNUSED(cb);
+
+    for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
+        Q_ASSERT(!u.buf->isStatic());
+        QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
+        if (u.buf->usage.testFlag(QRhiBuffer::UniformBuffer)) {
+            memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
+        } else {
+            f->glBindBuffer(bufD->target, bufD->buffer);
+            f->glBufferSubData(bufD->target, u.offset, u.data.size(), u.data.constData());
+        }
+    }
+
+    for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
+        Q_ASSERT(u.buf->isStatic());
+        QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
+        Q_ASSERT(u.data.size() == u.buf->size);
+        if (u.buf->usage.testFlag(QRhiBuffer::UniformBuffer)) {
+            memcpy(bufD->ubuf.data(), u.data.constData(), u.data.size());
+        } else {
+            f->glBindBuffer(bufD->target, bufD->buffer);
+            f->glBufferData(bufD->target, u.data.size(), u.data.constData(), GL_STATIC_DRAW);
+        }
+    }
+
+    for (const QRhi::TextureUpload &u : updates.textureUploads) {
+    }
+}
+
 void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const QRhi::PassUpdates &updates)
 {
     Q_ASSERT(!inPass);
+
+    applyPassUpdates(cb, updates);
 
     bool needsColorClear = true;
     QGles2BasicRenderTargetData *rtD = nullptr;
@@ -282,6 +315,9 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
         break;
     }
 
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+    cbD->currentTarget = rt;
+
     GLbitfield clearMask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
     if (needsColorClear) {
         clearMask |= GL_COLOR_BUFFER_BIT;
@@ -296,8 +332,14 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
 void QRhiGles2::endPass(QRhiCommandBuffer *cb)
 {
     Q_ASSERT(inPass);
-
     inPass = false;
+
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+    if (cbD->currentTarget->type() == QRhiRenderTarget::RtTexture)
+    {}
+        //deactivateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(cbD->currentTarget));
+
+    cbD->currentTarget = nullptr;
 }
 
 QGles2Buffer::QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
@@ -330,6 +372,7 @@ bool QGles2Buffer::build()
 
     if (usage.testFlag(QRhiBuffer::UniformBuffer)) {
         // special since we do not support uniform blocks in this backend
+        ubuf.resize(size);
         return true;
     }
 

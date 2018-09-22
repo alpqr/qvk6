@@ -1301,13 +1301,13 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
     }
 
     for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
-        QVkBuffer *ubufD = QRHI_RES(QVkBuffer, u.buf);
+        QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
         Q_ASSERT(u.buf->isStatic());
-        Q_ASSERT(ubufD->stagingBuffer);
+        Q_ASSERT(bufD->stagingBuffer);
         Q_ASSERT(u.data.size() == u.buf->size);
 
         void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(ubufD->stagingAlloc);
+        VmaAllocation a = toVmaAllocation(bufD->stagingAlloc);
         VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
@@ -1321,9 +1321,9 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
         memset(&copyInfo, 0, sizeof(copyInfo));
         copyInfo.size = u.buf->size;
 
-        df->vkCmdCopyBuffer(cbD->cb, ubufD->stagingBuffer, ubufD->buffers[0], 1, &copyInfo);
+        df->vkCmdCopyBuffer(cbD->cb, bufD->stagingBuffer, bufD->buffers[0], 1, &copyInfo);
         bufferBarrier(cb, u.buf);
-        ubufD->lastActiveFrameSlot = currentFrameSlot;
+        bufD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     for (const QRhi::TextureUpload &u : updates.textureUploads) {

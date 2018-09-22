@@ -50,7 +50,9 @@ void GlWindow::init()
 
     QRhiGles2InitParams params;
     params.context = ctx;
-    params.surface = this;
+    params.nonVisualSurface = new QOffscreenSurface;
+    params.nonVisualSurface->setFormat(ctx->format());
+    params.nonVisualSurface->create();
     m_r = QRhi::create(QRhi::OpenGLES2, &params);
 
     ExampleWindow::init();

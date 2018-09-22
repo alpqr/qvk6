@@ -43,7 +43,7 @@ QRhiGles2::QRhiGles2(QRhiInitParams *params)
 {
     QRhiGles2InitParams *glparams = static_cast<QRhiGles2InitParams *>(params);
     ctx = glparams->context;
-    surface = glparams->surface;
+    fallbackSurface = glparams->nonVisualSurface;
 
     create();
 }
@@ -58,17 +58,30 @@ QRhiGles2::~QRhiGles2()
 // the applications mess with the GL context on the thread within a
 // begin-endFrame, it is up to them to restore before entering the next rhi
 // function that may issue GL calls.
-void QRhiGles2::ensureContext()
+void QRhiGles2::ensureContext(QSurface *surface)
 {
+    // When surface is null, we do not know what surface to use (since only
+    // begin-endFrame is tied to a swapchain; the concept maps badly to GL
+    // where any build() needs a current context as well). Use the
+    // QOffscreenSurface in this case - but note the early out below which
+    // minimizes changes since a window surface (from the swapchain) is good
+    // enough as well when it's still current.
+    if (!surface)
+        surface = fallbackSurface;
+
+    // Help badly written applications a bit.
     if (surface->surfaceClass() == QSurface::Window && !surface->surfaceHandle()) {
         qWarning("QRhiGles2: No native surface. This is typical during shutdown with QWindow "
                  "- it is too late to try cleaning up graphics resources from a QWindow dtor or afterwards. "
                  "Instead, handle QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed and destroy the rhi instance from there.");
     }
 
+    // Minimize makeCurrent calls since it is not guaranteed to have any
+    // return-if-same checks internally. Make sure the makeCurrent is never
+    // omitted after a swapBuffers and when surface was specified explicitly.
     if (buffersSwapped)
         buffersSwapped = false;
-    else if (QOpenGLContext::currentContext() == ctx)
+    else if (QOpenGLContext::currentContext() == ctx && (surface == fallbackSurface || ctx->surface() == surface))
         return;
 
     if (!ctx->makeCurrent(surface))
@@ -78,6 +91,8 @@ void QRhiGles2::ensureContext()
 void QRhiGles2::create()
 {
     Q_ASSERT(ctx);
+    Q_ASSERT(fallbackSurface);
+
     ensureContext();
 
     f = ctx->functions();
@@ -238,9 +253,9 @@ void QRhiGles2::finishFrame()
 
 QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
 {
-    ensureContext();
-
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
+    ensureContext(swapChainD->surface);
+
     prepareNewFrame(&swapChainD->cb);
 
     return QRhi::FrameOpSuccess;
@@ -268,6 +283,11 @@ void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
         QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
         if (u.buf->usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
+            QGles2Buffer::ChangeRange &r(bufD->ubufChangeRange);
+            if (r.changeBegin == -1 || u.offset < r.changeBegin)
+                r.changeBegin = u.offset;
+            if (r.changeEnd == -1 || u.offset + u.data.size() > r.changeEnd)
+                r.changeEnd = u.offset + u.data.size();
         } else {
             f->glBindBuffer(bufD->target, bufD->buffer);
             f->glBufferSubData(bufD->target, u.offset, u.data.size(), u.data.constData());
@@ -550,7 +570,7 @@ void QGles2CommandBuffer::release()
 
 QGles2SwapChain::QGles2SwapChain(QRhiImplementation *rhi)
     : QRhiSwapChain(rhi),
-      rtWrapper(rhi),
+      rt(rhi),
       cb(rhi)
 {
 }
@@ -566,12 +586,12 @@ QRhiCommandBuffer *QGles2SwapChain::currentFrameCommandBuffer()
 
 QRhiRenderTarget *QGles2SwapChain::currentFrameRenderTarget()
 {
-    return &rtWrapper;
+    return &rt;
 }
 
 const QRhiRenderPass *QGles2SwapChain::defaultRenderPass() const
 {
-    return rtWrapper.renderPass();
+    return rt.renderPass();
 }
 
 QSize QGles2SwapChain::sizeInPixels() const
@@ -582,8 +602,13 @@ QSize QGles2SwapChain::sizeInPixels() const
 bool QGles2SwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount_)
 {
+    Q_UNUSED(flags);
+    Q_UNUSED(depthStencil);
+    Q_UNUSED(sampleCount_);
+
     surface = window;
     pixelSize = pixelSize_;
+    QRHI_RES(QGles2ReferenceRenderTarget, &rt)->d.pixelSize = pixelSize_;
 
     return true;
 }

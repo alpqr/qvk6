@@ -56,6 +56,11 @@ struct QGles2Buffer : public QRhiBuffer
     uint buffer = 0;
     GLenum target;
     QByteArray ubuf;
+    struct ChangeRange {
+        int changeBegin = -1;
+        int changeEnd = -1;
+    };
+    ChangeRange ubufChangeRange;
 };
 
 struct QGles2RenderBuffer : public QRhiRenderBuffer
@@ -170,7 +175,7 @@ struct QGles2SwapChain : public QRhiSwapChain
 
     QSurface *surface = nullptr;
     QSize pixelSize;
-    QGles2ReferenceRenderTarget rtWrapper;
+    QGles2ReferenceRenderTarget rt;
     QGles2CommandBuffer cb;
 };
 
@@ -238,7 +243,7 @@ public:
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
 
-    void ensureContext();
+    void ensureContext(QSurface *surface = nullptr);
     void create();
     void destroy();
     void executeDeferredReleases();
@@ -247,8 +252,8 @@ public:
     void finishFrame();
 
     QOpenGLContext *ctx = nullptr;
+    QSurface *fallbackSurface = nullptr;
     bool buffersSwapped = false;
-    QSurface *surface = nullptr;
     QOpenGLFunctions *f = nullptr;
     bool inFrame = false;
     int finishedFrameCount = 0;

@@ -52,13 +52,22 @@ bool ExampleWindow::event(QEvent *e)
         render();
         break;
 
-    // Now the fun part: the swapchain must be destroyed before the surface as per
+    // With Vulkan the swapchain must be destroyed before the surface as per
     // spec. This is not ideal for us because the surface is managed by the
-    // QPlatformWindow which may be gone already when the unexpose comes, making the
-    // validation layer scream. The solution is to listen to the PlatformSurface events.
+    // QPlatformWindow which may be gone already when the unexpose comes,
+    // making the validation layer scream. The solution is to listen to the
+    // PlatformSurface events.
+    //
+    // Then there's a similar problem with any OpenGL resource: trying to do
+    // makeCurrent from a QWindow dtor (or afterwards) is futile: the
+    // underlying native window is long gone by then. So act early and do also
+    // releaseResources() from here.
     case QEvent::PlatformSurface:
-        if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
+        if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+            m_inited = false;
             releaseSwapChain();
+            releaseResources();
+        }
         break;
 
     default:
@@ -136,8 +145,6 @@ void ExampleWindow::render()
 {
     if (!m_hasSwapChain)
         return;
-
-    prepareRender();
 
     if (m_sc->sizeInPixels() != size() * devicePixelRatio()) {
         recreateSwapChain();

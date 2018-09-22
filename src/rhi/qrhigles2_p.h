@@ -237,6 +237,7 @@ public:
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
 
+    void ensureContext();
     void create();
     void destroy();
     void executeDeferredReleases();
@@ -244,6 +245,8 @@ public:
     void finishFrame();
 
     QOpenGLContext *ctx = nullptr;
+    bool buffersSwapped = false;
+    QSurface *surface = nullptr;
     QOpenGLFunctions *f = nullptr;
     bool inFrame = false;
     int finishedFrameCount = 0;

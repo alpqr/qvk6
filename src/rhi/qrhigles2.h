@@ -45,6 +45,7 @@ QT_BEGIN_NAMESPACE
 struct Q_RHI_EXPORT QRhiGles2InitParams : public QRhiInitParams
 {
     QOpenGLContext *context = nullptr;
+    QSurface *surface = nullptr;
 };
 
 QT_END_NAMESPACE

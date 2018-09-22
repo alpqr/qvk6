@@ -39,11 +39,9 @@ class VWindow : public ExampleWindow
 {
 public:
     VWindow() { setSurfaceType(VulkanSurface); }
-    ~VWindow() { releaseResources(); }
 
 private:
     void init() override;
-    void prepareRender() override;
     void releaseResources() override;
 
     VkPhysicalDevice m_vkPhysDev;
@@ -191,10 +189,6 @@ void VWindow::releaseResources()
         vulkanInstance()->resetDeviceFunctions(m_vkDev);
         m_vkDev = VK_NULL_HANDLE;
     }
-}
-
-void VWindow::prepareRender()
-{
 }
 
 int main(int argc, char **argv)

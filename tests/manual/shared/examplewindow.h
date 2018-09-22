@@ -43,7 +43,6 @@ public:
     virtual void releaseResources();
     virtual void recreateSwapChain();
     virtual void releaseSwapChain();
-    virtual void prepareRender() = 0;
 
 protected:
     void render();

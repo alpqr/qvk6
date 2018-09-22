@@ -43,6 +43,7 @@ QRhiGles2::QRhiGles2(QRhiInitParams *params)
 {
     QRhiGles2InitParams *glparams = static_cast<QRhiGles2InitParams *>(params);
     ctx = glparams->context;
+    surface = glparams->surface;
 
     create();
 }
@@ -52,9 +53,32 @@ QRhiGles2::~QRhiGles2()
     destroy();
 }
 
+// Initialization, teardown, beginFrame(), and every build() take care of
+// making the context and the surface current, if needed. Others do not - if
+// the applications mess with the GL context on the thread within a
+// begin-endFrame, it is up to them to restore before entering the next rhi
+// function that may issue GL calls.
+void QRhiGles2::ensureContext()
+{
+    if (surface->surfaceClass() == QSurface::Window && !surface->surfaceHandle()) {
+        qWarning("QRhiGles2: No native surface. This is typical during shutdown with QWindow "
+                 "- it is too late to try cleaning up graphics resources from a QWindow dtor or afterwards. "
+                 "Instead, handle QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed and destroy the rhi instance from there.");
+    }
+
+    if (buffersSwapped)
+        buffersSwapped = false;
+    else if (QOpenGLContext::currentContext() == ctx)
+        return;
+
+    if (!ctx->makeCurrent(surface))
+        qWarning("QRhiGles2: Failed to make context current. Expect bad things to happen.");
+}
+
 void QRhiGles2::create()
 {
-    Q_ASSERT(ctx && QOpenGLContext::currentContext() == ctx);
+    Q_ASSERT(ctx);
+    ensureContext();
 
     f = ctx->functions();
 }
@@ -64,6 +88,7 @@ void QRhiGles2::destroy()
     if (!f)
         return;
 
+    ensureContext();
     executeDeferredReleases();
 
     f = nullptr;
@@ -71,7 +96,6 @@ void QRhiGles2::destroy()
 
 void QRhiGles2::executeDeferredReleases()
 {
-    Q_ASSERT(QOpenGLContext::currentContext() == ctx);
     for (int i = releaseQueue.count() - 1; i >= 0; --i) {
         const QRhiGles2::DeferredReleaseEntry &e(releaseQueue[i]);
         switch (e.type) {
@@ -214,6 +238,8 @@ void QRhiGles2::finishFrame()
 
 QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
 {
+    ensureContext();
+
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
     prepareNewFrame(&swapChainD->cb);
 
@@ -225,8 +251,10 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     finishFrame();
 
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
-    if (swapChainD->surface)
+    if (swapChainD->surface) {
         ctx->swapBuffers(swapChainD->surface);
+        buffersSwapped = true;
+    }
 
     return QRhi::FrameOpSuccess;
 }
@@ -234,7 +262,6 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const QRhi::PassUpdates &updates)
 {
     Q_ASSERT(!inPass);
-    Q_ASSERT(QOpenGLContext::currentContext() == ctx);
 
     bool needsColorClear = true;
     QGles2BasicRenderTargetData *rtD = nullptr;
@@ -297,7 +324,6 @@ void QGles2Buffer::release()
 bool QGles2Buffer::build()
 {
     QRHI_RES_RHI(QRhiGles2);
-    Q_ASSERT(QOpenGLContext::currentContext() == rhiD->ctx);
 
     if (buffer)
         release();
@@ -306,6 +332,8 @@ bool QGles2Buffer::build()
         // special since we do not support uniform blocks in this backend
         return true;
     }
+
+    rhiD->ensureContext();
 
     if (usage.testFlag(QRhiBuffer::VertexBuffer))
         target = GL_ARRAY_BUFFER;

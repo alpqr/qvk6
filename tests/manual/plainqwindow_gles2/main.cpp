@@ -34,12 +34,10 @@ class GlWindow : public ExampleWindow
 {
 public:
     GlWindow() { setSurfaceType(OpenGLSurface); }
-    ~GlWindow() { releaseResources(); }
 
 private:
     void init() override;
     void releaseResources() override;
-    void prepareRender() override;
 
     QOpenGLContext *ctx = nullptr;
 };
@@ -47,11 +45,12 @@ private:
 void GlWindow::init()
 {
     ctx = new QOpenGLContext;
-    ctx->create();
-    ctx->makeCurrent(this);
+    if (!ctx->create())
+        qFatal("Failed to get OpenGL context");
 
     QRhiGles2InitParams params;
     params.context = ctx;
+    params.surface = this;
     m_r = QRhi::create(QRhi::OpenGLES2, &params);
 
     ExampleWindow::init();
@@ -62,16 +61,10 @@ void GlWindow::releaseResources()
     if (!ctx)
         return;
 
-    ctx->makeCurrent(this);
     ExampleWindow::releaseResources();
 
     delete ctx;
     ctx = nullptr;
-}
-
-void GlWindow::prepareRender()
-{
-    ctx->makeCurrent(this);
 }
 
 int main(int argc, char **argv)

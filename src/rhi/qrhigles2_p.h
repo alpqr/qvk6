@@ -128,6 +128,8 @@ struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
     QGles2ShaderResourceBindings(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
+
+    uint generation = 0;
 };
 
 struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
@@ -135,6 +137,9 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
     QGles2GraphicsPipeline(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
+
+    GLuint program = 0;
+    uint generation = 0;
 };
 
 struct QGles2CommandBuffer : public QRhiCommandBuffer
@@ -148,13 +153,17 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
     QVector<Command> commands;
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
+    uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
+    uint currentSrbGeneration;
 
     void resetState() {
         commands.clear();
         currentTarget = nullptr;
         currentPipeline = nullptr;
+        currentPipelineGeneration = 0;
         currentSrb = nullptr;
+        currentSrbGeneration = 0;
     }
 };
 
@@ -261,13 +270,17 @@ public:
 
     struct DeferredReleaseEntry {
         enum Type {
-            Buffer
+            Buffer,
+            Pipeline
         };
         Type type;
         union {
             struct {
                 uint buffer;
             } buffer;
+            struct {
+                GLuint program;
+            } pipeline;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

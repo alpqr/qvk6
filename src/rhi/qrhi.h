@@ -483,7 +483,6 @@ public:
 
     Flags flags;
     Topology topology = Triangles;
-    bool rasterizerDiscard = false;
     CullMode cullMode;
     FrontFace frontFace = CCW;
     QVector<TargetBlend> targetBlends;

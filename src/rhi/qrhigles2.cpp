@@ -54,12 +54,19 @@ QRhiGles2::~QRhiGles2()
 }
 
 // Initialization, teardown, beginFrame(), and every build() take care of
-// making the context and the surface current, if needed. Others do not - if
-// the applications mess with the GL context on the thread within a
-// begin-endFrame, it is up to them to restore before entering the next rhi
-// function that may issue GL calls.
+// making the context and the (window or fallback) surface current, if needed.
+// Others do not - if the applications mess with the GL context on the thread
+// within a begin-endFrame, it is up to them to restore before entering the
+// next rhi function that may issue GL calls.
+
 void QRhiGles2::ensureContext(QSurface *surface)
 {
+    bool nativeWindowGone = false;
+    if (surface && surface->surfaceClass() == QSurface::Window && !surface->surfaceHandle()) {
+        surface = fallbackSurface;
+        nativeWindowGone = true;
+    }
+
     // When surface is null, we do not know what surface to use (since only
     // begin-endFrame is tied to a swapchain; the concept maps badly to GL
     // where any build() needs a current context as well). Use the
@@ -69,19 +76,12 @@ void QRhiGles2::ensureContext(QSurface *surface)
     if (!surface)
         surface = fallbackSurface;
 
-    // Help badly written applications a bit.
-    if (surface->surfaceClass() == QSurface::Window && !surface->surfaceHandle()) {
-        qWarning("QRhiGles2: No native surface. This is typical during shutdown with QWindow "
-                 "- it is too late to try cleaning up graphics resources from a QWindow dtor or afterwards. "
-                 "Instead, handle QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed and destroy the rhi instance from there.");
-    }
-
     // Minimize makeCurrent calls since it is not guaranteed to have any
     // return-if-same checks internally. Make sure the makeCurrent is never
-    // omitted after a swapBuffers and when surface was specified explicitly.
+    // omitted after a swapBuffers, and when surface was specified explicitly.
     if (buffersSwapped)
         buffersSwapped = false;
-    else if (QOpenGLContext::currentContext() == ctx && (surface == fallbackSurface || ctx->surface() == surface))
+    else if (!nativeWindowGone && QOpenGLContext::currentContext() == ctx && (surface == fallbackSurface || ctx->surface() == surface))
         return;
 
     if (!ctx->makeCurrent(surface))
@@ -116,6 +116,9 @@ void QRhiGles2::executeDeferredReleases()
         switch (e.type) {
         case QRhiGles2::DeferredReleaseEntry::Buffer:
             f->glDeleteBuffers(1, &e.buffer.buffer);
+            break;
+        case QRhiGles2::DeferredReleaseEntry::Pipeline:
+            f->glDeleteProgram(e.pipeline.program);
             break;
         default:
             break;
@@ -191,9 +194,217 @@ QRhiShaderResourceBindings *QRhiGles2::createShaderResourceBindings()
     return new QGles2ShaderResourceBindings(this);
 }
 
+static inline GLenum toGlCullMode(QRhiGraphicsPipeline::CullMode mode)
+{
+    if (mode.testFlag(QRhiGraphicsPipeline::Front)) {
+        if (mode.testFlag(QRhiGraphicsPipeline::Back))
+            return GL_FRONT_AND_BACK;
+        return GL_FRONT;
+    }
+    return GL_BACK;
+}
+
+static inline GLenum toGlFrontFace(QRhiGraphicsPipeline::FrontFace f)
+{
+    switch (f) {
+    case QRhiGraphicsPipeline::CCW:
+        return GL_CCW;
+    case QRhiGraphicsPipeline::CW:
+        return GL_CW;
+    default:
+        Q_UNREACHABLE();
+        return GL_CCW;
+    }
+}
+
+static inline GLenum toGlBlendFactor(QRhiGraphicsPipeline::BlendFactor f)
+{
+    switch (f) {
+    case QRhiGraphicsPipeline::Zero:
+        return GL_ZERO;
+    case QRhiGraphicsPipeline::One:
+        return GL_ONE;
+    case QRhiGraphicsPipeline::SrcColor:
+        return GL_SRC_COLOR;
+    case QRhiGraphicsPipeline::OneMinusSrcColor:
+        return GL_ONE_MINUS_SRC_COLOR;
+    case QRhiGraphicsPipeline::DstColor:
+        return GL_DST_COLOR;
+    case QRhiGraphicsPipeline::OneMinusDstColor:
+        return GL_ONE_MINUS_DST_COLOR;
+    case QRhiGraphicsPipeline::SrcAlpha:
+        return GL_SRC_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusSrcAlpha:
+        return GL_ONE_MINUS_SRC_ALPHA;
+    case QRhiGraphicsPipeline::DstAlpha:
+        return GL_DST_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusDstAlpha:
+        return GL_ONE_MINUS_DST_ALPHA;
+    case QRhiGraphicsPipeline::ConstantColor:
+        return GL_CONSTANT_COLOR;
+    case QRhiGraphicsPipeline::OneMinusConstantColor:
+        return GL_ONE_MINUS_CONSTANT_COLOR;
+    case QRhiGraphicsPipeline::ConstantAlpha:
+        return GL_CONSTANT_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusConstantAlpha:
+        return GL_ONE_MINUS_CONSTANT_ALPHA;
+    case QRhiGraphicsPipeline::SrcAlphaSaturate:
+        return GL_SRC_ALPHA_SATURATE;
+    case QRhiGraphicsPipeline::Src1Color:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::OneMinusSrc1Color:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::Src1Alpha:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::OneMinusSrc1Alpha:
+        qWarning("Unsupported blend factor %x", f);
+        return GL_ZERO;
+    default:
+        Q_UNREACHABLE();
+        return GL_ZERO;
+    }
+}
+
+static inline GLenum toGlBlendOp(QRhiGraphicsPipeline::BlendOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Add:
+        return GL_ADD;
+    case QRhiGraphicsPipeline::Subtract:
+        return GL_SUBTRACT;
+    case QRhiGraphicsPipeline::ReverseSubtract:
+        return GL_FUNC_REVERSE_SUBTRACT;
+    case QRhiGraphicsPipeline::Min:
+        return GL_MIN;
+    case QRhiGraphicsPipeline::Max:
+        return GL_MAX;
+    default:
+        Q_UNREACHABLE();
+        return GL_ADD;
+    }
+}
+
+static inline GLenum toGlCompareOp(QRhiGraphicsPipeline::CompareOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Never:
+        return GL_NEVER;
+    case QRhiGraphicsPipeline::Less:
+        return GL_LESS;
+    case QRhiGraphicsPipeline::Equal:
+        return GL_EQUAL;
+    case QRhiGraphicsPipeline::LessOrEqual:
+        return GL_LEQUAL;
+    case QRhiGraphicsPipeline::Greater:
+        return GL_GREATER;
+    case QRhiGraphicsPipeline::NotEqual:
+        return GL_NOTEQUAL;
+    case QRhiGraphicsPipeline::GreaterOrEqual:
+        return GL_GEQUAL;
+    case QRhiGraphicsPipeline::Always:
+        return GL_ALWAYS;
+    default:
+        Q_UNREACHABLE();
+        return GL_ALWAYS;
+    }
+}
+
+static inline GLenum toGlStencilOp(QRhiGraphicsPipeline::StencilOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::StencilZero:
+        return GL_ZERO;
+    case QRhiGraphicsPipeline::Keep:
+        return GL_KEEP;
+    case QRhiGraphicsPipeline::Replace:
+        return GL_REPLACE;
+    case QRhiGraphicsPipeline::IncrementAndClamp:
+        return GL_INCR;
+    case QRhiGraphicsPipeline::DecrementAndClamp:
+        return GL_DECR;
+    case QRhiGraphicsPipeline::Invert:
+        return GL_INVERT;
+    case QRhiGraphicsPipeline::IncrementAndWrap:
+        return GL_INCR_WRAP;
+    case QRhiGraphicsPipeline::DecrementAndWrap:
+        return GL_DECR_WRAP;
+    default:
+        Q_UNREACHABLE();
+        return GL_KEEP;
+    }
+}
+
 void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
 {
     Q_ASSERT(inPass);
+
+    if (!srb)
+        srb = ps->shaderResourceBindings;
+
+    QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, ps);
+    QGles2ShaderResourceBindings *srbD = QRHI_RES(QGles2ShaderResourceBindings, srb);
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+
+    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
+        cbD->currentPipeline = ps;
+        cbD->currentPipelineGeneration = psD->generation;
+
+        // ### this needs some proper caching later on to minimize state changes
+
+        f->glCullFace(toGlCullMode(ps->cullMode));
+        f->glFrontFace(toGlFrontFace(ps->frontFace));
+        if (!ps->targetBlends.isEmpty()) {
+            const QRhiGraphicsPipeline::TargetBlend &blend(ps->targetBlends.first()); // no MRT
+            GLboolean wr = blend.colorWrite.testFlag(QRhiGraphicsPipeline::R);
+            GLboolean wg = blend.colorWrite.testFlag(QRhiGraphicsPipeline::G);
+            GLboolean wb = blend.colorWrite.testFlag(QRhiGraphicsPipeline::B);
+            GLboolean wa = blend.colorWrite.testFlag(QRhiGraphicsPipeline::A);
+            f->glColorMask(wr, wg, wb, wa);
+            if (blend.enable) {
+                f->glEnable(GL_BLEND);
+                f->glBlendFuncSeparate(toGlBlendFactor(blend.srcColor),
+                                       toGlBlendFactor(blend.dstColor),
+                                       toGlBlendFactor(blend.srcAlpha),
+                                       toGlBlendFactor(blend.dstAlpha));
+                f->glBlendEquationSeparate(toGlBlendOp(blend.opColor), toGlBlendOp(blend.opAlpha));
+            } else {
+                f->glDisable(GL_BLEND);
+            }
+        }
+        if (ps->depthTest)
+            f->glEnable(GL_DEPTH_TEST);
+        else
+            f->glDisable(GL_DEPTH_TEST);
+        if (ps->depthWrite)
+            f->glDepthMask(GL_TRUE);
+        else
+            f->glDepthMask(GL_FALSE);
+        f->glDepthFunc(toGlCompareOp(ps->depthOp));
+        if (ps->stencilTest) {
+            f->glEnable(GL_STENCIL_TEST);
+            f->glStencilFuncSeparate(GL_FRONT, toGlCompareOp(ps->stencilFront.compareOp), 0, ps->stencilReadMask);
+            f->glStencilOpSeparate(GL_FRONT,
+                                   toGlStencilOp(ps->stencilFront.failOp),
+                                   toGlStencilOp(ps->stencilFront.depthFailOp),
+                                   toGlStencilOp(ps->stencilFront.passOp));
+            f->glStencilMaskSeparate(GL_FRONT, ps->stencilWriteMask);
+            f->glStencilFuncSeparate(GL_BACK, toGlCompareOp(ps->stencilBack.compareOp), 0, ps->stencilReadMask);
+            f->glStencilOpSeparate(GL_BACK,
+                                   toGlStencilOp(ps->stencilBack.failOp),
+                                   toGlStencilOp(ps->stencilBack.depthFailOp),
+                                   toGlStencilOp(ps->stencilBack.passOp));
+            f->glStencilMaskSeparate(GL_BACK, ps->stencilWriteMask);
+        } else {
+            f->glDisable(GL_STENCIL_TEST);
+        }
+        f->glUseProgram(psD->program);
+    }
+
+    if (cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
+        cbD->currentSrb = srb;
+        cbD->currentSrbGeneration = srbD->generation;
+        // ###
+    }
 }
 
 void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
@@ -327,7 +538,7 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
         QGles2TextureRenderTarget *rtTex = static_cast<QGles2TextureRenderTarget *>(rt);
         rtD = &rtTex->d;
         needsColorClear = !rtTex->flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
-        //activateTextureRenderTarget(cb, rtTex);
+        // ### activateTextureRenderTarget(cb, rtTex);
     }
         break;
     default:
@@ -357,7 +568,7 @@ void QRhiGles2::endPass(QRhiCommandBuffer *cb)
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     if (cbD->currentTarget->type() == QRhiRenderTarget::RtTexture)
     {}
-        //deactivateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(cbD->currentTarget));
+        // ### deactivateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(cbD->currentTarget));
 
     cbD->currentTarget = nullptr;
 }
@@ -474,7 +685,7 @@ void QGles2ReferenceRenderTarget::release()
 
 QRhiRenderTarget::Type QGles2ReferenceRenderTarget::type() const
 {
-    return RtRef; // no Gles2* are owned directly by the object
+    return RtRef;
 }
 
 QSize QGles2ReferenceRenderTarget::sizeInPixels() const
@@ -516,7 +727,7 @@ bool QGles2TextureRenderTarget::build()
 
 QRhiRenderTarget::Type QGles2TextureRenderTarget::type() const
 {
-    return RtTexture; // this is a QGles2TextureRenderTarget, owns
+    return RtTexture;
 }
 
 QSize QGles2TextureRenderTarget::sizeInPixels() const
@@ -540,6 +751,7 @@ void QGles2ShaderResourceBindings::release()
 
 bool QGles2ShaderResourceBindings::build()
 {
+    generation += 1;
     return true;
 }
 
@@ -550,10 +762,34 @@ QGles2GraphicsPipeline::QGles2GraphicsPipeline(QRhiImplementation *rhi)
 
 void QGles2GraphicsPipeline::release()
 {
+    if (!program)
+        return;
+
+    QRhiGles2::DeferredReleaseEntry e;
+    e.type = QRhiGles2::DeferredReleaseEntry::Pipeline;
+
+    e.pipeline.program = program;
+
+    program = 0;
+
+    QRHI_RES_RHI(QRhiGles2);
+    rhiD->releaseQueue.append(e);
 }
 
 bool QGles2GraphicsPipeline::build()
 {
+    QRHI_RES_RHI(QRhiGles2);
+
+    if (program)
+        release();
+
+    program = rhiD->f->glCreateProgram();
+
+    for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(shaderStages)) {
+        // ###
+    }
+
+    generation += 1;
     return true;
 }
 
@@ -615,7 +851,7 @@ bool QGles2SwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImp
 
 bool QGles2SwapChain::build(QObject *target)
 {
-    // some day this could support QOpenGLWindow, OpenGLWidget, ...
+    // ### some day this could support QOpenGLWindow, OpenGLWidget, ...
     Q_UNUSED(target);
     return false;
 }

@@ -39,6 +39,7 @@ class VWindow : public ExampleWindow
 {
 public:
     VWindow() { setSurfaceType(VulkanSurface); }
+    ~VWindow() { releaseResources(); }
 
 private:
     void init() override;

@@ -29,6 +29,7 @@
 #include "examplewindow.h"
 
 const int SAMPLES = 1;
+const bool TRIANGLE_ONLY = false;
 
 void ExampleWindow::exposeEvent(QExposeEvent *)
 {
@@ -59,17 +60,9 @@ bool ExampleWindow::event(QEvent *e)
     // QPlatformWindow which may be gone already when the unexpose comes,
     // making the validation layer scream. The solution is to listen to the
     // PlatformSurface events.
-    //
-    // Then there's a similar problem with any OpenGL resource: trying to do
-    // makeCurrent from a QWindow dtor (or afterwards) is futile: the
-    // underlying native window is long gone by then. So act early and do also
-    // releaseResources() from here.
     case QEvent::PlatformSurface:
-        if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
-            m_inited = false;
+        if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
             releaseSwapChain();
-            releaseResources();
-        }
         break;
 
     default:
@@ -86,15 +79,17 @@ void ExampleWindow::init()
     m_triRenderer.initResources();
     m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
 
-    m_cubeRenderer.setRhi(m_r);
-    m_cubeRenderer.setSampleCount(SAMPLES);
-    m_cubeRenderer.initResources();
-    m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
+    if (!TRIANGLE_ONLY) {
+        m_cubeRenderer.setRhi(m_r);
+        m_cubeRenderer.setSampleCount(SAMPLES);
+        m_cubeRenderer.initResources();
+        m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
 
-    m_liveTexCubeRenderer.setRhi(m_r);
-    m_liveTexCubeRenderer.setSampleCount(SAMPLES);
-    m_liveTexCubeRenderer.initResources();
-    m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
+        m_liveTexCubeRenderer.setRhi(m_r);
+        m_liveTexCubeRenderer.setSampleCount(SAMPLES);
+        m_liveTexCubeRenderer.initResources();
+        m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
+    }
 
     m_sc = m_r->createSwapChain();
 }
@@ -104,11 +99,13 @@ void ExampleWindow::releaseResources()
     m_triRenderer.releaseOutputDependentResources();
     m_triRenderer.releaseResources();
 
-    m_cubeRenderer.releaseOutputDependentResources();
-    m_cubeRenderer.releaseResources();
+    if (!TRIANGLE_ONLY) {
+        m_cubeRenderer.releaseOutputDependentResources();
+        m_cubeRenderer.releaseResources();
 
-    m_liveTexCubeRenderer.releaseOutputDependentResources();
-    m_liveTexCubeRenderer.releaseResources();
+        m_liveTexCubeRenderer.releaseOutputDependentResources();
+        m_liveTexCubeRenderer.releaseResources();
+    }
 
     delete m_sc;
     m_sc = nullptr;
@@ -172,24 +169,31 @@ void ExampleWindow::render()
     if (m_swapChainChanged) {
         m_swapChainChanged = false;
         m_triRenderer.releaseOutputDependentResources();
-        m_cubeRenderer.releaseOutputDependentResources();
-        m_liveTexCubeRenderer.releaseOutputDependentResources();
+        if (!TRIANGLE_ONLY) {
+            m_cubeRenderer.releaseOutputDependentResources();
+            m_liveTexCubeRenderer.releaseOutputDependentResources();
+        }
     }
 
     if (!m_triRenderer.isPipelineInitialized()) {
         const QRhiRenderPass *rp = m_sc->defaultRenderPass();
         m_triRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
-        m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
-        m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        if (!TRIANGLE_ONLY) {
+            m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+            m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        }
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
-    m_liveTexCubeRenderer.queueOffscreenPass(cb);
+    if (!TRIANGLE_ONLY)
+        m_liveTexCubeRenderer.queueOffscreenPass(cb);
 
     QRhi::PassUpdates u;
     u += m_triRenderer.update();
-    u += m_cubeRenderer.update();
-    u += m_liveTexCubeRenderer.update();
+    if (!TRIANGLE_ONLY) {
+        u += m_cubeRenderer.update();
+        u += m_liveTexCubeRenderer.update();
+    }
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
     const QRhiClearValue clearValues[] = {
@@ -199,8 +203,10 @@ void ExampleWindow::render()
     };
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
     m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
-    m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
-    m_liveTexCubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    if (!TRIANGLE_ONLY) {
+        m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+        m_liveTexCubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    }
     m_r->endPass(cb);
 
     m_r->endFrame(m_sc);

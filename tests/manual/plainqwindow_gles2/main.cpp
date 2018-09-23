@@ -34,6 +34,7 @@ class GlWindow : public ExampleWindow
 {
 public:
     GlWindow() { setSurfaceType(OpenGLSurface); }
+    ~GlWindow() { releaseResources(); }
 
 private:
     void init() override;

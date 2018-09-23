@@ -167,6 +167,7 @@ struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
     int lastActiveFrameSlot = -1;
+    uint generation = 0;
 
     // Keep track of the generation number of each referenced QRhi* to be able
     // to detect that the underlying descriptor set became out of date and they
@@ -196,6 +197,7 @@ struct QVkGraphicsPipeline : public QRhiGraphicsPipeline
     VkPipelineLayout layout = VK_NULL_HANDLE;
     VkPipeline pipeline = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
+    uint generation = 0;
 };
 
 struct QVkCommandBuffer : public QRhiCommandBuffer
@@ -208,11 +210,15 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
     void resetState() {
         currentTarget = nullptr;
         currentPipeline = nullptr;
+        currentPipelineGeneration = 0;
         currentSrb = nullptr;
+        currentSrbGeneration = 0;
     }
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
+    uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
+    uint currentSrbGeneration;
 };
 
 struct QVkSwapChain : public QRhiSwapChain

@@ -1625,17 +1625,19 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
         updateShaderResourceBindings(srb, descSetIdx);
 
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
-    if (cbD->currentPipeline != ps) {
+    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
         psD->lastActiveFrameSlot = currentFrameSlot;
         df->vkCmdBindPipeline(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
         cbD->currentPipeline = ps;
+        cbD->currentPipelineGeneration = psD->generation;
     }
 
-    if (hasDynamicBufferInSrb || srbUpdate || cbD->currentSrb != srb) {
+    if (hasDynamicBufferInSrb || srbUpdate || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
         srbD->lastActiveFrameSlot = currentFrameSlot;
         df->vkCmdBindDescriptorSets(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
                                        &srbD->descSets[descSetIdx], 0, nullptr);
         cbD->currentSrb = srb;
+        cbD->currentSrbGeneration = srbD->generation;
     }
 }
 
@@ -2570,7 +2572,7 @@ bool QVkTextureRenderTarget::build()
 
 QRhiRenderTarget::Type QVkTextureRenderTarget::type() const
 {
-    return RtTexture; // this is a QVkTextureRenderTarget, owns
+    return RtTexture; // this is a QVkTextureRenderTarget, owns fb and rp
 }
 
 QSize QVkTextureRenderTarget::sizeInPixels() const
@@ -2655,6 +2657,7 @@ bool QVkShaderResourceBindings::build()
     rhiD->updateShaderResourceBindings(this);
 
     lastActiveFrameSlot = -1;
+    generation += 1;
     return true;
 }
 
@@ -2791,7 +2794,6 @@ bool QVkGraphicsPipeline::build()
     VkPipelineRasterizationStateCreateInfo rastInfo;
     memset(&rastInfo, 0, sizeof(rastInfo));
     rastInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rastInfo.rasterizerDiscardEnable = rasterizerDiscard;
     rastInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rastInfo.cullMode = toVkCullMode(cullMode);
     rastInfo.frontFace = toVkFrontFace(frontFace);
@@ -2852,6 +2854,7 @@ bool QVkGraphicsPipeline::build()
 
     if (err == VK_SUCCESS) {
         lastActiveFrameSlot = -1;
+        generation += 1;
         return true;
     } else {
         qWarning("Failed to create graphics pipeline: %d", err);

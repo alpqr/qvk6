@@ -376,7 +376,6 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         srb = ps->shaderResourceBindings;
 
     QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, ps);
-    QGles2ShaderResourceBindings *srbD = QRHI_RES(QGles2ShaderResourceBindings, srb);
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
 
     if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
@@ -434,72 +433,48 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         f->glUseProgram(psD->program);
     }
 
-    if (cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
-        cbD->currentSrb = srb;
-        cbD->currentSrbGeneration = srbD->generation;
-    }
-
-    // ### this is terribly inefficient for now
     for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBindings::Binding &b(srb->bindings[i]);
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
         {
             QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b.ubuf.buf);
+            if (bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
+                break;
             const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b.ubuf.offset, b.ubuf.size);
-            // Now the fun part: take the reflection info and "decompose" the
-            // uniform buffer (or at least the touched range of the bound slice
-            // of it) into individual uniforms.
-            struct Uni {
-                QShaderDescription::VarType type;
-                int location;
-                QByteArray data;
-            };
-            QVarLengthArray<Uni, 8> uniforms;
-            for (auto ub : psD->fsDesc.uniformBlocks()) {
-                if (ub.binding != b.binding)
-                    continue;
-                for (auto blockMember : ub.members) {
-                    // ### no array support for now
-                    if (blockMember.offset >= bufD->ubufChangeRange.changeBegin
-                            && blockMember.offset < bufD->ubufChangeRange.changeEnd)
-                    {
-                        Uni uni;
-                        uni.type = blockMember.type;
-                        const QByteArray name = ub.structName.toUtf8() + '.' + blockMember.name.toUtf8();
-                        uni.location = f->glGetUniformLocation(psD->program, name.constData());
-                        uni.data.resize(blockMember.size);
-                        memcpy(uni.data.data(), bufView.constData() + blockMember.offset, blockMember.size);
-                        uniforms.append(uni);
+            for (QGles2GraphicsPipeline::Uniform &uniform : psD->uniforms) {
+                if (uniform.binding == b.binding
+                        && uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)
+                        && uniform.offset < uint(bufD->ubufChangeRange.changeEnd))
+                {
+                    memcpy(uniform.data.data(), bufView.constData() + uniform.offset, uniform.data.size());
+
+                    switch (uniform.type) {
+                    case QShaderDescription::Float:
+                        f->glUniform1f(uniform.location, *reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Vec2:
+                        f->glUniform2fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Vec3:
+                        f->glUniform3fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Vec4:
+                        f->glUniform4fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Mat2:
+                        f->glUniformMatrix2fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Mat3:
+                        f->glUniformMatrix3fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Mat4:
+                        f->glUniformMatrix4fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                        // ### more types
+                    default:
+                        break;
                     }
-                }
-            }
-            for (auto u : uniforms) {
-                switch (u.type) {
-                case QShaderDescription::Float:
-                    f->glUniform1f(u.location, *reinterpret_cast<const float *>(u.data.constData()));
-                    break;
-                case QShaderDescription::Vec2:
-                    f->glUniform2fv(u.location, 1, reinterpret_cast<const float *>(u.data.constData()));
-                    break;
-                case QShaderDescription::Vec3:
-                    f->glUniform3fv(u.location, 1, reinterpret_cast<const float *>(u.data.constData()));
-                    break;
-                case QShaderDescription::Vec4:
-                    f->glUniform4fv(u.location, 1, reinterpret_cast<const float *>(u.data.constData()));
-                    break;
-                case QShaderDescription::Mat2:
-                    f->glUniformMatrix2fv(u.location, 1, GL_FALSE, reinterpret_cast<const float *>(u.data.constData()));
-                    break;
-                case QShaderDescription::Mat3:
-                    f->glUniformMatrix3fv(u.location, 1, GL_FALSE, reinterpret_cast<const float *>(u.data.constData()));
-                    break;
-                case QShaderDescription::Mat4:
-                    f->glUniformMatrix4fv(u.location, 1, GL_FALSE, reinterpret_cast<const float *>(u.data.constData()));
-                    break;
-                // ### more types
-                default:
-                    break;
                 }
             }
 
@@ -542,13 +517,7 @@ void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::BindIndexBuffer;
         cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
-        if (indexFormat == QRhi::IndexUInt16) {
-            cmd.args.bindIndexBuffer.type = GL_UNSIGNED_SHORT;
-            cmd.args.bindIndexBuffer.stride = sizeof(quint16);
-        } else {
-            cmd.args.bindIndexBuffer.type = GL_UNSIGNED_INT;
-            cmd.args.bindIndexBuffer.stride = sizeof(quint32);
-        }
+        cmd.args.bindIndexBuffer.type = indexFormat == QRhi::IndexUInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
         cbD->commands.append(cmd);
     }
 }
@@ -710,7 +679,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
 {
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     GLenum indexType = GL_UNSIGNED_SHORT;
-    int indexStride = sizeof(quint16);
+    size_t indexStride = sizeof(quint16);
 
     for (const QGles2CommandBuffer::Command &cmd : qAsConst(cbD->commands)) {
         switch (cmd.cmd) {
@@ -781,7 +750,8 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                     default:
                         break;
                     }
-                    f->glVertexAttribPointer(a.location, size, type, GL_FALSE, stride, (const GLvoid *) quintptr(a.offset));
+                    f->glVertexAttribPointer(a.location, size, type, GL_FALSE, stride,
+                                             reinterpret_cast<const GLvoid *>(quintptr(a.offset)));
                     f->glEnableVertexAttribArray(a.location);
                 }
             } else {
@@ -791,7 +761,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             break;
         case QGles2CommandBuffer::Command::BindIndexBuffer:
             indexType = cmd.args.bindIndexBuffer.type;
-            indexStride = cmd.args.bindIndexBuffer.stride;
+            indexStride = indexType == GL_UNSIGNED_SHORT ? sizeof(quint16) : sizeof(quint32);
             f->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.args.bindIndexBuffer.buffer);
             break;
         case QGles2CommandBuffer::Command::Draw:
@@ -810,7 +780,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 f->glDrawElements(ps->drawMode,
                                   cmd.args.drawIndexed.indexCount,
                                   indexType,
-                                  (const GLvoid *) quintptr(cmd.args.drawIndexed.firstIndex * indexStride));
+                                  reinterpret_cast<const GLvoid *>(quintptr(cmd.args.drawIndexed.firstIndex * indexStride)));
             } else {
                 qWarning("No graphics pipeline active for drawIndexed; ignored");
             }
@@ -1072,6 +1042,7 @@ void QGles2GraphicsPipeline::release()
     e.pipeline.program = program;
 
     program = 0;
+    uniforms.clear();
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
@@ -1149,6 +1120,29 @@ bool QGles2GraphicsPipeline::build()
         qWarning("Failed to link shader program: %s", log.constData());
         return false;
     }
+
+    auto lookupUniforms = [this, rhiD](const QShaderDescription::UniformBlock &ub) {
+        const QByteArray prefix = ub.structName.toUtf8() + '.';
+        for (const QShaderDescription::BlockVariable &blockMember : ub.members) {
+            // ### no array support for now
+            Uniform uniform;
+            uniform.type = blockMember.type;
+            const QByteArray name = prefix + blockMember.name.toUtf8();
+            uniform.location = rhiD->f->glGetUniformLocation(program, name.constData());
+            if (uniform.location >= 0) {
+                uniform.binding = ub.binding;
+                uniform.offset = blockMember.offset;
+                uniform.data.resize(blockMember.size);
+                uniforms.append(uniform);
+            }
+        }
+    };
+
+    for (const QShaderDescription::UniformBlock &ub : vsDesc.uniformBlocks())
+        lookupUniforms(ub);
+
+    for (const QShaderDescription::UniformBlock &ub : fsDesc.uniformBlocks())
+        lookupUniforms(ub);
 
     generation += 1;
     return true;

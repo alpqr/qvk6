@@ -74,9 +74,10 @@ void ExampleWindow::init()
     m_triRenderer.setRhi(m_r);
     m_triRenderer.setSampleCount(m_sampleCount);
     m_triRenderer.initResources();
-    m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
 
     if (!m_triangleOnly) {
+        m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
+
         m_cubeRenderer.setRhi(m_r);
         m_cubeRenderer.setSampleCount(m_sampleCount);
         m_cubeRenderer.initResources();

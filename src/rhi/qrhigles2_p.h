@@ -61,6 +61,7 @@ struct QGles2Buffer : public QRhiBuffer
         ChangeRange(int b = -1, int e = -1)
             : changeBegin(b), changeEnd(e)
         { }
+        bool isNull() const { return changeBegin == -1 && changeEnd == -1; }
         int changeBegin;
         int changeEnd;
     };
@@ -147,6 +148,15 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
     uint generation = 0;
     QShaderDescription vsDesc;
     QShaderDescription fsDesc;
+
+    struct Uniform {
+        QShaderDescription::VarType type;
+        int location;
+        int binding;
+        uint offset;
+        QByteArray data;
+    };
+    QVector<Uniform> uniforms;
 };
 
 struct QGles2CommandBuffer : public QRhiCommandBuffer
@@ -189,7 +199,6 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             struct {
                 GLuint buffer;
                 GLenum type;
-                int stride;
             } bindIndexBuffer;
             struct {
                 QRhiGraphicsPipeline *ps;
@@ -208,16 +217,12 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
-    QRhiShaderResourceBindings *currentSrb;
-    uint currentSrbGeneration;
 
     void resetState() {
         commands.clear();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
-        currentSrb = nullptr;
-        currentSrbGeneration = 0;
     }
 };
 

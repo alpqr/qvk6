@@ -80,6 +80,8 @@ struct QGles2Texture : public QRhiTexture
     QGles2Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
     void release() override;
     bool build() override;
+
+    GLuint texture = 0;
 };
 
 struct QGles2Sampler : public QRhiSampler
@@ -316,6 +318,7 @@ public:
     void executeDeferredReleases();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);
+    void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb);
 
     QOpenGLContext *ctx = nullptr;
     QSurface *fallbackSurface = nullptr;
@@ -328,7 +331,8 @@ public:
     struct DeferredReleaseEntry {
         enum Type {
             Buffer,
-            Pipeline
+            Pipeline,
+            Texture
         };
         Type type;
         union {
@@ -338,6 +342,9 @@ public:
             struct {
                 GLuint program;
             } pipeline;
+            struct {
+                GLuint texture;
+            } texture;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

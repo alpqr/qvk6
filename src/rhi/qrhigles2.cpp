@@ -128,6 +128,9 @@ void QRhiGles2::executeDeferredReleases()
         case QRhiGles2::DeferredReleaseEntry::Pipeline:
             f->glDeleteProgram(e.pipeline.program);
             break;
+        case QRhiGles2::DeferredReleaseEntry::Texture:
+            f->glDeleteTextures(1, &e.texture.texture);
+            break;
         default:
             break;
         }
@@ -433,6 +436,12 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         f->glUseProgram(psD->program);
     }
 
+    // buffer data cannot change within the pass so this time is as good to update uniforms as any
+    setChangedUniforms(psD, srb);
+}
+
+void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb)
+{
     for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBindings::Binding &b(srb->bindings[i]);
         switch (b.type) {
@@ -911,12 +920,54 @@ QGles2Texture::QGles2Texture(QRhiImplementation *rhi, Format format, const QSize
 {
 }
 
+static inline QSize safeSize(const QSize &size)
+{
+    return size.isEmpty() ? QSize(16, 16) : size;
+}
+
 void QGles2Texture::release()
 {
+    if (!texture)
+        return;
+
+    QRhiGles2::DeferredReleaseEntry e;
+    e.type = QRhiGles2::DeferredReleaseEntry::Texture;
+
+    e.texture.texture = texture;
+
+    texture = 0;
+
+    QRHI_RES_RHI(QRhiGles2);
+    rhiD->releaseQueue.append(e);
 }
 
 bool QGles2Texture::build()
 {
+    QRHI_RES_RHI(QRhiGles2);
+
+    if (texture)
+        release();
+
+    rhiD->f->glGenTextures(1, &texture);
+    rhiD->f->glBindTexture(GL_TEXTURE_2D, texture);
+
+    const QSize size = safeSize(pixelSize);
+    GLenum glintformat;
+    GLenum glformat;
+    GLenum gltype;
+    switch (format) {
+    case QRhiTexture::RGBA8:
+        Q_FALLTHROUGH();
+    default:
+        glintformat = GL_RGBA;
+        glformat = GL_RGBA;
+        gltype = GL_UNSIGNED_BYTE;
+        break;
+    // ###
+    }
+
+    rhiD->f->glTexImage2D(GL_TEXTURE_2D, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
+
     return true;
 }
 

@@ -494,38 +494,100 @@ void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
                                QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+
+    for (int i = 0, ie = bindings.count(); i != ie; ++i) {
+        QRhiBuffer *buf = bindings[i].first;
+        // ignore offset, no glBindBufferRange
+        QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, buf);
+        Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
+        //###
+    }
+
+    if (indexBuf) {
+        QGles2Buffer *ibufD = QRHI_RES(QGles2Buffer, indexBuf);
+        Q_ASSERT(indexBuf->usage.testFlag(QRhiBuffer::IndexBuffer));
+        Q_UNUSED(indexOffset); // no glBindBufferRange
+        QGles2CommandBuffer::Command cmd;
+        cmd.cmd = QGles2CommandBuffer::Command::BindIndexBuffer;
+        cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
+        cmd.args.bindIndexBuffer.type = indexFormat == QRhi::IndexUInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+        cbD->commands.append(cmd);
+    }
 }
 
 void QRhiGles2::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer::Command cmd;
+    cmd.cmd = QGles2CommandBuffer::Command::Viewport;
+    cmd.args.viewport.x = viewport.r.x();
+    cmd.args.viewport.y = viewport.r.y();
+    cmd.args.viewport.w = viewport.r.width();
+    cmd.args.viewport.h = viewport.r.height();
+    cmd.args.viewport.d0 = viewport.minDepth;
+    cmd.args.viewport.d1 = viewport.maxDepth;
+    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiGles2::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer::Command cmd;
+    cmd.cmd = QGles2CommandBuffer::Command::Scissor;
+    cmd.args.scissor.x = scissor.r.x();
+    cmd.args.scissor.y = scissor.r.y();
+    cmd.args.scissor.w = scissor.r.width();
+    cmd.args.scissor.h = scissor.r.height();
+    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiGles2::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer::Command cmd;
+    cmd.cmd = QGles2CommandBuffer::Command::BlendConstants;
+    cmd.args.blendConstants.r = c.x();
+    cmd.args.blendConstants.g = c.y();
+    cmd.args.blendConstants.b = c.z();
+    cmd.args.blendConstants.a = c.w();
+    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiGles2::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer::Command cmd;
+    cmd.cmd = QGles2CommandBuffer::Command::StencilRef;
+    cmd.args.stencilRef.ref = refValue;
+    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiGles2::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
                      quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer::Command cmd;
+    cmd.cmd = QGles2CommandBuffer::Command::Draw;
+    cmd.args.draw.vertexCount = vertexCount;
+    cmd.args.draw.instanceCount = instanceCount;
+    cmd.args.draw.firstVertex = firstVertex;
+    cmd.args.draw.firstInstance = firstInstance;
+    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiGles2::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                             quint32 instanceCount, quint32 firstIndex, qint32 vertexOffset, quint32 firstInstance)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer::Command cmd;
+    cmd.cmd = QGles2CommandBuffer::Command::DrawIndexed;
+    cmd.args.drawIndexed.indexCount = indexCount;
+    cmd.args.drawIndexed.instanceCount = instanceCount;
+    cmd.args.drawIndexed.firstIndex = firstIndex;
+    cmd.args.drawIndexed.vertexOffset = vertexOffset;
+    cmd.args.drawIndexed.firstInstance = firstInstance;
+    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiGles2::prepareNewFrame(QRhiCommandBuffer *cb)

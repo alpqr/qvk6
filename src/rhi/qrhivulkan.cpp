@@ -1642,7 +1642,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
 }
 
 void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
-                          QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
+                                QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
 

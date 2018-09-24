@@ -154,6 +154,48 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
     void release() override;
 
     struct Command {
+        enum Cmd {
+            Viewport,
+            Scissor,
+            BlendConstants,
+            StencilRef,
+            Draw,
+            DrawIndexed,
+            BindIndexBuffer
+        };
+        Cmd cmd;
+        union {
+            struct {
+                float x, y, w, h;
+                float d0, d1;
+            } viewport;
+            struct {
+                float x, y, w, h;
+            } scissor;
+            struct {
+                float r, g, b, a;
+            } blendConstants;
+            struct {
+                quint32 ref;
+            } stencilRef;
+            struct {
+                quint32 vertexCount;
+                quint32 instanceCount;
+                quint32 firstVertex;
+                quint32 firstInstance;
+            } draw;
+            struct {
+                quint32 indexCount;
+                quint32 instanceCount;
+                quint32 firstIndex;
+                qint32 vertexOffset;
+                quint32 firstInstance;
+            } drawIndexed;
+            struct {
+                GLuint buffer;
+                GLenum type;
+            } bindIndexBuffer;
+        } args;
     };
 
     QVector<Command> commands;

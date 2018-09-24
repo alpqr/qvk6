@@ -2716,7 +2716,7 @@ bool QVkGraphicsPipeline::build()
     for (const QRhiGraphicsShaderStage &shaderStage : shaderStages) {
         const QByteArray spirv = shaderStage.shader.shader(QBakedShader::SpirvShader).shader;
         if (spirv.isEmpty()) {
-            qWarning("No SPIR-V shader code found");
+            qWarning() << "No SPIR-V shader code found in baked shader" << shaderStage.shader;
             return false;
         }
         VkShaderModule shader = rhiD->createShader(spirv);

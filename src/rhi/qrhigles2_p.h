@@ -44,6 +44,7 @@
 #include "qrhigles2.h"
 #include "qrhi_p.h"
 #include <QOpenGLFunctions>
+#include <QShaderDescription>
 
 QT_BEGIN_NAMESPACE
 
@@ -57,8 +58,11 @@ struct QGles2Buffer : public QRhiBuffer
     GLenum target;
     QByteArray ubuf;
     struct ChangeRange {
-        int changeBegin = -1;
-        int changeEnd = -1;
+        ChangeRange(int b = -1, int e = -1)
+            : changeBegin(b), changeEnd(e)
+        { }
+        int changeBegin;
+        int changeEnd;
     };
     ChangeRange ubufChangeRange;
 };
@@ -140,6 +144,8 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
 
     GLuint program = 0;
     uint generation = 0;
+    QShaderDescription vsDesc;
+    QShaderDescription fsDesc;
 };
 
 struct QGles2CommandBuffer : public QRhiCommandBuffer

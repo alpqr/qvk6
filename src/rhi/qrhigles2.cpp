@@ -155,6 +155,11 @@ int QRhiGles2::ubufAlignment() const
     return 256;
 }
 
+QMatrix4x4 QRhiGles2::openGLCorrectionMatrix() const
+{
+    return QMatrix4x4(); // identity
+}
+
 QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount)
 {
     return new QGles2RenderBuffer(this, type, pixelSize, sampleCount);
@@ -200,6 +205,27 @@ QRhiGraphicsPipeline *QRhiGles2::createGraphicsPipeline()
 QRhiShaderResourceBindings *QRhiGles2::createShaderResourceBindings()
 {
     return new QGles2ShaderResourceBindings(this);
+}
+
+static inline GLenum toGlTopology(QRhiGraphicsPipeline::Topology t)
+{
+    switch (t) {
+    case QRhiGraphicsPipeline::Triangles:
+        return GL_TRIANGLES;
+    case QRhiGraphicsPipeline::TriangleStrip:
+        return GL_TRIANGLE_STRIP;
+    case QRhiGraphicsPipeline::TriangleFan:
+        return GL_TRIANGLE_FAN;
+    case QRhiGraphicsPipeline::Lines:
+        return GL_LINES;
+    case QRhiGraphicsPipeline::LineStrip:
+        return GL_LINE_STRIP;
+    case QRhiGraphicsPipeline::Points:
+        return GL_POINTS;
+    default:
+        Q_UNREACHABLE();
+        return GL_TRIANGLES;
+    }
 }
 
 static inline GLenum toGlCullMode(QRhiGraphicsPipeline::CullMode mode)
@@ -501,7 +527,12 @@ void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         // ignore offset, no glBindBufferRange
         QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, buf);
         Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
-        //###
+        QGles2CommandBuffer::Command cmd;
+        cmd.cmd = QGles2CommandBuffer::Command::BindVertexBuffer;
+        cmd.args.bindVertexBuffer.ps = cbD->currentPipeline;
+        cmd.args.bindVertexBuffer.buffer = bufD->buffer;
+        cmd.args.bindVertexBuffer.binding = startBinding + i;
+        cbD->commands.append(cmd);
     }
 
     if (indexBuf) {
@@ -511,7 +542,13 @@ void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::BindIndexBuffer;
         cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
-        cmd.args.bindIndexBuffer.type = indexFormat == QRhi::IndexUInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+        if (indexFormat == QRhi::IndexUInt16) {
+            cmd.args.bindIndexBuffer.type = GL_UNSIGNED_SHORT;
+            cmd.args.bindIndexBuffer.stride = sizeof(quint16);
+        } else {
+            cmd.args.bindIndexBuffer.type = GL_UNSIGNED_INT;
+            cmd.args.bindIndexBuffer.stride = sizeof(quint32);
+        }
         cbD->commands.append(cmd);
     }
 }
@@ -557,71 +594,72 @@ void QRhiGles2::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
 void QRhiGles2::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
 {
     Q_ASSERT(inPass);
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+
     QGles2CommandBuffer::Command cmd;
     cmd.cmd = QGles2CommandBuffer::Command::StencilRef;
     cmd.args.stencilRef.ref = refValue;
-    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
+    cmd.args.stencilRef.ps = cbD->currentPipeline;
+    cbD->commands.append(cmd);
 }
 
 void QRhiGles2::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
                      quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
     Q_ASSERT(inPass);
+    Q_UNUSED(instanceCount); // no instancing
+    Q_UNUSED(firstInstance);
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+
     QGles2CommandBuffer::Command cmd;
     cmd.cmd = QGles2CommandBuffer::Command::Draw;
+    cmd.args.draw.ps = cbD->currentPipeline;
     cmd.args.draw.vertexCount = vertexCount;
-    cmd.args.draw.instanceCount = instanceCount;
     cmd.args.draw.firstVertex = firstVertex;
-    cmd.args.draw.firstInstance = firstInstance;
-    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
+    cbD->commands.append(cmd);
 }
 
 void QRhiGles2::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                             quint32 instanceCount, quint32 firstIndex, qint32 vertexOffset, quint32 firstInstance)
 {
     Q_ASSERT(inPass);
+    Q_UNUSED(instanceCount); // no instancing
+    Q_UNUSED(firstInstance);
+    Q_UNUSED(vertexOffset); // no glDrawElementsBaseVertex
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+
     QGles2CommandBuffer::Command cmd;
     cmd.cmd = QGles2CommandBuffer::Command::DrawIndexed;
+    cmd.args.drawIndexed.ps = cbD->currentPipeline;
     cmd.args.drawIndexed.indexCount = indexCount;
-    cmd.args.drawIndexed.instanceCount = instanceCount;
     cmd.args.drawIndexed.firstIndex = firstIndex;
-    cmd.args.drawIndexed.vertexOffset = vertexOffset;
-    cmd.args.drawIndexed.firstInstance = firstInstance;
-    QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
-}
-
-void QRhiGles2::prepareNewFrame(QRhiCommandBuffer *cb)
-{
-    Q_ASSERT(!inFrame);
-    inFrame = true;
-
-    executeDeferredReleases();
-
-    QRHI_RES(QGles2CommandBuffer, cb)->resetState();
-}
-
-void QRhiGles2::finishFrame()
-{
-    Q_ASSERT(inFrame);
-    inFrame = false;
-    ++finishedFrameCount;
+    cbD->commands.append(cmd);
 }
 
 QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
 {
+    Q_ASSERT(!inFrame);
+
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
     ensureContext(swapChainD->surface);
+    inFrame = true;
 
-    prepareNewFrame(&swapChainD->cb);
+    executeDeferredReleases();
+    QRHI_RES(QGles2CommandBuffer, &swapChainD->cb)->resetState();
 
     return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 {
-    finishFrame();
+    Q_ASSERT(inFrame);
 
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
+    executeCommandBuffer(&swapChainD->cb);
+
+    inFrame = false;
+    ++finishedFrameCount;
+
     if (swapChainD->surface) {
         ctx->swapBuffers(swapChainD->surface);
         buffersSwapped = true;
@@ -664,6 +702,123 @@ void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
     }
 
     for (const QRhi::TextureUpload &u : updates.textureUploads) {
+        // ###
+    }
+}
+
+void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
+{
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+    GLenum indexType = GL_UNSIGNED_SHORT;
+    int indexStride = sizeof(quint16);
+
+    for (const QGles2CommandBuffer::Command &cmd : qAsConst(cbD->commands)) {
+        switch (cmd.cmd) {
+        case QGles2CommandBuffer::Command::Viewport:
+            f->glViewport(cmd.args.viewport.x, cmd.args.viewport.y, cmd.args.viewport.w, cmd.args.viewport.h);
+            f->glDepthRangef(cmd.args.viewport.d0, cmd.args.viewport.d1);
+            break;
+        case QGles2CommandBuffer::Command::Scissor:
+            f->glScissor(cmd.args.scissor.x, cmd.args.scissor.y, cmd.args.scissor.w, cmd.args.scissor.h);
+            break;
+        case QGles2CommandBuffer::Command::BlendConstants:
+            f->glBlendColor(cmd.args.blendConstants.r, cmd.args.blendConstants.g, cmd.args.blendConstants.b, cmd.args.blendConstants.a);
+            break;
+        case QGles2CommandBuffer::Command::StencilRef:
+        {
+            QGles2GraphicsPipeline *ps = QRHI_RES(QGles2GraphicsPipeline, cmd.args.stencilRef.ps);
+            if (ps) {
+                f->glStencilFuncSeparate(GL_FRONT, toGlCompareOp(ps->stencilFront.compareOp), cmd.args.stencilRef.ref, ps->stencilReadMask);
+                f->glStencilFuncSeparate(GL_BACK, toGlCompareOp(ps->stencilBack.compareOp), cmd.args.stencilRef.ref, ps->stencilReadMask);
+            } else {
+                qWarning("No graphics pipeline active for setStencilRef; ignored");
+            }
+        }
+            break;
+        case QGles2CommandBuffer::Command::BindVertexBuffer:
+        {
+            QGles2GraphicsPipeline *ps = QRHI_RES(QGles2GraphicsPipeline, cmd.args.bindVertexBuffer.ps);
+            if (ps) {
+                for (const QRhiVertexInputLayout::Attribute &a : ps->vertexInputLayout.attributes) {
+                    if (a.binding != cmd.args.bindVertexBuffer.binding)
+                        continue;
+
+                    // we do not support more than one vertex buffer
+                    f->glBindBuffer(GL_ARRAY_BUFFER, cmd.args.bindVertexBuffer.buffer);
+
+                    const int stride = ps->vertexInputLayout.bindings[a.binding].stride;
+                    int size = 1;
+                    GLenum type = GL_FLOAT;
+                    switch (a.format) {
+                    case QRhiVertexInputLayout::Attribute::Float4:
+                        type = GL_FLOAT;
+                        size = 4;
+                        break;
+                    case QRhiVertexInputLayout::Attribute::Float3:
+                        type = GL_FLOAT;
+                        size = 3;
+                        break;
+                    case QRhiVertexInputLayout::Attribute::Float2:
+                        type = GL_FLOAT;
+                        size = 2;
+                        break;
+                    case QRhiVertexInputLayout::Attribute::Float:
+                        type = GL_FLOAT;
+                        size = 1;
+                        break;
+                    case QRhiVertexInputLayout::Attribute::UNormByte4:
+                        type = GL_UNSIGNED_BYTE;
+                        size = 4;
+                        break;
+                    case QRhiVertexInputLayout::Attribute::UNormByte2:
+                        type = GL_UNSIGNED_BYTE;
+                        size = 2;
+                        break;
+                    case QRhiVertexInputLayout::Attribute::UNormByte:
+                        type = GL_UNSIGNED_BYTE;
+                        size = 1;
+                        break;
+                    default:
+                        break;
+                    }
+                    f->glVertexAttribPointer(a.location, size, type, GL_FALSE, stride, (const GLvoid *) quintptr(a.offset));
+                    f->glEnableVertexAttribArray(a.location);
+                }
+            } else {
+                qWarning("No graphics pipeline active for setVertexInput; ignored");
+            }
+        }
+            break;
+        case QGles2CommandBuffer::Command::BindIndexBuffer:
+            indexType = cmd.args.bindIndexBuffer.type;
+            indexStride = cmd.args.bindIndexBuffer.stride;
+            f->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.args.bindIndexBuffer.buffer);
+            break;
+        case QGles2CommandBuffer::Command::Draw:
+        {
+            QGles2GraphicsPipeline *ps = QRHI_RES(QGles2GraphicsPipeline, cmd.args.draw.ps);
+            if (ps)
+                f->glDrawArrays(ps->drawMode, cmd.args.draw.firstVertex, cmd.args.draw.vertexCount);
+            else
+                qWarning("No graphics pipeline active for draw; ignored");
+        }
+            break;
+        case QGles2CommandBuffer::Command::DrawIndexed:
+        {
+            QGles2GraphicsPipeline *ps = QRHI_RES(QGles2GraphicsPipeline, cmd.args.drawIndexed.ps);
+            if (ps) {
+                f->glDrawElements(ps->drawMode,
+                                  cmd.args.drawIndexed.indexCount,
+                                  indexType,
+                                  (const GLvoid *) quintptr(cmd.args.drawIndexed.firstIndex * indexStride));
+            } else {
+                qWarning("No graphics pipeline active for drawIndexed; ignored");
+            }
+        }
+            break;
+        default:
+            break;
+        }
     }
 }
 
@@ -928,6 +1083,8 @@ bool QGles2GraphicsPipeline::build()
 
     if (program)
         release();
+
+    drawMode = toGlTopology(topology);
 
     program = rhiD->f->glCreateProgram();
 

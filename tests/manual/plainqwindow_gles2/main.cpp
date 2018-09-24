@@ -45,6 +45,8 @@ private:
 
 void GlWindow::init()
 {
+    setTriangleOnly(true); // ### remove this
+
     ctx = new QOpenGLContext;
     if (!ctx->create())
         qFatal("Failed to get OpenGL context");

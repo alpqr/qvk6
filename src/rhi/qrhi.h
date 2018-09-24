@@ -727,8 +727,8 @@ public:
                      qint32 vertexOffset = 0, quint32 firstInstance = 0);
 
     QVector<int> supportedSampleCounts() const;
-    int ubufAlignment() const;
 
+    int ubufAlignment() const;
     int ubufAligned(int v) const;
 
     // make Y up and viewport.min/maxDepth 0/1

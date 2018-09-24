@@ -110,6 +110,7 @@ public:
 
     virtual QVector<int> supportedSampleCounts() const = 0;
     virtual int ubufAlignment() const = 0;
+    virtual QMatrix4x4 openGLCorrectionMatrix() const = 0;
 };
 
 QT_END_NAMESPACE

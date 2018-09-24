@@ -143,6 +143,7 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
     bool build() override;
 
     GLuint program = 0;
+    GLenum drawMode = GL_TRIANGLES;
     uint generation = 0;
     QShaderDescription vsDesc;
     QShaderDescription fsDesc;
@@ -159,9 +160,10 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             Scissor,
             BlendConstants,
             StencilRef,
+            BindVertexBuffer,
+            BindIndexBuffer,
             Draw,
-            DrawIndexed,
-            BindIndexBuffer
+            DrawIndexed
         };
         Cmd cmd;
         union {
@@ -177,24 +179,28 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             } blendConstants;
             struct {
                 quint32 ref;
+                QRhiGraphicsPipeline *ps;
             } stencilRef;
             struct {
-                quint32 vertexCount;
-                quint32 instanceCount;
-                quint32 firstVertex;
-                quint32 firstInstance;
-            } draw;
-            struct {
-                quint32 indexCount;
-                quint32 instanceCount;
-                quint32 firstIndex;
-                qint32 vertexOffset;
-                quint32 firstInstance;
-            } drawIndexed;
+                QRhiGraphicsPipeline *ps;
+                GLuint buffer;
+                int binding;
+            } bindVertexBuffer;
             struct {
                 GLuint buffer;
                 GLenum type;
+                int stride;
             } bindIndexBuffer;
+            struct {
+                QRhiGraphicsPipeline *ps;
+                quint32 vertexCount;
+                quint32 firstVertex;
+            } draw;
+            struct {
+                QRhiGraphicsPipeline *ps;
+                quint32 indexCount;
+                quint32 firstIndex;
+            } drawIndexed;
         } args;
     };
 
@@ -299,14 +305,14 @@ public:
 
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
+    QMatrix4x4 openGLCorrectionMatrix() const override;
 
     void ensureContext(QSurface *surface = nullptr);
     void create();
     void destroy();
     void executeDeferredReleases();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
-    void prepareNewFrame(QRhiCommandBuffer *cb);
-    void finishFrame();
+    void executeCommandBuffer(QRhiCommandBuffer *cb);
 
     QOpenGLContext *ctx = nullptr;
     QSurface *fallbackSurface = nullptr;

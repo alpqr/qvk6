@@ -1518,6 +1518,19 @@ int QRhiVulkan::ubufAlignment() const
     return ubufAlign; // typically 256 (bytes)
 }
 
+QMatrix4x4 QRhiVulkan::openGLCorrectionMatrix() const
+{
+    static QMatrix4x4 m;
+    if (m.isIdentity()) {
+        // NB the ctor takes row-major
+        m = QMatrix4x4(1.0f, 0.0f, 0.0f, 0.0f,
+                       0.0f, -1.0f, 0.0f, 0.0f,
+                       0.0f, 0.0f, 0.5f, 0.5f,
+                       0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    return m;
+}
+
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount)
 {
     return new QVkRenderBuffer(this, type, pixelSize, sampleCount);

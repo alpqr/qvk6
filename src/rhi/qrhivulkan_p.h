@@ -340,6 +340,7 @@ public:
 
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
+    QMatrix4x4 openGLCorrectionMatrix() const override;
 
     void create();
     void destroy();

@@ -44,6 +44,9 @@ public:
     virtual void recreateSwapChain();
     virtual void releaseSwapChain();
 
+    void setSampleCount(int sampleCount) { m_sampleCount = sampleCount; }
+    void setTriangleOnly(bool v) { m_triangleOnly = v; }
+
 protected:
     void render();
     void exposeEvent(QExposeEvent *) override;
@@ -60,6 +63,9 @@ protected:
     TriangleRenderer m_triRenderer;
     TexturedCubeRenderer m_cubeRenderer;
     TriangleOnCubeRenderer m_liveTexCubeRenderer;
+
+    int m_sampleCount = 1;
+    bool m_triangleOnly = false;
 };
 
 #endif

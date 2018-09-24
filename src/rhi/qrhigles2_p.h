@@ -133,8 +133,6 @@ struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
     QGles2ShaderResourceBindings(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
-
-    uint generation = 0;
 };
 
 struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline

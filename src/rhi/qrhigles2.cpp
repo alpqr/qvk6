@@ -1018,11 +1018,12 @@ QGles2ShaderResourceBindings::QGles2ShaderResourceBindings(QRhiImplementation *r
 
 void QGles2ShaderResourceBindings::release()
 {
+    // nothing to do here
 }
 
 bool QGles2ShaderResourceBindings::build()
 {
-    generation += 1;
+    // deeply complex implementation
     return true;
 }
 

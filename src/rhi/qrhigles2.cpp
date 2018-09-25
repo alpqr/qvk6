@@ -1328,8 +1328,12 @@ bool QGles2GraphicsPipeline::build()
             continue;
 
         GLuint shader = rhiD->f->glCreateShader(isVertex ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER);
-        const QByteArray source = shaderStage.shader.shader({ QBakedShader::GlslShader,
-                                                              { 100, QBakedShader::ShaderSourceVersion::GlslEs } }).shader;
+        QBakedShader::ShaderSourceVersion ver;
+        if (rhiD->ctx->isOpenGLES())
+            ver = { 100, QBakedShader::ShaderSourceVersion::GlslEs };
+        else
+            ver = { 120 };
+        const QByteArray source = shaderStage.shader.shader({ QBakedShader::GlslShader, ver }).shader;
         if (source.isEmpty()) {
             qWarning() << "No GLSL ES 100 shader code found in baked shader" << shaderStage.shader;
             return false;

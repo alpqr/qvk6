@@ -45,7 +45,7 @@ private:
 
 void GlWindow::init()
 {
-    setTriangleOnly(true); // ### remove this
+    setOnScreenOnly(true); // ### remove this
 
     ctx = new QOpenGLContext;
     if (!ctx->create())

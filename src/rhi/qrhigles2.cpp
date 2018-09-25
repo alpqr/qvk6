@@ -216,167 +216,6 @@ QRhiShaderResourceBindings *QRhiGles2::createShaderResourceBindings()
     return new QGles2ShaderResourceBindings(this);
 }
 
-static inline GLenum toGlTopology(QRhiGraphicsPipeline::Topology t)
-{
-    switch (t) {
-    case QRhiGraphicsPipeline::Triangles:
-        return GL_TRIANGLES;
-    case QRhiGraphicsPipeline::TriangleStrip:
-        return GL_TRIANGLE_STRIP;
-    case QRhiGraphicsPipeline::TriangleFan:
-        return GL_TRIANGLE_FAN;
-    case QRhiGraphicsPipeline::Lines:
-        return GL_LINES;
-    case QRhiGraphicsPipeline::LineStrip:
-        return GL_LINE_STRIP;
-    case QRhiGraphicsPipeline::Points:
-        return GL_POINTS;
-    default:
-        Q_UNREACHABLE();
-        return GL_TRIANGLES;
-    }
-}
-
-static inline GLenum toGlCullMode(QRhiGraphicsPipeline::CullMode mode)
-{
-    if (mode.testFlag(QRhiGraphicsPipeline::Front)) {
-        if (mode.testFlag(QRhiGraphicsPipeline::Back))
-            return GL_FRONT_AND_BACK;
-        return GL_FRONT;
-    }
-    return GL_BACK;
-}
-
-static inline GLenum toGlFrontFace(QRhiGraphicsPipeline::FrontFace f)
-{
-    switch (f) {
-    case QRhiGraphicsPipeline::CCW:
-        return GL_CCW;
-    case QRhiGraphicsPipeline::CW:
-        return GL_CW;
-    default:
-        Q_UNREACHABLE();
-        return GL_CCW;
-    }
-}
-
-static inline GLenum toGlBlendFactor(QRhiGraphicsPipeline::BlendFactor f)
-{
-    switch (f) {
-    case QRhiGraphicsPipeline::Zero:
-        return GL_ZERO;
-    case QRhiGraphicsPipeline::One:
-        return GL_ONE;
-    case QRhiGraphicsPipeline::SrcColor:
-        return GL_SRC_COLOR;
-    case QRhiGraphicsPipeline::OneMinusSrcColor:
-        return GL_ONE_MINUS_SRC_COLOR;
-    case QRhiGraphicsPipeline::DstColor:
-        return GL_DST_COLOR;
-    case QRhiGraphicsPipeline::OneMinusDstColor:
-        return GL_ONE_MINUS_DST_COLOR;
-    case QRhiGraphicsPipeline::SrcAlpha:
-        return GL_SRC_ALPHA;
-    case QRhiGraphicsPipeline::OneMinusSrcAlpha:
-        return GL_ONE_MINUS_SRC_ALPHA;
-    case QRhiGraphicsPipeline::DstAlpha:
-        return GL_DST_ALPHA;
-    case QRhiGraphicsPipeline::OneMinusDstAlpha:
-        return GL_ONE_MINUS_DST_ALPHA;
-    case QRhiGraphicsPipeline::ConstantColor:
-        return GL_CONSTANT_COLOR;
-    case QRhiGraphicsPipeline::OneMinusConstantColor:
-        return GL_ONE_MINUS_CONSTANT_COLOR;
-    case QRhiGraphicsPipeline::ConstantAlpha:
-        return GL_CONSTANT_ALPHA;
-    case QRhiGraphicsPipeline::OneMinusConstantAlpha:
-        return GL_ONE_MINUS_CONSTANT_ALPHA;
-    case QRhiGraphicsPipeline::SrcAlphaSaturate:
-        return GL_SRC_ALPHA_SATURATE;
-    case QRhiGraphicsPipeline::Src1Color:
-        Q_FALLTHROUGH();
-    case QRhiGraphicsPipeline::OneMinusSrc1Color:
-        Q_FALLTHROUGH();
-    case QRhiGraphicsPipeline::Src1Alpha:
-        Q_FALLTHROUGH();
-    case QRhiGraphicsPipeline::OneMinusSrc1Alpha:
-        qWarning("Unsupported blend factor %x", f);
-        return GL_ZERO;
-    default:
-        Q_UNREACHABLE();
-        return GL_ZERO;
-    }
-}
-
-static inline GLenum toGlBlendOp(QRhiGraphicsPipeline::BlendOp op)
-{
-    switch (op) {
-    case QRhiGraphicsPipeline::Add:
-        return GL_ADD;
-    case QRhiGraphicsPipeline::Subtract:
-        return GL_SUBTRACT;
-    case QRhiGraphicsPipeline::ReverseSubtract:
-        return GL_FUNC_REVERSE_SUBTRACT;
-    case QRhiGraphicsPipeline::Min:
-        return GL_MIN;
-    case QRhiGraphicsPipeline::Max:
-        return GL_MAX;
-    default:
-        Q_UNREACHABLE();
-        return GL_ADD;
-    }
-}
-
-static inline GLenum toGlCompareOp(QRhiGraphicsPipeline::CompareOp op)
-{
-    switch (op) {
-    case QRhiGraphicsPipeline::Never:
-        return GL_NEVER;
-    case QRhiGraphicsPipeline::Less:
-        return GL_LESS;
-    case QRhiGraphicsPipeline::Equal:
-        return GL_EQUAL;
-    case QRhiGraphicsPipeline::LessOrEqual:
-        return GL_LEQUAL;
-    case QRhiGraphicsPipeline::Greater:
-        return GL_GREATER;
-    case QRhiGraphicsPipeline::NotEqual:
-        return GL_NOTEQUAL;
-    case QRhiGraphicsPipeline::GreaterOrEqual:
-        return GL_GEQUAL;
-    case QRhiGraphicsPipeline::Always:
-        return GL_ALWAYS;
-    default:
-        Q_UNREACHABLE();
-        return GL_ALWAYS;
-    }
-}
-
-static inline GLenum toGlStencilOp(QRhiGraphicsPipeline::StencilOp op)
-{
-    switch (op) {
-    case QRhiGraphicsPipeline::StencilZero:
-        return GL_ZERO;
-    case QRhiGraphicsPipeline::Keep:
-        return GL_KEEP;
-    case QRhiGraphicsPipeline::Replace:
-        return GL_REPLACE;
-    case QRhiGraphicsPipeline::IncrementAndClamp:
-        return GL_INCR;
-    case QRhiGraphicsPipeline::DecrementAndClamp:
-        return GL_DECR;
-    case QRhiGraphicsPipeline::Invert:
-        return GL_INVERT;
-    case QRhiGraphicsPipeline::IncrementAndWrap:
-        return GL_INCR_WRAP;
-    case QRhiGraphicsPipeline::DecrementAndWrap:
-        return GL_DECR_WRAP;
-    default:
-        Q_UNREACHABLE();
-        return GL_KEEP;
-    }
-}
-
 void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
 {
     Q_ASSERT(inPass);
@@ -391,118 +230,11 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
 
-        // ### this needs some proper caching later on to minimize state changes
-
-        f->glCullFace(toGlCullMode(ps->cullMode));
-        f->glFrontFace(toGlFrontFace(ps->frontFace));
-        if (!ps->targetBlends.isEmpty()) {
-            const QRhiGraphicsPipeline::TargetBlend &blend(ps->targetBlends.first()); // no MRT
-            GLboolean wr = blend.colorWrite.testFlag(QRhiGraphicsPipeline::R);
-            GLboolean wg = blend.colorWrite.testFlag(QRhiGraphicsPipeline::G);
-            GLboolean wb = blend.colorWrite.testFlag(QRhiGraphicsPipeline::B);
-            GLboolean wa = blend.colorWrite.testFlag(QRhiGraphicsPipeline::A);
-            f->glColorMask(wr, wg, wb, wa);
-            if (blend.enable) {
-                f->glEnable(GL_BLEND);
-                f->glBlendFuncSeparate(toGlBlendFactor(blend.srcColor),
-                                       toGlBlendFactor(blend.dstColor),
-                                       toGlBlendFactor(blend.srcAlpha),
-                                       toGlBlendFactor(blend.dstAlpha));
-                f->glBlendEquationSeparate(toGlBlendOp(blend.opColor), toGlBlendOp(blend.opAlpha));
-            } else {
-                f->glDisable(GL_BLEND);
-            }
-        }
-        if (ps->depthTest)
-            f->glEnable(GL_DEPTH_TEST);
-        else
-            f->glDisable(GL_DEPTH_TEST);
-        if (ps->depthWrite)
-            f->glDepthMask(GL_TRUE);
-        else
-            f->glDepthMask(GL_FALSE);
-        f->glDepthFunc(toGlCompareOp(ps->depthOp));
-        if (ps->stencilTest) {
-            f->glEnable(GL_STENCIL_TEST);
-            f->glStencilFuncSeparate(GL_FRONT, toGlCompareOp(ps->stencilFront.compareOp), 0, ps->stencilReadMask);
-            f->glStencilOpSeparate(GL_FRONT,
-                                   toGlStencilOp(ps->stencilFront.failOp),
-                                   toGlStencilOp(ps->stencilFront.depthFailOp),
-                                   toGlStencilOp(ps->stencilFront.passOp));
-            f->glStencilMaskSeparate(GL_FRONT, ps->stencilWriteMask);
-            f->glStencilFuncSeparate(GL_BACK, toGlCompareOp(ps->stencilBack.compareOp), 0, ps->stencilReadMask);
-            f->glStencilOpSeparate(GL_BACK,
-                                   toGlStencilOp(ps->stencilBack.failOp),
-                                   toGlStencilOp(ps->stencilBack.depthFailOp),
-                                   toGlStencilOp(ps->stencilBack.passOp));
-            f->glStencilMaskSeparate(GL_BACK, ps->stencilWriteMask);
-        } else {
-            f->glDisable(GL_STENCIL_TEST);
-        }
-        f->glUseProgram(psD->program);
-    }
-
-    // buffer data cannot change within the pass so this time is as good to update uniforms as any
-    setChangedUniforms(psD, srb);
-}
-
-void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb)
-{
-    for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBindings::Binding &b(srb->bindings[i]);
-        switch (b.type) {
-        case QRhiShaderResourceBindings::Binding::UniformBuffer:
-        {
-            QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b.ubuf.buf);
-            if (bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
-                break;
-            const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b.ubuf.offset, b.ubuf.size);
-            for (QGles2GraphicsPipeline::Uniform &uniform : psD->uniforms) {
-                if (uniform.binding == b.binding
-                        && uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)
-                        && uniform.offset < uint(bufD->ubufChangeRange.changeEnd))
-                {
-                    memcpy(uniform.data.data(), bufView.constData() + uniform.offset, uniform.data.size());
-
-                    switch (uniform.type) {
-                    case QShaderDescription::Float:
-                        f->glUniform1f(uniform.location, *reinterpret_cast<const float *>(uniform.data.constData()));
-                        break;
-                    case QShaderDescription::Vec2:
-                        f->glUniform2fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
-                        break;
-                    case QShaderDescription::Vec3:
-                        f->glUniform3fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
-                        break;
-                    case QShaderDescription::Vec4:
-                        f->glUniform4fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
-                        break;
-                    case QShaderDescription::Mat2:
-                        f->glUniformMatrix2fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
-                        break;
-                    case QShaderDescription::Mat3:
-                        f->glUniformMatrix3fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
-                        break;
-                    case QShaderDescription::Mat4:
-                        f->glUniformMatrix4fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
-                        break;
-                        // ### more types
-                    default:
-                        break;
-                    }
-                }
-            }
-
-            bufD->ubufChangeRange = QGles2Buffer::ChangeRange();
-        }
-            break;
-        case QRhiShaderResourceBindings::Binding::SampledTexture:
-            // ###
-            break;
-        default:
-            Q_UNREACHABLE();
-            break;
-        }
+        QGles2CommandBuffer::Command cmd;
+        cmd.cmd = QGles2CommandBuffer::Command::BindGraphicsPipeline;
+        cmd.args.bindGraphicsPipeline.ps = ps;
+        cmd.args.bindGraphicsPipeline.srb = srb;
+        cbD->commands.append(cmd);
     }
 }
 
@@ -690,6 +422,167 @@ void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
     }
 }
 
+static inline GLenum toGlTopology(QRhiGraphicsPipeline::Topology t)
+{
+    switch (t) {
+    case QRhiGraphicsPipeline::Triangles:
+        return GL_TRIANGLES;
+    case QRhiGraphicsPipeline::TriangleStrip:
+        return GL_TRIANGLE_STRIP;
+    case QRhiGraphicsPipeline::TriangleFan:
+        return GL_TRIANGLE_FAN;
+    case QRhiGraphicsPipeline::Lines:
+        return GL_LINES;
+    case QRhiGraphicsPipeline::LineStrip:
+        return GL_LINE_STRIP;
+    case QRhiGraphicsPipeline::Points:
+        return GL_POINTS;
+    default:
+        Q_UNREACHABLE();
+        return GL_TRIANGLES;
+    }
+}
+
+static inline GLenum toGlCullMode(QRhiGraphicsPipeline::CullMode mode)
+{
+    if (mode.testFlag(QRhiGraphicsPipeline::Front)) {
+        if (mode.testFlag(QRhiGraphicsPipeline::Back))
+            return GL_FRONT_AND_BACK;
+        return GL_FRONT;
+    }
+    return GL_BACK;
+}
+
+static inline GLenum toGlFrontFace(QRhiGraphicsPipeline::FrontFace f)
+{
+    switch (f) {
+    case QRhiGraphicsPipeline::CCW:
+        return GL_CCW;
+    case QRhiGraphicsPipeline::CW:
+        return GL_CW;
+    default:
+        Q_UNREACHABLE();
+        return GL_CCW;
+    }
+}
+
+static inline GLenum toGlBlendFactor(QRhiGraphicsPipeline::BlendFactor f)
+{
+    switch (f) {
+    case QRhiGraphicsPipeline::Zero:
+        return GL_ZERO;
+    case QRhiGraphicsPipeline::One:
+        return GL_ONE;
+    case QRhiGraphicsPipeline::SrcColor:
+        return GL_SRC_COLOR;
+    case QRhiGraphicsPipeline::OneMinusSrcColor:
+        return GL_ONE_MINUS_SRC_COLOR;
+    case QRhiGraphicsPipeline::DstColor:
+        return GL_DST_COLOR;
+    case QRhiGraphicsPipeline::OneMinusDstColor:
+        return GL_ONE_MINUS_DST_COLOR;
+    case QRhiGraphicsPipeline::SrcAlpha:
+        return GL_SRC_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusSrcAlpha:
+        return GL_ONE_MINUS_SRC_ALPHA;
+    case QRhiGraphicsPipeline::DstAlpha:
+        return GL_DST_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusDstAlpha:
+        return GL_ONE_MINUS_DST_ALPHA;
+    case QRhiGraphicsPipeline::ConstantColor:
+        return GL_CONSTANT_COLOR;
+    case QRhiGraphicsPipeline::OneMinusConstantColor:
+        return GL_ONE_MINUS_CONSTANT_COLOR;
+    case QRhiGraphicsPipeline::ConstantAlpha:
+        return GL_CONSTANT_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusConstantAlpha:
+        return GL_ONE_MINUS_CONSTANT_ALPHA;
+    case QRhiGraphicsPipeline::SrcAlphaSaturate:
+        return GL_SRC_ALPHA_SATURATE;
+    case QRhiGraphicsPipeline::Src1Color:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::OneMinusSrc1Color:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::Src1Alpha:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::OneMinusSrc1Alpha:
+        qWarning("Unsupported blend factor %x", f);
+        return GL_ZERO;
+    default:
+        Q_UNREACHABLE();
+        return GL_ZERO;
+    }
+}
+
+static inline GLenum toGlBlendOp(QRhiGraphicsPipeline::BlendOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Add:
+        return GL_ADD;
+    case QRhiGraphicsPipeline::Subtract:
+        return GL_SUBTRACT;
+    case QRhiGraphicsPipeline::ReverseSubtract:
+        return GL_FUNC_REVERSE_SUBTRACT;
+    case QRhiGraphicsPipeline::Min:
+        return GL_MIN;
+    case QRhiGraphicsPipeline::Max:
+        return GL_MAX;
+    default:
+        Q_UNREACHABLE();
+        return GL_ADD;
+    }
+}
+
+static inline GLenum toGlCompareOp(QRhiGraphicsPipeline::CompareOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Never:
+        return GL_NEVER;
+    case QRhiGraphicsPipeline::Less:
+        return GL_LESS;
+    case QRhiGraphicsPipeline::Equal:
+        return GL_EQUAL;
+    case QRhiGraphicsPipeline::LessOrEqual:
+        return GL_LEQUAL;
+    case QRhiGraphicsPipeline::Greater:
+        return GL_GREATER;
+    case QRhiGraphicsPipeline::NotEqual:
+        return GL_NOTEQUAL;
+    case QRhiGraphicsPipeline::GreaterOrEqual:
+        return GL_GEQUAL;
+    case QRhiGraphicsPipeline::Always:
+        return GL_ALWAYS;
+    default:
+        Q_UNREACHABLE();
+        return GL_ALWAYS;
+    }
+}
+
+static inline GLenum toGlStencilOp(QRhiGraphicsPipeline::StencilOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::StencilZero:
+        return GL_ZERO;
+    case QRhiGraphicsPipeline::Keep:
+        return GL_KEEP;
+    case QRhiGraphicsPipeline::Replace:
+        return GL_REPLACE;
+    case QRhiGraphicsPipeline::IncrementAndClamp:
+        return GL_INCR;
+    case QRhiGraphicsPipeline::DecrementAndClamp:
+        return GL_DECR;
+    case QRhiGraphicsPipeline::Invert:
+        return GL_INVERT;
+    case QRhiGraphicsPipeline::IncrementAndWrap:
+        return GL_INCR_WRAP;
+    case QRhiGraphicsPipeline::DecrementAndWrap:
+        return GL_DECR_WRAP;
+    default:
+        Q_UNREACHABLE();
+        return GL_KEEP;
+    }
+}
+
 void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
 {
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
@@ -801,7 +694,127 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             }
         }
             break;
+        case QGles2CommandBuffer::Command::BindGraphicsPipeline:
+            executeBindGraphicsPipeline(cmd.args.bindGraphicsPipeline.ps, cmd.args.bindGraphicsPipeline.srb);
+            break;
         default:
+            break;
+        }
+    }
+}
+
+void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
+{
+    QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, ps);
+
+    // ### this needs some proper caching later on to minimize state changes
+    f->glCullFace(toGlCullMode(ps->cullMode));
+    f->glFrontFace(toGlFrontFace(ps->frontFace));
+    if (!ps->targetBlends.isEmpty()) {
+        const QRhiGraphicsPipeline::TargetBlend &blend(ps->targetBlends.first()); // no MRT
+        GLboolean wr = blend.colorWrite.testFlag(QRhiGraphicsPipeline::R);
+        GLboolean wg = blend.colorWrite.testFlag(QRhiGraphicsPipeline::G);
+        GLboolean wb = blend.colorWrite.testFlag(QRhiGraphicsPipeline::B);
+        GLboolean wa = blend.colorWrite.testFlag(QRhiGraphicsPipeline::A);
+        f->glColorMask(wr, wg, wb, wa);
+        if (blend.enable) {
+            f->glEnable(GL_BLEND);
+            f->glBlendFuncSeparate(toGlBlendFactor(blend.srcColor),
+                                   toGlBlendFactor(blend.dstColor),
+                                   toGlBlendFactor(blend.srcAlpha),
+                                   toGlBlendFactor(blend.dstAlpha));
+            f->glBlendEquationSeparate(toGlBlendOp(blend.opColor), toGlBlendOp(blend.opAlpha));
+        } else {
+            f->glDisable(GL_BLEND);
+        }
+    }
+    if (ps->depthTest)
+        f->glEnable(GL_DEPTH_TEST);
+    else
+        f->glDisable(GL_DEPTH_TEST);
+    if (ps->depthWrite)
+        f->glDepthMask(GL_TRUE);
+    else
+        f->glDepthMask(GL_FALSE);
+    f->glDepthFunc(toGlCompareOp(ps->depthOp));
+    if (ps->stencilTest) {
+        f->glEnable(GL_STENCIL_TEST);
+        f->glStencilFuncSeparate(GL_FRONT, toGlCompareOp(ps->stencilFront.compareOp), 0, ps->stencilReadMask);
+        f->glStencilOpSeparate(GL_FRONT,
+                               toGlStencilOp(ps->stencilFront.failOp),
+                               toGlStencilOp(ps->stencilFront.depthFailOp),
+                               toGlStencilOp(ps->stencilFront.passOp));
+        f->glStencilMaskSeparate(GL_FRONT, ps->stencilWriteMask);
+        f->glStencilFuncSeparate(GL_BACK, toGlCompareOp(ps->stencilBack.compareOp), 0, ps->stencilReadMask);
+        f->glStencilOpSeparate(GL_BACK,
+                               toGlStencilOp(ps->stencilBack.failOp),
+                               toGlStencilOp(ps->stencilBack.depthFailOp),
+                               toGlStencilOp(ps->stencilBack.passOp));
+        f->glStencilMaskSeparate(GL_BACK, ps->stencilWriteMask);
+    } else {
+        f->glDisable(GL_STENCIL_TEST);
+    }
+
+    f->glUseProgram(psD->program);
+    // buffer data cannot change within the pass so this time is as good to update uniforms as any
+    setChangedUniforms(psD, srb);
+}
+
+void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb)
+{
+    for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBindings::Binding &b(srb->bindings[i]);
+        switch (b.type) {
+        case QRhiShaderResourceBindings::Binding::UniformBuffer:
+        {
+            QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b.ubuf.buf);
+            if (bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
+                break;
+            const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b.ubuf.offset, b.ubuf.size);
+            for (QGles2GraphicsPipeline::Uniform &uniform : psD->uniforms) {
+                if (uniform.binding == b.binding
+                        && uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)
+                        && uniform.offset < uint(bufD->ubufChangeRange.changeEnd))
+                {
+                    memcpy(uniform.data.data(), bufView.constData() + uniform.offset, uniform.data.size());
+
+                    switch (uniform.type) {
+                    case QShaderDescription::Float:
+                        f->glUniform1f(uniform.location, *reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Vec2:
+                        f->glUniform2fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Vec3:
+                        f->glUniform3fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Vec4:
+                        f->glUniform4fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Mat2:
+                        f->glUniformMatrix2fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Mat3:
+                        f->glUniformMatrix3fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Mat4:
+                        f->glUniformMatrix4fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        break;
+                        // ### more types
+                    default:
+                        break;
+                    }
+                }
+            }
+
+            bufD->ubufChangeRange = QGles2Buffer::ChangeRange();
+        }
+            break;
+        case QRhiShaderResourceBindings::Binding::SampledTexture:
+            // ###
+            break;
+        default:
+            Q_UNREACHABLE();
             break;
         }
     }

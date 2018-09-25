@@ -173,7 +173,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             BindVertexBuffer,
             BindIndexBuffer,
             Draw,
-            DrawIndexed
+            DrawIndexed,
+            BindGraphicsPipeline
         };
         Cmd cmd;
         union {
@@ -210,6 +211,10 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 quint32 indexCount;
                 quint32 firstIndex;
             } drawIndexed;
+            struct {
+                QRhiGraphicsPipeline *ps;
+                QRhiShaderResourceBindings *srb;
+            } bindGraphicsPipeline;
         } args;
     };
 
@@ -318,6 +323,7 @@ public:
     void executeDeferredReleases();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);
+    void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb);
     void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb);
 
     QOpenGLContext *ctx = nullptr;

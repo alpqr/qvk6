@@ -45,7 +45,7 @@ public:
     virtual void releaseSwapChain();
 
     void setSampleCount(int sampleCount) { m_sampleCount = sampleCount; }
-    void setTriangleOnly(bool v) { m_triangleOnly = v; }
+    void setOnScreenOnly(bool v) { m_onScreenOnly = v; }
 
 protected:
     void render();
@@ -65,7 +65,7 @@ protected:
     TriangleOnCubeRenderer m_liveTexCubeRenderer;
 
     int m_sampleCount = 1;
-    bool m_triangleOnly = false;
+    bool m_onScreenOnly = false;
 };
 
 #endif

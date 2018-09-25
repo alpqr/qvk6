@@ -418,7 +418,11 @@ void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
     }
 
     for (const QRhi::TextureUpload &u : updates.textureUploads) {
-        // ###
+        QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
+        f->glBindTexture(texD->target, texD->texture);
+        f->glTexSubImage2D(texD->target, 0,
+                           0, 0, u.tex->pixelSize.width(), u.tex->pixelSize.height(),
+                           texD->glformat, texD->gltype, u.image.constBits());
     }
 }
 
@@ -967,25 +971,18 @@ bool QGles2Texture::build()
     if (texture)
         release();
 
-    rhiD->f->glGenTextures(1, &texture);
-    rhiD->f->glBindTexture(GL_TEXTURE_2D, texture);
+    // ### more formats
+    target = GL_TEXTURE_2D;
+    glintformat = GL_RGBA;
+    glformat = GL_RGBA;
+    gltype = GL_UNSIGNED_BYTE;
 
     const QSize size = safeSize(pixelSize);
-    GLenum glintformat;
-    GLenum glformat;
-    GLenum gltype;
-    switch (format) {
-    case QRhiTexture::RGBA8:
-        Q_FALLTHROUGH();
-    default:
-        glintformat = GL_RGBA;
-        glformat = GL_RGBA;
-        gltype = GL_UNSIGNED_BYTE;
-        break;
-    // ###
-    }
+    // ### adjust size for npot when repeat with npot is not supported?
 
-    rhiD->f->glTexImage2D(GL_TEXTURE_2D, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
+    rhiD->f->glGenTextures(1, &texture);
+    rhiD->f->glBindTexture(target, texture);
+    rhiD->f->glTexImage2D(target, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
 
     return true;
 }

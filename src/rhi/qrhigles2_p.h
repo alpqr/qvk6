@@ -82,6 +82,10 @@ struct QGles2Texture : public QRhiTexture
     bool build() override;
 
     GLuint texture = 0;
+    GLenum target;
+    GLenum glintformat;
+    GLenum glformat;
+    GLenum gltype;
 };
 
 struct QGles2Sampler : public QRhiSampler

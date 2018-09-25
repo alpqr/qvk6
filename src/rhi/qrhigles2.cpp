@@ -104,6 +104,12 @@ void QRhiGles2::create()
     ensureContext();
 
     f = ctx->functions();
+
+    const char *vendor = reinterpret_cast<const char *>(f->glGetString(GL_VENDOR));
+    const char *renderer = reinterpret_cast<const char *>(f->glGetString(GL_RENDERER));
+    const char *version = reinterpret_cast<const char *>(f->glGetString(GL_VERSION));
+    if (vendor && renderer && version)
+        qDebug("OpenGL VENDOR: %s RENDERER: %s VERSION: %s", vendor, renderer, version);
 }
 
 void QRhiGles2::destroy()

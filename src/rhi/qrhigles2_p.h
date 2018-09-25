@@ -93,6 +93,11 @@ struct QGles2Sampler : public QRhiSampler
     QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
     void release() override;
     bool build() override;
+
+    GLenum glminfilter;
+    GLenum glmagfilter;
+    GLenum glwraps;
+    GLenum glwrapt;
 };
 
 struct QGles2RenderPass : public QRhiRenderPass

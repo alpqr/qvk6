@@ -510,7 +510,7 @@ static inline GLenum toGlBlendFactor(QRhiGraphicsPipeline::BlendFactor f)
     case QRhiGraphicsPipeline::Src1Alpha:
         Q_FALLTHROUGH();
     case QRhiGraphicsPipeline::OneMinusSrc1Alpha:
-        qWarning("Unsupported blend factor %x", f);
+        qWarning("Unsupported blend factor %d", f);
         return GL_ZERO;
     default:
         Q_UNREACHABLE();
@@ -584,6 +584,53 @@ static inline GLenum toGlStencilOp(QRhiGraphicsPipeline::StencilOp op)
     default:
         Q_UNREACHABLE();
         return GL_KEEP;
+    }
+}
+
+static inline GLenum toGlMinFilter(QRhiSampler::Filter f, QRhiSampler::Filter m)
+{
+    Q_UNUSED(m); // ###
+    switch (f) {
+    case QRhiSampler::Nearest:
+        return GL_NEAREST;
+    case QRhiSampler::Linear:
+        return GL_LINEAR;
+    default:
+        Q_UNREACHABLE();
+        return GL_LINEAR;
+    }
+}
+
+static inline GLenum toGlMagFilter(QRhiSampler::Filter f)
+{
+    switch (f) {
+    case QRhiSampler::Nearest:
+        return GL_NEAREST;
+    case QRhiSampler::Linear:
+        return GL_LINEAR;
+    default:
+        Q_UNREACHABLE();
+        return GL_LINEAR;
+    }
+}
+
+static inline GLenum toGlWrapMode(QRhiSampler::AddressMode m)
+{
+    switch (m) {
+    case QRhiSampler::Repeat:
+        return GL_REPEAT;
+    case QRhiSampler::ClampToEdge:
+        return GL_CLAMP_TO_EDGE;
+    case QRhiSampler::Mirror:
+        return GL_MIRRORED_REPEAT;
+    case QRhiSampler::MirrorOnce:
+        Q_FALLTHROUGH();
+    case QRhiSampler::Border:
+        qWarning("Unsupported wrap mode %d", m);
+        return GL_CLAMP_TO_EDGE;
+    default:
+        Q_UNREACHABLE();
+        return GL_CLAMP_TO_EDGE;
     }
 }
 
@@ -994,10 +1041,16 @@ QGles2Sampler::QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter m
 
 void QGles2Sampler::release()
 {
+    // nothing to do here
 }
 
 bool QGles2Sampler::build()
 {
+    glminfilter = toGlMinFilter(minFilter, mipmapMode);
+    glmagfilter = toGlMagFilter(magFilter);
+    glwraps = toGlWrapMode(addressU);
+    glwrapt = toGlWrapMode(addressV);
+
     return true;
 }
 
@@ -1008,6 +1061,7 @@ QGles2RenderPass::QGles2RenderPass(QRhiImplementation *rhi)
 
 void QGles2RenderPass::release()
 {
+    // nothing to do here
 }
 
 QGles2ReferenceRenderTarget::QGles2ReferenceRenderTarget(QRhiImplementation *rhi)
@@ -1090,7 +1144,6 @@ void QGles2ShaderResourceBindings::release()
 
 bool QGles2ShaderResourceBindings::build()
 {
-    // deeply complex implementation
     return true;
 }
 

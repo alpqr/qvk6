@@ -2388,10 +2388,11 @@ bool QVkSampler::build()
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = toVkFilter(magFilter);
     samplerInfo.minFilter = toVkFilter(minFilter);
-    samplerInfo.mipmapMode = toVkMipmapMode(mipmapMode);
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; // ### toVkMipmapMode(mipmapMode);
     samplerInfo.addressModeU = toVkAddressMode(addressU);
     samplerInfo.addressModeV = toVkAddressMode(addressV);
     samplerInfo.maxAnisotropy = 1.0f;
+    samplerInfo.maxLod = 0.25f; // ###
 
     QRHI_RES_RHI(QRhiVulkan);
     VkResult err = rhiD->df->vkCreateSampler(rhiD->dev, &samplerInfo, nullptr, &sampler);

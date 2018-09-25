@@ -116,7 +116,10 @@ void ExampleWindow::recreateSwapChain()
     const QSize outputSize = size() * devicePixelRatio();
 
     if (!m_ds) {
-        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil, outputSize, m_triRenderer.sampleCount());
+        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
+                                       outputSize,
+                                       m_triRenderer.sampleCount(),
+                                       QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
     } else {
         m_ds->release();
         m_ds->pixelSize = outputSize;

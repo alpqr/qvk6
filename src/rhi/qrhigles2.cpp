@@ -137,6 +137,12 @@ void QRhiGles2::executeDeferredReleases()
         case QRhiGles2::DeferredReleaseEntry::Texture:
             f->glDeleteTextures(1, &e.texture.texture);
             break;
+        case QRhiGles2::DeferredReleaseEntry::RenderBuffer:
+            f->glDeleteRenderbuffers(1, &e.renderbuffer.renderbuffer);
+            break;
+        case QRhiGles2::DeferredReleaseEntry::TextureRenderTarget:
+            f->glDeleteFramebuffers(1, &e.textureRenderTarget.framebuffer);
+            break;
         default:
             break;
         }
@@ -169,9 +175,10 @@ QMatrix4x4 QRhiGles2::openGLCorrectionMatrix() const
     return QMatrix4x4(); // identity
 }
 
-QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount)
+QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
+                                                int sampleCount, QRhiRenderBuffer::Hints hints)
 {
-    return new QGles2RenderBuffer(this, type, pixelSize, sampleCount);
+    return new QGles2RenderBuffer(this, type, pixelSize, sampleCount, hints);
 }
 
 QRhiTexture *QRhiGles2::createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags)
@@ -523,9 +530,9 @@ static inline GLenum toGlBlendOp(QRhiGraphicsPipeline::BlendOp op)
 {
     switch (op) {
     case QRhiGraphicsPipeline::Add:
-        return GL_ADD;
+        return GL_FUNC_ADD;
     case QRhiGraphicsPipeline::Subtract:
-        return GL_SUBTRACT;
+        return GL_FUNC_SUBTRACT;
     case QRhiGraphicsPipeline::ReverseSubtract:
         return GL_FUNC_REVERSE_SUBTRACT;
     case QRhiGraphicsPipeline::Min:
@@ -534,7 +541,7 @@ static inline GLenum toGlBlendOp(QRhiGraphicsPipeline::BlendOp op)
         return GL_MAX;
     default:
         Q_UNREACHABLE();
-        return GL_ADD;
+        return GL_FUNC_ADD;
     }
 }
 
@@ -639,8 +646,8 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
 {
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     GLenum indexType = GL_UNSIGNED_SHORT;
-    size_t indexStride = sizeof(quint16);
-    size_t indexOffset = 0;
+    quint32 indexStride = sizeof(quint16);
+    quint32 indexOffset = 0;
 
     for (const QGles2CommandBuffer::Command &cmd : qAsConst(cbD->commands)) {
         switch (cmd.cmd) {
@@ -752,6 +759,22 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             break;
         case QGles2CommandBuffer::Command::BindGraphicsPipeline:
             executeBindGraphicsPipeline(cmd.args.bindGraphicsPipeline.ps, cmd.args.bindGraphicsPipeline.srb);
+            break;
+        case QGles2CommandBuffer::Command::BindFramebuffer:
+            if (cmd.args.bindFramebuffer.rt)
+                f->glBindFramebuffer(GL_FRAMEBUFFER,
+                                     QRHI_RES(QGles2TextureRenderTarget, cmd.args.bindFramebuffer.rt)->framebuffer);
+            else
+                f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
+            break;
+        case QGles2CommandBuffer::Command::Clear:
+            if (cmd.args.clear.mask & GL_COLOR_BUFFER_BIT)
+                f->glClearColor(cmd.args.clear.r, cmd.args.clear.g, cmd.args.clear.b, cmd.args.clear.a);
+            if (cmd.args.clear.mask & GL_DEPTH_BUFFER_BIT)
+                f->glClearDepthf(cmd.args.clear.d);
+            if (cmd.args.clear.mask & GL_STENCIL_BUFFER_BIT)
+                f->glClearStencil(cmd.args.clear.s);
+            f->glClear(cmd.args.clear.mask);
             break;
         default:
             break;
@@ -898,41 +921,58 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
     }
 }
 
-void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const QRhi::PassUpdates &updates)
+void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
+                          const QRhi::PassUpdates &updates)
 {
     Q_ASSERT(!inPass);
 
     applyPassUpdates(cb, updates);
 
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     bool needsColorClear = true;
     QGles2BasicRenderTargetData *rtD = nullptr;
+    QGles2CommandBuffer::Command fbCmd;
+    fbCmd.cmd = QGles2CommandBuffer::Command::BindFramebuffer;
     switch (rt->type()) {
     case QRhiRenderTarget::RtRef:
-        rtD = &static_cast<QGles2ReferenceRenderTarget *>(rt)->d;
+        rtD = &QRHI_RES(QGles2ReferenceRenderTarget, rt)->d;
+        fbCmd.args.bindFramebuffer.rt = nullptr;
         break;
     case QRhiRenderTarget::RtTexture:
     {
-        QGles2TextureRenderTarget *rtTex = static_cast<QGles2TextureRenderTarget *>(rt);
+        QGles2TextureRenderTarget *rtTex = QRHI_RES(QGles2TextureRenderTarget, rt);
         rtD = &rtTex->d;
         needsColorClear = !rtTex->flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
-        // ### activateTextureRenderTarget(cb, rtTex);
+        fbCmd.args.bindFramebuffer.rt = rtTex;
     }
         break;
     default:
         Q_UNREACHABLE();
         break;
     }
+    cbD->commands.append(fbCmd);
 
-    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     cbD->currentTarget = rt;
 
-    GLbitfield clearMask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
-    if (needsColorClear) {
-        clearMask |= GL_COLOR_BUFFER_BIT;
-        const QVector4D &c(clearValues->rgba);
-        f->glClearColor(c.x(), c.y(), c.z(), c.w());
+    Q_ASSERT(rtD->attCount == 1 || rtD->attCount == 2);
+    QGles2CommandBuffer::Command clearCmd;
+    clearCmd.cmd = QGles2CommandBuffer::Command::Clear;
+    clearCmd.args.clear.mask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+    if (needsColorClear)
+        clearCmd.args.clear.mask |= GL_COLOR_BUFFER_BIT;
+    for (int i = 0; i < rtD->attCount; ++i) {
+        if (clearValues[i].isDepthStencil) {
+            clearCmd.args.clear.d = clearValues[i].d;
+            clearCmd.args.clear.s = clearValues[i].s;
+        } else {
+            const QVector4D &c(clearValues[i].rgba);
+            clearCmd.args.clear.r = c.x();
+            clearCmd.args.clear.g = c.y();
+            clearCmd.args.clear.b = c.z();
+            clearCmd.args.clear.a = c.w();
+        }
     }
-    f->glClear(clearMask);
+    cbD->commands.append(clearCmd);
 
     inPass = true;
 }
@@ -943,10 +983,6 @@ void QRhiGles2::endPass(QRhiCommandBuffer *cb)
     inPass = false;
 
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
-    if (cbD->currentTarget->type() == QRhiRenderTarget::RtTexture)
-    {}
-        // ### deactivateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(cbD->currentTarget));
-
     cbD->currentTarget = nullptr;
 }
 
@@ -998,17 +1034,50 @@ bool QGles2Buffer::build()
     return true;
 }
 
-QGles2RenderBuffer::QGles2RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize, int sampleCount)
-    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount)
+QGles2RenderBuffer::QGles2RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
+                                       int sampleCount, QRhiRenderBuffer::Hints hints)
+    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints)
 {
 }
 
 void QGles2RenderBuffer::release()
 {
+    if (!renderbuffer)
+        return;
+
+    QRhiGles2::DeferredReleaseEntry e;
+    e.type = QRhiGles2::DeferredReleaseEntry::RenderBuffer;
+
+    e.renderbuffer.renderbuffer = renderbuffer;
+
+    renderbuffer = 0;
+
+    QRHI_RES_RHI(QRhiGles2);
+    rhiD->releaseQueue.append(e);
 }
 
 bool QGles2RenderBuffer::build()
 {
+    QRHI_RES_RHI(QRhiGles2);
+
+    if (renderbuffer)
+        release();
+
+    if (hints.testFlag(ToBeUsedWithSwapChainOnly))
+        return true;
+
+    rhiD->f->glGenRenderbuffers(1, &renderbuffer);
+    rhiD->f->glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+
+    switch (type) {
+    case QRhiRenderBuffer::DepthStencil:
+        rhiD->f->glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, pixelSize.width(), pixelSize.height());
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
     return true;
 }
 
@@ -1137,10 +1206,54 @@ QGles2TextureRenderTarget::QGles2TextureRenderTarget(QRhiImplementation *rhi, QR
 
 void QGles2TextureRenderTarget::release()
 {
+    if (!framebuffer)
+        return;
+
+    QRhiGles2::DeferredReleaseEntry e;
+    e.type = QRhiGles2::DeferredReleaseEntry::TextureRenderTarget;
+
+    e.textureRenderTarget.framebuffer = framebuffer;
+
+    framebuffer = 0;
+
+    QRHI_RES_RHI(QRhiGles2);
+    rhiD->releaseQueue.append(e);
 }
 
 bool QGles2TextureRenderTarget::build()
 {
+    QRHI_RES_RHI(QRhiGles2);
+
+    if (framebuffer)
+        release();
+
+    Q_ASSERT(texture);
+    Q_ASSERT(!depthStencilBuffer || !depthTexture);
+
+    rhiD->f->glGenFramebuffers(1, &framebuffer);
+    rhiD->f->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+
+    QGles2Texture *texD = QRHI_RES(QGles2Texture, texture);
+    Q_ASSERT(texD->texture);
+
+    rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
+    d.attCount = 1;
+
+    if (depthStencilBuffer) {
+        QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, depthStencilBuffer);
+        rhiD->f->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbD->renderbuffer);
+        rhiD->f->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbD->renderbuffer);
+        d.attCount += 1;
+    }
+
+    // ### depthTexture is not handled yet
+
+    GLenum status = rhiD->f->glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (status != GL_NO_ERROR && status != GL_FRAMEBUFFER_COMPLETE) {
+        qWarning("Framebuffer incomplete: 0x%x", status);
+        return false;
+    }
+
     return true;
 }
 
@@ -1364,7 +1477,10 @@ bool QGles2SwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImp
 
     surface = window;
     pixelSize = pixelSize_;
-    QRHI_RES(QGles2ReferenceRenderTarget, &rt)->d.pixelSize = pixelSize_;
+
+    QGles2ReferenceRenderTarget *rtD = QRHI_RES(QGles2ReferenceRenderTarget, &rt);
+    rtD->d.pixelSize = pixelSize_;
+    rtD->d.attCount = depthStencil ? 2 : 1;
 
     return true;
 }

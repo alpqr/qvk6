@@ -55,9 +55,10 @@ QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, i
 {
 }
 
-QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_, int sampleCount_)
+QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
+                                   int sampleCount_, Hints hints_)
     : QRhiResource(rhi),
-      type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_)
+      type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_), hints(hints_)
 {
 }
 
@@ -228,9 +229,10 @@ QRhiBuffer *QRhi::createBuffer(QRhiBuffer::Type type,
 
 QRhiRenderBuffer *QRhi::createRenderBuffer(QRhiRenderBuffer::Type type,
                                            const QSize &pixelSize,
-                                           int sampleCount)
+                                           int sampleCount,
+                                           QRhiRenderBuffer::Hints hints)
 {
-    return d->createRenderBuffer(type, pixelSize, sampleCount);
+    return d->createRenderBuffer(type, pixelSize, sampleCount, hints);
 }
 
 QRhiTexture *QRhi::createTexture(QRhiTexture::Format format,

@@ -62,6 +62,8 @@ struct Q_RHI_EXPORT QRhiClearValue
     bool isDepthStencil;
 };
 
+Q_DECLARE_TYPEINFO(QRhiClearValue, Q_MOVABLE_TYPE);
+
 struct Q_RHI_EXPORT QRhiViewport
 {
     QRhiViewport() { }
@@ -73,6 +75,8 @@ struct Q_RHI_EXPORT QRhiViewport
     float maxDepth;
 };
 
+Q_DECLARE_TYPEINFO(QRhiViewport, Q_MOVABLE_TYPE);
+
 struct Q_RHI_EXPORT QRhiScissor
 {
     QRhiScissor() { }
@@ -81,6 +85,8 @@ struct Q_RHI_EXPORT QRhiScissor
     { }
     QRectF r;
 };
+
+Q_DECLARE_TYPEINFO(QRhiScissor, Q_MOVABLE_TYPE);
 
 // should be mappable to D3D12_INPUT_ELEMENT_DESC + D3D12_VERTEX_BUFFER_VIEW...
 struct Q_RHI_EXPORT QRhiVertexInputLayout
@@ -126,6 +132,10 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
     QVector<Attribute> attributes;
 };
 
+Q_DECLARE_TYPEINFO(QRhiVertexInputLayout::Binding, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiVertexInputLayout::Attribute, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiVertexInputLayout, Q_MOVABLE_TYPE);
+
 struct Q_RHI_EXPORT QRhiGraphicsShaderStage
 {
     enum Type {
@@ -146,7 +156,7 @@ struct Q_RHI_EXPORT QRhiGraphicsShaderStage
     const char *name;
 };
 
-class QRhi;
+Q_DECLARE_TYPEINFO(QRhiGraphicsShaderStage, Q_MOVABLE_TYPE);
 
 class Q_RHI_EXPORT QRhiResource
 {
@@ -196,15 +206,24 @@ public:
         DepthStencil
     };
 
+    enum Hint {
+        ToBeUsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
+    };
+    Q_DECLARE_FLAGS(Hints, Hint)
+
     Type type;
     QSize pixelSize;
     int sampleCount;
+    Hints hints;
 
     virtual bool build() = 0;
 
 protected:
-    QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_, int sampleCount_);
+    QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
+                     int sampleCount_, Hints hints_);
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiRenderBuffer::Hints)
 
 class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 {
@@ -373,6 +392,7 @@ protected:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBindings::Binding::StageFlags)
+Q_DECLARE_TYPEINFO(QRhiShaderResourceBindings::Binding, Q_MOVABLE_TYPE);
 
 class Q_RHI_EXPORT QRhiGraphicsPipeline : public QRhiResource
 {
@@ -511,6 +531,7 @@ protected:
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::CullMode)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
+Q_DECLARE_TYPEINFO(QRhiGraphicsPipeline::TargetBlend, Q_MOVABLE_TYPE);
 
 class Q_RHI_EXPORT QRhiCommandBuffer : public QRhiResource
 {
@@ -647,11 +668,15 @@ public:
                              QRhiBuffer::UsageFlags usage,
                              int size);
 
-    // Transient image, backed by lazily allocated memory (ideal for tiled
-    // GPUs). To be used for depth-stencil.
+    // To be used for depth-stencil when no access is needed afterwards.
+    // Transient image, backed by lazily allocated memory (Vulkan, ideal for
+    // tiled GPUs). May also be a dummy internally depending on the backend and
+    // the hints (OpenGL, where the winsys interface provides the depth-stencil
+    // buffer via the window surface).
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
-                                         int sampleCount = 1);
+                                         int sampleCount = 1,
+                                         QRhiRenderBuffer::Hints hints = QRhiRenderBuffer::Hints());
 
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,

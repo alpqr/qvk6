@@ -1063,11 +1063,11 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QR
     QVkBasicRenderTargetData *rtD = nullptr;
     switch (rt->type()) {
     case QRhiRenderTarget::RtRef:
-        rtD = &static_cast<QVkReferenceRenderTarget *>(rt)->d;
+        rtD = &QRHI_RES(QVkReferenceRenderTarget, rt)->d;
         break;
     case QRhiRenderTarget::RtTexture:
     {
-        QVkTextureRenderTarget *rtTex = static_cast<QVkTextureRenderTarget *>(rt);
+        QVkTextureRenderTarget *rtTex = QRHI_RES(QVkTextureRenderTarget, rt);
         rtD = &rtTex->d;
         activateTextureRenderTarget(cb, rtTex);
     }
@@ -1531,9 +1531,10 @@ QMatrix4x4 QRhiVulkan::openGLCorrectionMatrix() const
     return m;
 }
 
-QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize, int sampleCount)
+QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
+                                                 int sampleCount, QRhiRenderBuffer::Hints hints)
 {
-    return new QVkRenderBuffer(this, type, pixelSize, sampleCount);
+    return new QVkRenderBuffer(this, type, pixelSize, sampleCount, hints);
 }
 
 QRhiTexture *QRhiVulkan::createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags)
@@ -2193,8 +2194,9 @@ bool QVkBuffer::build()
     }
 }
 
-QVkRenderBuffer::QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize, int sampleCount)
-    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount)
+QVkRenderBuffer::QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
+                                 int sampleCount, Hints hints)
+    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints)
 {
 }
 

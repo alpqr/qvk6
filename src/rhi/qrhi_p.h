@@ -61,7 +61,8 @@ public:
                                      int size) = 0;
     virtual QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                                  const QSize &pixelSize,
-                                                 int sampleCount) = 0;
+                                                 int sampleCount,
+                                                 QRhiRenderBuffer::Hints hints) = 0;
     virtual QRhiTexture *createTexture(QRhiTexture::Format format,
                                        const QSize &pixelSize,
                                        QRhiTexture::Flags flags) = 0;

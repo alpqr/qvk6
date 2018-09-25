@@ -54,7 +54,7 @@ struct QGles2Buffer : public QRhiBuffer
     void release() override;
     bool build() override;
 
-    uint buffer = 0;
+    GLuint buffer = 0;
     GLenum target;
     QByteArray ubuf;
     struct ChangeRange {
@@ -70,9 +70,12 @@ struct QGles2Buffer : public QRhiBuffer
 
 struct QGles2RenderBuffer : public QRhiRenderBuffer
 {
-    QGles2RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize, int sampleCount);
+    QGles2RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
+                       int sampleCount, QRhiRenderBuffer::Hints hints);
     void release() override;
     bool build() override;
+
+    GLuint renderbuffer = 0;
 };
 
 struct QGles2Texture : public QRhiTexture
@@ -112,6 +115,7 @@ struct QGles2BasicRenderTargetData
 
     QGles2RenderPass rp;
     QSize pixelSize;
+    int attCount;
 };
 
 struct QGles2ReferenceRenderTarget : public QRhiReferenceRenderTarget
@@ -137,6 +141,7 @@ struct QGles2TextureRenderTarget : public QRhiTextureRenderTarget
     const QRhiRenderPass *renderPass() const override;
 
     QGles2BasicRenderTargetData d;
+    GLuint framebuffer = 0;
 };
 
 struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
@@ -189,7 +194,9 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             BindIndexBuffer,
             Draw,
             DrawIndexed,
-            BindGraphicsPipeline
+            BindGraphicsPipeline,
+            BindFramebuffer,
+            Clear
         };
         Cmd cmd;
         union {
@@ -232,6 +239,15 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 QRhiGraphicsPipeline *ps;
                 QRhiShaderResourceBindings *srb;
             } bindGraphicsPipeline;
+            struct {
+                GLbitfield mask;
+                float r, g, b, a;
+                float d;
+                quint32 s;
+            } clear;
+            struct {
+                QRhiTextureRenderTarget *rt;
+            } bindFramebuffer;
         } args;
     };
 
@@ -282,7 +298,8 @@ public:
                              int size) override;
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
-                                         int sampleCount) override;
+                                         int sampleCount,
+                                         QRhiRenderBuffer::Hints hints) override;
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
                                QRhiTexture::Flags flags) override;
@@ -355,12 +372,14 @@ public:
         enum Type {
             Buffer,
             Pipeline,
-            Texture
+            Texture,
+            RenderBuffer,
+            TextureRenderTarget
         };
         Type type;
         union {
             struct {
-                uint buffer;
+                GLuint buffer;
             } buffer;
             struct {
                 GLuint program;
@@ -368,6 +387,12 @@ public:
             struct {
                 GLuint texture;
             } texture;
+            struct {
+                GLuint renderbuffer;
+            } renderbuffer;
+            struct {
+                GLuint framebuffer;
+            } textureRenderTarget;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;

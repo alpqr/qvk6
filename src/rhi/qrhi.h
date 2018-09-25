@@ -655,7 +655,7 @@ public:
 
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
-                               QRhiTexture::Flags flags = 0);
+                               QRhiTexture::Flags flags = QRhiTexture::Flags());
 
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
@@ -663,15 +663,15 @@ public:
 
     // color only
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTextureRenderTarget::Flags flags = 0);
+                                                       QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
     // color and depth-stencil, only color accessed afterwards
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiRenderBuffer *depthStencilBuffer,
-                                                       QRhiTextureRenderTarget::Flags flags = 0);
+                                                       QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
     // color and depth, both as textures accessible afterwards
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiTexture *depthTexture,
-                                                       QRhiTextureRenderTarget::Flags flags = 0);
+                                                       QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
 
     /*
       Render to a QWindow (must be VulkanSurface):

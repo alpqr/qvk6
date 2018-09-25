@@ -160,12 +160,18 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
 
     struct Uniform {
         QShaderDescription::VarType type;
-        int location;
+        int glslLocation;
         int binding;
         uint offset;
         QByteArray data;
     };
     QVector<Uniform> uniforms;
+
+    struct Sampler {
+        int glslLocation;
+        int binding;
+    };
+    QVector<Sampler> samplers;
 };
 
 struct QGles2CommandBuffer : public QRhiCommandBuffer
@@ -204,10 +210,12 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             struct {
                 QRhiGraphicsPipeline *ps;
                 GLuint buffer;
+                quint32 offset;
                 int binding;
             } bindVertexBuffer;
             struct {
                 GLuint buffer;
+                quint32 offset;
                 GLenum type;
             } bindIndexBuffer;
             struct {

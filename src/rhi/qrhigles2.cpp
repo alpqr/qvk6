@@ -246,13 +246,14 @@ void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
 
     for (int i = 0, ie = bindings.count(); i != ie; ++i) {
         QRhiBuffer *buf = bindings[i].first;
-        // ignore offset, no glBindBufferRange
+        quint32 ofs = bindings[i].second;
         QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, buf);
         Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::BindVertexBuffer;
         cmd.args.bindVertexBuffer.ps = cbD->currentPipeline;
         cmd.args.bindVertexBuffer.buffer = bufD->buffer;
+        cmd.args.bindVertexBuffer.offset = ofs;
         cmd.args.bindVertexBuffer.binding = startBinding + i;
         cbD->commands.append(cmd);
     }
@@ -260,10 +261,10 @@ void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
     if (indexBuf) {
         QGles2Buffer *ibufD = QRHI_RES(QGles2Buffer, indexBuf);
         Q_ASSERT(indexBuf->usage.testFlag(QRhiBuffer::IndexBuffer));
-        Q_UNUSED(indexOffset); // no glBindBufferRange
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::BindIndexBuffer;
         cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
+        cmd.args.bindIndexBuffer.offset = indexOffset;
         cmd.args.bindIndexBuffer.type = indexFormat == QRhi::IndexUInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
         cbD->commands.append(cmd);
     }
@@ -639,6 +640,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     GLenum indexType = GL_UNSIGNED_SHORT;
     size_t indexStride = sizeof(quint16);
+    size_t indexOffset = 0;
 
     for (const QGles2CommandBuffer::Command &cmd : qAsConst(cbD->commands)) {
         switch (cmd.cmd) {
@@ -709,8 +711,9 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                     default:
                         break;
                     }
+                    quint32 ofs = a.offset + cmd.args.bindVertexBuffer.offset;
                     f->glVertexAttribPointer(a.location, size, type, GL_FALSE, stride,
-                                             reinterpret_cast<const GLvoid *>(quintptr(a.offset)));
+                                             reinterpret_cast<const GLvoid *>(quintptr(ofs)));
                     f->glEnableVertexAttribArray(a.location);
                 }
             } else {
@@ -721,6 +724,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         case QGles2CommandBuffer::Command::BindIndexBuffer:
             indexType = cmd.args.bindIndexBuffer.type;
             indexStride = indexType == GL_UNSIGNED_SHORT ? sizeof(quint16) : sizeof(quint32);
+            indexOffset = cmd.args.bindIndexBuffer.offset;
             f->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.args.bindIndexBuffer.buffer);
             break;
         case QGles2CommandBuffer::Command::Draw:
@@ -736,10 +740,11 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         {
             QGles2GraphicsPipeline *ps = QRHI_RES(QGles2GraphicsPipeline, cmd.args.drawIndexed.ps);
             if (ps) {
+                quint32 ofs = cmd.args.drawIndexed.firstIndex * indexStride + indexOffset;
                 f->glDrawElements(ps->drawMode,
                                   cmd.args.drawIndexed.indexCount,
                                   indexType,
-                                  reinterpret_cast<const GLvoid *>(quintptr(cmd.args.drawIndexed.firstIndex * indexStride)));
+                                  reinterpret_cast<const GLvoid *>(quintptr(ofs)));
             } else {
                 qWarning("No graphics pipeline active for drawIndexed; ignored");
             }
@@ -831,25 +836,25 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
 
                     switch (uniform.type) {
                     case QShaderDescription::Float:
-                        f->glUniform1f(uniform.location, *reinterpret_cast<const float *>(uniform.data.constData()));
+                        f->glUniform1f(uniform.glslLocation, *reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
                     case QShaderDescription::Vec2:
-                        f->glUniform2fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        f->glUniform2fv(uniform.glslLocation, 1, reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
                     case QShaderDescription::Vec3:
-                        f->glUniform3fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        f->glUniform3fv(uniform.glslLocation, 1, reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
                     case QShaderDescription::Vec4:
-                        f->glUniform4fv(uniform.location, 1, reinterpret_cast<const float *>(uniform.data.constData()));
+                        f->glUniform4fv(uniform.glslLocation, 1, reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
                     case QShaderDescription::Mat2:
-                        f->glUniformMatrix2fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        f->glUniformMatrix2fv(uniform.glslLocation, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
                     case QShaderDescription::Mat3:
-                        f->glUniformMatrix3fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        f->glUniformMatrix3fv(uniform.glslLocation, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
                     case QShaderDescription::Mat4:
-                        f->glUniformMatrix4fv(uniform.location, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
+                        f->glUniformMatrix4fv(uniform.glslLocation, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
                         // ### more types
                     default:
@@ -862,7 +867,29 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
         }
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
-            // ###
+        {
+            QGles2Texture *texD = QRHI_RES(QGles2Texture, b.stex.tex);
+            QGles2Sampler *samplerD = QRHI_RES(QGles2Sampler, b.stex.sampler);
+
+            int texUnit = 0;
+            for (QGles2GraphicsPipeline::Sampler &sampler : psD->samplers) {
+                if (sampler.binding == b.binding) {
+                    // ### should this use sampler->generation or something to prevent doing it over and over again
+                    f->glActiveTexture(GL_TEXTURE0 + texUnit);
+                    f->glBindTexture(texD->target, texD->texture);
+
+                    f->glTexParameteri(texD->target, GL_TEXTURE_MIN_FILTER, samplerD->glminfilter);
+                    f->glTexParameteri(texD->target, GL_TEXTURE_MAG_FILTER, samplerD->glmagfilter);
+                    f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_S, samplerD->glwraps);
+                    f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_T, samplerD->glwrapt);
+
+                    f->glUniform1i(sampler.glslLocation, texUnit);
+                    ++texUnit;
+                }
+            }
+            if (texUnit)
+                f->glActiveTexture(GL_TEXTURE0);
+        }
             break;
         default:
             Q_UNREACHABLE();
@@ -1164,6 +1191,7 @@ void QGles2GraphicsPipeline::release()
 
     program = 0;
     uniforms.clear();
+    samplers.clear();
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
@@ -1249,8 +1277,8 @@ bool QGles2GraphicsPipeline::build()
             Uniform uniform;
             uniform.type = blockMember.type;
             const QByteArray name = prefix + blockMember.name.toUtf8();
-            uniform.location = rhiD->f->glGetUniformLocation(program, name.constData());
-            if (uniform.location >= 0) {
+            uniform.glslLocation = rhiD->f->glGetUniformLocation(program, name.constData());
+            if (uniform.glslLocation >= 0) {
                 uniform.binding = ub.binding;
                 uniform.offset = blockMember.offset;
                 uniform.data.resize(blockMember.size);
@@ -1264,6 +1292,22 @@ bool QGles2GraphicsPipeline::build()
 
     for (const QShaderDescription::UniformBlock &ub : fsDesc.uniformBlocks())
         lookupUniforms(ub);
+
+    auto lookupSamplers = [this, rhiD](const QShaderDescription::InOutVariable &v) {
+        Sampler sampler;
+        const QByteArray name = v.name.toUtf8();
+        sampler.glslLocation = rhiD->f->glGetUniformLocation(program, name.constData());
+        if (sampler.glslLocation >= 0) {
+            sampler.binding = v.binding;
+            samplers.append(sampler);
+        }
+    };
+
+    for (const QShaderDescription::InOutVariable &v : vsDesc.combinedImageSamplers())
+        lookupSamplers(v);
+
+    for (const QShaderDescription::InOutVariable &v : fsDesc.combinedImageSamplers())
+        lookupSamplers(v);
 
     generation += 1;
     return true;

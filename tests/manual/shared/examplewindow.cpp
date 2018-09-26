@@ -124,6 +124,10 @@ void ExampleWindow::recreateSwapChain()
         m_ds->release();
         m_ds->pixelSize = outputSize;
     }
+
+    if (!m_ds)
+        return;
+
     m_ds->build();
 
     m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, m_triRenderer.sampleCount());

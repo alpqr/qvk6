@@ -39,6 +39,9 @@
 #if QT_CONFIG(vulkan)
 #include "qrhivulkan_p.h"
 #endif
+#ifdef Q_OS_WIN
+#include "qrhid3d11_p.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -197,6 +200,17 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
         QRhi *r = new QRhi;
         r->d = new QRhiGles2(params);
         return r;
+    }
+    case D3D11:
+    {
+#ifdef Q_OS_WIN
+        QRhi *r = new QRhi;
+        r->d = new QRhiD3D11(params);
+        return r;
+#else
+        qWarning("This platform has no Direct3D 11 support");
+        break;
+#endif
     }
     default:
         break;

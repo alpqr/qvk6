@@ -1,0 +1,42 @@
+d3d11 backend
+more what-if-resource-rebuilt cases
+gles2: more ubuf types
+gles2: reduce state, reduce texparam
+tex/QImage formats
+gles2: tex size stuff
+test depth texture
+depth only offscreen
+mipmaps
+cubemaps
+anisotropic
+compressed textures
+adopt texture, buffer, ...
+more tex: 3d, array
+resize to 0 width or height fails (vk)
+upgrade vkmemalloc
+msaa offscreen
+gles2: ubuf structs, arrays
+gles2: target QOpenGLWindow ...
+
++++ done
+what if ps is rebuilt
+move correctionmatrix to backend
+remove some inlines in public api
+hide virtuals
+remove QVk*Private
+buf rebuilt -> srb? srb rebuilt -> ps? texture rebuilt -> texture rt?
+hide VkSurfaceKHR from api
+vkcmdcopybuffertoimage
+test upload+render-to (preserved)
+barriers
+rendertarget
+scheduleRelease -> releaseLater (+ update recreate example)
+static buffer -> gpu_only, staging cpu_only, vkCmdCopyBuffer
+textures
+msaastencil
+depth
+bring back startBinding
+pipeline obj destroy (deferred d.list?)
+shader resource if.
+topology, cull
+blend

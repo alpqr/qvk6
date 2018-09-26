@@ -34,23 +34,15 @@
 **
 ****************************************************************************/
 
-#ifndef QRHIGLES2_H
-#define QRHIGLES2_H
+#ifndef QRHID3D11_H
+#define QRHID3D11_H
 
 #include <QtRhi/qrhi.h>
-#include <QOpenGLContext>
-#include <QOffscreenSurface>
 
 QT_BEGIN_NAMESPACE
 
-struct Q_RHI_EXPORT QRhiGles2InitParams : public QRhiInitParams
+struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
 {
-    QOpenGLContext *context = nullptr;
-
-    // Why doesn't the rhi create a QOffscreenSurface on its own? Because that
-    // must be done on the gui/main thread while the rhi in principle can operate
-    // on any (one) thread.
-    QOffscreenSurface *nonVisualSurface = nullptr;
 };
 
 QT_END_NAMESPACE

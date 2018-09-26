@@ -25,4 +25,12 @@ qtConfig(vulkan) {
         qrhivulkan.cpp
 }
 
+win32 {
+    HEADERS += \
+        qrhid3d11.h \
+        qrhid3d11_p.h
+    SOURCES += \
+        qrhid3d11.cpp
+}
+
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)

@@ -7,3 +7,8 @@ qtConfig(vulkan) {
         vulkanwindow \
         plainqwindow_vulkan
 }
+
+win32 {
+    SUBDIRS += \
+        plainqwindow_d3d11
+}

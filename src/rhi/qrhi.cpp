@@ -35,8 +35,10 @@
 ****************************************************************************/
 
 #include "qrhi.h"
-#include "qrhivulkan_p.h"
 #include "qrhigles2_p.h"
+#if QT_CONFIG(vulkan)
+#include "qrhivulkan_p.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -181,9 +183,14 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
     switch (impl) {
     case Vulkan:
     {
+#if QT_CONFIG(vulkan)
         QRhi *r = new QRhi;
         r->d = new QRhiVulkan(params);
         return r;
+#else
+        qWarning("This build of Qt has no Vulkan support");
+        break;
+#endif
     }
     case OpenGLES2:
     {

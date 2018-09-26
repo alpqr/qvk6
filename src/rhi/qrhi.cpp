@@ -49,6 +49,12 @@ QRhiResource::~QRhiResource()
 {
 }
 
+void QRhiResource::releaseAndDestroy()
+{
+    release();
+    delete this;
+}
+
 QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
     : QRhiResource(rhi),
       type(type_), usage(usage_), size(size_)

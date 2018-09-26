@@ -163,6 +163,7 @@ class Q_RHI_EXPORT QRhiResource
 public:
     virtual ~QRhiResource();
     virtual void release() = 0;
+    void releaseAndDestroy();
 
 protected:
     QRhiImplementation *rhi = nullptr;

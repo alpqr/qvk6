@@ -137,8 +137,7 @@ void ExampleWindow::releaseSwapChain()
         m_sc->release();
     }
     if (m_ds) {
-        m_ds->release();
-        delete m_ds;
+        m_ds->releaseAndDestroy();
         m_ds = nullptr;
     }
 }

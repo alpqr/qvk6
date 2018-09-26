@@ -179,6 +179,9 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
     QVector<Sampler> samplers;
 };
 
+Q_DECLARE_TYPEINFO(QGles2GraphicsPipeline::Uniform, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QGles2GraphicsPipeline::Sampler, Q_MOVABLE_TYPE);
+
 struct QGles2CommandBuffer : public QRhiCommandBuffer
 {
     QGles2CommandBuffer(QRhiImplementation *rhi);
@@ -263,6 +266,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
         currentPipelineGeneration = 0;
     }
 };
+
+Q_DECLARE_TYPEINFO(QGles2CommandBuffer::Command, Q_MOVABLE_TYPE);
 
 struct QGles2SwapChain : public QRhiSwapChain
 {
@@ -397,6 +402,8 @@ public:
     };
     QVector<DeferredReleaseEntry> releaseQueue;
 };
+
+Q_DECLARE_TYPEINFO(QRhiGles2::DeferredReleaseEntry, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

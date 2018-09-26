@@ -106,20 +106,17 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
 void TriangleRenderer::releaseResources()
 {
     if (m_srb) {
-        m_srb->release();
-        delete m_srb;
+        m_srb->releaseAndDestroy();
         m_srb = nullptr;
     }
 
     if (m_ubuf) {
-        m_ubuf->release();
-        delete m_ubuf;
+        m_ubuf->releaseAndDestroy();
         m_ubuf = nullptr;
     }
 
     if (m_vbuf) {
-        m_vbuf->release();
-        delete m_vbuf;
+        m_vbuf->releaseAndDestroy();
         m_vbuf = nullptr;
     }
 }
@@ -127,8 +124,7 @@ void TriangleRenderer::releaseResources()
 void TriangleRenderer::releaseOutputDependentResources()
 {
     if (m_ps) {
-        m_ps->release();
-        delete m_ps;
+        m_ps->releaseAndDestroy();
         m_ps = nullptr;
     }
 }

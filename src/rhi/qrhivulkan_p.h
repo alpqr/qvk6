@@ -189,6 +189,8 @@ struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
     QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
 };
 
+Q_DECLARE_TYPEINFO(QVkShaderResourceBindings::BoundResourceData, Q_MOVABLE_TYPE);
+
 struct QVkGraphicsPipeline : public QRhiGraphicsPipeline
 {
     QVkGraphicsPipeline(QRhiImplementation *rhi);
@@ -478,6 +480,9 @@ public:
     };
     QVector<DeferredReleaseEntry> releaseQueue;
 };
+
+Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiVulkan::DeferredReleaseEntry, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

@@ -6,6 +6,7 @@ layout(location = 0) out vec4 fragColor;
 
 layout(std140, binding = 0) uniform buf {
     mat4 mvp;
+    int flip;
 } ubuf;
 
 layout(binding = 1) uniform sampler2D tex;

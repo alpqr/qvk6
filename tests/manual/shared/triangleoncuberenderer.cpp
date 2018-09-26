@@ -34,39 +34,7 @@
 const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
 const bool UPLOAD_UNDERLAY_ON_EVERY_FRAME = false;
 
-// ugliness borrowed from qtdeclarative/examples/quick/rendercontrol/cuberenderer.cpp
-static float vertexData[] = { // Y up, CW
-    -0.5, 0.5, 0.5, 0.5,-0.5,0.5,-0.5,-0.5,0.5,
-    0.5, -0.5, 0.5, -0.5,0.5,0.5,0.5,0.5,0.5,
-    -0.5, -0.5, -0.5, 0.5,-0.5,-0.5,-0.5,0.5,-0.5,
-    0.5, 0.5, -0.5, -0.5,0.5,-0.5,0.5,-0.5,-0.5,
-
-    0.5, -0.5, -0.5, 0.5,-0.5,0.5,0.5,0.5,-0.5,
-    0.5, 0.5, 0.5, 0.5,0.5,-0.5,0.5,-0.5,0.5,
-    -0.5, 0.5, -0.5, -0.5,-0.5,0.5,-0.5,-0.5,-0.5,
-    -0.5, -0.5, 0.5, -0.5,0.5,-0.5,-0.5,0.5,0.5,
-
-    0.5, 0.5,  -0.5, -0.5, 0.5,  0.5,  -0.5,  0.5,  -0.5,
-    -0.5,  0.5,  0.5,  0.5,  0.5,  -0.5, 0.5, 0.5,  0.5,
-    -0.5,  -0.5, -0.5, -0.5, -0.5, 0.5,  0.5, -0.5, -0.5,
-    0.5, -0.5, 0.5,  0.5,  -0.5, -0.5, -0.5,  -0.5, 0.5,
-
-    // texcoords
-    0.0f,1.0f, 1.0f,0.0f, 1.0f,1.0f,
-    1.0f,0.0f, 0.0f,1.0f, 0.0f,0.0f,
-    1.0f,0.0f, 1.0f,1.0f, 0.0f,0.0f,
-    0.0f,1.0f, 0.0f,0.0f, 1.0f,1.0f,
-
-    1.0f,0.0f, 1.0f,1.0f, 0.0f,0.0f,
-    0.0f,1.0f, 0.0f,0.0f, 1.0f,1.0f,
-    0.0f,1.0f, 1.0f,0.0f, 1.0f,1.0f,
-    1.0f,0.0f, 0.0f,1.0f, 0.0f,0.0f,
-
-    0.0f,0.0f, 1.0f,1.0f, 1.0f,0.0f,
-    1.0f,1.0f, 0.0f,0.0f, 0.0f,1.0f,
-    1.0f,1.0f, 1.0f,0.0f, 0.0f,1.0f,
-    0.0f,0.0f, 0.0f,1.0f, 1.0f,0.0f
-};
+#include "cube.h"
 
 static QBakedShader getShader(const QString &name)
 {
@@ -81,26 +49,29 @@ static const QSize OFFSCREEN_SIZE(512, 512);
 
 void TriangleOnCubeRenderer::initResources()
 {
-    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(cube));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
+    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64 + 4);
     m_ubuf->build();
 
-    if (IMAGE_UNDER_OFFSCREEN_RENDERING)
-        m_image = QImage(QLatin1String(":/qt256.png")).mirrored().scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
+    if (IMAGE_UNDER_OFFSCREEN_RENDERING) {
+        m_image = QImage(QLatin1String(":/qt256.png")).scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
+        if (m_r->isYUpInFramebuffer())
+            m_image = m_image.mirrored(); // just cause we'll flip texcoord Y when y up so accomodate our static background image as well
+    }
 
     m_tex = m_r->createTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
     m_tex->build();
 
-    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
+    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sampler->build();
 
     m_srb = m_r->createShaderResourceBindings();
     const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
+        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64 + 4),
         QRhiShaderResourceBindings::Binding::sampledTexture(1, QRhiShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
     };
     m_srb->build();
@@ -129,7 +100,7 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
     m_ps->depthOp = QRhiGraphicsPipeline::Less;
 
     m_ps->cullMode = QRhiGraphicsPipeline::Back;
-    m_ps->frontFace = QRhiGraphicsPipeline::CW;
+    m_ps->frontFace = QRhiGraphicsPipeline::CCW;
 
     m_ps->sampleCount = m_sampleCount;
 
@@ -158,7 +129,7 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
 
     m_ps->build();
 
-    m_proj = m_r->openGLCorrectionMatrix();
+    m_proj = m_r->openGLVertexCorrectionMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
 
@@ -216,12 +187,15 @@ QRhi::PassUpdates TriangleOnCubeRenderer::update()
 
     if (!m_vbufReady) {
         m_vbufReady = true;
-        u.staticBufferUploads.append({ m_vbuf, vertexData });
+        u.staticBufferUploads.append({ m_vbuf, cube });
+        qint32 flip = m_r->isYUpInFramebuffer() ? 1 : 0;
+        u.dynamicBufferUpdates.append({ m_ubuf, 64, 4, &flip });
     }
 
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.translate(m_translation);
+    mvp.scale(0.5f);
     mvp.rotate(m_rotation, 1, 0, 0);
     u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
 

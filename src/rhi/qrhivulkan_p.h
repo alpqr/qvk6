@@ -68,6 +68,7 @@ struct QVkBuffer : public QRhiBuffer
 
     VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
+    QVector<QRhi::DynamicBufferUpdate> pendingDynamicUpdates[QVK_FRAMES_IN_FLIGHT];
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     int lastActiveFrameSlot = -1;
@@ -344,7 +345,8 @@ public:
 
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
-    QMatrix4x4 openGLCorrectionMatrix() const override;
+    QMatrix4x4 openGLVertexCorrectionMatrix() const override;
+    bool isYUpInFramebuffer() const override;
 
     void create();
     void destroy();
@@ -372,6 +374,7 @@ public:
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void finishFrame();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
+    void executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD);
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void deactivateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void executeDeferredReleases(bool forced = false);

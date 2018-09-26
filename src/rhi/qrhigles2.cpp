@@ -170,9 +170,14 @@ int QRhiGles2::ubufAlignment() const
     return 256;
 }
 
-QMatrix4x4 QRhiGles2::openGLCorrectionMatrix() const
+QMatrix4x4 QRhiGles2::openGLVertexCorrectionMatrix() const
 {
     return QMatrix4x4(); // identity
+}
+
+bool QRhiGles2::isYUpInFramebuffer() const
+{
+    return true;
 }
 
 QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -768,12 +773,18 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
             break;
         case QGles2CommandBuffer::Command::Clear:
-            if (cmd.args.clear.mask & GL_COLOR_BUFFER_BIT)
+            if (cmd.args.clear.mask & GL_COLOR_BUFFER_BIT) {
+                f->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
                 f->glClearColor(cmd.args.clear.r, cmd.args.clear.g, cmd.args.clear.b, cmd.args.clear.a);
-            if (cmd.args.clear.mask & GL_DEPTH_BUFFER_BIT)
+            }
+            if (cmd.args.clear.mask & GL_DEPTH_BUFFER_BIT) {
+                f->glDepthMask(GL_TRUE);
                 f->glClearDepthf(cmd.args.clear.d);
-            if (cmd.args.clear.mask & GL_STENCIL_BUFFER_BIT)
+            }
+            if (cmd.args.clear.mask & GL_STENCIL_BUFFER_BIT) {
+                f->glStencilMask(GL_TRUE);
                 f->glClearStencil(cmd.args.clear.s);
+            }
             f->glClear(cmd.args.clear.mask);
             break;
         default:
@@ -879,7 +890,19 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
                     case QShaderDescription::Mat4:
                         f->glUniformMatrix4fv(uniform.glslLocation, 1, GL_FALSE, reinterpret_cast<const float *>(uniform.data.constData()));
                         break;
-                        // ### more types
+                    case QShaderDescription::Int:
+                        f->glUniform1i(uniform.glslLocation, *reinterpret_cast<const qint32 *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Int2:
+                        f->glUniform2iv(uniform.glslLocation, 1, reinterpret_cast<const qint32 *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Int3:
+                        f->glUniform3iv(uniform.glslLocation, 1, reinterpret_cast<const qint32 *>(uniform.data.constData()));
+                        break;
+                    case QShaderDescription::Int4:
+                        f->glUniform4iv(uniform.glslLocation, 1, reinterpret_cast<const qint32 *>(uniform.data.constData()));
+                        break;
+                    // ### more types
                     default:
                         break;
                     }
@@ -957,7 +980,9 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
     Q_ASSERT(rtD->attCount == 1 || rtD->attCount == 2);
     QGles2CommandBuffer::Command clearCmd;
     clearCmd.cmd = QGles2CommandBuffer::Command::Clear;
-    clearCmd.args.clear.mask = GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
+    clearCmd.args.clear.mask = 0;
+    if (rtD->attCount > 1)
+        clearCmd.args.clear.mask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
     if (needsColorClear)
         clearCmd.args.clear.mask |= GL_COLOR_BUFFER_BIT;
     for (int i = 0; i < rtD->attCount; ++i) {

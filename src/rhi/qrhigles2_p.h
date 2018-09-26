@@ -354,7 +354,8 @@ public:
 
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
-    QMatrix4x4 openGLCorrectionMatrix() const override;
+    QMatrix4x4 openGLVertexCorrectionMatrix() const override;
+    bool isYUpInFramebuffer() const override;
 
     void ensureContext(QSurface *surface = nullptr);
     void create();

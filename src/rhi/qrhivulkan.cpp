@@ -1273,31 +1273,11 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
 {
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
 
-    struct ChangeRange {
-        int changeBegin = -1;
-        int changeEnd = -1;
-    };
-    QHash<QRhiBuffer *, ChangeRange> changeRanges;
     for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
         Q_ASSERT(!u.buf->isStatic());
-        void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(QRHI_RES(QVkBuffer, u.buf)->allocations[currentFrameSlot]);
-        VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
-        if (err != VK_SUCCESS) {
-            qWarning("Failed to map buffer: %d", err);
-            continue;
-        }
-        memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
-        vmaUnmapMemory(toVmaAllocator(allocator), a);
-        ChangeRange &r(changeRanges[u.buf]);
-        if (r.changeBegin == -1 || u.offset < r.changeBegin)
-            r.changeBegin = u.offset;
-        if (r.changeEnd == -1 || u.offset + u.data.size() > r.changeEnd)
-            r.changeEnd = u.offset + u.data.size();
-    }
-    for (auto it = changeRanges.cbegin(), itEnd = changeRanges.cend(); it != itEnd; ++it) {
-        VmaAllocation a = toVmaAllocation(QRHI_RES(QVkBuffer, it.key())->allocations[currentFrameSlot]);
-        vmaFlushAllocation(toVmaAllocator(allocator), a, it->changeBegin, it->changeEnd - it->changeBegin);
+        QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
+        for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+            bufD->pendingDynamicUpdates[i].append(u);
     }
 
     for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
@@ -1400,6 +1380,37 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
                      VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
     }
+}
+
+void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
+{
+    QVector<QRhi::DynamicBufferUpdate> &updates(bufD->pendingDynamicUpdates[currentFrameSlot]);
+    if (updates.isEmpty())
+        return;
+
+    void *p = nullptr;
+    VmaAllocation a = toVmaAllocation(bufD->allocations[currentFrameSlot]);
+    VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to map buffer: %d", err);
+        return;
+    }
+    int changeBegin = -1;
+    int changeEnd = -1;
+    for (const QRhi::DynamicBufferUpdate &u : updates) {
+        Q_ASSERT(!u.buf->isStatic());
+        Q_ASSERT(bufD == QRHI_RES(QVkBuffer, u.buf));
+        memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
+        if (changeBegin == -1 || u.offset < changeBegin)
+            changeBegin = u.offset;
+        if (changeEnd == -1 || u.offset + u.data.size() > changeEnd)
+            changeEnd = u.offset + u.data.size();
+    }
+    vmaUnmapMemory(toVmaAllocator(allocator), a);
+    if (changeBegin >= 0)
+        vmaFlushAllocation(toVmaAllocator(allocator), a, changeBegin, changeEnd - changeBegin);
+
+    updates.clear();
 }
 
 void QRhiVulkan::executeDeferredReleases(bool forced)
@@ -1518,7 +1529,7 @@ int QRhiVulkan::ubufAlignment() const
     return ubufAlign; // typically 256 (bytes)
 }
 
-QMatrix4x4 QRhiVulkan::openGLCorrectionMatrix() const
+QMatrix4x4 QRhiVulkan::openGLVertexCorrectionMatrix() const
 {
     static QMatrix4x4 m;
     if (m.isIdentity()) {
@@ -1529,6 +1540,11 @@ QMatrix4x4 QRhiVulkan::openGLCorrectionMatrix() const
                        0.0f, 0.0f, 0.0f, 1.0f);
     }
     return m;
+}
+
+bool QRhiVulkan::isYUpInFramebuffer() const
+{
+    return false;
 }
 
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -1543,28 +1559,28 @@ QRhiTexture *QRhiVulkan::createTexture(QRhiTexture::Format format, const QSize &
 }
 
 QRhiSampler *QRhiVulkan::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
-                                 QRhiSampler::Filter mipmapMode,
-                                 QRhiSampler::AddressMode u, QRhiSampler::AddressMode v)
+                                       QRhiSampler::Filter mipmapMode,
+                                       QRhiSampler::AddressMode u, QRhiSampler::AddressMode v)
 {
     return new QVkSampler(this, magFilter, minFilter, mipmapMode, u, v);
 }
 
 QRhiTextureRenderTarget *QRhiVulkan::createTextureRenderTarget(QRhiTexture *texture,
-                                                         QRhiTextureRenderTarget::Flags flags)
+                                                               QRhiTextureRenderTarget::Flags flags)
 {
     return new QVkTextureRenderTarget(this, texture, flags);
 }
 
 QRhiTextureRenderTarget *QRhiVulkan::createTextureRenderTarget(QRhiTexture *texture,
-                                                         QRhiRenderBuffer *depthStencilBuffer,
-                                                         QRhiTextureRenderTarget::Flags flags)
+                                                               QRhiRenderBuffer *depthStencilBuffer,
+                                                               QRhiTextureRenderTarget::Flags flags)
 {
     return new QVkTextureRenderTarget(this, texture, depthStencilBuffer, flags);
 }
 
 QRhiTextureRenderTarget *QRhiVulkan::createTextureRenderTarget(QRhiTexture *texture,
-                                                         QRhiTexture *depthTexture,
-                                                         QRhiTextureRenderTarget::Flags flags)
+                                                               QRhiTexture *depthTexture,
+                                                               QRhiTextureRenderTarget::Flags flags)
 {
     return new QVkTextureRenderTarget(this, texture, depthTexture, flags);
 }
@@ -1592,10 +1608,15 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     for (const QRhiShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
+        {
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
-            QRHI_RES(QVkBuffer, b.ubuf.buf)->lastActiveFrameSlot = currentFrameSlot;
-            if (!b.ubuf.buf->isStatic())
+            QVkBuffer *bufD = QRHI_RES(QVkBuffer, b.ubuf.buf);
+            bufD->lastActiveFrameSlot = currentFrameSlot;
+            if (!b.ubuf.buf->isStatic()) {
                 hasDynamicBufferInSrb = true;
+                executeBufferHostWritesForCurrentFrame(bufD);
+            }
+        }
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
             QRHI_RES(QVkTexture, b.stex.tex)->lastActiveFrameSlot = currentFrameSlot;
@@ -2134,6 +2155,7 @@ void QVkBuffer::release()
 
         buffers[i] = VK_NULL_HANDLE;
         allocations[i] = nullptr;
+        pendingDynamicUpdates[i].clear();
     }
 
     QRHI_RES_RHI(QRhiVulkan);
@@ -2172,6 +2194,8 @@ bool QVkBuffer::build()
             if (err != VK_SUCCESS)
                 break;
             allocations[i] = allocation;
+            if (!isStatic())
+                pendingDynamicUpdates[i].reserve(16);
         }
     }
 
@@ -2462,13 +2486,15 @@ QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiText
 {
 }
 
-QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags)
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture,
+                                               QRhiRenderBuffer *depthStencilBuffer, Flags flags)
     : QRhiTextureRenderTarget(rhi, texture, depthStencilBuffer, flags),
       d(rhi)
 {
 }
 
-QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags)
+QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture,
+                                               QRhiTexture *depthTexture, Flags flags)
     : QRhiTextureRenderTarget(rhi, texture, depthTexture, flags),
       d(rhi)
 {

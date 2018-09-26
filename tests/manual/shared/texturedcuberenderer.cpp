@@ -30,39 +30,7 @@
 #include <QFile>
 #include <QBakedShader>
 
-// ugliness borrowed from qtdeclarative/examples/quick/rendercontrol/cuberenderer.cpp
-static float vertexData[] = { // Y up, CW
-    -0.5, 0.5, 0.5, 0.5,-0.5,0.5,-0.5,-0.5,0.5,
-    0.5, -0.5, 0.5, -0.5,0.5,0.5,0.5,0.5,0.5,
-    -0.5, -0.5, -0.5, 0.5,-0.5,-0.5,-0.5,0.5,-0.5,
-    0.5, 0.5, -0.5, -0.5,0.5,-0.5,0.5,-0.5,-0.5,
-
-    0.5, -0.5, -0.5, 0.5,-0.5,0.5,0.5,0.5,-0.5,
-    0.5, 0.5, 0.5, 0.5,0.5,-0.5,0.5,-0.5,0.5,
-    -0.5, 0.5, -0.5, -0.5,-0.5,0.5,-0.5,-0.5,-0.5,
-    -0.5, -0.5, 0.5, -0.5,0.5,-0.5,-0.5,0.5,0.5,
-
-    0.5, 0.5,  -0.5, -0.5, 0.5,  0.5,  -0.5,  0.5,  -0.5,
-    -0.5,  0.5,  0.5,  0.5,  0.5,  -0.5, 0.5, 0.5,  0.5,
-    -0.5,  -0.5, -0.5, -0.5, -0.5, 0.5,  0.5, -0.5, -0.5,
-    0.5, -0.5, 0.5,  0.5,  -0.5, -0.5, -0.5,  -0.5, 0.5,
-
-    // texcoords
-    0.0f,0.0f, 1.0f,1.0f, 1.0f,0.0f,
-    1.0f,1.0f, 0.0f,0.0f, 0.0f,1.0f,
-    1.0f,1.0f, 1.0f,0.0f, 0.0f,1.0f,
-    0.0f,0.0f, 0.0f,1.0f, 1.0f,0.0f,
-
-    1.0f,1.0f, 1.0f,0.0f, 0.0f,1.0f,
-    0.0f,0.0f, 0.0f,1.0f, 1.0f,0.0f,
-    0.0f,0.0f, 1.0f,1.0f, 1.0f,0.0f,
-    1.0f,1.0f, 0.0f,0.0f, 0.0f,1.0f,
-
-    0.0f,1.0f, 1.0f,0.0f, 1.0f,1.0f,
-    1.0f,0.0f, 0.0f,1.0f, 0.0f,0.0f,
-    1.0f,0.0f, 1.0f,1.0f, 0.0f,0.0f,
-    0.0f,1.0f, 0.0f,0.0f, 1.0f,1.0f
-};
+#include "cube.h"
 
 static QBakedShader getShader(const QString &name)
 {
@@ -75,24 +43,24 @@ static QBakedShader getShader(const QString &name)
 
 void TexturedCubeRenderer::initResources()
 {
-    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(cube));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64);
+    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64 + 4);
     m_ubuf->build();
 
-    m_image = QImage(QLatin1String(":/qt256.png")).mirrored().convertToFormat(QImage::Format_RGBA8888);
+    m_image = QImage(QLatin1String(":/qt256.png")).convertToFormat(QImage::Format_RGBA8888);
     m_tex = m_r->createTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()));
     m_tex->build();
 
-    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Repeat, QRhiSampler::Repeat);
+    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sampler->build();
 
     m_srb = m_r->createShaderResourceBindings();
     const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64),
+        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64 + 4),
         QRhiShaderResourceBindings::Binding::sampledTexture(1, QRhiShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
     };
     m_srb->build();
@@ -109,7 +77,7 @@ void TexturedCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp
     m_ps->depthOp = QRhiGraphicsPipeline::Less;
 
     m_ps->cullMode = QRhiGraphicsPipeline::Back;
-    m_ps->frontFace = QRhiGraphicsPipeline::CW;
+    m_ps->frontFace = QRhiGraphicsPipeline::CCW;
 
     m_ps->sampleCount = m_sampleCount;
 
@@ -138,7 +106,7 @@ void TexturedCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp
 
     m_ps->build();
 
-    m_proj = m_r->openGLCorrectionMatrix();
+    m_proj = m_r->openGLVertexCorrectionMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
 }
@@ -185,7 +153,9 @@ QRhi::PassUpdates TexturedCubeRenderer::update()
 
     if (!m_vbufReady) {
         m_vbufReady = true;
-        u.staticBufferUploads.append({ m_vbuf, vertexData });
+        u.staticBufferUploads.append({ m_vbuf, cube });
+        qint32 flip = 0;
+        u.dynamicBufferUpdates.append({ m_ubuf, 64, 4, &flip });
     }
 
     if (!m_image.isNull()) {
@@ -196,6 +166,7 @@ QRhi::PassUpdates TexturedCubeRenderer::update()
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.translate(m_translation);
+    mvp.scale(0.5f);
     mvp.rotate(m_rotation, 0, 1, 0);
     u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
 

@@ -757,8 +757,12 @@ public:
     int ubufAlignment() const;
     int ubufAligned(int v) const;
 
-    // make Y up and viewport.min/maxDepth 0/1
-    QMatrix4x4 openGLCorrectionMatrix() const;
+    // Make Y up and viewport.min/maxDepth 0/1. Allows applications to keep
+    // using OpenGL-style vertex data regardless of the backend, by passing
+    // this_matrix * mvp, instead of just mvp, to their vertex shaders.
+    QMatrix4x4 openGLVertexCorrectionMatrix() const;
+
+    bool isYUpInFramebuffer() const;
 
 protected:
     QRhi();

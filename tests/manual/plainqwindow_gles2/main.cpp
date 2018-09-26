@@ -45,8 +45,6 @@ private:
 
 void GlWindow::init()
 {
-    setOnScreenOnly(true); // ### remove this
-
     ctx = new QOpenGLContext;
     if (!ctx->create())
         qFatal("Failed to get OpenGL context");
@@ -74,6 +72,7 @@ void GlWindow::releaseResources()
 
 int main(int argc, char **argv)
 {
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
 
     QSurfaceFormat fmt;

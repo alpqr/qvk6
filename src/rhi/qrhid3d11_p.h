@@ -165,11 +165,13 @@ struct QD3D11SwapChain : public QRhiSwapChain
 
     bool build(QObject *target) override;
 
-    QSurface *surface = nullptr;
+    QWindow *window = nullptr;
     QSize pixelSize;
     QD3D11ReferenceRenderTarget rt;
     QD3D11CommandBuffer cb;
     IDXGISwapChain1 *swapChain = nullptr;
+    static const int BUFFER_COUNT = 2;
+    ID3D11Texture2D *bufTex[BUFFER_COUNT];
 };
 
 class QRhiD3D11 : public QRhiImplementation

@@ -409,12 +409,21 @@ QD3D11SwapChain::QD3D11SwapChain(QRhiImplementation *rhi)
       rt(rhi),
       cb(rhi)
 {
+    for (int i = 0; i < BUFFER_COUNT; ++i)
+        bufTex[i] = nullptr;
 }
 
 void QD3D11SwapChain::release()
 {
     if (!swapChain)
         return;
+
+    for (int i = 0; i < BUFFER_COUNT; ++i) {
+        if (bufTex[i]) {
+            bufTex[i]->Release();
+            bufTex[i] = nullptr;
+        }
+    }
 
     swapChain->Release();
     swapChain = nullptr;
@@ -440,48 +449,74 @@ QSize QD3D11SwapChain::sizeInPixels() const
     return pixelSize;
 }
 
-bool QD3D11SwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImportFlags flags,
-                            QRhiRenderBuffer *depthStencil, int sampleCount_)
+bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceImportFlags flags,
+                            QRhiRenderBuffer *depthStencil, int sampleCount)
 {
-    // Can be called multiple times without a call to release()
-    // - this is typical when a window is resized.
+    // Can be called multiple times without a call to release() - this is typical when a window is resized.
+    Q_ASSERT(!swapChain || window == window_);
 
     Q_UNUSED(flags);
     Q_UNUSED(depthStencil);
-    Q_UNUSED(sampleCount_);
+    Q_UNUSED(sampleCount);
 
-    surface = window;
+    window = window_;
     pixelSize = pixelSize_;
+
+    QRHI_RES_RHI(QRhiD3D11);
+
+    const DXGI_FORMAT colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    const UINT swapChainFlags = 0;
+
+    if (!swapChain) {
+        HWND hwnd = reinterpret_cast<HWND>(window->winId());
+
+        // We use FLIP_DISCARD which implies a buffer count of 2 (as opposed to the
+        // old DISCARD with back buffer count == 1). This makes no difference for
+        // the rest of the stuff except that automatic MSAA is unsupported and
+        // needs to be implemented via a custom multisample render target and an
+        // explicit resolve.
+        DXGI_SWAP_CHAIN_DESC1 desc;
+        memset(&desc, 0, sizeof(desc));
+        desc.Width = pixelSize.width();
+        desc.Height = pixelSize.height();
+        desc.Format = colorFormat;
+        desc.SampleDesc.Count = 1;
+        desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+        desc.BufferCount = BUFFER_COUNT;
+        desc.Scaling = DXGI_SCALING_STRETCH;
+        desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        desc.Flags = swapChainFlags;
+
+        HRESULT hr = rhiD->dxgiFactory->CreateSwapChainForHwnd(rhiD->dev, hwnd, &desc, nullptr, nullptr, &swapChain);
+        if (FAILED(hr)) {
+            qWarning("Failed to create D3D11 swapchain: %s", qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+    } else {
+        for (int i = 0; i < BUFFER_COUNT; ++i) {
+            if (bufTex[i]) {
+                bufTex[i]->Release();
+                bufTex[i] = nullptr;
+            }
+        }
+        HRESULT hr = swapChain->ResizeBuffers(2, pixelSize.width(), pixelSize.height(), colorFormat, swapChainFlags);
+        if (FAILED(hr)) {
+            qWarning("Failed to resize D3D11 swapchain: %s", qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+    }
+
+    for (int i = 0; i < BUFFER_COUNT; ++i) {
+        HRESULT hr = swapChain->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void **>(&bufTex[i]));
+        if (FAILED(hr)) {
+            qWarning("Failed to query buffer %d: %s", i, qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+    }
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
     rtD->d.pixelSize = pixelSize_;
     rtD->d.attCount = depthStencil ? 2 : 1;
-
-    // We use FLIP_DISCARD which implies a buffer count of 2 (as opposed to the
-    // old DISCARD with back buffer count == 1). This makes no difference for
-    // the rest of the stuff except that automatic MSAA is unsupported and
-    // needs to be implemented via a custom multisample render target and an
-    // explicit resolve.
-
-    QRHI_RES_RHI(QRhiD3D11);
-    HWND hwnd = reinterpret_cast<HWND>(window->winId());
-
-    DXGI_SWAP_CHAIN_DESC1 desc;
-    memset(&desc, 0, sizeof(desc));
-    desc.Width = pixelSize.width();
-    desc.Height = pixelSize.height();
-    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    desc.SampleDesc.Count = 1;
-    desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    desc.BufferCount = 2;
-    desc.Scaling = DXGI_SCALING_STRETCH;
-    desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-
-    HRESULT hr = rhiD->dxgiFactory->CreateSwapChainForHwnd(rhiD->dev, hwnd, &desc, nullptr, nullptr, &swapChain);
-    if (FAILED(hr)) {
-        qWarning("Failed to create D3D11 swapchain: %s", qPrintable(comErrorMessage(hr)));
-        return false;
-    }
 
     return true;
 }

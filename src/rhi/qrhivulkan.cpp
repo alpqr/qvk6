@@ -2954,8 +2954,7 @@ QSize QVkSwapChain::sizeInPixels() const
 bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImportFlags flags,
                          QRhiRenderBuffer *depthStencil, int sampleCount_)
 {
-    // Can be called multiple times without a call to release()
-    // - this is typical when a window is resized.
+    // Can be called multiple times without a call to release() - this is typical when a window is resized.
 
     VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(window);
     if (!surface) {

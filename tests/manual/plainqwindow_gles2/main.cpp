@@ -28,6 +28,8 @@
 
 #include <QGuiApplication>
 #include <QRhiGles2InitParams>
+#include <QOpenGLContext>
+#include <QOffscreenSurface>
 #include "examplewindow.h"
 
 class GlWindow : public ExampleWindow
@@ -51,9 +53,10 @@ void GlWindow::init()
 
     QRhiGles2InitParams params;
     params.context = ctx;
-    params.nonVisualSurface = new QOffscreenSurface;
-    params.nonVisualSurface->setFormat(ctx->format());
-    params.nonVisualSurface->create();
+    params.window = this;
+    params.fallbackSurface = new QOffscreenSurface;
+    params.fallbackSurface->setFormat(ctx->format());
+    params.fallbackSurface->create();
     m_r = QRhi::create(QRhi::OpenGLES2, &params);
 
     ExampleWindow::init();

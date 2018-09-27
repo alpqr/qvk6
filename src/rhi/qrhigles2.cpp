@@ -36,6 +36,8 @@
 
 #include "qrhigles2_p.h"
 #include <QWindow>
+#include <QOffscreenSurface>
+#include <QOpenGLContext>
 
 QT_BEGIN_NAMESPACE
 
@@ -51,7 +53,8 @@ QRhiGles2::QRhiGles2(QRhiInitParams *params)
 {
     QRhiGles2InitParams *glparams = static_cast<QRhiGles2InitParams *>(params);
     ctx = glparams->context;
-    fallbackSurface = glparams->nonVisualSurface;
+    maybeWindow = glparams->window; // may be null
+    fallbackSurface = glparams->fallbackSurface;
 
     create();
 }
@@ -75,18 +78,9 @@ void QRhiGles2::ensureContext(QSurface *surface)
         nativeWindowGone = true;
     }
 
-    // When surface is null, we do not know what surface to use (since only
-    // begin-endFrame is tied to a swapchain; the concept maps badly to GL
-    // where any build() needs a current context as well). Use the
-    // QOffscreenSurface in this case - but note the early out below which
-    // minimizes changes since a window surface (from the swapchain) is good
-    // enough as well when it's still current.
     if (!surface)
         surface = fallbackSurface;
 
-    // Minimize makeCurrent calls since it is not guaranteed to have any
-    // return-if-same checks internally. Make sure the makeCurrent is never
-    // omitted after a swapBuffers, and when surface was specified explicitly.
     if (buffersSwapped)
         buffersSwapped = false;
     else if (!nativeWindowGone && QOpenGLContext::currentContext() == ctx && (surface == fallbackSurface || ctx->surface() == surface))
@@ -101,7 +95,7 @@ void QRhiGles2::create()
     Q_ASSERT(ctx);
     Q_ASSERT(fallbackSurface);
 
-    ensureContext();
+    ensureContext(maybeWindow ? maybeWindow : fallbackSurface); // see 'window' discussion in QRhiGles2InitParams comments
 
     f = ctx->functions();
 
@@ -1091,6 +1085,8 @@ bool QGles2RenderBuffer::build()
     if (hints.testFlag(ToBeUsedWithSwapChainOnly))
         return true;
 
+    rhiD->ensureContext();
+
     rhiD->f->glGenRenderbuffers(1, &renderbuffer);
     rhiD->f->glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
 
@@ -1138,6 +1134,8 @@ bool QGles2Texture::build()
 
     if (texture)
         release();
+
+    rhiD->ensureContext();
 
     // ### more formats
     target = GL_TEXTURE_2D;
@@ -1255,6 +1253,8 @@ bool QGles2TextureRenderTarget::build()
     Q_ASSERT(texture);
     Q_ASSERT(!depthStencilBuffer || !depthTexture);
 
+    rhiD->ensureContext();
+
     rhiD->f->glGenFramebuffers(1, &framebuffer);
     rhiD->f->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
@@ -1341,6 +1341,8 @@ bool QGles2GraphicsPipeline::build()
 
     if (program)
         release();
+
+    rhiD->ensureContext();
 
     drawMode = toGlTopology(topology);
 

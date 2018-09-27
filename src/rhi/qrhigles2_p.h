@@ -367,6 +367,7 @@ public:
     void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb);
 
     QOpenGLContext *ctx = nullptr;
+    QWindow *maybeWindow = nullptr;
     QSurface *fallbackSurface = nullptr;
     bool buffersSwapped = false;
     QOpenGLFunctions *f = nullptr;

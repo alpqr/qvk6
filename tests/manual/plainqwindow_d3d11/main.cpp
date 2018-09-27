@@ -44,14 +44,16 @@ private:
 void D3D11Window::init()
 {
     QRhiD3D11InitParams params;
+    params.enableDebugLayer = true;
+
     m_r = QRhi::create(QRhi::D3D11, &params);
 
-    //ExampleWindow::init();
+    ExampleWindow::init();
 }
 
 void D3D11Window::releaseResources()
 {
-    //ExampleWindow::releaseResources();
+    ExampleWindow::releaseResources();
 }
 
 int main(int argc, char **argv)

@@ -71,6 +71,10 @@ bool ExampleWindow::event(QEvent *e)
 
 void ExampleWindow::init()
 {
+    m_sc = m_r->createSwapChain();
+    if (!m_sc)
+        return;
+
     m_triRenderer.setRhi(m_r);
     m_triRenderer.setSampleCount(m_sampleCount);
     m_triRenderer.initResources();
@@ -87,8 +91,6 @@ void ExampleWindow::init()
         m_liveTexCubeRenderer.initResources();
         m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
     }
-
-    m_sc = m_r->createSwapChain();
 }
 
 void ExampleWindow::releaseResources()

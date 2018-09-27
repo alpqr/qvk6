@@ -64,12 +64,6 @@ QRhiGles2::~QRhiGles2()
     destroy();
 }
 
-// Initialization, teardown, beginFrame(), and every build() take care of
-// making the context and the (window or fallback) surface current, if needed.
-// Others do not - if the applications mess with the GL context on the thread
-// within a begin-endFrame, it is up to them to restore before entering the
-// next rhi function that may issue GL calls.
-
 void QRhiGles2::ensureContext(QSurface *surface)
 {
     bool nativeWindowGone = false;
@@ -117,6 +111,10 @@ void QRhiGles2::destroy()
     f = nullptr;
 }
 
+// Strictly speaking this is not necessary since we could do the deletes in
+// release(). However, it is kind of nice that no release() ever requires a
+// current context and so GL calls are isolated to specific places (build,
+// beginFrame, endFrame) as much as possible.
 void QRhiGles2::executeDeferredReleases()
 {
     for (int i = releaseQueue.count() - 1; i >= 0; --i) {
@@ -378,6 +376,7 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     Q_ASSERT(inFrame);
 
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
+    ensureContext(swapChainD->surface);
     executeCommandBuffer(&swapChainD->cb);
 
     inFrame = false;

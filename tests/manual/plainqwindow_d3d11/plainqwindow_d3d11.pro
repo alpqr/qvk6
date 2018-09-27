@@ -18,5 +18,3 @@ HEADERS = \
 INCLUDEPATH += ../shared
 
 RESOURCES = plainqwindow_d3d11.qrc
-
-LIBS += -ld3d11

@@ -31,6 +31,8 @@ win32 {
         qrhid3d11_p.h
     SOURCES += \
         qrhid3d11.cpp
+
+    LIBS += -ld3d11 -ldxgi -ldxguid
 }
 
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)

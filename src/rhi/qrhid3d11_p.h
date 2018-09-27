@@ -44,8 +44,133 @@
 #include "qrhid3d11.h"
 #include "qrhi_p.h"
 #include <QShaderDescription>
+#include <QWindow>
+
+#include <d3d11.h>
+#include <dxgi1_3.h>
 
 QT_BEGIN_NAMESPACE
+
+struct QD3D11Buffer : public QRhiBuffer
+{
+    QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    void release() override;
+    bool build() override;
+};
+
+struct QD3D11RenderBuffer : public QRhiRenderBuffer
+{
+    QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
+                       int sampleCount, QRhiRenderBuffer::Hints hints);
+    void release() override;
+    bool build() override;
+};
+
+struct QD3D11Texture : public QRhiTexture
+{
+    QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
+    void release() override;
+    bool build() override;
+};
+
+struct QD3D11Sampler : public QRhiSampler
+{
+    QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
+    void release() override;
+    bool build() override;
+};
+
+struct QD3D11RenderPass : public QRhiRenderPass
+{
+    QD3D11RenderPass(QRhiImplementation *rhi);
+    void release() override;
+};
+
+struct QD3D11BasicRenderTargetData
+{
+    QD3D11BasicRenderTargetData(QRhiImplementation *rhi) : rp(rhi) { }
+
+    QD3D11RenderPass rp;
+    QSize pixelSize;
+    int attCount;
+};
+
+struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
+{
+    QD3D11ReferenceRenderTarget(QRhiImplementation *rhi);
+    void release() override;
+    Type type() const override;
+    QSize sizeInPixels() const override;
+    const QRhiRenderPass *renderPass() const override;
+
+    QD3D11BasicRenderTargetData d;
+};
+
+struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
+{
+    QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags);
+    QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags);
+    QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags);
+    void release() override;
+    Type type() const override;
+    bool build() override;
+    QSize sizeInPixels() const override;
+    const QRhiRenderPass *renderPass() const override;
+
+    QD3D11BasicRenderTargetData d;
+};
+
+struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
+{
+    QD3D11ShaderResourceBindings(QRhiImplementation *rhi);
+    void release() override;
+    bool build() override;
+};
+
+struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
+{
+    QD3D11GraphicsPipeline(QRhiImplementation *rhi);
+    void release() override;
+    bool build() override;
+};
+
+struct QD3D11CommandBuffer : public QRhiCommandBuffer
+{
+    QD3D11CommandBuffer(QRhiImplementation *rhi);
+    void release() override;
+
+    QRhiRenderTarget *currentTarget;
+    QRhiGraphicsPipeline *currentPipeline;
+    uint currentPipelineGeneration;
+
+    void resetState() {
+        currentTarget = nullptr;
+        currentPipeline = nullptr;
+        currentPipelineGeneration = 0;
+    }
+};
+
+struct QD3D11SwapChain : public QRhiSwapChain
+{
+    QD3D11SwapChain(QRhiImplementation *rhi);
+    void release() override;
+
+    QRhiCommandBuffer *currentFrameCommandBuffer() override;
+    QRhiRenderTarget *currentFrameRenderTarget() override;
+    const QRhiRenderPass *defaultRenderPass() const override;
+    QSize sizeInPixels() const override;
+
+    bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
+               QRhiRenderBuffer *depthStencil, int sampleCount) override;
+
+    bool build(QObject *target) override;
+
+    QSurface *surface = nullptr;
+    QSize pixelSize;
+    QD3D11ReferenceRenderTarget rt;
+    QD3D11CommandBuffer cb;
+    IDXGISwapChain1 *swapChain = nullptr;
+};
 
 class QRhiD3D11 : public QRhiImplementation
 {
@@ -116,6 +241,12 @@ public:
 
     void create();
     void destroy();
+
+    bool debugLayer = false;
+    ID3D11Device *dev = nullptr;
+    ID3D11DeviceContext *context = nullptr;
+    D3D_FEATURE_LEVEL featureLevel;
+    IDXGIFactory2 *dxgiFactory;
 };
 
 QT_END_NAMESPACE

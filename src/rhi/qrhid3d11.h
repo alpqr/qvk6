@@ -43,6 +43,7 @@ QT_BEGIN_NAMESPACE
 
 struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
 {
+    bool enableDebugLayer = false;
 };
 
 QT_END_NAMESPACE

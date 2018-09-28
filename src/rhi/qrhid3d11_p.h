@@ -64,6 +64,9 @@ struct QD3D11RenderBuffer : public QRhiRenderBuffer
                        int sampleCount, QRhiRenderBuffer::Hints hints);
     void release() override;
     bool build() override;
+
+    ID3D11Texture2D *tex = nullptr;
+    ID3D11DepthStencilView *dsv = nullptr;
 };
 
 struct QD3D11Texture : public QRhiTexture
@@ -171,7 +174,8 @@ struct QD3D11SwapChain : public QRhiSwapChain
     QD3D11CommandBuffer cb;
     IDXGISwapChain1 *swapChain = nullptr;
     static const int BUFFER_COUNT = 2;
-    ID3D11Texture2D *bufTex[BUFFER_COUNT];
+    ID3D11Texture2D *tex[BUFFER_COUNT];
+    ID3D11RenderTargetView *rtv[BUFFER_COUNT];
 };
 
 class QRhiD3D11 : public QRhiImplementation

@@ -49,6 +49,14 @@
 
 QT_BEGIN_NAMESPACE
 
+/*
+  Vulkan 1.0 backend. Provides a double-buffered swapchain that throttles the
+  rendering thread to vsync. Textures and "static" buffers are device local,
+  and a separate, host visible staging buffer is used to upload data to them.
+  "Dynamic" buffers are in host visible memory and are duplicated (since there
+  can be 2 frames in flight). This is handled transparently to the application.
+*/
+
 static inline VkDeviceSize aligned(VkDeviceSize v, VkDeviceSize byteAlign)
 {
     return (v + byteAlign - 1) & ~(byteAlign - 1);
@@ -2986,7 +2994,6 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
         colorSpace = formats[0].colorSpace;
     }
 
-    depthStencil = flags.testFlag(QRhiSwapChain::UseDepthStencil) ? depthStencil : nullptr;
     if (depthStencil && depthStencil->sampleCount != sampleCount) {
         qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
                  depthStencil->sampleCount, sampleCount);

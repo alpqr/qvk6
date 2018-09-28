@@ -132,7 +132,7 @@ void ExampleWindow::recreateSwapChain()
 
     m_ds->build();
 
-    m_hasSwapChain = m_sc->build(this, outputSize, QRhiSwapChain::UseDepthStencil, m_ds, m_triRenderer.sampleCount());
+    m_hasSwapChain = m_sc->build(this, outputSize, 0, m_ds, m_triRenderer.sampleCount());
     m_swapChainChanged = true;
 }
 

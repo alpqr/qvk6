@@ -41,6 +41,16 @@
 
 QT_BEGIN_NAMESPACE
 
+/*
+  Direct3D 11 backend. Provides a double-buffered flip model (FLIP_DISCARD)
+  swapchain. Textures and "static" buffers are USAGE_DEFAULT, leaving it to
+  UpdateSubResource to upload the data in any way it sees fit. "Dynamic"
+  buffers are USAGE_DYNAMIC and updating is done by mapping with WRITE_DISCARD.
+  (so here QRhiBuffer keeps a copy of the buffer contents and all of it is
+  memcpy'd every time, leaving the rest (juggling with the memory area Map
+  returns) to the driver).
+*/
+
 QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
 {
     QRhiD3D11InitParams *d3dparams = static_cast<QRhiD3D11InitParams *>(params);
@@ -254,10 +264,55 @@ QD3D11RenderBuffer::QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const
 
 void QD3D11RenderBuffer::release()
 {
+    if (!tex)
+        return;
+
+    if (dsv) {
+        dsv->Release();
+        dsv = nullptr;
+    }
+
+    if (tex) {
+        tex->Release();
+        tex = nullptr;
+    }
 }
 
 bool QD3D11RenderBuffer::build()
 {
+    if (tex)
+        release();
+
+    QRHI_RES_RHI(QRhiD3D11);
+    static const DXGI_FORMAT dsFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+    if (type == DepthStencil) {
+        D3D11_TEXTURE2D_DESC desc;
+        memset(&desc, 0, sizeof(desc));
+        desc.Width = pixelSize.width();
+        desc.Height = pixelSize.height();
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = dsFormat;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
+        if (FAILED(hr)) {
+            qWarning("Failed to create depth-stencil buffer: %s", qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+        D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
+        memset(&dsvDesc, 0, sizeof(dsvDesc));
+        dsvDesc.Format = dsFormat;
+        dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+        hr = rhiD->dev->CreateDepthStencilView(tex, &dsvDesc, &dsv);
+        if (FAILED(hr)) {
+            qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+        return true;
+    }
+
     return false;
 }
 
@@ -409,8 +464,10 @@ QD3D11SwapChain::QD3D11SwapChain(QRhiImplementation *rhi)
       rt(rhi),
       cb(rhi)
 {
-    for (int i = 0; i < BUFFER_COUNT; ++i)
-        bufTex[i] = nullptr;
+    for (int i = 0; i < BUFFER_COUNT; ++i) {
+        tex[i] = nullptr;
+        rtv[i] = nullptr;
+    }
 }
 
 void QD3D11SwapChain::release()
@@ -419,9 +476,13 @@ void QD3D11SwapChain::release()
         return;
 
     for (int i = 0; i < BUFFER_COUNT; ++i) {
-        if (bufTex[i]) {
-            bufTex[i]->Release();
-            bufTex[i] = nullptr;
+        if (rtv[i]) {
+            rtv[i]->Release();
+            rtv[i] = nullptr;
+        }
+        if (tex[i]) {
+            tex[i]->Release();
+            tex[i] = nullptr;
         }
     }
 
@@ -455,9 +516,7 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceIm
     // Can be called multiple times without a call to release() - this is typical when a window is resized.
     Q_ASSERT(!swapChain || window == window_);
 
-    Q_UNUSED(flags);
-    Q_UNUSED(depthStencil);
-    Q_UNUSED(sampleCount);
+    Q_UNUSED(sampleCount); // ### MSAA
 
     window = window_;
     pixelSize = pixelSize_;
@@ -485,6 +544,10 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceIm
         desc.BufferCount = BUFFER_COUNT;
         desc.Scaling = DXGI_SCALING_STRETCH;
         desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
+        if (flags.testFlag(SurfaceHasPreMulAlpha))
+            desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
+        else if (flags.testFlag(SurfaceHasNonPreMulAlpha))
+            desc.AlphaMode = DXGI_ALPHA_MODE_STRAIGHT;
         desc.Flags = swapChainFlags;
 
         HRESULT hr = rhiD->dxgiFactory->CreateSwapChainForHwnd(rhiD->dev, hwnd, &desc, nullptr, nullptr, &swapChain);
@@ -494,9 +557,13 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceIm
         }
     } else {
         for (int i = 0; i < BUFFER_COUNT; ++i) {
-            if (bufTex[i]) {
-                bufTex[i]->Release();
-                bufTex[i] = nullptr;
+            if (rtv[i]) {
+                rtv[i]->Release();
+                rtv[i] = nullptr;
+            }
+            if (tex[i]) {
+                tex[i]->Release();
+                tex[i] = nullptr;
             }
         }
         HRESULT hr = swapChain->ResizeBuffers(2, pixelSize.width(), pixelSize.height(), colorFormat, swapChainFlags);
@@ -507,9 +574,14 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceIm
     }
 
     for (int i = 0; i < BUFFER_COUNT; ++i) {
-        HRESULT hr = swapChain->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void **>(&bufTex[i]));
+        HRESULT hr = swapChain->GetBuffer(0, IID_ID3D11Texture2D, reinterpret_cast<void **>(&tex[i]));
         if (FAILED(hr)) {
-            qWarning("Failed to query buffer %d: %s", i, qPrintable(comErrorMessage(hr)));
+            qWarning("Failed to query swapchain buffer %d: %s", i, qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+        hr = rhiD->dev->CreateRenderTargetView(tex[i], nullptr, &rtv[i]);
+        if (FAILED(hr)) {
+            qWarning("Failed to create rtv for swapchain buffer %d: %s", i, qPrintable(comErrorMessage(hr)));
             return false;
         }
     }

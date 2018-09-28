@@ -544,9 +544,8 @@ class Q_RHI_EXPORT QRhiSwapChain : public QRhiResource
 {
 public:
     enum SurfaceImportFlag {
-        UseDepthStencil = 1 << 0,
-        SurfaceHasPreMulAlpha = 1 << 1,
-        SurfaceHasNonPreMulAlpha = 1 << 2
+        SurfaceHasPreMulAlpha = 1 << 0,
+        SurfaceHasNonPreMulAlpha = 1 << 1
     };
     Q_DECLARE_FLAGS(SurfaceImportFlags, SurfaceImportFlag)
 

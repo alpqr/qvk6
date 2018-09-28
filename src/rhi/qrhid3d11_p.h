@@ -139,6 +139,10 @@ struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
     bool build() override;
 
     ID3D11DepthStencilState *dsState = nullptr;
+    ID3D11BlendState *blendState = nullptr;
+    ID3D11VertexShader *vs = nullptr;
+    ID3D11PixelShader *fs = nullptr;
+    uint generation = 0;
 };
 
 struct QD3D11SwapChain;
@@ -153,7 +157,12 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             SetRenderTarget,
             Clear,
             Viewport,
-            Scissor
+            Scissor,
+            BindGraphicsPipeline,
+            StencilRef,
+            BlendConstants,
+            Draw,
+            DrawIndexed
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
@@ -175,6 +184,33 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             struct {
                 int x, y, w, h;
             } scissor;
+            struct {
+                QD3D11GraphicsPipeline *ps;
+                QD3D11ShaderResourceBindings *srb;
+            } bindGraphicsPipeline;
+            struct {
+                QD3D11GraphicsPipeline *ps;
+                quint32 ref;
+            } stencilRef;
+            struct {
+                QD3D11GraphicsPipeline *ps;
+                float c[4];
+            } blendConstants;
+            struct {
+                QD3D11GraphicsPipeline *ps;
+                quint32 vertexCount;
+                quint32 instanceCount;
+                quint32 firstVertex;
+                quint32 firstInstance;
+            } draw;
+            struct {
+                QD3D11GraphicsPipeline *ps;
+                quint32 indexCount;
+                quint32 instanceCount;
+                quint32 firstIndex;
+                qint32 vertexOffset;
+                quint32 firstInstance;
+            } drawIndexed;
         } args;
     };
 

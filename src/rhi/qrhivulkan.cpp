@@ -2971,12 +2971,14 @@ bool QVkGraphicsPipeline::build()
     dsInfo.depthWriteEnable = depthWrite;
     dsInfo.depthCompareOp = toVkCompareOp(depthOp);
     dsInfo.stencilTestEnable = stencilTest;
-    fillVkStencilOpState(&dsInfo.front, stencilFront);
-    dsInfo.front.compareMask = stencilReadMask;
-    dsInfo.front.writeMask = stencilWriteMask;
-    fillVkStencilOpState(&dsInfo.back, stencilBack);
-    dsInfo.back.compareMask = stencilReadMask;
-    dsInfo.back.writeMask = stencilWriteMask;
+    if (stencilTest) {
+        fillVkStencilOpState(&dsInfo.front, stencilFront);
+        dsInfo.front.compareMask = stencilReadMask;
+        dsInfo.front.writeMask = stencilWriteMask;
+        fillVkStencilOpState(&dsInfo.back, stencilBack);
+        dsInfo.back.compareMask = stencilReadMask;
+        dsInfo.back.writeMask = stencilWriteMask;
+    }
     pipelineInfo.pDepthStencilState = &dsInfo;
 
     VkPipelineColorBlendStateCreateInfo blendInfo;

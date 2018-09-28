@@ -100,7 +100,7 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
         Binding(quint32 stride_, Classification cls = PerVertex)
             : stride(stride_), classification(cls)
         { }
-        quint32 stride; // if another api needs this in setVertexBuffer (d3d12), make the cb store a ptr to the current ps and look up the stride via that
+        quint32 stride; // if another api needs this in setVertexBuffer, make the cb store a ptr to the current ps and look up the stride via that
         Classification classification;
     };
 
@@ -512,7 +512,7 @@ public:
     bool stencilTest = false;
     StencilOpState stencilFront;
     StencilOpState stencilBack;
-    // use the same read (compare) and write masks for both faces (see d3d12).
+    // use the same read (compare) and write masks for both faces (see d3d).
     // have the reference value dynamically settable.
     quint32 stencilReadMask = 0xFF;
     quint32 stencilWriteMask = 0xFF;

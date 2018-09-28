@@ -202,6 +202,24 @@ QRhiShaderResourceBindings *QRhiD3D11::createShaderResourceBindings()
 
 void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
 {
+    Q_ASSERT(inPass);
+
+    if (!srb)
+        srb = ps->shaderResourceBindings;
+
+    QD3D11GraphicsPipeline *psD = QRHI_RES(QD3D11GraphicsPipeline, ps);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+
+    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
+        cbD->currentPipeline = ps;
+        cbD->currentPipelineGeneration = psD->generation;
+
+        QD3D11CommandBuffer::Command cmd;
+        cmd.cmd = QD3D11CommandBuffer::Command::BindGraphicsPipeline;
+        cmd.args.bindGraphicsPipeline.ps = psD;
+        cmd.args.bindGraphicsPipeline.srb = QRHI_RES(QD3D11ShaderResourceBindings, srb);
+        cbD->commands.append(cmd);
+    }
 }
 
 void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
@@ -237,15 +255,39 @@ void QRhiD3D11::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 
 void QRhiD3D11::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
 {
+    Q_ASSERT(inPass);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::BlendConstants;
+    cmd.args.blendConstants.ps = QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline);
+    memcpy(cmd.args.blendConstants.c, &c, 4 * sizeof(float));
+    cbD->commands.append(cmd);
 }
 
 void QRhiD3D11::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
 {
+    Q_ASSERT(inPass);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::StencilRef;
+    cmd.args.stencilRef.ps = QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline);
+    cmd.args.stencilRef.ref = refValue;
+    cbD->commands.append(cmd);
 }
 
 void QRhiD3D11::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
                      quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
+    Q_ASSERT(inPass);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::Draw;
+    cmd.args.draw.ps = QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline);
+    cmd.args.draw.vertexCount = vertexCount;
+    cmd.args.draw.instanceCount = instanceCount;
+    cmd.args.draw.firstVertex = firstVertex;
+    cmd.args.draw.firstInstance = firstInstance;
+    cbD->commands.append(cmd);
 }
 
 void QRhiD3D11::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
@@ -355,6 +397,9 @@ void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
 
 void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
 {
+    quint32 stencilRef = 0;
+    float blendConstants[] = { 1, 1, 1, 1 };
+
     for (const QD3D11CommandBuffer::Command &cmd : qAsConst(cb->commands)) {
         switch (cmd.cmd) {
         case QD3D11CommandBuffer::Command::SetRenderTarget:
@@ -399,6 +444,56 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
             r.right = cmd.args.scissor.x + cmd.args.scissor.w - 1;
             r.bottom = cmd.args.scissor.y + cmd.args.scissor.h - 1;
             context->RSSetScissorRects(1, &r);
+        }
+            break;
+        case QD3D11CommandBuffer::Command::BindGraphicsPipeline:
+        {
+            QD3D11GraphicsPipeline *psD = cmd.args.bindGraphicsPipeline.ps;
+            QD3D11ShaderResourceBindings *srbD = cmd.args.bindGraphicsPipeline.srb;
+            context->VSSetShader(psD->vs, nullptr, 0);
+            context->PSSetShader(psD->fs, nullptr, 0);
+            context->OMSetDepthStencilState(psD->dsState, stencilRef);
+            context->OMSetBlendState(psD->blendState, blendConstants, 0xffffffff);
+        }
+            break;
+        case QD3D11CommandBuffer::Command::StencilRef:
+        {
+            stencilRef = cmd.args.stencilRef.ref;
+            context->OMSetDepthStencilState(cmd.args.stencilRef.ps->dsState, stencilRef);
+        }
+            break;
+        case QD3D11CommandBuffer::Command::BlendConstants:
+        {
+            memcpy(blendConstants, cmd.args.blendConstants.c, 4 * sizeof(float));
+            context->OMSetBlendState(cmd.args.blendConstants.ps->blendState, blendConstants, 0xffffffff);
+        }
+            break;
+        case QD3D11CommandBuffer::Command::Draw:
+        {
+            if (cmd.args.draw.ps) {
+                if (cmd.args.draw.instanceCount == 1)
+                    context->Draw(cmd.args.draw.vertexCount, cmd.args.draw.firstVertex);
+                else
+                    context->DrawInstanced(cmd.args.draw.vertexCount, cmd.args.draw.instanceCount,
+                                           cmd.args.draw.firstVertex, cmd.args.draw.firstInstance);
+            } else {
+                qWarning("No graphics pipeline active for draw; ignored");
+            }
+        }
+            break;
+        case QD3D11CommandBuffer::Command::DrawIndexed:
+        {
+            if (cmd.args.drawIndexed.ps) {
+                if (cmd.args.drawIndexed.instanceCount == 1)
+                    context->DrawIndexed(cmd.args.drawIndexed.indexCount, cmd.args.drawIndexed.firstIndex,
+                                         cmd.args.drawIndexed.vertexOffset);
+                else
+                    context->DrawIndexedInstanced(cmd.args.drawIndexed.indexCount, cmd.args.drawIndexed.instanceCount,
+                                                  cmd.args.drawIndexed.firstIndex, cmd.args.drawIndexed.vertexOffset,
+                                                  cmd.args.drawIndexed.firstInstance);
+            } else {
+                qWarning("No graphics pipeline active for drawIndexed; ignored");
+            }
         }
             break;
         default:
@@ -613,6 +708,21 @@ void QD3D11GraphicsPipeline::release()
         dsState->Release();
         dsState = nullptr;
     }
+
+    if (blendState) {
+        blendState->Release();
+        blendState = nullptr;
+    }
+
+    if (vs) {
+        vs->Release();
+        vs = nullptr;
+    }
+
+    if (fs) {
+        fs->Release();
+        fs = nullptr;
+    }
 }
 
 static inline D3D11_COMPARISON_FUNC toD3DCompareOp(QRhiGraphicsPipeline::CompareOp op)
@@ -637,6 +747,31 @@ static inline D3D11_COMPARISON_FUNC toD3DCompareOp(QRhiGraphicsPipeline::Compare
     default:
         Q_UNREACHABLE();
         return D3D11_COMPARISON_ALWAYS;
+    }
+}
+
+static inline D3D11_STENCIL_OP toD3DStencilOp(QRhiGraphicsPipeline::StencilOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::StencilZero:
+        return D3D11_STENCIL_OP_ZERO;
+    case QRhiGraphicsPipeline::Keep:
+        return D3D11_STENCIL_OP_KEEP;
+    case QRhiGraphicsPipeline::Replace:
+        return D3D11_STENCIL_OP_REPLACE;
+    case QRhiGraphicsPipeline::IncrementAndClamp:
+        return D3D11_STENCIL_OP_INCR_SAT;
+    case QRhiGraphicsPipeline::DecrementAndClamp:
+        return D3D11_STENCIL_OP_DECR_SAT;
+    case QRhiGraphicsPipeline::Invert:
+        return D3D11_STENCIL_OP_INVERT;
+    case QRhiGraphicsPipeline::IncrementAndWrap:
+        return D3D11_STENCIL_OP_INCR;
+    case QRhiGraphicsPipeline::DecrementAndWrap:
+        return D3D11_STENCIL_OP_DECR;
+    default:
+        Q_UNREACHABLE();
+        return D3D11_STENCIL_OP_KEEP;
     }
 }
 
@@ -707,17 +842,62 @@ bool QD3D11GraphicsPipeline::build()
     dsDesc.DepthEnable = depthTest;
     dsDesc.DepthWriteMask = depthWrite ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
     dsDesc.DepthFunc = toD3DCompareOp(depthOp);
+    dsDesc.StencilEnable = stencilTest;
+    if (stencilTest) {
+        dsDesc.StencilReadMask = stencilReadMask;
+        dsDesc.StencilWriteMask = stencilWriteMask;
+        dsDesc.FrontFace.StencilFailOp = toD3DStencilOp(stencilFront.failOp);
+        dsDesc.FrontFace.StencilDepthFailOp = toD3DStencilOp(stencilFront.depthFailOp);
+        dsDesc.FrontFace.StencilPassOp = toD3DStencilOp(stencilFront.passOp);
+        dsDesc.FrontFace.StencilFunc = toD3DCompareOp(stencilFront.compareOp);
+        dsDesc.BackFace.StencilFailOp = toD3DStencilOp(stencilBack.failOp);
+        dsDesc.BackFace.StencilDepthFailOp = toD3DStencilOp(stencilBack.depthFailOp);
+        dsDesc.BackFace.StencilPassOp = toD3DStencilOp(stencilBack.passOp);
+        dsDesc.BackFace.StencilFunc = toD3DCompareOp(stencilBack.compareOp);
+    }
+    HRESULT hr = rhiD->dev->CreateDepthStencilState(&dsDesc, &dsState);
+    if (FAILED(hr)) {
+        qWarning("Failed to create depth-stencil state: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
+    D3D11_BLEND_DESC blendDesc;
+    memset(&blendDesc, 0, sizeof(blendDesc));
     // ###
-    rhiD->dev->CreateDepthStencilState(&dsDesc, &dsState);
+    hr = rhiD->dev->CreateBlendState(&blendDesc, &blendState);
+    if (FAILED(hr)) {
+        qWarning("Failed to create blend state: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
 
     for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(shaderStages)) {
         QString error;
         QByteArray bytecode = compileHlslShaderSource(shaderStage.shader, &error);
-        if (bytecode.isEmpty())
+        if (bytecode.isEmpty()) {
             qWarning("HLSL shader compilation failed: %s", qPrintable(error));
-        // ###
+            return false;
+        }
+        switch (shaderStage.type) {
+        case QRhiGraphicsShaderStage::Vertex:
+            hr = rhiD->dev->CreateVertexShader(bytecode.constData(), bytecode.size(), nullptr, &vs);
+            if (FAILED(hr)) {
+                qWarning("Failed to create vertex shader: %s", qPrintable(comErrorMessage(hr)));
+                return false;
+            }
+            break;
+        case QRhiGraphicsShaderStage::Fragment:
+            hr = rhiD->dev->CreatePixelShader(bytecode.constData(), bytecode.size(), nullptr, &fs);
+            if (FAILED(hr)) {
+                qWarning("Failed to create pixel shader: %s", qPrintable(comErrorMessage(hr)));
+                return false;
+            }
+            break;
+        default:
+            break;
+        }
     }
 
+    generation += 1;
     return true;
 }
 

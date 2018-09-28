@@ -38,12 +38,17 @@
 #define QRHID3D11_H
 
 #include <QtRhi/qrhi.h>
+#include <d3d11.h>
 
 QT_BEGIN_NAMESPACE
 
 struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
 {
     bool enableDebugLayer = false;
+
+    // device and context are optional (but either both or none must be valid, ownership is not taken)
+    ID3D11Device *dev = nullptr;
+    ID3D11DeviceContext *context = nullptr;
 };
 
 QT_END_NAMESPACE

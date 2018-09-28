@@ -64,11 +64,7 @@ void GlWindow::init()
 
 void GlWindow::releaseResources()
 {
-    if (!ctx)
-        return;
-
     ExampleWindow::releaseResources();
-
     delete ctx;
     ctx = nullptr;
 }

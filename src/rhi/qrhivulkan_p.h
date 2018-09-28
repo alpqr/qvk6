@@ -391,11 +391,13 @@ public:
     void updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx = -1);
 
     QRhi *q;
-    QVulkanInstance *inst;
-    VkPhysicalDevice physDev;
-    VkDevice dev;
-    VkCommandPool cmdPool;
-    VkQueue gfxQueue;
+    QVulkanInstance *inst = nullptr;
+    QWindow *maybeWindow = nullptr;
+    VkPhysicalDevice physDev = VK_NULL_HANDLE;
+    VkDevice dev = VK_NULL_HANDLE;
+    VkCommandPool cmdPool = VK_NULL_HANDLE;
+    VkQueue gfxQueue = VK_NULL_HANDLE;
+    bool ownsDevPoolQueue = false;
     QVkAllocator allocator;
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;

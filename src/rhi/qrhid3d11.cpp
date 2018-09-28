@@ -57,6 +57,11 @@ QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
 {
     QRhiD3D11InitParams *d3dparams = static_cast<QRhiD3D11InitParams *>(params);
     debugLayer = d3dparams->enableDebugLayer;
+    if (d3dparams->dev && d3dparams->context) {
+        dev = d3dparams->dev;
+        context = d3dparams->context;
+        ownsDeviceAndContext = false;
+    }
 
     create();
 }
@@ -85,15 +90,20 @@ void QRhiD3D11::create()
     if (debugLayer)
         flags |= D3D11_CREATE_DEVICE_DEBUG;
 
-    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
-                                   nullptr, 0, D3D11_SDK_VERSION,
-                                   &dev, &featureLevel, &context);
-    if (FAILED(hr)) {
-        qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
-        return;
+    if (!dev && !context) {
+        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
+                                       nullptr, 0, D3D11_SDK_VERSION,
+                                       &dev, &featureLevel, &context);
+        if (FAILED(hr)) {
+            qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
+            return;
+        }
+        ownsDeviceAndContext = true;
     }
 
-    hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgiFactory));
+    Q_ASSERT(dev && context);
+
+    HRESULT hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgiFactory));
     if (FAILED(hr)) {
         qWarning("Failed to create DXGI factory: %s", qPrintable(comErrorMessage(hr)));
         return;
@@ -102,14 +112,14 @@ void QRhiD3D11::create()
 
 void QRhiD3D11::destroy()
 {
-    if (!dev)
-        return;
-
-    context->Release();
-    context = nullptr;
-
-    dev->Release();
-    dev = nullptr;
+    if (ownsDeviceAndContext) {
+        if (context)
+            context->Release();
+        context = nullptr;
+        if (dev)
+            dev->Release();
+        dev = nullptr;
+    }
 }
 
 QVector<int> QRhiD3D11::supportedSampleCounts() const

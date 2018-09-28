@@ -46,7 +46,6 @@
 #include <QShaderDescription>
 #include <QWindow>
 
-#include <d3d11.h>
 #include <dxgi1_3.h>
 
 QT_BEGIN_NAMESPACE
@@ -293,6 +292,7 @@ public:
     bool debugLayer = false;
     ID3D11Device *dev = nullptr;
     ID3D11DeviceContext *context = nullptr;
+    bool ownsDeviceAndContext = false;
     D3D_FEATURE_LEVEL featureLevel;
     IDXGIFactory2 *dxgiFactory;
 

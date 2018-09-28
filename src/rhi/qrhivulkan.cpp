@@ -158,10 +158,14 @@ QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
 {
     QRhiVulkanInitParams *vkparams = static_cast<QRhiVulkanInitParams *>(params);
     inst = vkparams->inst;
-    physDev = vkparams->physDev;
-    dev = vkparams->dev;
-    cmdPool = vkparams->cmdPool;
-    gfxQueue = vkparams->gfxQueue;
+    maybeWindow = vkparams->window; // may be null
+    if (vkparams->physDev && vkparams->dev && vkparams->cmdPool && vkparams->gfxQueue) {
+        physDev = vkparams->physDev;
+        dev = vkparams->dev;
+        cmdPool = vkparams->cmdPool;
+        gfxQueue = vkparams->gfxQueue;
+        ownsDevPoolQueue = false;
+    }
 
     create();
 }
@@ -173,11 +177,100 @@ QRhiVulkan::~QRhiVulkan()
 
 void QRhiVulkan::create()
 {
-    Q_ASSERT(inst && physDev && dev && cmdPool && gfxQueue);
+    Q_ASSERT(inst);
 
     globalVulkanInstance = inst; // assume this will not change during the lifetime of the entire application
 
     f = inst->functions();
+
+    if (!physDev && !dev && !cmdPool && !gfxQueue) {
+        uint32_t devCount = 0;
+        f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, nullptr);
+        qDebug("%d physical devices", devCount);
+        if (!devCount)
+            qFatal("No physical devices");
+
+        // Just pick the first physical device for now.
+        devCount = 1;
+        VkResult err = f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, &physDev);
+        if (err != VK_SUCCESS)
+            qFatal("Failed to enumerate physical devices: %d", err);
+
+        uint32_t queueCount = 0;
+        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, nullptr);
+        QVector<VkQueueFamilyProperties> queueFamilyProps(queueCount);
+        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, queueFamilyProps.data());
+        int gfxQueueFamilyIdx = -1;
+        int presQueueFamilyIdx = -1;
+        for (int i = 0; i < queueFamilyProps.count(); ++i) {
+            qDebug("queue family %d: flags=0x%x count=%d", i, queueFamilyProps[i].queueFlags, queueFamilyProps[i].queueCount);
+            if (gfxQueueFamilyIdx == -1
+                    && (queueFamilyProps[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+                    && (!maybeWindow || inst->supportsPresent(physDev, i, maybeWindow)))
+            {
+                gfxQueueFamilyIdx = i;
+            }
+        }
+        if (gfxQueueFamilyIdx != -1) {
+            presQueueFamilyIdx = gfxQueueFamilyIdx;
+        } else {
+            // ###
+            qWarning("No graphics queue that can present. This is not supported atm.");
+        }
+        if (gfxQueueFamilyIdx == -1)
+            qFatal("No graphics queue family found");
+        if (presQueueFamilyIdx == -1)
+            qFatal("No present queue family found");
+
+        VkDeviceQueueCreateInfo queueInfo[2];
+        const float prio[] = { 0 };
+        memset(queueInfo, 0, sizeof(queueInfo));
+        queueInfo[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueInfo[0].queueFamilyIndex = gfxQueueFamilyIdx;
+        queueInfo[0].queueCount = 1;
+        queueInfo[0].pQueuePriorities = prio;
+        if (gfxQueueFamilyIdx != presQueueFamilyIdx) {
+            queueInfo[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueInfo[1].queueFamilyIndex = presQueueFamilyIdx;
+            queueInfo[1].queueCount = 1;
+            queueInfo[1].pQueuePriorities = prio;
+        }
+
+        QVector<const char *> devLayers;
+        if (inst->layers().contains("VK_LAYER_LUNARG_standard_validation"))
+            devLayers.append("VK_LAYER_LUNARG_standard_validation");
+
+        QVector<const char *> devExts;
+        devExts.append("VK_KHR_swapchain");
+
+        VkDeviceCreateInfo devInfo;
+        memset(&devInfo, 0, sizeof(devInfo));
+        devInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        devInfo.queueCreateInfoCount = gfxQueueFamilyIdx == presQueueFamilyIdx ? 1 : 2;
+        devInfo.pQueueCreateInfos = queueInfo;
+        devInfo.enabledLayerCount = devLayers.count();
+        devInfo.ppEnabledLayerNames = devLayers.constData();
+        devInfo.enabledExtensionCount = devExts.count();
+        devInfo.ppEnabledExtensionNames = devExts.constData();
+
+        err = f->vkCreateDevice(physDev, &devInfo, nullptr, &dev);
+        if (err != VK_SUCCESS)
+            qFatal("Failed to create device: %d", err);
+
+        df = inst->deviceFunctions(dev);
+        df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
+
+        VkCommandPoolCreateInfo poolInfo;
+        memset(&poolInfo, 0, sizeof(poolInfo));
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.queueFamilyIndex = gfxQueueFamilyIdx;
+        err = df->vkCreateCommandPool(dev, &poolInfo, nullptr, &cmdPool);
+        if (err != VK_SUCCESS)
+            qFatal("Failed to create command pool: %d", err);
+
+        ownsDevPoolQueue = true;
+    }
+
     df = inst->deviceFunctions(dev);
 
     VmaVulkanFunctions afuncs;
@@ -200,6 +293,11 @@ void QRhiVulkan::create()
 
     f->vkGetPhysicalDeviceProperties(physDev, &physDevProperties);
     ubufAlign = physDevProperties.limits.minUniformBufferOffsetAlignment;
+
+    qDebug("Device name: %s Driver version: %d.%d.%d", physDevProperties.deviceName,
+           VK_VERSION_MAJOR(physDevProperties.driverVersion),
+           VK_VERSION_MINOR(physDevProperties.driverVersion),
+           VK_VERSION_PATCH(physDevProperties.driverVersion));
 
     VmaAllocatorCreateInfo allocatorInfo;
     memset(&allocatorInfo, 0, sizeof(allocatorInfo));
@@ -242,6 +340,18 @@ void QRhiVulkan::destroy()
     descriptorPools.clear();
 
     vmaDestroyAllocator(toVmaAllocator(allocator));
+
+    if (ownsDevPoolQueue) {
+        if (cmdPool) {
+            df->vkDestroyCommandPool(dev, cmdPool, nullptr);
+            cmdPool = VK_NULL_HANDLE;
+        }
+        if (dev) {
+            df->vkDestroyDevice(dev, nullptr);
+            inst->resetDeviceFunctions(dev);
+            dev = VK_NULL_HANDLE;
+        }
+    }
 
     f = nullptr;
     df = nullptr;

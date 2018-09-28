@@ -250,7 +250,7 @@ struct QVkSwapChain : public QRhiSwapChain
     int bufferCount = 0;
     VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    QRhiRenderBuffer *depthStencil = nullptr;
+    QVkRenderBuffer *ds = nullptr;
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
     VkRenderPass rp;

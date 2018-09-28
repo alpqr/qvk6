@@ -842,11 +842,10 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
     QVulkanWindow *w = swapChainD->wrapWindow;
 
-    QRHI_RES(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = w->currentCommandBuffer();
+    swapChainD->cbWrapper.cb = w->currentCommandBuffer();
 
-    QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &swapChainD->rtWrapper);
-    rtD->d.fb = w->currentFramebuffer();
-    swapChainD->pixelSize = rtD->d.pixelSize = w->swapChainImageSize();
+    swapChainD->rtWrapper.d.fb = w->currentFramebuffer();
+    swapChainD->pixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
 
     currentFrameSlot = w->currentFrame();
 
@@ -938,15 +937,14 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
         return QRhi::FrameOpError;
     }
 
-    QRHI_RES(QVkCommandBuffer, &swapChainD->cbWrapper)->cb = image.cmdBuf;
+    swapChainD->cbWrapper.cb = image.cmdBuf;
 
-    QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &swapChainD->rtWrapper);
-    rtD->d.fb = image.fb;
-    rtD->d.pixelSize = swapChainD->pixelSize;
+    swapChainD->rtWrapper.d.fb = image.fb;
+    swapChainD->rtWrapper.d.pixelSize = swapChainD->pixelSize;
 
     currentFrameSlot = swapChainD->currentFrame;
-    if (swapChainD->depthStencil)
-        QRHI_RES(QVkRenderBuffer, swapChainD->depthStencil)->lastActiveFrameSlot = currentFrameSlot;
+    if (swapChainD->ds)
+        swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
 
     prepareNewFrame(&swapChainD->cbWrapper);
 
@@ -1091,7 +1089,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QR
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
     rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = QRHI_RES(QVkRenderPass, &rtD->rp)->rp;
+    rpBeginInfo.renderPass = rtD->rp.rp;
     rpBeginInfo.framebuffer = rtD->fb;
     rpBeginInfo.renderArea.extent.width = rtD->pixelSize.width();
     rpBeginInfo.renderArea.extent.height = rtD->pixelSize.height();
@@ -2584,7 +2582,7 @@ bool QVkTextureRenderTarget::build()
     if (hasDepthStencil)
         rpInfo.attachmentCount += 1;
 
-    VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, &QRHI_RES(QVkRenderPass, &d.rp)->rp);
+    VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, &d.rp.rp);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create renderpass: %d", err);
         return false;
@@ -2601,7 +2599,7 @@ bool QVkTextureRenderTarget::build()
     VkFramebufferCreateInfo fbInfo;
     memset(&fbInfo, 0, sizeof(fbInfo));
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbInfo.renderPass = QRHI_RES(QVkRenderPass, &d.rp)->rp;
+    fbInfo.renderPass = d.rp.rp;
     fbInfo.attachmentCount = d.attCount;
     fbInfo.pAttachments = views;
     fbInfo.width = texture->pixelSize.width();
@@ -3003,29 +3001,32 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
     if (!rhiD->recreateSwapChain(surface, pixelSize_, flags, this))
         return false;
 
-    QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &rtWrapper);
     rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat);
 
-    QRHI_RES(QVkRenderPass, &rtD->d.rp)->rp = rp;
-    rtD->d.attCount = 1;
-    if (depthStencil)
-        rtD->d.attCount += 1;
+    rtWrapper.d.rp.rp = rp;
+    rtWrapper.d.attCount = 1;
+    if (depthStencil) {
+        rtWrapper.d.attCount += 1;
+        ds = QRHI_RES(QVkRenderBuffer, depthStencil);
+    } else {
+        ds = nullptr;
+    }
     if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
-        rtD->d.attCount += 1;
+        rtWrapper.d.attCount += 1;
 
     for (int i = 0; i < bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(imageRes[i]);
 
         VkImageView views[3] = {
             image.imageView,
-            depthStencil ? QRHI_RES(QVkRenderBuffer, depthStencil)->imageView : VK_NULL_HANDLE,
+            ds ? ds->imageView : VK_NULL_HANDLE,
             sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
         };
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = QRHI_RES(QVkRenderPass, &rtD->d.rp)->rp;
-        fbInfo.attachmentCount = rtD->d.attCount;
+        fbInfo.renderPass = rtWrapper.d.rp.rp;
+        fbInfo.attachmentCount = rtWrapper.d.attCount;
         fbInfo.pAttachments = views;
         fbInfo.width = pixelSize.width();
         fbInfo.height = pixelSize.height();
@@ -3048,10 +3049,9 @@ bool QVkSwapChain::build(QObject *target)
 
     QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(target);
     if (vkw) {
-        QVkReferenceRenderTarget *rtD = QRHI_RES(QVkReferenceRenderTarget, &rtWrapper);
-        QRHI_RES(QVkRenderPass, &rtD->d.rp)->rp = vkw->defaultRenderPass();
-        pixelSize = rtD->d.pixelSize = vkw->swapChainImageSize();
-        rtD->d.attCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+        rtWrapper.d.rp.rp = vkw->defaultRenderPass();
+        pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
+        rtWrapper.d.attCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
         wrapWindow = vkw;
         return true;
     }

@@ -36,7 +36,9 @@
 
 #include "qrhid3d11_p.h"
 #include <QWindow>
+#include <QBakedShader>
 
+#include <d3dcompiler.h>
 #include <comdef.h>
 
 QT_BEGIN_NAMESPACE
@@ -199,10 +201,28 @@ void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
 
 void QRhiD3D11::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
 {
+    Q_ASSERT(inPass);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::Viewport;
+    cmd.args.viewport.x = viewport.r.x();
+    cmd.args.viewport.y = viewport.r.y();
+    cmd.args.viewport.w = viewport.r.width();
+    cmd.args.viewport.h = viewport.r.height();
+    cmd.args.viewport.d0 = viewport.minDepth;
+    cmd.args.viewport.d1 = viewport.maxDepth;
+    QRHI_RES(QD3D11CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiD3D11::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
+    Q_ASSERT(inPass);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::Scissor;
+    cmd.args.scissor.x = scissor.r.x();
+    cmd.args.scissor.y = scissor.r.y();
+    cmd.args.scissor.w = scissor.r.width();
+    cmd.args.scissor.h = scissor.r.height();
+    QRHI_RES(QD3D11CommandBuffer, cb)->commands.append(cmd);
 }
 
 void QRhiD3D11::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
@@ -347,6 +367,28 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
                 ds |= D3D11_CLEAR_STENCIL;
             if (ds)
                 context->ClearDepthStencilView(rp->dsv, ds, cmd.args.clear.d, cmd.args.clear.s);
+        }
+            break;
+        case QD3D11CommandBuffer::Command::Viewport:
+        {
+            D3D11_VIEWPORT v;
+            v.TopLeftX = cmd.args.viewport.x;
+            v.TopLeftY = cmd.args.viewport.y;
+            v.Width = cmd.args.viewport.w;
+            v.Height = cmd.args.viewport.h;
+            v.MinDepth = cmd.args.viewport.d0;
+            v.MaxDepth = cmd.args.viewport.d1;
+            context->RSSetViewports(1, &v);
+        }
+            break;
+        case QD3D11CommandBuffer::Command::Scissor:
+        {
+            D3D11_RECT r;
+            r.left = cmd.args.scissor.x;
+            r.top = cmd.args.scissor.y;
+            r.right = cmd.args.scissor.x + cmd.args.scissor.w - 1;
+            r.bottom = cmd.args.scissor.y + cmd.args.scissor.h - 1;
+            context->RSSetScissorRects(1, &r);
         }
             break;
         default:
@@ -554,11 +596,119 @@ QD3D11GraphicsPipeline::QD3D11GraphicsPipeline(QRhiImplementation *rhi)
 
 void QD3D11GraphicsPipeline::release()
 {
+    if (!dsState)
+        return;
+
+    if (dsState) {
+        dsState->Release();
+        dsState = nullptr;
+    }
+}
+
+static inline D3D11_COMPARISON_FUNC toD3DCompareOp(QRhiGraphicsPipeline::CompareOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Never:
+        return D3D11_COMPARISON_NEVER;
+    case QRhiGraphicsPipeline::Less:
+        return D3D11_COMPARISON_LESS;
+    case QRhiGraphicsPipeline::Equal:
+        return D3D11_COMPARISON_EQUAL;
+    case QRhiGraphicsPipeline::LessOrEqual:
+        return D3D11_COMPARISON_LESS_EQUAL;
+    case QRhiGraphicsPipeline::Greater:
+        return D3D11_COMPARISON_GREATER;
+    case QRhiGraphicsPipeline::NotEqual:
+        return D3D11_COMPARISON_NOT_EQUAL;
+    case QRhiGraphicsPipeline::GreaterOrEqual:
+        return D3D11_COMPARISON_GREATER_EQUAL;
+    case QRhiGraphicsPipeline::Always:
+        return D3D11_COMPARISON_ALWAYS;
+    default:
+        Q_UNREACHABLE();
+        return D3D11_COMPARISON_ALWAYS;
+    }
+}
+
+static QByteArray compileHlslShaderSource(const QBakedShader &shader, QString *error)
+{
+    QBakedShader::Shader hlslSource = shader.shader({ QBakedShader::HlslShader, 50 });
+    if (hlslSource.shader.isEmpty()) {
+        qWarning() << "No HLSL (shader model 5.0) code found in baked shader" << shader;
+        return QByteArray();
+    }
+
+    const char *target;
+    switch (shader.stage()) {
+    case QBakedShader::VertexStage:
+        target = "vs_5_0";
+        break;
+    case QBakedShader::TessControlStage:
+        target = "hs_5_0";
+        break;
+    case QBakedShader::TessEvaluationStage:
+        target = "ds_5_0";
+        break;
+    case QBakedShader::GeometryStage:
+        target = "gs_5_0";
+        break;
+    case QBakedShader::FragmentStage:
+        target = "ps_5_0";
+        break;
+    case QBakedShader::ComputeStage:
+        target = "cs_5_0";
+        break;
+    default:
+        Q_UNREACHABLE();
+        return QByteArray();
+    }
+
+    ID3DBlob *bytecode = nullptr;
+    ID3DBlob *errors = nullptr;
+    HRESULT hr = D3DCompile(hlslSource.shader.constData(), hlslSource.shader.size(),
+                            nullptr, nullptr, nullptr,
+                            hlslSource.entryPoint.constData(), target, 0, 0, &bytecode, &errors);
+    if (FAILED(hr) || !bytecode) {
+        qWarning("HLSL shader compilation failed: 0x%x", hr);
+        if (errors) {
+            *error = QString::fromUtf8(static_cast<const char *>(errors->GetBufferPointer()),
+                                       errors->GetBufferSize());
+            errors->Release();
+        }
+        return QByteArray();
+    }
+
+    QByteArray result;
+    result.resize(bytecode->GetBufferSize());
+    memcpy(result.data(), bytecode->GetBufferPointer(), result.size());
+    bytecode->Release();
+    return result;
 }
 
 bool QD3D11GraphicsPipeline::build()
 {
-    return false;
+    if (dsState)
+        release();
+
+    QRHI_RES_RHI(QRhiD3D11);
+
+    D3D11_DEPTH_STENCIL_DESC dsDesc;
+    memset(&dsDesc, 0, sizeof(dsDesc));
+    dsDesc.DepthEnable = depthTest;
+    dsDesc.DepthWriteMask = depthWrite ? D3D11_DEPTH_WRITE_MASK_ALL : D3D11_DEPTH_WRITE_MASK_ZERO;
+    dsDesc.DepthFunc = toD3DCompareOp(depthOp);
+    // ###
+    rhiD->dev->CreateDepthStencilState(&dsDesc, &dsState);
+
+    for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(shaderStages)) {
+        QString error;
+        QByteArray bytecode = compileHlslShaderSource(shaderStage.shader, &error);
+        if (bytecode.isEmpty())
+            qWarning("HLSL shader compilation failed: %s", qPrintable(error));
+        // ###
+    }
+
+    return true;
 }
 
 QD3D11CommandBuffer::QD3D11CommandBuffer(QRhiImplementation *rhi)

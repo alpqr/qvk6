@@ -80,10 +80,10 @@ Q_DECLARE_TYPEINFO(QRhiViewport, Q_MOVABLE_TYPE);
 struct Q_RHI_EXPORT QRhiScissor
 {
     QRhiScissor() { }
-    QRhiScissor(float x, float y, float w, float h)
+    QRhiScissor(int x, int y, int w, int h)
         : r(x, y, w, h)
     { }
-    QRectF r;
+    QRect r;
 };
 
 Q_DECLARE_TYPEINFO(QRhiScissor, Q_MOVABLE_TYPE);
@@ -147,13 +147,12 @@ struct Q_RHI_EXPORT QRhiGraphicsShaderStage
     };
 
     QRhiGraphicsShaderStage() { }
-    QRhiGraphicsShaderStage(Type type_, const QBakedShader &shader_, const char *name_ = "main")
-        : type(type_), shader(shader_), name(name_)
+    QRhiGraphicsShaderStage(Type type_, const QBakedShader &shader_)
+        : type(type_), shader(shader_)
     { }
 
     Type type;
     QBakedShader shader;
-    const char *name;
 };
 
 Q_DECLARE_TYPEINFO(QRhiGraphicsShaderStage, Q_MOVABLE_TYPE);

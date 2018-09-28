@@ -2762,12 +2762,12 @@ bool QVkGraphicsPipeline::build()
     QVarLengthArray<VkShaderModule, 4> shaders;
     QVarLengthArray<VkPipelineShaderStageCreateInfo, 4> shaderStageCreateInfos;
     for (const QRhiGraphicsShaderStage &shaderStage : shaderStages) {
-        const QByteArray spirv = shaderStage.shader.shader(QBakedShader::SpirvShader).shader;
-        if (spirv.isEmpty()) {
+        const QBakedShader::Shader spirv = shaderStage.shader.shader(QBakedShader::SpirvShader);
+        if (spirv.shader.isEmpty()) {
             qWarning() << "No SPIR-V shader code found in baked shader" << shaderStage.shader;
             return false;
         }
-        VkShaderModule shader = rhiD->createShader(spirv);
+        VkShaderModule shader = rhiD->createShader(spirv.shader);
         if (shader) {
             shaders.append(shader);
             VkPipelineShaderStageCreateInfo shaderInfo;
@@ -2775,7 +2775,7 @@ bool QVkGraphicsPipeline::build()
             shaderInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
             shaderInfo.stage = toVkShaderStage(shaderStage.type);
             shaderInfo.module = shader;
-            shaderInfo.pName = shaderStage.name;
+            shaderInfo.pName = spirv.entryPoint.constData();
             shaderStageCreateInfos.append(shaderInfo);
         }
     }

@@ -138,6 +138,8 @@ struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
     QD3D11GraphicsPipeline(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
+
+    ID3D11DepthStencilState *dsState = nullptr;
 };
 
 struct QD3D11SwapChain;
@@ -172,7 +174,7 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
                 float d0, d1;
             } viewport;
             struct {
-                float x, y, w, h;
+                int x, y, w, h;
             } scissor;
         } args;
     };

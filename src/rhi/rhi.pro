@@ -32,7 +32,7 @@ win32 {
     SOURCES += \
         qrhid3d11.cpp
 
-    LIBS += -ld3d11 -ldxgi -ldxguid
+    LIBS += -ld3d11 -ldxgi -ldxguid -ld3dcompiler
 }
 
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)

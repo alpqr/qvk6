@@ -208,7 +208,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 float d0, d1;
             } viewport;
             struct {
-                float x, y, w, h;
+                int x, y, w, h;
             } scissor;
             struct {
                 float r, g, b, a;

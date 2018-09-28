@@ -1481,6 +1481,7 @@ QGles2SwapChain::QGles2SwapChain(QRhiImplementation *rhi)
 
 void QGles2SwapChain::release()
 {
+    // nothing to do here
 }
 
 QRhiCommandBuffer *QGles2SwapChain::currentFrameCommandBuffer()
@@ -1512,9 +1513,8 @@ bool QGles2SwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImp
     surface = window;
     pixelSize = pixelSize_;
 
-    QGles2ReferenceRenderTarget *rtD = QRHI_RES(QGles2ReferenceRenderTarget, &rt);
-    rtD->d.pixelSize = pixelSize_;
-    rtD->d.attCount = depthStencil ? 2 : 1;
+    rt.d.pixelSize = pixelSize_;
+    rt.d.attCount = depthStencil ? 2 : 1;
 
     return true;
 }

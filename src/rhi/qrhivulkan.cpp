@@ -3004,6 +3004,7 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
     rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat);
 
     rtWrapper.d.rp.rp = rp;
+    rtWrapper.d.pixelSize = pixelSize_;
     rtWrapper.d.attCount = 1;
     if (depthStencil) {
         rtWrapper.d.attCount += 1;

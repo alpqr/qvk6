@@ -225,21 +225,134 @@ void QRhiD3D11::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 
 QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
 {
+    Q_ASSERT(!inFrame);
+    inFrame = true;
+
+    QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
+    swapChainD->cb.resetState();
+
+    currentFrameSlot = swapChainD->currentFrame;
+
+    swapChainD->rt.d.pixelSize = swapChainD->pixelSize;
+    swapChainD->rt.d.rp.rtv = swapChainD->rtv[currentFrameSlot];
+    swapChainD->rt.d.rp.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
+
     return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 {
+    Q_ASSERT(inFrame);
+    inFrame = false;
+
+    QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
+    executeCommandBuffer(&swapChainD->cb);
+
+    const UINT swapInterval = 1;
+    const UINT presentFlags = 0;
+    HRESULT hr = swapChainD->swapChain->Present(swapInterval, presentFlags);
+    if (FAILED(hr))
+        qWarning("Failed to present: %s", qPrintable(comErrorMessage(hr)));
+
+    swapChainD->currentFrame = (swapChainD->currentFrame + 1) % FRAMES_IN_FLIGHT;
+
+    ++finishedFrameCount;
     return QRhi::FrameOpSuccess;
 }
 
 void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
                           const QRhi::PassUpdates &updates)
 {
+    Q_ASSERT(!inPass);
+
+    inPass = true;
+
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    bool needsColorClear = true;
+    QD3D11BasicRenderTargetData *rtD = nullptr;
+    switch (rt->type()) {
+    case QRhiRenderTarget::RtRef:
+        rtD = &QRHI_RES(QD3D11ReferenceRenderTarget, rt)->d;
+        break;
+    case QRhiRenderTarget::RtTexture:
+    {
+        QD3D11TextureRenderTarget *rtTex = QRHI_RES(QD3D11TextureRenderTarget, rt);
+        rtD = &rtTex->d;
+        needsColorClear = !rtTex->flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
+    }
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
+    cbD->currentTarget = rt;
+
+    QD3D11CommandBuffer::Command fbCmd;
+    fbCmd.cmd = QD3D11CommandBuffer::Command::SetRenderTarget;
+    fbCmd.args.setRenderTarget.rt = rt;
+    cbD->commands.append(fbCmd);
+
+    Q_ASSERT(rtD->attCount == 1 || rtD->attCount == 2);
+    QD3D11CommandBuffer::Command clearCmd;
+    clearCmd.cmd = QD3D11CommandBuffer::Command::Clear;
+    clearCmd.args.clear.rt = rt;
+    clearCmd.args.clear.mask = 0;
+    if (rtD->attCount > 1)
+        clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Depth | QD3D11CommandBuffer::Command::Stencil;
+    if (needsColorClear)
+        clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Color;
+    for (int i = 0; i < rtD->attCount; ++i) {
+        if (clearValues[i].isDepthStencil) {
+            clearCmd.args.clear.d = clearValues[i].d;
+            clearCmd.args.clear.s = clearValues[i].s;
+        } else {
+            memcpy(clearCmd.args.clear.c, &clearValues[i].rgba, sizeof(float) * 4);
+        }
+    }
+    cbD->commands.append(clearCmd);
 }
 
 void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
 {
+    Q_ASSERT(inPass);
+
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    cbD->currentTarget = nullptr;
+
+    inPass = false;
+}
+
+void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
+{
+    for (const QD3D11CommandBuffer::Command &cmd : qAsConst(cb->commands)) {
+        switch (cmd.cmd) {
+        case QD3D11CommandBuffer::Command::SetRenderTarget:
+        {
+            QRhiRenderTarget *rt = cmd.args.setRenderTarget.rt;
+            const QD3D11RenderPass *rp = QRHI_RES(const QD3D11RenderPass, rt->renderPass());
+            Q_ASSERT(rp);
+            context->OMSetRenderTargets(rp->rtv ? 1 : 0, rp->rtv ? &rp->rtv : nullptr, rp->dsv);
+        }
+            break;
+        case QD3D11CommandBuffer::Command::Clear:
+        {
+            const QD3D11RenderPass *rp = QRHI_RES(const QD3D11RenderPass, cmd.args.clear.rt->renderPass());
+            if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Color)
+                context->ClearRenderTargetView(rp->rtv, cmd.args.clear.c);
+            uint ds = 0;
+            if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Depth)
+                ds |= D3D11_CLEAR_DEPTH;
+            if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Stencil)
+                ds |= D3D11_CLEAR_STENCIL;
+            if (ds)
+                context->ClearDepthStencilView(rp->dsv, ds, cmd.args.clear.d, cmd.args.clear.s);
+        }
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 QD3D11Buffer::QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
@@ -585,6 +698,9 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceIm
             return false;
         }
     }
+
+    currentFrame = 0;
+    ds = depthStencil ? QRHI_RES(QD3D11RenderBuffer, depthStencil) : nullptr;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
     rtD->d.pixelSize = pixelSize_;

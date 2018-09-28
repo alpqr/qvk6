@@ -87,6 +87,9 @@ struct QD3D11RenderPass : public QRhiRenderPass
 {
     QD3D11RenderPass(QRhiImplementation *rhi);
     void release() override;
+
+    ID3D11RenderTargetView *rtv = nullptr;
+    ID3D11DepthStencilView *dsv = nullptr;
 };
 
 struct QD3D11BasicRenderTargetData
@@ -137,16 +140,50 @@ struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
     bool build() override;
 };
 
+struct QD3D11SwapChain;
+
 struct QD3D11CommandBuffer : public QRhiCommandBuffer
 {
     QD3D11CommandBuffer(QRhiImplementation *rhi);
     void release() override;
 
+    struct Command {
+        enum Cmd {
+            SetRenderTarget,
+            Clear,
+            Viewport,
+            Scissor
+        };
+        enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
+        Cmd cmd;
+        union {
+            struct {
+                QRhiRenderTarget *rt;
+            } setRenderTarget;
+            struct {
+                QRhiRenderTarget *rt;
+                int mask;
+                float c[4];
+                float d;
+                quint32 s;
+            } clear;
+            struct {
+                float x, y, w, h;
+                float d0, d1;
+            } viewport;
+            struct {
+                float x, y, w, h;
+            } scissor;
+        } args;
+    };
+
+    QVector<Command> commands;
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
 
     void resetState() {
+        commands.clear();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
@@ -176,6 +213,8 @@ struct QD3D11SwapChain : public QRhiSwapChain
     static const int BUFFER_COUNT = 2;
     ID3D11Texture2D *tex[BUFFER_COUNT];
     ID3D11RenderTargetView *rtv[BUFFER_COUNT];
+    int currentFrame = 0;
+    QD3D11RenderBuffer *ds = nullptr;
 };
 
 class QRhiD3D11 : public QRhiImplementation
@@ -247,12 +286,19 @@ public:
 
     void create();
     void destroy();
+    void executeCommandBuffer(QD3D11CommandBuffer *cb);
 
     bool debugLayer = false;
     ID3D11Device *dev = nullptr;
     ID3D11DeviceContext *context = nullptr;
     D3D_FEATURE_LEVEL featureLevel;
     IDXGIFactory2 *dxgiFactory;
+
+    static const int FRAMES_IN_FLIGHT = QD3D11SwapChain::BUFFER_COUNT;
+    int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1
+    bool inFrame = false;
+    int finishedFrameCount = 0;
+    bool inPass = false;
 };
 
 QT_END_NAMESPACE

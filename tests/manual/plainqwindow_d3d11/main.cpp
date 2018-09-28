@@ -48,6 +48,7 @@ void D3D11Window::init()
 
     m_r = QRhi::create(QRhi::D3D11, &params);
 
+    setOnScreenOnly(true); // ###
     ExampleWindow::init();
 }
 

@@ -46,7 +46,9 @@ struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
 {
     bool enableDebugLayer = false;
 
-    // device and context are optional (but either both or none must be valid, ownership is not taken)
+    bool importExistingDevice = false;
+    // both must be given when importExistingDevice is true. ownership not taken.
+    // leave them unset otherwise.
     ID3D11Device *dev = nullptr;
     ID3D11DeviceContext *context = nullptr;
 };

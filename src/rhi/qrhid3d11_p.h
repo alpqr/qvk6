@@ -326,9 +326,9 @@ public:
     void executeCommandBuffer(QD3D11CommandBuffer *cb);
 
     bool debugLayer = false;
+    bool importedDevice = false;
     ID3D11Device *dev = nullptr;
     ID3D11DeviceContext *context = nullptr;
-    bool ownsDeviceAndContext = false;
     D3D_FEATURE_LEVEL featureLevel;
     IDXGIFactory2 *dxgiFactory;
 

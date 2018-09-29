@@ -393,11 +393,11 @@ public:
     QRhi *q;
     QVulkanInstance *inst = nullptr;
     QWindow *maybeWindow = nullptr;
+    bool importedDevPoolQueue = false;
     VkPhysicalDevice physDev = VK_NULL_HANDLE;
     VkDevice dev = VK_NULL_HANDLE;
     VkCommandPool cmdPool = VK_NULL_HANDLE;
     VkQueue gfxQueue = VK_NULL_HANDLE;
-    bool ownsDevPoolQueue = false;
     QVkAllocator allocator;
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;

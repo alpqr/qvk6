@@ -158,14 +158,14 @@ QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
 {
     QRhiVulkanInitParams *vkparams = static_cast<QRhiVulkanInitParams *>(params);
     inst = vkparams->inst;
-    maybeWindow = vkparams->window; // may be null
-    if (vkparams->physDev && vkparams->dev && vkparams->cmdPool && vkparams->gfxQueue) {
+    importedDevPoolQueue = vkparams->importExistingDevice;
+    if (importedDevPoolQueue) {
         physDev = vkparams->physDev;
         dev = vkparams->dev;
         cmdPool = vkparams->cmdPool;
         gfxQueue = vkparams->gfxQueue;
-        ownsDevPoolQueue = false;
     }
+    maybeWindow = vkparams->window; // may be null
 
     create();
 }
@@ -183,7 +183,7 @@ void QRhiVulkan::create()
 
     f = inst->functions();
 
-    if (!physDev && !dev && !cmdPool && !gfxQueue) {
+    if (!importedDevPoolQueue) {
         uint32_t devCount = 0;
         f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, nullptr);
         qDebug("%d physical devices", devCount);
@@ -267,8 +267,6 @@ void QRhiVulkan::create()
         err = df->vkCreateCommandPool(dev, &poolInfo, nullptr, &cmdPool);
         if (err != VK_SUCCESS)
             qFatal("Failed to create command pool: %d", err);
-
-        ownsDevPoolQueue = true;
     }
 
     df = inst->deviceFunctions(dev);
@@ -341,7 +339,7 @@ void QRhiVulkan::destroy()
 
     vmaDestroyAllocator(toVmaAllocator(allocator));
 
-    if (ownsDevPoolQueue) {
+    if (!importedDevPoolQueue) {
         if (cmdPool) {
             df->vkDestroyCommandPool(dev, cmdPool, nullptr);
             cmdPool = VK_NULL_HANDLE;

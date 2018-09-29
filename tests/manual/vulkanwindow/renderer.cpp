@@ -64,6 +64,7 @@ void Renderer::initResources()
 {
     QRhiVulkanInitParams params;
     params.inst = m_window->vulkanInstance();
+    params.importExistingDevice = true;
     params.physDev = m_window->physicalDevice();
     params.dev = m_window->device();
     params.cmdPool = m_window->graphicsCommandPool();

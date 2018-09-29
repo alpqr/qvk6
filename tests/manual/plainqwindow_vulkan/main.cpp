@@ -45,6 +45,7 @@ void VWindow::init()
 {
     QRhiVulkanInitParams params;
     params.inst = vulkanInstance();
+    params.importExistingDevice = false;
     params.window = this;
     m_r = QRhi::create(QRhi::Vulkan, &params);
 

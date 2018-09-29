@@ -57,10 +57,10 @@ QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
 {
     QRhiD3D11InitParams *d3dparams = static_cast<QRhiD3D11InitParams *>(params);
     debugLayer = d3dparams->enableDebugLayer;
-    if (d3dparams->dev && d3dparams->context) {
+    importedDevice = d3dparams->importExistingDevice;
+    if (importedDevice) {
         dev = d3dparams->dev;
         context = d3dparams->context;
-        ownsDeviceAndContext = false;
     }
 
     create();
@@ -90,7 +90,7 @@ void QRhiD3D11::create()
     if (debugLayer)
         flags |= D3D11_CREATE_DEVICE_DEBUG;
 
-    if (!dev && !context) {
+    if (!importedDevice) {
         HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
                                        nullptr, 0, D3D11_SDK_VERSION,
                                        &dev, &featureLevel, &context);
@@ -98,10 +98,10 @@ void QRhiD3D11::create()
             qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
             return;
         }
-        ownsDeviceAndContext = true;
+    } else {
+        Q_ASSERT(dev && context);
+        featureLevel = dev->GetFeatureLevel();
     }
-
-    Q_ASSERT(dev && context);
 
     HRESULT hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgiFactory));
     if (FAILED(hr)) {
@@ -112,7 +112,7 @@ void QRhiD3D11::create()
 
 void QRhiD3D11::destroy()
 {
-    if (ownsDeviceAndContext) {
+    if (!importedDevice) {
         if (context)
             context->Release();
         context = nullptr;

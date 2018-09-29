@@ -55,6 +55,8 @@ struct QD3D11Buffer : public QRhiBuffer
     QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
     void release() override;
     bool build() override;
+
+    ID3D11Buffer *buffer = nullptr;
 };
 
 struct QD3D11RenderBuffer : public QRhiRenderBuffer
@@ -142,6 +144,9 @@ struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
     ID3D11BlendState *blendState = nullptr;
     ID3D11VertexShader *vs = nullptr;
     ID3D11PixelShader *fs = nullptr;
+    ID3D11InputLayout *inputLayout = nullptr;
+    D3D11_PRIMITIVE_TOPOLOGY d3dTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    ID3D11RasterizerState *rastState = nullptr;
     uint generation = 0;
 };
 
@@ -158,6 +163,8 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             Clear,
             Viewport,
             Scissor,
+            BindVertexBuffers,
+            BindIndexBuffer,
             BindGraphicsPipeline,
             StencilRef,
             BlendConstants,
@@ -184,6 +191,18 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             struct {
                 int x, y, w, h;
             } scissor;
+            struct {
+                int startSlot;
+                int slotCount;
+                ID3D11Buffer *buffers[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+                UINT offsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+                UINT strides[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+            } bindVertexBuffers;
+            struct {
+                ID3D11Buffer *buffer;
+                quint32 offset;
+                DXGI_FORMAT format;
+            } bindIndexBuffer;
             struct {
                 QD3D11GraphicsPipeline *ps;
                 QD3D11ShaderResourceBindings *srb;
@@ -323,6 +342,7 @@ public:
 
     void create();
     void destroy();
+    void setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cb);
 
     bool debugLayer = false;

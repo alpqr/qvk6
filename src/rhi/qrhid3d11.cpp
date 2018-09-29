@@ -225,6 +225,34 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
 void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
                                QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
 {
+    Q_ASSERT(inPass);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::BindVertexBuffers;
+    cmd.args.bindVertexBuffers.startSlot = startBinding;
+    cmd.args.bindVertexBuffers.slotCount = bindings.count();
+    for (int i = 0, ie = bindings.count(); i != ie; ++i) {
+        QRhiBuffer *buf = bindings[i].first;
+        quint32 ofs = bindings[i].second;
+        QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, buf);
+        Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
+        cmd.args.bindVertexBuffers.buffers[i] = bufD->buffer;
+        cmd.args.bindVertexBuffers.offsets[i] = ofs;
+        cmd.args.bindVertexBuffers.strides[i] = cbD->currentPipeline->vertexInputLayout.bindings[i].stride;
+    }
+    cbD->commands.append(cmd);
+
+    if (indexBuf) {
+        QD3D11Buffer *ibufD = QRHI_RES(QD3D11Buffer, indexBuf);
+        Q_ASSERT(indexBuf->usage.testFlag(QRhiBuffer::IndexBuffer));
+        QD3D11CommandBuffer::Command cmd;
+        cmd.cmd = QD3D11CommandBuffer::Command::BindIndexBuffer;
+        cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
+        cmd.args.bindIndexBuffer.offset = indexOffset;
+        cmd.args.bindIndexBuffer.format = indexFormat == QRhi::IndexUInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+        cbD->commands.append(cmd);
+    }
 }
 
 void QRhiD3D11::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
@@ -395,6 +423,37 @@ void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
     inPass = false;
 }
 
+void QRhiD3D11::setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD)
+{
+    QVarLengthArray<ID3D11Buffer *, 4> vsubufs;
+    QVarLengthArray<ID3D11Buffer *, 4> fsubufs;
+    // ### this assumes srb.bindings is sorted based on the binding index (and that there are no gaps)
+    for (int i = 0, ie = srbD->bindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBindings::Binding &b(srbD->bindings[i]);
+        switch (b.type) {
+        case QRhiShaderResourceBindings::Binding::UniformBuffer:
+        {
+            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
+            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::VertexStage))
+                vsubufs.append(bufD->buffer);
+            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::FragmentStage))
+                fsubufs.append(bufD->buffer);
+        }
+            break;
+        case QRhiShaderResourceBindings::Binding::SampledTexture:
+            // ###
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+    if (!vsubufs.isEmpty())
+        context->VSSetConstantBuffers(0, vsubufs.count(), vsubufs.constData());
+    if (!fsubufs.isEmpty())
+        context->PSSetConstantBuffers(0, fsubufs.count(), fsubufs.constData());
+}
+
 void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
 {
     quint32 stencilRef = 0;
@@ -446,30 +505,41 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
             context->RSSetScissorRects(1, &r);
         }
             break;
+        case QD3D11CommandBuffer::Command::BindVertexBuffers:
+            context->IASetVertexBuffers(cmd.args.bindVertexBuffers.startSlot,
+                                        cmd.args.bindVertexBuffers.slotCount,
+                                        cmd.args.bindVertexBuffers.buffers,
+                                        cmd.args.bindVertexBuffers.offsets,
+                                        cmd.args.bindVertexBuffers.strides);
+            break;
+        case QD3D11CommandBuffer::Command::BindIndexBuffer:
+            context->IASetIndexBuffer(cmd.args.bindIndexBuffer.buffer,
+                                      cmd.args.bindIndexBuffer.format,
+                                      cmd.args.bindIndexBuffer.format);
+            break;
         case QD3D11CommandBuffer::Command::BindGraphicsPipeline:
         {
             QD3D11GraphicsPipeline *psD = cmd.args.bindGraphicsPipeline.ps;
             QD3D11ShaderResourceBindings *srbD = cmd.args.bindGraphicsPipeline.srb;
             context->VSSetShader(psD->vs, nullptr, 0);
             context->PSSetShader(psD->fs, nullptr, 0);
+            context->IASetPrimitiveTopology(psD->d3dTopology);
+            context->IASetInputLayout(psD->inputLayout);
             context->OMSetDepthStencilState(psD->dsState, stencilRef);
             context->OMSetBlendState(psD->blendState, blendConstants, 0xffffffff);
+            context->RSSetState(psD->rastState);
+            setUniformBuffers(psD, srbD);
         }
             break;
         case QD3D11CommandBuffer::Command::StencilRef:
-        {
             stencilRef = cmd.args.stencilRef.ref;
             context->OMSetDepthStencilState(cmd.args.stencilRef.ps->dsState, stencilRef);
-        }
             break;
         case QD3D11CommandBuffer::Command::BlendConstants:
-        {
             memcpy(blendConstants, cmd.args.blendConstants.c, 4 * sizeof(float));
             context->OMSetBlendState(cmd.args.blendConstants.ps->blendState, blendConstants, 0xffffffff);
-        }
             break;
         case QD3D11CommandBuffer::Command::Draw:
-        {
             if (cmd.args.draw.ps) {
                 if (cmd.args.draw.instanceCount == 1)
                     context->Draw(cmd.args.draw.vertexCount, cmd.args.draw.firstVertex);
@@ -479,10 +549,8 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
             } else {
                 qWarning("No graphics pipeline active for draw; ignored");
             }
-        }
             break;
         case QD3D11CommandBuffer::Command::DrawIndexed:
-        {
             if (cmd.args.drawIndexed.ps) {
                 if (cmd.args.drawIndexed.instanceCount == 1)
                     context->DrawIndexed(cmd.args.drawIndexed.indexCount, cmd.args.drawIndexed.firstIndex,
@@ -494,7 +562,6 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
             } else {
                 qWarning("No graphics pipeline active for drawIndexed; ignored");
             }
-        }
             break;
         default:
             break;
@@ -513,7 +580,7 @@ void QD3D11Buffer::release()
 
 bool QD3D11Buffer::build()
 {
-    return false;
+    return true;
 }
 
 QD3D11RenderBuffer::QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
@@ -687,11 +754,12 @@ QD3D11ShaderResourceBindings::QD3D11ShaderResourceBindings(QRhiImplementation *r
 
 void QD3D11ShaderResourceBindings::release()
 {
+    // nothing to do here
 }
 
 bool QD3D11ShaderResourceBindings::build()
 {
-    return false;
+    return true;
 }
 
 QD3D11GraphicsPipeline::QD3D11GraphicsPipeline(QRhiImplementation *rhi)
@@ -714,6 +782,16 @@ void QD3D11GraphicsPipeline::release()
         blendState = nullptr;
     }
 
+    if (inputLayout) {
+        inputLayout->Release();
+        inputLayout = nullptr;
+    }
+
+    if (rastState) {
+        rastState->Release();
+        rastState = nullptr;
+    }
+
     if (vs) {
         vs->Release();
         vs = nullptr;
@@ -723,6 +801,18 @@ void QD3D11GraphicsPipeline::release()
         fs->Release();
         fs = nullptr;
     }
+}
+
+static inline D3D11_CULL_MODE toD3DCullMode(QRhiGraphicsPipeline::CullMode mode)
+{
+    if (mode.testFlag(QRhiGraphicsPipeline::Front)) {
+        if (mode.testFlag(QRhiGraphicsPipeline::Back)) {
+            qWarning("Culling both front and back is not supported by Direct 3D");
+            return D3D11_CULL_BACK;
+        }
+        return D3D11_CULL_FRONT;
+    }
+    return D3D11_CULL_BACK;
 }
 
 static inline D3D11_COMPARISON_FUNC toD3DCompareOp(QRhiGraphicsPipeline::CompareOp op)
@@ -772,6 +862,131 @@ static inline D3D11_STENCIL_OP toD3DStencilOp(QRhiGraphicsPipeline::StencilOp op
     default:
         Q_UNREACHABLE();
         return D3D11_STENCIL_OP_KEEP;
+    }
+}
+
+static inline DXGI_FORMAT toD3DAttributeFormat(QRhiVertexInputLayout::Attribute::Format format)
+{
+    switch (format) {
+    case QRhiVertexInputLayout::Attribute::Float4:
+        return DXGI_FORMAT_R32G32B32A32_FLOAT;
+    case QRhiVertexInputLayout::Attribute::Float3:
+        return DXGI_FORMAT_R32G32B32_FLOAT;
+    case QRhiVertexInputLayout::Attribute::Float2:
+        return DXGI_FORMAT_R32G32_FLOAT;
+    case QRhiVertexInputLayout::Attribute::Float:
+        return DXGI_FORMAT_R32_FLOAT;
+    case QRhiVertexInputLayout::Attribute::UNormByte4:
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+    case QRhiVertexInputLayout::Attribute::UNormByte2:
+        return DXGI_FORMAT_R8G8_UNORM;
+    case QRhiVertexInputLayout::Attribute::UNormByte:
+        return DXGI_FORMAT_R8_UNORM;
+    default:
+        Q_UNREACHABLE();
+        return DXGI_FORMAT_R32G32B32A32_FLOAT;
+    }
+}
+
+static inline D3D11_PRIMITIVE_TOPOLOGY toD3DTopology(QRhiGraphicsPipeline::Topology t)
+{
+    switch (t) {
+    case QRhiGraphicsPipeline::Triangles:
+        return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    case QRhiGraphicsPipeline::TriangleStrip:
+        return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+    case QRhiGraphicsPipeline::TriangleFan:
+        qWarning("Triangle fans are not supported by Direct 3D");
+        return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
+    case QRhiGraphicsPipeline::Lines:
+        return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
+    case QRhiGraphicsPipeline::LineStrip:
+        return D3D11_PRIMITIVE_TOPOLOGY_LINESTRIP;
+    case QRhiGraphicsPipeline::Points:
+        return D3D11_PRIMITIVE_TOPOLOGY_POINTLIST;
+    default:
+        Q_UNREACHABLE();
+        return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+    }
+}
+
+static inline uint toD3DColorWriteMask(QRhiGraphicsPipeline::ColorMask c)
+{
+    uint f = 0;
+    if (c.testFlag(QRhiGraphicsPipeline::R))
+        f |= D3D11_COLOR_WRITE_ENABLE_RED;
+    if (c.testFlag(QRhiGraphicsPipeline::G))
+        f |= D3D11_COLOR_WRITE_ENABLE_GREEN;
+    if (c.testFlag(QRhiGraphicsPipeline::B))
+        f |= D3D11_COLOR_WRITE_ENABLE_BLUE;
+    if (c.testFlag(QRhiGraphicsPipeline::A))
+        f |= D3D11_COLOR_WRITE_ENABLE_ALPHA;
+    return f;
+}
+
+static inline D3D11_BLEND toD3DBlendFactor(QRhiGraphicsPipeline::BlendFactor f)
+{
+    switch (f) {
+    case QRhiGraphicsPipeline::Zero:
+        return D3D11_BLEND_ZERO;
+    case QRhiGraphicsPipeline::One:
+        return D3D11_BLEND_ONE;
+    case QRhiGraphicsPipeline::SrcColor:
+        return D3D11_BLEND_SRC_COLOR;
+    case QRhiGraphicsPipeline::OneMinusSrcColor:
+        return D3D11_BLEND_INV_SRC_COLOR;
+    case QRhiGraphicsPipeline::DstColor:
+        return D3D11_BLEND_DEST_COLOR;
+    case QRhiGraphicsPipeline::OneMinusDstColor:
+        return D3D11_BLEND_INV_DEST_COLOR;
+    case QRhiGraphicsPipeline::SrcAlpha:
+        return D3D11_BLEND_SRC_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusSrcAlpha:
+        return D3D11_BLEND_INV_SRC_ALPHA;
+    case QRhiGraphicsPipeline::DstAlpha:
+        return D3D11_BLEND_DEST_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusDstAlpha:
+        return D3D11_BLEND_INV_DEST_ALPHA;
+    case QRhiGraphicsPipeline::ConstantColor:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::ConstantAlpha:
+        return D3D11_BLEND_BLEND_FACTOR;
+    case QRhiGraphicsPipeline::OneMinusConstantColor:
+        Q_FALLTHROUGH();
+    case QRhiGraphicsPipeline::OneMinusConstantAlpha:
+        return D3D11_BLEND_INV_BLEND_FACTOR;
+    case QRhiGraphicsPipeline::SrcAlphaSaturate:
+        return D3D11_BLEND_SRC_ALPHA_SAT;
+    case QRhiGraphicsPipeline::Src1Color:
+        return D3D11_BLEND_SRC1_COLOR;
+    case QRhiGraphicsPipeline::OneMinusSrc1Color:
+        return D3D11_BLEND_INV_SRC1_COLOR;
+    case QRhiGraphicsPipeline::Src1Alpha:
+        return D3D11_BLEND_SRC1_ALPHA;
+    case QRhiGraphicsPipeline::OneMinusSrc1Alpha:
+        return D3D11_BLEND_INV_SRC1_ALPHA;
+    default:
+        Q_UNREACHABLE();
+        return D3D11_BLEND_ZERO;
+    }
+}
+
+static inline D3D11_BLEND_OP toD3DBlendOp(QRhiGraphicsPipeline::BlendOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Add:
+        return D3D11_BLEND_OP_ADD;
+    case QRhiGraphicsPipeline::Subtract:
+        return D3D11_BLEND_OP_SUBTRACT;
+    case QRhiGraphicsPipeline::ReverseSubtract:
+        return D3D11_BLEND_OP_REV_SUBTRACT;
+    case QRhiGraphicsPipeline::Min:
+        return D3D11_BLEND_OP_MIN;
+    case QRhiGraphicsPipeline::Max:
+        return D3D11_BLEND_OP_MAX;
+    default:
+        Q_UNREACHABLE();
+        return D3D11_BLEND_OP_ADD;
     }
 }
 
@@ -837,6 +1052,19 @@ bool QD3D11GraphicsPipeline::build()
 
     QRHI_RES_RHI(QRhiD3D11);
 
+    D3D11_RASTERIZER_DESC rastDesc;
+    memset(&rastDesc, 0, sizeof(rastDesc));
+    rastDesc.FillMode = D3D11_FILL_SOLID;
+    rastDesc.CullMode = toD3DCullMode(cullMode);
+    rastDesc.FrontCounterClockwise = frontFace == CCW;
+    rastDesc.ScissorEnable = true; // ###
+    //rastDesc.MultisampleEnable;
+    HRESULT hr = rhiD->dev->CreateRasterizerState(&rastDesc, &rastState);
+    if (FAILED(hr)) {
+        qWarning("Failed to create rasterizer state: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
     D3D11_DEPTH_STENCIL_DESC dsDesc;
     memset(&dsDesc, 0, sizeof(dsDesc));
     dsDesc.DepthEnable = depthTest;
@@ -855,7 +1083,7 @@ bool QD3D11GraphicsPipeline::build()
         dsDesc.BackFace.StencilPassOp = toD3DStencilOp(stencilBack.passOp);
         dsDesc.BackFace.StencilFunc = toD3DCompareOp(stencilBack.compareOp);
     }
-    HRESULT hr = rhiD->dev->CreateDepthStencilState(&dsDesc, &dsState);
+    hr = rhiD->dev->CreateDepthStencilState(&dsDesc, &dsState);
     if (FAILED(hr)) {
         qWarning("Failed to create depth-stencil state: %s", qPrintable(comErrorMessage(hr)));
         return false;
@@ -863,13 +1091,28 @@ bool QD3D11GraphicsPipeline::build()
 
     D3D11_BLEND_DESC blendDesc;
     memset(&blendDesc, 0, sizeof(blendDesc));
-    // ###
+    blendDesc.IndependentBlendEnable = targetBlends.count() > 1;
+    for (int i = 0, ie = targetBlends.count(); i != ie; ++i) {
+        const QRhiGraphicsPipeline::TargetBlend &b(targetBlends[i]);
+        D3D11_RENDER_TARGET_BLEND_DESC blend;
+        memset(&blend, 0, sizeof(blend));
+        blend.BlendEnable = b.enable;
+        blend.SrcBlend = toD3DBlendFactor(b.srcColor);
+        blend.DestBlend = toD3DBlendFactor(b.dstColor);
+        blend.BlendOp = toD3DBlendOp(b.opColor);
+        blend.SrcBlendAlpha = toD3DBlendFactor(b.srcAlpha);
+        blend.DestBlendAlpha = toD3DBlendFactor(b.dstAlpha);
+        blend.BlendOpAlpha = toD3DBlendOp(b.opAlpha);
+        blend.RenderTargetWriteMask = toD3DColorWriteMask(b.colorWrite);
+        blendDesc.RenderTarget[i] = blend;
+    }
     hr = rhiD->dev->CreateBlendState(&blendDesc, &blendState);
     if (FAILED(hr)) {
         qWarning("Failed to create blend state: %s", qPrintable(comErrorMessage(hr)));
         return false;
     }
 
+    QByteArray vsByteCode;
     for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(shaderStages)) {
         QString error;
         QByteArray bytecode = compileHlslShaderSource(shaderStage.shader, &error);
@@ -884,6 +1127,7 @@ bool QD3D11GraphicsPipeline::build()
                 qWarning("Failed to create vertex shader: %s", qPrintable(comErrorMessage(hr)));
                 return false;
             }
+            vsByteCode = bytecode;
             break;
         case QRhiGraphicsShaderStage::Fragment:
             hr = rhiD->dev->CreatePixelShader(bytecode.constData(), bytecode.size(), nullptr, &fs);
@@ -894,6 +1138,31 @@ bool QD3D11GraphicsPipeline::build()
             break;
         default:
             break;
+        }
+    }
+
+    d3dTopology = toD3DTopology(topology);
+
+    if (!vsByteCode.isEmpty()) {
+        QVarLengthArray<D3D11_INPUT_ELEMENT_DESC, 4> inputDescs;
+        for (const QRhiVertexInputLayout::Attribute &attribute : vertexInputLayout.attributes) {
+            D3D11_INPUT_ELEMENT_DESC desc;
+            memset(&desc, 0, sizeof(desc));
+            // the output from SPIRV-Cross uses TEXCOORD<location> as the semantic
+            desc.SemanticName = "TEXCOORD";
+            desc.SemanticIndex = attribute.location;
+            desc.Format = toD3DAttributeFormat(attribute.format);
+            desc.InputSlot = attribute.binding;
+            desc.AlignedByteOffset = attribute.offset;
+            const QRhiVertexInputLayout::Binding &binding(vertexInputLayout.bindings[attribute.binding]);
+            desc.InputSlotClass = binding.classification == QRhiVertexInputLayout::Binding::PerInstance
+                    ? D3D11_INPUT_PER_INSTANCE_DATA : D3D11_INPUT_PER_VERTEX_DATA;
+            inputDescs.append(desc);
+        }
+        hr = rhiD->dev->CreateInputLayout(inputDescs.constData(), inputDescs.count(), vsByteCode, vsByteCode.size(), &inputLayout);
+        if (FAILED(hr)) {
+            qWarning("Failed to create input layout: %s", qPrintable(comErrorMessage(hr)));
+            return false;
         }
     }
 

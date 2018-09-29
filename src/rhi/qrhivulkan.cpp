@@ -2950,7 +2950,6 @@ bool QVkGraphicsPipeline::build()
     VkPipelineRasterizationStateCreateInfo rastInfo;
     memset(&rastInfo, 0, sizeof(rastInfo));
     rastInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rastInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rastInfo.cullMode = toVkCullMode(cullMode);
     rastInfo.frontFace = toVkFrontFace(frontFace);
     rastInfo.lineWidth = 1.0f;

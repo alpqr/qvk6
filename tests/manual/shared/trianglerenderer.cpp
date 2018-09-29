@@ -88,8 +88,8 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
         { 7 * sizeof(float) }
     };
     inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0, "POSITION" },
-        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float), "COLOR" }
+        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
     };
 
     m_ps->vertexInputLayout = inputLayout;

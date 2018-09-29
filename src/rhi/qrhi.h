@@ -115,20 +115,18 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
             UNormByte
         };
         Attribute() { }
-        Attribute(int binding_, int location_, Format format_, quint32 offset_,
-                  const char *semanticName_, int semanticIndex_ = 0)
-            : binding(binding_), location(location_), format(format_), offset(offset_),
-              semanticName(semanticName_), semanticIndex(semanticIndex_)
+        Attribute(int binding_, int location_, Format format_, quint32 offset_)
+            : binding(binding_), location(location_), format(format_), offset(offset_)
         { }
-        int binding;
+        int binding; // slot
+        // With HLSL we assume the vertex shader uses TEXCOORD<location> as the
+        // semantic for each input. Hence no separate semantic name and index.
         int location;
         Format format;
         quint32 offset;
-        const char *semanticName; // POSITION, COLOR, TEXCOORD, ...
-        int semanticIndex; // matters for TEXCOORD
     };
 
-    QVector<Binding> bindings; // aka slot (d3d12)
+    QVector<Binding> bindings;
     QVector<Attribute> attributes;
 };
 

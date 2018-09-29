@@ -1,4 +1,9 @@
-d3d11 backend
+drop offset and size from srb::Binding::uniformBuffer?
+drop triangle fan?
+drop front-and-back cull?
+scissor-enable flag? (esp d3d)
+gl and d3d setGraphicsPipeline should check srb->generation
+hlsl version to qsb (qtshaderstack17)
 more what-if-resource-rebuilt cases
 gles2: more ubuf types
 gles2: reduce state, reduce texparam
@@ -19,6 +24,7 @@ gles2: ubuf structs, arrays
 gles2: target QOpenGLWindow ...
 
 +++ done
+start d3d11 backend
 what if ps is rebuilt
 move correctionmatrix to backend
 remove some inlines in public api

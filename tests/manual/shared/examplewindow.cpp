@@ -80,10 +80,12 @@ void ExampleWindow::init()
     m_triRenderer.initResources();
     m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
 
-    m_cubeRenderer.setRhi(m_r);
-    m_cubeRenderer.setSampleCount(m_sampleCount);
-    m_cubeRenderer.initResources();
-    m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
+    if (!m_triangleOnly) {
+        m_cubeRenderer.setRhi(m_r);
+        m_cubeRenderer.setSampleCount(m_sampleCount);
+        m_cubeRenderer.initResources();
+        m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
+    }
 
     if (!m_onScreenOnly) {
         m_liveTexCubeRenderer.setRhi(m_r);
@@ -98,8 +100,10 @@ void ExampleWindow::releaseResources()
     m_triRenderer.releaseOutputDependentResources();
     m_triRenderer.releaseResources();
 
-    m_cubeRenderer.releaseOutputDependentResources();
-    m_cubeRenderer.releaseResources();
+    if (!m_triangleOnly) {
+        m_cubeRenderer.releaseOutputDependentResources();
+        m_cubeRenderer.releaseResources();
+    }
 
     if (!m_onScreenOnly) {
         m_liveTexCubeRenderer.releaseOutputDependentResources();
@@ -174,7 +178,8 @@ void ExampleWindow::render()
     if (m_swapChainChanged) {
         m_swapChainChanged = false;
         m_triRenderer.releaseOutputDependentResources();
-        m_cubeRenderer.releaseOutputDependentResources();
+        if (!m_triangleOnly)
+            m_cubeRenderer.releaseOutputDependentResources();
         if (!m_onScreenOnly)
             m_liveTexCubeRenderer.releaseOutputDependentResources();
     }
@@ -182,7 +187,8 @@ void ExampleWindow::render()
     if (!m_triRenderer.isPipelineInitialized()) {
         const QRhiRenderPass *rp = m_sc->defaultRenderPass();
         m_triRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
-        m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        if (!m_triangleOnly)
+            m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
         if (!m_onScreenOnly)
             m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
     }
@@ -193,7 +199,8 @@ void ExampleWindow::render()
 
     QRhi::PassUpdates u;
     u += m_triRenderer.update();
-    u += m_cubeRenderer.update();
+    if (!m_triangleOnly)
+        u += m_cubeRenderer.update();
     if (!m_onScreenOnly)
         u += m_liveTexCubeRenderer.update();
 
@@ -205,7 +212,8 @@ void ExampleWindow::render()
     };
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
     m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
-    m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    if (!m_triangleOnly)
+        m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
     m_r->endPass(cb);

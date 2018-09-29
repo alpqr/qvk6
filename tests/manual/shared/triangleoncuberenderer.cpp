@@ -119,8 +119,8 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
         { 2 * sizeof(float) }
     };
     inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0, "POSITION" },
-        { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0, "TEXCOORD" }
+        { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
+        { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
     };
 
     m_ps->vertexInputLayout = inputLayout;

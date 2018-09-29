@@ -46,6 +46,7 @@ public:
 
     void setSampleCount(int sampleCount) { m_sampleCount = sampleCount; }
     void setOnScreenOnly(bool v) { m_onScreenOnly = v; }
+    void setTriangleOnly(bool v) { m_triangleOnly = v; }
 
 protected:
     void render();
@@ -66,6 +67,7 @@ protected:
 
     int m_sampleCount = 1;
     bool m_onScreenOnly = false;
+    bool m_triangleOnly = false;
 };
 
 #endif

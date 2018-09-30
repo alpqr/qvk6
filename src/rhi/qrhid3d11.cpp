@@ -386,8 +386,17 @@ void QRhiD3D11::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
         QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
         Q_ASSERT(u.buf->isStatic());
         Q_ASSERT(u.data.size() == u.buf->size);
-        // ### box cause size may not be multiple of 16?
-        context->UpdateSubresource(bufD->buffer, 0, nullptr, u.data.constData(), 0, 0);
+        if (!(u.data.size() & 0xF)) {
+            context->UpdateSubresource(bufD->buffer, 0, nullptr, u.data.constData(), 0, 0);
+        } else {
+            // Specify the region since the ID3D11Buffer's size is rounded up to be
+            // a multiple of 16 while the data we have has the original size.
+            D3D11_BOX box;
+            box.left = box.top = box.front = 0;
+            box.back = box.bottom = 1;
+            box.right = u.data.size() - 1;
+            context->UpdateSubresource(bufD->buffer, 0, &box, u.data.constData(), 0, 0);
+        }
     }
 
     for (const QRhi::TextureUpload &u : updates.textureUploads) {

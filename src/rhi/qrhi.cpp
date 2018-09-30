@@ -129,15 +129,29 @@ QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
 }
 
 QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::uniformBuffer(
-        int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_)
+        int binding_, StageFlags stage_, QRhiBuffer *buf_)
 {
     Binding b;
     b.binding = binding_;
     b.stage = stage_;
     b.type = UniformBuffer;
     b.ubuf.buf = buf_;
+    b.ubuf.offset = 0;
+    b.ubuf.maybeSize = 0; // entire buffer
+    return b;
+}
+
+QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::uniformBuffer(
+        int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_)
+{
+    Q_ASSERT(size_ > 0);
+    Binding b;
+    b.binding = binding_;
+    b.stage = stage_;
+    b.type = UniformBuffer;
+    b.ubuf.buf = buf_;
     b.ubuf.offset = offset_;
-    b.ubuf.size = size_;
+    b.ubuf.maybeSize = size_;
     return b;
 }
 

@@ -185,7 +185,7 @@ public:
 
     Type type;
     UsageFlags usage;
-    int size;
+    int size; // no restrictions here, up to the backend to round up if needed
 
     bool isStatic() const { return type == StaticType; }
 
@@ -360,7 +360,12 @@ public:
         };
         Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
-        static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_ = 0, int size_ = 0);
+        static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_);
+
+        // Bind a region only - may not be supported by all backends. Up to the
+        // user to ensure offset is aligned to ubufAlignment.
+        static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_);
+
         static Binding sampledTexture(int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_);
 
         int binding;
@@ -369,7 +374,7 @@ public:
         struct UniformBufferData {
             QRhiBuffer *buf;
             int offset;
-            int size;
+            int maybeSize;
         };
         struct SampledTextureData {
             QRhiTexture *tex;
@@ -501,9 +506,9 @@ public:
 
     Flags flags;
     Topology topology = Triangles;
-    CullMode cullMode;
+    CullMode cullMode; // no culling
     FrontFace frontFace = CCW;
-    QVector<TargetBlend> targetBlends;
+    QVector<TargetBlend> targetBlends; // no blend when empty
     bool depthTest = false;
     bool depthWrite = false;
     CompareOp depthOp = Less;
@@ -554,7 +559,7 @@ public:
     virtual bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
                        QRhiRenderBuffer *depthStencil, int sampleCount) = 0;
 
-    virtual bool build(QObject *target) = 0; // integrate with an existing output mgmt fw, for instance, QVulkanWindow
+    virtual bool build(QObject *target) = 0; // integrate with an existing swapchain, f.ex. QVulkanWindow
 
 protected:
     QRhiSwapChain(QRhiImplementation *rhi);

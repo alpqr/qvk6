@@ -1295,7 +1295,7 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
                 VkDescriptorBufferInfo bufInfo;
                 bufInfo.buffer = buf->isStatic() ? bufD->buffers[0] : bufD->buffers[frameSlot];
                 bufInfo.offset = b.ubuf.offset;
-                bufInfo.range = b.ubuf.size <= 0 ? buf->size : b.ubuf.size;
+                bufInfo.range = b.ubuf.maybeSize ? b.ubuf.maybeSize : buf->size;
                 // be nice and assert when we know the vulkan device would die a horrible death due to non-aligned reads
                 Q_ASSERT(aligned(bufInfo.offset, ubufAlign) == bufInfo.offset);
                 bufferInfos.append(bufInfo);
@@ -2993,6 +2993,13 @@ bool QVkGraphicsPipeline::build()
         blend.dstAlphaBlendFactor = toVkBlendFactor(b.dstAlpha);
         blend.alphaBlendOp = toVkBlendOp(b.opAlpha);
         blend.colorWriteMask = toVkColorComponents(b.colorWrite);
+        vktargetBlends.append(blend);
+    }
+    if (vktargetBlends.isEmpty()) {
+        VkPipelineColorBlendAttachmentState blend;
+        memset(&blend, 0, sizeof(blend));
+        blend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
         vktargetBlends.append(blend);
     }
     blendInfo.attachmentCount = vktargetBlends.count();

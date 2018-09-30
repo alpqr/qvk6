@@ -57,7 +57,7 @@ void TriangleRenderer::initResources()
     m_srb = m_r->createShaderResourceBindings();
     const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 68)
+        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf)
     };
     m_srb->build();
 }

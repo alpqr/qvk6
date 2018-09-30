@@ -321,6 +321,17 @@ void QRhiD3D11::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
 void QRhiD3D11::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                             quint32 instanceCount, quint32 firstIndex, qint32 vertexOffset, quint32 firstInstance)
 {
+    Q_ASSERT(inPass);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::DrawIndexed;
+    cmd.args.drawIndexed.ps = QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline);
+    cmd.args.drawIndexed.indexCount = indexCount;
+    cmd.args.drawIndexed.instanceCount = instanceCount;
+    cmd.args.drawIndexed.firstIndex = firstIndex;
+    cmd.args.drawIndexed.vertexOffset = vertexOffset;
+    cmd.args.drawIndexed.firstInstance = firstInstance;
+    cbD->commands.append(cmd);
 }
 
 QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
@@ -360,12 +371,35 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+void QRhiD3D11::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates)
+{
+    Q_UNUSED(cb);
+
+    for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
+        Q_ASSERT(!u.buf->isStatic());
+        QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
+        memcpy(bufD->dynBuf.data() + u.offset, u.data.constData(), u.data.size());
+        bufD->hasPendingDynamicUpdates = true;
+    }
+
+    for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
+        QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
+        Q_ASSERT(u.buf->isStatic());
+        Q_ASSERT(u.data.size() == u.buf->size);
+        // ### box cause size may not be multiple of 16?
+        context->UpdateSubresource(bufD->buffer, 0, nullptr, u.data.constData(), 0, 0);
+    }
+
+    for (const QRhi::TextureUpload &u : updates.textureUploads) {
+    }
+}
+
 void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
                           const QRhi::PassUpdates &updates)
 {
     Q_ASSERT(!inPass);
 
-    inPass = true;
+    applyPassUpdates(cb, updates);
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     bool needsColorClear = true;
@@ -411,16 +445,17 @@ void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
         }
     }
     cbD->commands.append(clearCmd);
+
+    inPass = true;
 }
 
 void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
 {
     Q_ASSERT(inPass);
+    inPass = false;
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     cbD->currentTarget = nullptr;
-
-    inPass = false;
 }
 
 void QRhiD3D11::setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD)
@@ -434,6 +469,18 @@ void QRhiD3D11::setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResou
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
         {
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
+            if (!bufD->isStatic() && bufD->hasPendingDynamicUpdates) {
+                bufD->hasPendingDynamicUpdates = false;
+                D3D11_MAPPED_SUBRESOURCE mp;
+                HRESULT hr = context->Map(bufD->buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mp);
+                if (SUCCEEDED(hr)) {
+                    memcpy(mp.pData, bufD->dynBuf.constData(), bufD->dynBuf.size());
+                    context->Unmap(bufD->buffer, 0);
+                } else {
+                    qWarning("Failed to map buffer: %s", qPrintable(comErrorMessage(hr)));
+                }
+            }
+            Q_ASSERT(b.ubuf.offset == 0 && b.ubuf.maybeSize == 0); // ### is this really unsupported?
             if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::VertexStage))
                 vsubufs.append(bufD->buffer);
             if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::FragmentStage))
@@ -509,8 +556,8 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
             context->IASetVertexBuffers(cmd.args.bindVertexBuffers.startSlot,
                                         cmd.args.bindVertexBuffers.slotCount,
                                         cmd.args.bindVertexBuffers.buffers,
-                                        cmd.args.bindVertexBuffers.offsets,
-                                        cmd.args.bindVertexBuffers.strides);
+                                        cmd.args.bindVertexBuffers.strides,
+                                        cmd.args.bindVertexBuffers.offsets);
             break;
         case QD3D11CommandBuffer::Command::BindIndexBuffer:
             context->IASetIndexBuffer(cmd.args.bindIndexBuffer.buffer,
@@ -576,10 +623,56 @@ QD3D11Buffer::QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage,
 
 void QD3D11Buffer::release()
 {
+    if (!buffer)
+        return;
+
+    dynBuf.clear();
+
+    buffer->Release();
+    buffer = nullptr;
+}
+
+static inline uint aligned(uint v, uint byteAlign)
+{
+    return (v + byteAlign - 1) & ~(byteAlign - 1);
+}
+
+static inline uint toD3DBufferUsage(QRhiBuffer::UsageFlags usage)
+{
+    int u = 0;
+    if (usage.testFlag(QRhiBuffer::VertexBuffer))
+        u |= D3D11_BIND_VERTEX_BUFFER;;
+    if (usage.testFlag(QRhiBuffer::IndexBuffer))
+        u |= D3D11_BIND_INDEX_BUFFER;
+    if (usage.testFlag(QRhiBuffer::UniformBuffer))
+        u |= D3D11_BIND_CONSTANT_BUFFER;
+    return u;
 }
 
 bool QD3D11Buffer::build()
 {
+    if (buffer)
+        release();
+
+    D3D11_BUFFER_DESC desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.ByteWidth = usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(size, 16) : size;
+    desc.Usage = isStatic() ? D3D11_USAGE_DEFAULT : D3D11_USAGE_DYNAMIC;
+    desc.BindFlags = toD3DBufferUsage(usage);
+    desc.CPUAccessFlags = isStatic() ? 0 : D3D11_CPU_ACCESS_WRITE;
+
+    QRHI_RES_RHI(QRhiD3D11);
+    HRESULT hr = rhiD->dev->CreateBuffer(&desc, nullptr, &buffer);
+    if (FAILED(hr)) {
+        qWarning("Failed to create buffer: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
+    if (!isStatic()) {
+        dynBuf.resize(size);
+        hasPendingDynamicUpdates = false;
+    }
+
     return true;
 }
 
@@ -599,10 +692,8 @@ void QD3D11RenderBuffer::release()
         dsv = nullptr;
     }
 
-    if (tex) {
-        tex->Release();
-        tex = nullptr;
-    }
+    tex->Release();
+    tex = nullptr;
 }
 
 bool QD3D11RenderBuffer::build()
@@ -772,10 +863,8 @@ void QD3D11GraphicsPipeline::release()
     if (!dsState)
         return;
 
-    if (dsState) {
-        dsState->Release();
-        dsState = nullptr;
-    }
+    dsState->Release();
+    dsState = nullptr;
 
     if (blendState) {
         blendState->Release();
@@ -805,6 +894,8 @@ void QD3D11GraphicsPipeline::release()
 
 static inline D3D11_CULL_MODE toD3DCullMode(QRhiGraphicsPipeline::CullMode mode)
 {
+    if (mode == 0)
+        return D3D11_CULL_NONE;
     if (mode.testFlag(QRhiGraphicsPipeline::Front)) {
         if (mode.testFlag(QRhiGraphicsPipeline::Back)) {
             qWarning("Culling both front and back is not supported by Direct 3D");
@@ -1105,6 +1196,12 @@ bool QD3D11GraphicsPipeline::build()
         blend.BlendOpAlpha = toD3DBlendOp(b.opAlpha);
         blend.RenderTargetWriteMask = toD3DColorWriteMask(b.colorWrite);
         blendDesc.RenderTarget[i] = blend;
+    }
+    if (targetBlends.isEmpty()) {
+        D3D11_RENDER_TARGET_BLEND_DESC blend;
+        memset(&blend, 0, sizeof(blend));
+        blend.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        blendDesc.RenderTarget[0] = blend;
     }
     hr = rhiD->dev->CreateBlendState(&blendDesc, &blendState);
     if (FAILED(hr)) {

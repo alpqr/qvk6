@@ -796,7 +796,13 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShader
     QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, ps);
 
     // ### this needs some proper caching later on to minimize state changes
-    f->glCullFace(toGlCullMode(ps->cullMode));
+
+    if (ps->cullMode == 0) {
+        f->glDisable(GL_CULL_FACE);
+    } else {
+        f->glEnable(GL_CULL_FACE);
+        f->glCullFace(toGlCullMode(ps->cullMode));
+    }
     f->glFrontFace(toGlFrontFace(ps->frontFace));
     if (!ps->targetBlends.isEmpty()) {
         const QRhiGraphicsPipeline::TargetBlend &blend(ps->targetBlends.first()); // no MRT
@@ -815,6 +821,8 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShader
         } else {
             f->glDisable(GL_BLEND);
         }
+    } else {
+        f->glDisable(GL_BLEND);
     }
     if (ps->depthTest)
         f->glEnable(GL_DEPTH_TEST);
@@ -858,7 +866,8 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
             QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b.ubuf.buf);
             if (bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
                 break;
-            const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b.ubuf.offset, b.ubuf.size);
+            const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b.ubuf.offset,
+                                                               b.ubuf.maybeSize ? b.ubuf.maybeSize : bufD->size);
             for (QGles2GraphicsPipeline::Uniform &uniform : psD->uniforms) {
                 if (uniform.binding == b.binding
                         && uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)

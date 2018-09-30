@@ -57,6 +57,8 @@ struct QD3D11Buffer : public QRhiBuffer
     bool build() override;
 
     ID3D11Buffer *buffer = nullptr;
+    QByteArray dynBuf;
+    bool hasPendingDynamicUpdates = false;
 };
 
 struct QD3D11RenderBuffer : public QRhiRenderBuffer
@@ -342,6 +344,7 @@ public:
 
     void create();
     void destroy();
+    void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
     void setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cb);
 

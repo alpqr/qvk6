@@ -71,7 +71,7 @@ void TriangleOnCubeRenderer::initResources()
     m_srb = m_r->createShaderResourceBindings();
     const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
     m_srb->bindings = {
-        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf, 0, 64 + 4),
+        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf),
         QRhiShaderResourceBindings::Binding::sampledTexture(1, QRhiShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
     };
     m_srb->build();
@@ -92,8 +92,6 @@ void TriangleOnCubeRenderer::initResources()
 void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
 {
     m_ps = m_r->createGraphicsPipeline();
-
-    m_ps->targetBlends = { QRhiGraphicsPipeline::TargetBlend() };
 
     m_ps->depthTest = true;
     m_ps->depthWrite = true;

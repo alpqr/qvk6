@@ -1,6 +1,6 @@
-drop offset and size from srb::Binding::uniformBuffer?
 drop triangle fan?
 drop front-and-back cull?
+exercise indexed drawing
 scissor-enable flag? (esp d3d)
 gl and d3d setGraphicsPipeline should check srb->generation
 hlsl version to qsb (qtshaderstack17)
@@ -24,6 +24,7 @@ gles2: ubuf structs, arrays
 gles2: target QOpenGLWindow ...
 
 +++ done
+do something with offset and size in srb::Binding::uniformBuffer
 start d3d11 backend
 what if ps is rebuilt
 move correctionmatrix to backend

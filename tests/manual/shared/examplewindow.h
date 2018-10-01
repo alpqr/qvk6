@@ -53,7 +53,7 @@ protected:
     void exposeEvent(QExposeEvent *) override;
     bool event(QEvent *) override;
 
-    bool m_inited = false;
+    bool m_running = false;
 
     QRhi *m_r = nullptr;
     bool m_hasSwapChain = false;

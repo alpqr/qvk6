@@ -1,3 +1,4 @@
+d3d device loss
 drop triangle fan?
 drop front-and-back cull?
 exercise indexed drawing
@@ -5,6 +6,7 @@ scissor-enable flag? (esp d3d)
 gl and d3d setGraphicsPipeline should check srb->generation
 hlsl version to qsb (qtshaderstack17)
 more what-if-resource-rebuilt cases
+test FrameOpDeviceLost somehow
 gles2: more ubuf types
 gles2: reduce state, reduce texparam
 tex/QImage formats

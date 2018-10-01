@@ -30,18 +30,11 @@
 
 void ExampleWindow::exposeEvent(QExposeEvent *)
 {
-    if (isExposed() && !m_inited) {
-        m_inited = true;
+    if (isExposed() && !m_running) {
+        m_running = true;
         init();
         recreateSwapChain();
         render();
-    }
-
-    // Release everything when unexposed - the meaning of which is platform specific.
-    if (!isExposed() && m_inited) {
-        m_inited = false;
-        releaseSwapChain();
-        releaseResources();
     }
 }
 
@@ -120,6 +113,9 @@ void ExampleWindow::releaseResources()
 
 void ExampleWindow::recreateSwapChain()
 {
+    if (!m_sc)
+        return;
+
     const QSize outputSize = size() * devicePixelRatio();
 
     if (!m_ds) {

@@ -233,9 +233,10 @@ struct QVkSwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
     const QRhiRenderPass *defaultRenderPass() const override;
-    QSize sizeInPixels() const override;
+    QSize requestedSizeInPixels() const override;
+    QSize effectiveSizeInPixels() const override;
 
-    bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
+    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                QRhiRenderBuffer *depthStencil, int sampleCount) override;
 
     bool build(QObject *target) override;
@@ -244,7 +245,8 @@ struct QVkSwapChain : public QRhiSwapChain
     static const int MAX_BUFFER_COUNT = 3;
 
     QVulkanWindow *wrapWindow = nullptr;
-    QSize pixelSize;
+    QSize requestedPixelSize;
+    QSize effectivePixelSize;
     bool supportsReadback = false;
     VkSwapchainKHR sc = VK_NULL_HANDLE;
     int bufferCount = 0;

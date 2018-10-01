@@ -651,15 +651,15 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
 }
 
 bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
-                                    QRhiSwapChain::SurfaceImportFlags flags, QRhiSwapChain *swapChain)
+                                   QRhiSwapChain::SurfaceImportFlags flags, QRhiSwapChain *swapChain)
 {
-    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
-
-    swapChainD->pixelSize = pixelSize;
-    if (swapChainD->pixelSize.isEmpty())
+    if (pixelSize.isEmpty())
         return false;
 
     df->vkDeviceWaitIdle(dev);
+
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
+    swapChainD->requestedPixelSize = pixelSize;
 
     if (!vkCreateSwapchainKHR) {
         vkCreateSwapchainKHR = reinterpret_cast<PFN_vkCreateSwapchainKHR>(f->vkGetDeviceProcAddr(dev, "vkCreateSwapchainKHR"));
@@ -682,10 +682,11 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
     VkExtent2D bufferSize = surfaceCaps.currentExtent;
     if (bufferSize.width == quint32(-1)) {
         Q_ASSERT(bufferSize.height == quint32(-1));
-        bufferSize.width = swapChainD->pixelSize.width();
-        bufferSize.height = swapChainD->pixelSize.height();
+        bufferSize.width = swapChainD->requestedPixelSize.width();
+        bufferSize.height = swapChainD->requestedPixelSize.height();
+        swapChainD->effectivePixelSize = swapChainD->requestedPixelSize;
     } else {
-        swapChainD->pixelSize = QSize(bufferSize.width, bufferSize.height);
+        swapChainD->effectivePixelSize = QSize(bufferSize.width, bufferSize.height);
     }
 
     VkSurfaceTransformFlagBitsKHR preTransform =
@@ -771,7 +772,7 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
     VkImageView msaaViews[QVkSwapChain::MAX_BUFFER_COUNT];
     if (swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT) {
         if (!createTransientImage(swapChainD->colorFormat,
-                                  swapChainD->pixelSize,
+                                  swapChainD->effectivePixelSize,
                                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                                   VK_IMAGE_ASPECT_COLOR_BIT,
                                   swapChainD->sampleCount,
@@ -953,7 +954,7 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->cbWrapper.cb = w->currentCommandBuffer();
 
     swapChainD->rtWrapper.d.fb = w->currentFramebuffer();
-    swapChainD->pixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
+    swapChainD->requestedPixelSize = swapChainD->effectivePixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
 
     currentFrameSlot = w->currentFrame();
 
@@ -1048,7 +1049,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->cbWrapper.cb = image.cmdBuf;
 
     swapChainD->rtWrapper.d.fb = image.fb;
-    swapChainD->rtWrapper.d.pixelSize = swapChainD->pixelSize;
+    swapChainD->rtWrapper.d.pixelSize = swapChainD->effectivePixelSize;
 
     currentFrameSlot = swapChainD->currentFrame;
     if (swapChainD->ds)
@@ -3068,12 +3069,17 @@ const QRhiRenderPass *QVkSwapChain::defaultRenderPass() const
     return rtWrapper.renderPass();
 }
 
-QSize QVkSwapChain::sizeInPixels() const
+QSize QVkSwapChain::requestedSizeInPixels() const
 {
-    return pixelSize;
+    return requestedPixelSize;
 }
 
-bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImportFlags flags,
+QSize QVkSwapChain::effectiveSizeInPixels() const
+{
+    return effectivePixelSize;
+}
+
+bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                          QRhiRenderBuffer *depthStencil, int sampleCount_)
 {
     // Can be called multiple times without a call to release() - this is typical when a window is resized.
@@ -3114,13 +3120,13 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
     }
     sampleCount = rhiD->effectiveSampleCount(sampleCount_);
 
-    if (!rhiD->recreateSwapChain(surface, pixelSize_, flags, this))
+    if (!rhiD->recreateSwapChain(surface, requestedPixelSize, flags, this))
         return false;
 
     rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat);
 
     rtWrapper.d.rp.rp = rp;
-    rtWrapper.d.pixelSize = pixelSize_;
+    rtWrapper.d.pixelSize = requestedPixelSize; // ###
     rtWrapper.d.attCount = 1;
     if (depthStencil) {
         rtWrapper.d.attCount += 1;
@@ -3145,8 +3151,8 @@ bool QVkSwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImport
         fbInfo.renderPass = rtWrapper.d.rp.rp;
         fbInfo.attachmentCount = rtWrapper.d.attCount;
         fbInfo.pAttachments = views;
-        fbInfo.width = pixelSize.width();
-        fbInfo.height = pixelSize.height();
+        fbInfo.width = effectivePixelSize.width();
+        fbInfo.height = effectivePixelSize.height();
         fbInfo.layers = 1;
         VkResult err = rhiD->df->vkCreateFramebuffer(rhiD->dev, &fbInfo, nullptr, &image.fb);
         if (err != VK_SUCCESS) {
@@ -3167,7 +3173,7 @@ bool QVkSwapChain::build(QObject *target)
     QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(target);
     if (vkw) {
         rtWrapper.d.rp.rp = vkw->defaultRenderPass();
-        pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
+        requestedPixelSize = effectivePixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
         rtWrapper.d.attCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
         wrapWindow = vkw;
         return true;

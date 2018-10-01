@@ -554,9 +554,10 @@ public:
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
     virtual const QRhiRenderPass *defaultRenderPass() const = 0;
-    virtual QSize sizeInPixels() const = 0;
+    virtual QSize requestedSizeInPixels() const = 0;
+    virtual QSize effectiveSizeInPixels() const = 0;
 
-    virtual bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
+    virtual bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                        QRhiRenderBuffer *depthStencil, int sampleCount) = 0;
 
     virtual bool build(QObject *target) = 0; // integrate with an existing swapchain, f.ex. QVulkanWindow

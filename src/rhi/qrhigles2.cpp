@@ -1508,21 +1508,26 @@ const QRhiRenderPass *QGles2SwapChain::defaultRenderPass() const
     return rt.renderPass();
 }
 
-QSize QGles2SwapChain::sizeInPixels() const
+QSize QGles2SwapChain::requestedSizeInPixels() const
 {
     return pixelSize;
 }
 
-bool QGles2SwapChain::build(QWindow *window, const QSize &pixelSize_, SurfaceImportFlags flags,
+QSize QGles2SwapChain::effectiveSizeInPixels() const
+{
+    return pixelSize;
+}
+
+bool QGles2SwapChain::build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount)
 {
     Q_UNUSED(flags);
     Q_UNUSED(sampleCount);
 
     surface = window;
-    pixelSize = pixelSize_;
+    pixelSize = requestedPixelSize;
 
-    rt.d.pixelSize = pixelSize_;
+    rt.d.pixelSize = pixelSize;
     rt.d.attCount = depthStencil ? 2 : 1;
 
     return true;

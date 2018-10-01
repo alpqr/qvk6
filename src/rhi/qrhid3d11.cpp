@@ -1333,12 +1333,17 @@ const QRhiRenderPass *QD3D11SwapChain::defaultRenderPass() const
     return rt.renderPass();
 }
 
-QSize QD3D11SwapChain::sizeInPixels() const
+QSize QD3D11SwapChain::requestedSizeInPixels() const
 {
     return pixelSize;
 }
 
-bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceImportFlags flags,
+QSize QD3D11SwapChain::effectiveSizeInPixels() const
+{
+    return pixelSize;
+}
+
+bool QD3D11SwapChain::build(QWindow *window_, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount)
 {
     // Can be called multiple times without a call to release() - this is typical when a window is resized.
@@ -1347,7 +1352,7 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceIm
     Q_UNUSED(sampleCount); // ### MSAA
 
     window = window_;
-    pixelSize = pixelSize_;
+    pixelSize = requestedPixelSize;
 
     QRHI_RES_RHI(QRhiD3D11);
 
@@ -1418,7 +1423,7 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &pixelSize_, SurfaceIm
     ds = depthStencil ? QRHI_RES(QD3D11RenderBuffer, depthStencil) : nullptr;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
-    rtD->d.pixelSize = pixelSize_;
+    rtD->d.pixelSize = pixelSize;
     rtD->d.attCount = depthStencil ? 2 : 1;
 
     return true;

@@ -158,7 +158,7 @@ void ExampleWindow::render()
     if (!m_hasSwapChain)
         return;
 
-    if (m_sc->sizeInPixels() != size() * devicePixelRatio()) {
+    if (m_sc->requestedSizeInPixels() != size() * devicePixelRatio()) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;
@@ -187,11 +187,11 @@ void ExampleWindow::render()
 
     if (!m_triRenderer.isPipelineInitialized()) {
         const QRhiRenderPass *rp = m_sc->defaultRenderPass();
-        m_triRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+        m_triRenderer.initOutputDependentResources(rp, m_sc->effectiveSizeInPixels());
         if (!m_triangleOnly)
-            m_cubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+            m_cubeRenderer.initOutputDependentResources(rp, m_sc->effectiveSizeInPixels());
         if (!m_onScreenOnly)
-            m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->sizeInPixels());
+            m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->effectiveSizeInPixels());
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
@@ -212,11 +212,11 @@ void ExampleWindow::render()
         clearColor // 3 attachments when using MSAA
     };
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
-    m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_triRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
     if (!m_triangleOnly)
-        m_cubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+        m_cubeRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
     if (!m_onScreenOnly)
-        m_liveTexCubeRenderer.queueDraw(cb, m_sc->sizeInPixels());
+        m_liveTexCubeRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
     m_r->endPass(cb);
 
     m_r->endFrame(m_sc);

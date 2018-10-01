@@ -277,9 +277,10 @@ struct QGles2SwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
     const QRhiRenderPass *defaultRenderPass() const override;
-    QSize sizeInPixels() const override;
+    QSize requestedSizeInPixels() const override;
+    QSize effectiveSizeInPixels() const override;
 
-    bool build(QWindow *window, const QSize &pixelSize, SurfaceImportFlags flags,
+    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                QRhiRenderBuffer *depthStencil, int sampleCount) override;
 
     bool build(QObject *target) override;

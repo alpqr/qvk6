@@ -77,6 +77,9 @@ struct QD3D11Texture : public QRhiTexture
     QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
     void release() override;
     bool build() override;
+
+    ID3D11Texture2D *tex = nullptr;
+    ID3D11ShaderResourceView *srv = nullptr;
 };
 
 struct QD3D11Sampler : public QRhiSampler
@@ -84,6 +87,8 @@ struct QD3D11Sampler : public QRhiSampler
     QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
     void release() override;
     bool build() override;
+
+    ID3D11SamplerState *samplerState = nullptr;
 };
 
 struct QD3D11RenderPass : public QRhiRenderPass

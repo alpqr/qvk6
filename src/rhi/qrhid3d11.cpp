@@ -400,6 +400,8 @@ void QRhiD3D11::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
     }
 
     for (const QRhi::TextureUpload &u : updates.textureUploads) {
+        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.tex);
+        context->UpdateSubresource(texD->tex, 0, nullptr, u.image.constBits(), u.image.bytesPerLine(), 0);
     }
 }
 
@@ -469,6 +471,8 @@ void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
 
 void QRhiD3D11::setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD)
 {
+    Q_UNUSED(psD);
+
     QVarLengthArray<ID3D11Buffer *, 4> vsubufs;
     QVarLengthArray<ID3D11Buffer *, 4> fsubufs;
     // ### this assumes srb.bindings is sorted based on the binding index (and that there are no gaps)
@@ -497,7 +501,12 @@ void QRhiD3D11::setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResou
         }
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
-            // ###
+            // A sampler with binding N is mapped to a HLSL sampler and texture
+            // with registers sN and tN by SPIRV-Cross.
+
+            // ### batch this
+            context->PSSetSamplers(b.binding, 1, &QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
+            context->PSSetShaderResources(b.binding, 1, &QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
             break;
         default:
             Q_UNREACHABLE();
@@ -750,11 +759,104 @@ QD3D11Texture::QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize
 
 void QD3D11Texture::release()
 {
+    if (!tex)
+        return;
+
+    if (srv) {
+        srv->Release();
+        srv = nullptr;
+    }
+
+    tex->Release();
+    tex = nullptr;
+}
+
+static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::RGBA8:
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+    case QRhiTexture::BGRA8:
+        return DXGI_FORMAT_B8G8R8A8_UNORM;
+    case QRhiTexture::R8:
+        return DXGI_FORMAT_R8_UNORM;
+    case QRhiTexture::R16:
+        return DXGI_FORMAT_R16_UNORM;
+
+    case QRhiTexture::D16:
+        return DXGI_FORMAT_D16_UNORM;
+    case QRhiTexture::D32:
+        return DXGI_FORMAT_D32_FLOAT;
+
+    default:
+        Q_UNREACHABLE();
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+    }
+}
+
+static inline bool isDepthStencilTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::Format::D16:
+        Q_FALLTHROUGH();
+    case QRhiTexture::Format::D32:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
+static inline QSize safeSize(const QSize &size)
+{
+    return size.isEmpty() ? QSize(16, 16) : size;
 }
 
 bool QD3D11Texture::build()
 {
-    return false;
+    if (tex)
+        release();
+
+    const QSize size = safeSize(pixelSize);
+    const bool isDepthStencil = isDepthStencilTextureFormat(format);
+
+    uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
+    if (isDepthStencil)
+        bindFlags |= D3D11_BIND_DEPTH_STENCIL;
+    if (flags.testFlag(RenderTarget))
+        bindFlags |= D3D11_BIND_RENDER_TARGET;
+
+    D3D11_TEXTURE2D_DESC desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.Width = size.width();
+    desc.Height = size.height();
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = toD3DTextureFormat(format);
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = bindFlags;
+
+    QRHI_RES_RHI(QRhiD3D11);
+    HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
+    if (FAILED(hr)) {
+        qWarning("Failed to create texture: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    memset(&srvDesc, 0, sizeof(srvDesc));
+    srvDesc.Format = desc.Format;
+    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = 1;
+
+    hr = rhiD->dev->CreateShaderResourceView(tex, &srvDesc, &srv);
+    if (FAILED(hr)) {
+        qWarning("Failed to create srv: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
+    return true;
 }
 
 QD3D11Sampler::QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)
@@ -764,11 +866,59 @@ QD3D11Sampler::QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter m
 
 void QD3D11Sampler::release()
 {
+    if (!samplerState)
+        return;
+
+    samplerState->Release();
+    samplerState = nullptr;
+}
+
+static inline D3D11_FILTER toD3DFilter(QRhiSampler::Filter minFilter, QRhiSampler::Filter magFilter, QRhiSampler::Filter mipFilter)
+{
+    // ### fixme
+    return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+}
+
+static inline D3D11_TEXTURE_ADDRESS_MODE toD3DAddressMode(QRhiSampler::AddressMode m)
+{
+    switch (m) {
+    case QRhiSampler::Repeat:
+        return D3D11_TEXTURE_ADDRESS_WRAP;
+    case QRhiSampler::ClampToEdge:
+        return D3D11_TEXTURE_ADDRESS_CLAMP;
+    case QRhiSampler::Border:
+        return D3D11_TEXTURE_ADDRESS_BORDER;
+    case QRhiSampler::Mirror:
+        return D3D11_TEXTURE_ADDRESS_MIRROR;
+    case QRhiSampler::MirrorOnce:
+        return D3D11_TEXTURE_ADDRESS_MIRROR_ONCE;
+    default:
+        Q_UNREACHABLE();
+        return D3D11_TEXTURE_ADDRESS_CLAMP;
+    }
 }
 
 bool QD3D11Sampler::build()
 {
-    return false;
+    if (samplerState)
+        release();
+
+    D3D11_SAMPLER_DESC desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.Filter = toD3DFilter(minFilter, magFilter, mipmapMode);
+    desc.AddressU = toD3DAddressMode(addressU);
+    desc.AddressV = toD3DAddressMode(addressV);
+    desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.MaxAnisotropy = 1.0f;
+
+    QRHI_RES_RHI(QRhiD3D11);
+    HRESULT hr = rhiD->dev->CreateSamplerState(&desc, &samplerState);
+    if (FAILED(hr)) {
+        qWarning("Failed to create sampler state: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
+    return true;
 }
 
 QD3D11RenderPass::QD3D11RenderPass(QRhiImplementation *rhi)

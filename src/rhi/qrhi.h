@@ -241,12 +241,6 @@ public:
         D32
     };
 
-    struct SubImageInfo {
-        int size = 0;
-        int stride = 0;
-        int offset = 0;
-    };
-
     Format format;
     QSize pixelSize;
     Flags flags;

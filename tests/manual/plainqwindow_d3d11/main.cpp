@@ -47,8 +47,7 @@ void D3D11Window::init()
     params.importExistingDevice = false;
     m_r = QRhi::create(QRhi::D3D11, &params);
 
-    setTriangleOnly(true); // ###
-    setOnScreenOnly(true);
+    setOnScreenOnly(true); // ###
     ExampleWindow::init();
 }
 

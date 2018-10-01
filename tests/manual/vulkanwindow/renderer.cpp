@@ -81,7 +81,7 @@ void Renderer::initResources()
 void Renderer::initSwapChainResources()
 {
     m_sc->build(m_window); // this just wraps the window's swapchain
-    m_triRenderer.initOutputDependentResources(m_sc->defaultRenderPass(), m_sc->sizeInPixels());
+    m_triRenderer.initOutputDependentResources(m_sc->defaultRenderPass(), m_sc->effectiveSizeInPixels());
 }
 
 void Renderer::releaseSwapChainResources()
@@ -115,7 +115,7 @@ void Renderer::startNextFrame()
         clearColor // 3 attachments when using MSAA
     };
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
-    m_triRenderer.queueDraw(cb, m_sc->sizeInPixels());
+    m_triRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
     m_r->endPass(cb);
 
     m_r->endFrame(m_sc);

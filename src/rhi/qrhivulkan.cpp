@@ -684,10 +684,8 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
         Q_ASSERT(bufferSize.height == quint32(-1));
         bufferSize.width = swapChainD->requestedPixelSize.width();
         bufferSize.height = swapChainD->requestedPixelSize.height();
-        swapChainD->effectivePixelSize = swapChainD->requestedPixelSize;
-    } else {
-        swapChainD->effectivePixelSize = QSize(bufferSize.width, bufferSize.height);
     }
+    swapChainD->effectivePixelSize = QSize(bufferSize.width, bufferSize.height);
 
     VkSurfaceTransformFlagBitsKHR preTransform =
         (surfaceCaps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)

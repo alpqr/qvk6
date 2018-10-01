@@ -3077,7 +3077,7 @@ QSize QVkSwapChain::effectiveSizeInPixels() const
     return effectivePixelSize;
 }
 
-bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
+bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, SurfaceImportFlags flags,
                          QRhiRenderBuffer *depthStencil, int sampleCount_)
 {
     // Can be called multiple times without a call to release() - this is typical when a window is resized.
@@ -3118,13 +3118,13 @@ bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize, Surfa
     }
     sampleCount = rhiD->effectiveSampleCount(sampleCount_);
 
-    if (!rhiD->recreateSwapChain(surface, requestedPixelSize, flags, this))
+    if (!rhiD->recreateSwapChain(surface, requestedPixelSize_, flags, this))
         return false;
 
     rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat);
 
     rtWrapper.d.rp.rp = rp;
-    rtWrapper.d.pixelSize = requestedPixelSize; // ###
+    rtWrapper.d.pixelSize = effectivePixelSize;
     rtWrapper.d.attCount = 1;
     if (depthStencil) {
         rtWrapper.d.attCount += 1;

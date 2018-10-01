@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     QVulkanInstance inst;
 
 #ifndef Q_OS_ANDROID
-    inst.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
+//    inst.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
 #else
     inst.setLayers(QByteArrayList()
                    << "VK_LAYER_GOOGLE_threading"

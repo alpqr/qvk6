@@ -132,6 +132,9 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     const QRhiRenderPass *renderPass() const override;
 
     QD3D11BasicRenderTargetData d;
+    ID3D11RenderTargetView *rtv = nullptr;
+    bool ownsDsv = false;
+    ID3D11DepthStencilView *dsv = nullptr;
 };
 
 struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings

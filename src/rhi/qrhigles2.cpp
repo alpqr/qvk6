@@ -1275,6 +1275,7 @@ bool QGles2TextureRenderTarget::build()
     Q_ASSERT(texD->texture);
 
     rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
+    d.pixelSize = texture->pixelSize;
     d.attCount = 1;
 
     if (depthStencilBuffer) {

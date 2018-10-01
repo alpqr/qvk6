@@ -685,7 +685,10 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
         bufferSize.width = swapChainD->requestedPixelSize.width();
         bufferSize.height = swapChainD->requestedPixelSize.height();
     }
+
     swapChainD->effectivePixelSize = QSize(bufferSize.width, bufferSize.height);
+    if (swapChainD->effectivePixelSize.isEmpty())
+        return false;
 
     VkSurfaceTransformFlagBitsKHR preTransform =
         (surfaceCaps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
@@ -714,7 +717,7 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
     if (swapChainD->supportsReadback)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-    qDebug("Creating new swap chain of %d buffers, size %dx%d", reqBufferCount, bufferSize.width, bufferSize.height);
+    qDebug("Creating new swapchain of %d buffers, size %dx%d", reqBufferCount, bufferSize.width, bufferSize.height);
 
     VkSwapchainKHR oldSwapChain = swapChainD->sc;
     VkSwapchainCreateInfoKHR swapChainInfo;

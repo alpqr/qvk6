@@ -137,11 +137,68 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     ID3D11DepthStencilView *dsv = nullptr;
 };
 
+template<typename T>
+struct BatchedBindings
+{
+    struct Batch {
+        uint startBinding;
+        QVarLengthArray<T, 4> resources;
+    };
+    QVarLengthArray<Batch, 4> batches;
+};
+
+template<typename T>
+struct BatchedBindingGen
+{
+    void feed(int binding, T resource) {
+        if (curBinding == -1 || binding > curBinding + 1) {
+            finish();
+            curBatch.startBinding = binding;
+            curBatch.resources.clear();
+            curBatch.resources.append(resource);
+        } else {
+            Q_ASSERT(binding == curBinding + 1);
+            curBatch.resources.append(resource);
+        }
+        curBinding = binding;
+    }
+
+    void finish() {
+        if (!curBatch.resources.isEmpty())
+            result.batches.append(curBatch);
+    }
+
+    void clear() {
+        result.batches.clear();
+        curBatch.resources.clear();
+        curBinding = -1;
+    }
+
+    BatchedBindings<T> result;
+
+private:
+    typename BatchedBindings<T>::Batch curBatch;
+    int curBinding = -1;
+};
+
 struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
 {
     QD3D11ShaderResourceBindings(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
+
+    QVector<Binding> sortedBindings;
+
+    BatchedBindingGen<ID3D11Buffer *> vsubufs;
+    BatchedBindingGen<UINT> vsubufoffsets;
+    BatchedBindingGen<UINT> vsubufsizes;
+
+    BatchedBindingGen<ID3D11Buffer *> fsubufs;
+    BatchedBindingGen<UINT> fsubufoffsets;
+    BatchedBindingGen<UINT> fsubufsizes;
+
+    BatchedBindingGen<ID3D11SamplerState *> fssamplers;
+    BatchedBindingGen<ID3D11ShaderResourceView *> fsshaderresources;
 };
 
 struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
@@ -354,13 +411,13 @@ public:
     void create();
     void destroy();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
-    void setUniformBuffers(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD);
+    void setShaderResources(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cb);
 
     bool debugLayer = false;
     bool importedDevice = false;
     ID3D11Device *dev = nullptr;
-    ID3D11DeviceContext *context = nullptr;
+    ID3D11DeviceContext1 *context = nullptr;
     D3D_FEATURE_LEVEL featureLevel;
     IDXGIFactory2 *dxgiFactory;
 

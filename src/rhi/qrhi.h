@@ -118,7 +118,7 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
         Attribute(int binding_, int location_, Format format_, quint32 offset_)
             : binding(binding_), location(location_), format(format_), offset(offset_)
         { }
-        int binding; // slot
+        int binding;
         // With HLSL we assume the vertex shader uses TEXCOORD<location> as the
         // semantic for each input. Hence no separate semantic name and index.
         int location;
@@ -126,7 +126,7 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
         quint32 offset;
     };
 
-    QVector<Binding> bindings;
+    QVector<Binding> bindings; // slots
     QVector<Attribute> attributes;
 };
 
@@ -356,8 +356,7 @@ public:
 
         static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_);
 
-        // Bind a region only - may not be supported by all backends. Up to the
-        // user to ensure offset is aligned to ubufAlignment.
+        // Bind a region only. Up to the user to ensure offset is aligned to ubufAlignment.
         static Binding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_);
 
         static Binding sampledTexture(int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_);

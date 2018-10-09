@@ -38,7 +38,7 @@
 #define QRHID3D11_H
 
 #include <QtRhi/qrhi.h>
-#include <d3d11.h>
+#include <d3d11_1.h>
 
 QT_BEGIN_NAMESPACE
 

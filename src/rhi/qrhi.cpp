@@ -42,6 +42,9 @@
 #ifdef Q_OS_WIN
 #include "qrhid3d11_p.h"
 #endif
+#ifdef Q_OS_MAC
+#include "qrhimetal_p.h"
+#endif
 
 QT_BEGIN_NAMESPACE
 
@@ -223,6 +226,17 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
         return r;
 #else
         qWarning("This platform has no Direct3D 11 support");
+        break;
+#endif
+    }
+    case Metal:
+    {
+#ifdef Q_OS_MAC
+        QRhi *r = new QRhi;
+        r->d = new QRhiMetal(params);
+        return r;
+#else
+        qWarning("This platform has no Metal support");
         break;
 #endif
     }

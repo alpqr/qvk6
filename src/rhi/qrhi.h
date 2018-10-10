@@ -549,6 +549,12 @@ public:
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
     virtual const QRhiRenderPass *defaultRenderPass() const = 0;
+
+    // Some backends use the requested size, others ignore it and get the actual
+    // size on their own. Keep track of both - application logic will need the
+    // requested size (to do their "if qwindow->size() * dpr != req.size then
+    // rebuild_swapchain" logic) and the actual size as well (for all graphics
+    // calculations like viewport).
     virtual QSize requestedSizeInPixels() const = 0;
     virtual QSize effectiveSizeInPixels() const = 0;
 
@@ -573,7 +579,8 @@ public:
     enum Implementation {
         Vulkan,
         OpenGLES2,
-        D3D11
+        D3D11,
+        Metal
     };
 
     enum FrameOpResult {

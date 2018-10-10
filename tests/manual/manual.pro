@@ -12,3 +12,8 @@ win32 {
     SUBDIRS += \
         plainqwindow_d3d11
 }
+
+mac {
+    SUBDIRS += \
+        plainqwindow_metal
+}

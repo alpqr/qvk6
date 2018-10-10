@@ -2,7 +2,7 @@ TARGET = QtRhi
 
 load(qt_module)
 
-QT += shadertools
+QT += gui-private shadertools
 
 DEFINES += QT_BUILD_RHI_LIB
 
@@ -33,6 +33,16 @@ win32 {
         qrhid3d11.cpp
 
     LIBS += -ld3d11 -ldxgi -ldxguid -ld3dcompiler
+}
+
+mac {
+    HEADERS += \
+        qrhimetal.h \
+        qrhimetal_p.h
+    SOURCES += \
+        qrhimetal.mm
+
+    LIBS += -framework AppKit -framework Metal
 }
 
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)

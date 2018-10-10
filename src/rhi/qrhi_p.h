@@ -111,8 +111,8 @@ public:
 
     virtual QVector<int> supportedSampleCounts() const = 0;
     virtual int ubufAlignment() const = 0;
-    virtual QMatrix4x4 openGLVertexCorrectionMatrix() const = 0;
     virtual bool isYUpInFramebuffer() const = 0;
+    virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
 };
 
 QT_END_NAMESPACE

@@ -67,10 +67,11 @@ Q_DECLARE_TYPEINFO(QRhiClearValue, Q_MOVABLE_TYPE);
 struct Q_RHI_EXPORT QRhiViewport
 {
     QRhiViewport() { }
+    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says
     QRhiViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
         : r(x, y, w, h), minDepth(minDepth_), maxDepth(maxDepth_)
     { }
-    QRectF r;
+    QVector4D r;
     float minDepth;
     float maxDepth;
 };
@@ -80,10 +81,11 @@ Q_DECLARE_TYPEINFO(QRhiViewport, Q_MOVABLE_TYPE);
 struct Q_RHI_EXPORT QRhiScissor
 {
     QRhiScissor() { }
+    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says
     QRhiScissor(int x, int y, int w, int h)
         : r(x, y, w, h)
     { }
-    QRect r;
+    QVector4D r;
 };
 
 Q_DECLARE_TYPEINFO(QRhiScissor, Q_MOVABLE_TYPE);
@@ -756,12 +758,13 @@ public:
     int ubufAlignment() const;
     int ubufAligned(int v) const;
 
-    // Make Y up and viewport.min/maxDepth 0/1. Allows applications to keep
-    // using OpenGL-style vertex data regardless of the backend, by passing
-    // this_matrix * mvp, instead of just mvp, to their vertex shaders.
-    QMatrix4x4 openGLVertexCorrectionMatrix() const;
-
     bool isYUpInFramebuffer() const;
+
+    // Make Y up and allow using 0..1 as the depth range. This lets
+    // applications keep using OpenGL-style vertex data regardless of the
+    // backend (by passing this_matrix * mvp, instead of just mvp, to their
+    // vertex shaders).
+    QMatrix4x4 clipSpaceCorrMatrix() const;
 
 protected:
     QRhi();

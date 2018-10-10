@@ -167,14 +167,14 @@ int QRhiGles2::ubufAlignment() const
     return 256;
 }
 
-QMatrix4x4 QRhiGles2::openGLVertexCorrectionMatrix() const
-{
-    return QMatrix4x4(); // identity
-}
-
 bool QRhiGles2::isYUpInFramebuffer() const
 {
     return true;
+}
+
+QMatrix4x4 QRhiGles2::clipSpaceCorrMatrix() const
+{
+    return QMatrix4x4(); // identity
 }
 
 QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -286,8 +286,8 @@ void QRhiGles2::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
     cmd.cmd = QGles2CommandBuffer::Command::Viewport;
     cmd.args.viewport.x = viewport.r.x();
     cmd.args.viewport.y = viewport.r.y();
-    cmd.args.viewport.w = viewport.r.width();
-    cmd.args.viewport.h = viewport.r.height();
+    cmd.args.viewport.w = viewport.r.z();
+    cmd.args.viewport.h = viewport.r.w();
     cmd.args.viewport.d0 = viewport.minDepth;
     cmd.args.viewport.d1 = viewport.maxDepth;
     QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
@@ -300,8 +300,8 @@ void QRhiGles2::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
     cmd.cmd = QGles2CommandBuffer::Command::Scissor;
     cmd.args.scissor.x = scissor.r.x();
     cmd.args.scissor.y = scissor.r.y();
-    cmd.args.scissor.w = scissor.r.width();
-    cmd.args.scissor.h = scissor.r.height();
+    cmd.args.scissor.w = scissor.r.z();
+    cmd.args.scissor.h = scissor.r.w();
     QRHI_RES(QGles2CommandBuffer, cb)->commands.append(cmd);
 }
 
@@ -769,6 +769,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
             break;
         case QGles2CommandBuffer::Command::Clear:
+            f->glDisable(GL_SCISSOR_TEST);
             if (cmd.args.clear.mask & GL_COLOR_BUFFER_BIT) {
                 f->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
                 f->glClearColor(cmd.args.clear.r, cmd.args.clear.g, cmd.args.clear.b, cmd.args.clear.a);
@@ -795,6 +796,10 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShader
 
     // ### this needs some proper caching later on to minimize state changes
 
+    if (ps->flags.testFlag(QRhiGraphicsPipeline::UsesScissor))
+        f->glEnable(GL_SCISSOR_TEST);
+    else
+        f->glDisable(GL_SCISSOR_TEST);
     if (ps->cullMode == 0) {
         f->glDisable(GL_CULL_FACE);
     } else {

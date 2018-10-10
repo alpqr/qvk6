@@ -98,7 +98,7 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
 
     m_ps->build();
 
-    m_proj = m_r->openGLVertexCorrectionMatrix();
+    m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
 }

@@ -246,14 +246,14 @@ int QRhi::ubufAligned(int v) const
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
 
-QMatrix4x4 QRhi::openGLVertexCorrectionMatrix() const
-{
-    return d->openGLVertexCorrectionMatrix();
-}
-
 bool QRhi::isYUpInFramebuffer() const
 {
     return d->isYUpInFramebuffer();
+}
+
+QMatrix4x4 QRhi::clipSpaceCorrMatrix() const
+{
+    return d->clipSpaceCorrMatrix();
 }
 
 QRhiGraphicsPipeline *QRhi::createGraphicsPipeline()

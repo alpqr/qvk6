@@ -1645,8 +1645,15 @@ int QRhiVulkan::ubufAlignment() const
     return ubufAlign; // typically 256 (bytes)
 }
 
-QMatrix4x4 QRhiVulkan::openGLVertexCorrectionMatrix() const
+bool QRhiVulkan::isYUpInFramebuffer() const
 {
+    return false;
+}
+
+QMatrix4x4 QRhiVulkan::clipSpaceCorrMatrix() const
+{
+    // See e.g. https://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
+
     static QMatrix4x4 m;
     if (m.isIdentity()) {
         // NB the ctor takes row-major
@@ -1656,11 +1663,6 @@ QMatrix4x4 QRhiVulkan::openGLVertexCorrectionMatrix() const
                        0.0f, 0.0f, 0.0f, 1.0f);
     }
     return m;
-}
-
-bool QRhiVulkan::isYUpInFramebuffer() const
-{
-    return false;
 }
 
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -1822,45 +1824,53 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
     }
 }
 
-static inline VkViewport toVkViewport(const QRhiViewport &viewport)
+static inline VkViewport toVkViewport(const QRhiViewport &viewport, const QSize &outputSize)
 {
+    // x,y is top-left in VkViewport but bottom-left in QRhiViewport
     VkViewport vp;
     vp.x = viewport.r.x();
-    vp.y = viewport.r.y();
-    vp.width = viewport.r.width();
-    vp.height = viewport.r.height();
+    vp.y = outputSize.height() - (viewport.r.y() + viewport.r.w() - 1);
+    vp.width = viewport.r.z();
+    vp.height = viewport.r.w();
     vp.minDepth = viewport.minDepth;
     vp.maxDepth = viewport.maxDepth;
     return vp;
 }
 
+static inline VkRect2D toVkScissor(const QRhiScissor &scissor, const QSize &outputSize)
+{
+    // x,y is top-left in VkRect2D but bottom-left in QRhiScissor
+    VkRect2D s;
+    s.offset.x = scissor.r.x();
+    s.offset.y = outputSize.height() - (scissor.r.y() + scissor.r.w() - 1);
+    s.extent.width = scissor.r.z();
+    s.extent.height = scissor.r.w();
+    return s;
+}
+
 void QRhiVulkan::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
 {
     Q_ASSERT(inPass);
-    VkViewport vp = toVkViewport(viewport);
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
+    Q_ASSERT(cbD->currentPipeline && cbD->currentTarget);
+    const QSize outputSize = cbD->currentTarget->sizeInPixels();
+    const VkViewport vp = toVkViewport(viewport, outputSize);
     df->vkCmdSetViewport(cbD->cb, 0, 1, &vp);
 
-    Q_ASSERT(cbD->currentPipeline);
-    if (!cbD->currentPipeline->flags.testFlag(QRhiGraphicsPipeline::UsesScissor))
-        setScissor(cb, QRhiScissor(viewport.r.x(), viewport.r.y(), viewport.r.width(), viewport.r.height()));
-}
-
-static inline VkRect2D toVkScissor(const QRhiScissor &scissor)
-{
-    VkRect2D s;
-    s.offset.x = scissor.r.x();
-    s.offset.y = scissor.r.y();
-    s.extent.width = scissor.r.width();
-    s.extent.height = scissor.r.height();
-    return s;
+    if (!cbD->currentPipeline->flags.testFlag(QRhiGraphicsPipeline::UsesScissor)) {
+        const VkRect2D s = toVkScissor(QRhiScissor(viewport.r.x(), viewport.r.y(), viewport.r.z(), viewport.r.w()), outputSize);
+        df->vkCmdSetScissor(cbD->cb, 0, 1, &s);
+    }
 }
 
 void QRhiVulkan::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
     Q_ASSERT(inPass);
-    VkRect2D s = toVkScissor(scissor);
-    df->vkCmdSetScissor(QRHI_RES(QVkCommandBuffer, cb)->cb, 0, 1, &s);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
+    Q_ASSERT(cbD->currentPipeline && cbD->currentTarget);
+    Q_ASSERT(cbD->currentPipeline->flags.testFlag(QRhiGraphicsPipeline::UsesScissor));
+    const VkRect2D s = toVkScissor(scissor, cbD->currentTarget->sizeInPixels());
+    df->vkCmdSetScissor(cbD->cb, 0, 1, &s);
 }
 
 void QRhiVulkan::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)

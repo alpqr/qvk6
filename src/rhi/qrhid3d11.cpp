@@ -159,14 +159,14 @@ int QRhiD3D11::ubufAlignment() const
     return 256;
 }
 
-QMatrix4x4 QRhiD3D11::openGLVertexCorrectionMatrix() const
-{
-    return QMatrix4x4(); // identity
-}
-
 bool QRhiD3D11::isYUpInFramebuffer() const
 {
     return false;
+}
+
+QMatrix4x4 QRhiD3D11::clipSpaceCorrMatrix() const
+{
+    return QMatrix4x4(); // identity
 }
 
 QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -275,27 +275,34 @@ void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
 void QRhiD3D11::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
 {
     Q_ASSERT(inPass);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    Q_ASSERT(cbD->currentTarget);
     QD3D11CommandBuffer::Command cmd;
     cmd.cmd = QD3D11CommandBuffer::Command::Viewport;
     cmd.args.viewport.x = viewport.r.x();
+    // d3d expects top-left, QRhiScissor is bottom-left
+    cmd.args.viewport.y = cbD->currentTarget->sizeInPixels().height() - (viewport.r.y() + viewport.r.w() - 1);
     cmd.args.viewport.y = viewport.r.y();
-    cmd.args.viewport.w = viewport.r.width();
-    cmd.args.viewport.h = viewport.r.height();
+    cmd.args.viewport.w = viewport.r.z();
+    cmd.args.viewport.h = viewport.r.w();
     cmd.args.viewport.d0 = viewport.minDepth;
     cmd.args.viewport.d1 = viewport.maxDepth;
-    QRHI_RES(QD3D11CommandBuffer, cb)->commands.append(cmd);
+    cbD->commands.append(cmd);
 }
 
 void QRhiD3D11::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
     Q_ASSERT(inPass);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    Q_ASSERT(cbD->currentTarget);
     QD3D11CommandBuffer::Command cmd;
     cmd.cmd = QD3D11CommandBuffer::Command::Scissor;
     cmd.args.scissor.x = scissor.r.x();
-    cmd.args.scissor.y = scissor.r.y();
-    cmd.args.scissor.w = scissor.r.width();
-    cmd.args.scissor.h = scissor.r.height();
-    QRHI_RES(QD3D11CommandBuffer, cb)->commands.append(cmd);
+    // d3d expects top-left, QRhiScissor is bottom-left
+    cmd.args.scissor.y = cbD->currentTarget->sizeInPixels().height() - (scissor.r.y() + scissor.r.w() - 1);
+    cmd.args.scissor.w = scissor.r.z();
+    cmd.args.scissor.h = scissor.r.w();
+    cbD->commands.append(cmd);
 }
 
 void QRhiD3D11::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)

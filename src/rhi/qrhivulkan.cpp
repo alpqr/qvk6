@@ -1838,7 +1838,12 @@ void QRhiVulkan::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport
 {
     Q_ASSERT(inPass);
     VkViewport vp = toVkViewport(viewport);
-    df->vkCmdSetViewport(QRHI_RES(QVkCommandBuffer, cb)->cb, 0, 1, &vp);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
+    df->vkCmdSetViewport(cbD->cb, 0, 1, &vp);
+
+    Q_ASSERT(cbD->currentPipeline);
+    if (!cbD->currentPipeline->flags.testFlag(QRhiGraphicsPipeline::UsesScissor))
+        setScissor(cb, QRhiScissor(viewport.r.x(), viewport.r.y(), viewport.r.width(), viewport.r.height()));
 }
 
 static inline VkRect2D toVkScissor(const QRhiScissor &scissor)
@@ -2921,7 +2926,7 @@ bool QVkGraphicsPipeline::build()
 
     QVarLengthArray<VkDynamicState, 8> dynEnable;
     dynEnable << VK_DYNAMIC_STATE_VIEWPORT;
-    dynEnable << VK_DYNAMIC_STATE_SCISSOR;
+    dynEnable << VK_DYNAMIC_STATE_SCISSOR; // ignore UsesScissor - Vulkan requires a scissor for the viewport always
     if (flags.testFlag(QRhiGraphicsPipeline::UsesBlendConstants))
         dynEnable << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
     if (flags.testFlag(QRhiGraphicsPipeline::UsesStencilRef))
@@ -2937,8 +2942,7 @@ bool QVkGraphicsPipeline::build()
     VkPipelineViewportStateCreateInfo viewportInfo;
     memset(&viewportInfo, 0, sizeof(viewportInfo));
     viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportInfo.viewportCount = 1;
-    viewportInfo.scissorCount = 1;
+    viewportInfo.viewportCount = viewportInfo.scissorCount = 1;
     pipelineInfo.pViewportState = &viewportInfo;
 
     VkPipelineInputAssemblyStateCreateInfo inputAsmInfo;

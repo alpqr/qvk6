@@ -100,7 +100,7 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
         Binding(quint32 stride_, Classification cls = PerVertex)
             : stride(stride_), classification(cls)
         { }
-        quint32 stride; // if another api needs this in setVertexBuffer, make the cb store a ptr to the current ps and look up the stride via that
+        quint32 stride; // if another api needs this in setVertexInput, make the cb store a ptr to the current ps and look up the stride via that
         Classification classification;
     };
 
@@ -395,7 +395,8 @@ class Q_RHI_EXPORT QRhiGraphicsPipeline : public QRhiResource
 public:
     enum Flag {
         UsesBlendConstants = 1 << 0,
-        UsesStencilRef = 1 << 1
+        UsesStencilRef = 1 << 1,
+        UsesScissor = 1 << 2
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -729,6 +730,9 @@ public:
                              QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb = nullptr);
 
+    // The following functions (taking a command buffer) expect to have the
+    // pipeline set already on the command buffer. Otherwise, unspecified
+    // issues may arise depending on the backend.
     using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
     void setVertexInput(QRhiCommandBuffer *cb,
                         int startBinding, const QVector<VertexInput> &bindings,

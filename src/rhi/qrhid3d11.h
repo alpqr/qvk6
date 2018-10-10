@@ -38,6 +38,8 @@
 #define QRHID3D11_H
 
 #include <QtRhi/qrhi.h>
+
+#ifndef Q_OS_MAC
 #include <d3d11_1.h>
 
 QT_BEGIN_NAMESPACE
@@ -54,5 +56,7 @@ struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
 };
 
 QT_END_NAMESPACE
+
+#endif // Q_OS_MAC
 
 #endif

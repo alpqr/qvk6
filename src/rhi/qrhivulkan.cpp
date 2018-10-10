@@ -2032,8 +2032,6 @@ static inline VkPrimitiveTopology toVkTopology(QRhiGraphicsPipeline::Topology t)
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     case QRhiGraphicsPipeline::TriangleStrip:
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
-    case QRhiGraphicsPipeline::TriangleFan:
-        return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
     case QRhiGraphicsPipeline::Lines:
         return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
     case QRhiGraphicsPipeline::LineStrip:

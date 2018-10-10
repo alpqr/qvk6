@@ -444,8 +444,6 @@ static inline GLenum toGlTopology(QRhiGraphicsPipeline::Topology t)
         return GL_TRIANGLES;
     case QRhiGraphicsPipeline::TriangleStrip:
         return GL_TRIANGLE_STRIP;
-    case QRhiGraphicsPipeline::TriangleFan:
-        return GL_TRIANGLE_FAN;
     case QRhiGraphicsPipeline::Lines:
         return GL_LINES;
     case QRhiGraphicsPipeline::LineStrip:

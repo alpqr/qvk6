@@ -1,8 +1,7 @@
-d3d device loss
-drop triangle fan?
 drop front-and-back cull?
 exercise indexed drawing
 scissor-enable flag? (esp d3d)
+d3d device loss
 gl and d3d setGraphicsPipeline should check srb->generation
 hlsl version to qsb (qtshaderstack17)
 more what-if-resource-rebuilt cases
@@ -26,6 +25,7 @@ gles2: ubuf structs, arrays
 gles2: target QOpenGLWindow ...
 
 +++ done
+drop triangle fan
 do something with offset and size in srb::Binding::uniformBuffer
 start d3d11 backend
 what if ps is rebuilt

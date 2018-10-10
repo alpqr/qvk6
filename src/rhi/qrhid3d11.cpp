@@ -1293,9 +1293,6 @@ static inline D3D11_PRIMITIVE_TOPOLOGY toD3DTopology(QRhiGraphicsPipeline::Topol
         return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
     case QRhiGraphicsPipeline::TriangleStrip:
         return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
-    case QRhiGraphicsPipeline::TriangleFan:
-        qWarning("Triangle fans are not supported by Direct 3D");
-        return D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP;
     case QRhiGraphicsPipeline::Lines:
         return D3D11_PRIMITIVE_TOPOLOGY_LINELIST;
     case QRhiGraphicsPipeline::LineStrip:

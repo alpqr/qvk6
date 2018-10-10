@@ -402,7 +402,6 @@ public:
     enum Topology {
         Triangles,
         TriangleStrip,
-        TriangleFan,
         Lines,
         LineStrip,
         Points

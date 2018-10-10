@@ -43,7 +43,7 @@ private:
 void D3D11Window::init()
 {
     QRhiD3D11InitParams params;
-//    params.enableDebugLayer = true;
+    params.enableDebugLayer = true;
     params.importExistingDevice = false;
     m_r = QRhi::create(QRhi::D3D11, &params);
 

@@ -138,19 +138,19 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
 };
 
 template<typename T>
-struct BatchedBindings
+struct QD3D11BatchedBindings
 {
     struct Batch {
         uint startBinding;
         QVarLengthArray<T, 4> resources;
     };
-    QVarLengthArray<Batch, 4> batches;
+    QVarLengthArray<Batch, 4> batches; // sorted by startBinding
 };
 
 template<typename T>
-struct BatchedBindingGen
+struct QD3D11BatchedBindingGen
 {
-    void feed(int binding, T resource) {
+    void feed(int binding, T resource) { // binding must be strictly increasing
         if (curBinding == -1 || binding > curBinding + 1) {
             finish();
             curBatch.startBinding = binding;
@@ -174,10 +174,10 @@ struct BatchedBindingGen
         curBinding = -1;
     }
 
-    BatchedBindings<T> result;
+    QD3D11BatchedBindings<T> result;
 
 private:
-    typename BatchedBindings<T>::Batch curBatch;
+    typename QD3D11BatchedBindings<T>::Batch curBatch;
     int curBinding = -1;
 };
 
@@ -189,16 +189,16 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
 
     QVector<Binding> sortedBindings;
 
-    BatchedBindingGen<ID3D11Buffer *> vsubufs;
-    BatchedBindingGen<UINT> vsubufoffsets;
-    BatchedBindingGen<UINT> vsubufsizes;
+    QD3D11BatchedBindingGen<ID3D11Buffer *> vsubufs;
+    QD3D11BatchedBindingGen<UINT> vsubufoffsets;
+    QD3D11BatchedBindingGen<UINT> vsubufsizes;
 
-    BatchedBindingGen<ID3D11Buffer *> fsubufs;
-    BatchedBindingGen<UINT> fsubufoffsets;
-    BatchedBindingGen<UINT> fsubufsizes;
+    QD3D11BatchedBindingGen<ID3D11Buffer *> fsubufs;
+    QD3D11BatchedBindingGen<UINT> fsubufoffsets;
+    QD3D11BatchedBindingGen<UINT> fsubufsizes;
 
-    BatchedBindingGen<ID3D11SamplerState *> fssamplers;
-    BatchedBindingGen<ID3D11ShaderResourceView *> fsshaderresources;
+    QD3D11BatchedBindingGen<ID3D11SamplerState *> fssamplers;
+    QD3D11BatchedBindingGen<ID3D11ShaderResourceView *> fsshaderresources;
 };
 
 struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
@@ -411,8 +411,8 @@ public:
     void create();
     void destroy();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
-    void setShaderResources(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD);
-    void executeCommandBuffer(QD3D11CommandBuffer *cb);
+    void setShaderResources(QD3D11ShaderResourceBindings *srbD);
+    void executeCommandBuffer(QD3D11CommandBuffer *cbD);
 
     bool debugLayer = false;
     bool importedDevice = false;
@@ -426,6 +426,10 @@ public:
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
+
+    struct {
+        int fsLastActiveSrvBinding = 0;
+    } contextState;
 };
 
 QT_END_NAMESPACE

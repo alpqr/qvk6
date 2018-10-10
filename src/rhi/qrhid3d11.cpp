@@ -407,7 +407,7 @@ void QRhiD3D11::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
             context->UpdateSubresource(bufD->buffer, 0, nullptr, u.data.constData(), 0, 0);
         } else {
             // Specify the region since the ID3D11Buffer's size is rounded up to be
-            // a multiple of 16 while the data we have has the original size.
+            // a multiple of 256 while the data we have has the original size.
             D3D11_BOX box;
             box.left = box.top = box.front = 0;
             box.back = box.bottom = 1;
@@ -486,10 +486,8 @@ void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
     cbD->currentTarget = nullptr;
 }
 
-void QRhiD3D11::setShaderResources(QD3D11GraphicsPipeline *psD, QD3D11ShaderResourceBindings *srbD)
+void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
 {
-    Q_UNUSED(psD);
-
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBindings::Binding &b(srbD->sortedBindings[i]);
         switch (b.type) {
@@ -520,8 +518,10 @@ void QRhiD3D11::setShaderResources(QD3D11GraphicsPipeline *psD, QD3D11ShaderReso
     for (const auto &batch : srbD->fssamplers.result.batches)
         context->PSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
 
-    for (const auto &batch : srbD->fsshaderresources.result.batches)
+    for (const auto &batch : srbD->fsshaderresources.result.batches) {
         context->PSSetShaderResources(batch.startBinding, batch.resources.count(), batch.resources.constData());
+        contextState.fsLastActiveSrvBinding = batch.startBinding + batch.resources.count() - 1;
+    }
 
     for (int i = 0, ie = srbD->vsubufs.result.batches.count(); i != ie; ++i) {
         context->VSSetConstantBuffers1(srbD->vsubufs.result.batches[i].startBinding,
@@ -540,18 +540,25 @@ void QRhiD3D11::setShaderResources(QD3D11GraphicsPipeline *psD, QD3D11ShaderReso
     }
 }
 
-void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
+void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
 {
     quint32 stencilRef = 0;
     float blendConstants[] = { 1, 1, 1, 1 };
 
-    for (const QD3D11CommandBuffer::Command &cmd : qAsConst(cb->commands)) {
+    for (const QD3D11CommandBuffer::Command &cmd : qAsConst(cbD->commands)) {
         switch (cmd.cmd) {
         case QD3D11CommandBuffer::Command::SetRenderTarget:
         {
             QRhiRenderTarget *rt = cmd.args.setRenderTarget.rt;
             const QD3D11RenderPass *rp = QRHI_RES(const QD3D11RenderPass, rt->renderPass());
             Q_ASSERT(rp);
+            // The new output cannot be bound as input from the previous frame,
+            // otherwise the debug layer complains. Avoid this.
+            QVarLengthArray<ID3D11ShaderResourceView *,
+                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> nullsrvs(contextState.fsLastActiveSrvBinding + 1);
+            for (int i = 0; i < nullsrvs.count(); ++i)
+                nullsrvs[i] = nullptr;
+            context->PSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
             context->OMSetRenderTargets(rp->rtv ? 1 : 0, rp->rtv ? &rp->rtv : nullptr, rp->dsv);
         }
             break;
@@ -614,7 +621,7 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cb)
             context->OMSetDepthStencilState(psD->dsState, stencilRef);
             context->OMSetBlendState(psD->blendState, blendConstants, 0xffffffff);
             context->RSSetState(psD->rastState);
-            setShaderResources(psD, srbD);
+            setShaderResources(srbD);
         }
             break;
         case QD3D11CommandBuffer::Command::StencilRef:

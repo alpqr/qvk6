@@ -59,6 +59,7 @@ struct QD3D11Buffer : public QRhiBuffer
     ID3D11Buffer *buffer = nullptr;
     QByteArray dynBuf;
     bool hasPendingDynamicUpdates = false;
+    uint generation = 0;
 };
 
 struct QD3D11RenderBuffer : public QRhiRenderBuffer
@@ -80,6 +81,7 @@ struct QD3D11Texture : public QRhiTexture
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11ShaderResourceView *srv = nullptr;
+    uint generation = 0;
 };
 
 struct QD3D11Sampler : public QRhiSampler
@@ -89,6 +91,7 @@ struct QD3D11Sampler : public QRhiSampler
     bool build() override;
 
     ID3D11SamplerState *samplerState = nullptr;
+    uint generation = 0;
 };
 
 struct QD3D11RenderPass : public QRhiRenderPass
@@ -140,16 +143,6 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
 template<typename T>
 struct QD3D11BatchedBindings
 {
-    struct Batch {
-        uint startBinding;
-        QVarLengthArray<T, 4> resources;
-    };
-    QVarLengthArray<Batch, 4> batches; // sorted by startBinding
-};
-
-template<typename T>
-struct QD3D11BatchedBindingGen
-{
     void feed(int binding, T resource) { // binding must be strictly increasing
         if (curBinding == -1 || binding > curBinding + 1) {
             finish();
@@ -165,19 +158,24 @@ struct QD3D11BatchedBindingGen
 
     void finish() {
         if (!curBatch.resources.isEmpty())
-            result.batches.append(curBatch);
+            batches.append(curBatch);
     }
 
     void clear() {
-        result.batches.clear();
+        batches.clear();
         curBatch.resources.clear();
         curBinding = -1;
     }
 
-    QD3D11BatchedBindings<T> result;
+    struct Batch {
+        uint startBinding;
+        QVarLengthArray<T, 4> resources;
+    };
+
+    QVarLengthArray<Batch, 4> batches; // sorted by startBinding
 
 private:
-    typename QD3D11BatchedBindings<T>::Batch curBatch;
+    Batch curBatch;
     int curBinding = -1;
 };
 
@@ -188,17 +186,18 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     bool build() override;
 
     QVector<Binding> sortedBindings;
+    uint generation = 0;
 
-    QD3D11BatchedBindingGen<ID3D11Buffer *> vsubufs;
-    QD3D11BatchedBindingGen<UINT> vsubufoffsets;
-    QD3D11BatchedBindingGen<UINT> vsubufsizes;
+    QD3D11BatchedBindings<ID3D11Buffer *> vsubufs;
+    QD3D11BatchedBindings<UINT> vsubufoffsets;
+    QD3D11BatchedBindings<UINT> vsubufsizes;
 
-    QD3D11BatchedBindingGen<ID3D11Buffer *> fsubufs;
-    QD3D11BatchedBindingGen<UINT> fsubufoffsets;
-    QD3D11BatchedBindingGen<UINT> fsubufsizes;
+    QD3D11BatchedBindings<ID3D11Buffer *> fsubufs;
+    QD3D11BatchedBindings<UINT> fsubufoffsets;
+    QD3D11BatchedBindings<UINT> fsubufsizes;
 
-    QD3D11BatchedBindingGen<ID3D11SamplerState *> fssamplers;
-    QD3D11BatchedBindingGen<ID3D11ShaderResourceView *> fsshaderresources;
+    QD3D11BatchedBindings<ID3D11SamplerState *> fssamplers;
+    QD3D11BatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
 };
 
 struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
@@ -411,6 +410,7 @@ public:
     void create();
     void destroy();
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
+    void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD);
 

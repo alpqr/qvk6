@@ -136,8 +136,8 @@ QRhi::PassUpdates TriangleRenderer::update()
     // recreate the underlying VkBuffer every second frame
     // to exercise setGraphicsPipeline's built-in smartness
     if (!(messWithBufferTrigger & 1)) {
-        m_r->releaseLater(m_ubuf);
-        m_r->createBuffer(m_ubuf);
+        m_ubuf->release();
+        m_ubuf->build();
     }
     ++messWithBufferTrigger;
 #endif

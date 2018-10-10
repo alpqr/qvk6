@@ -1,7 +1,8 @@
+d3d to track buffer, texture, sampler generation and update the buffer/srv/sampler in the batchedbinding lists
+gl and d3d setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
 drop front-and-back cull?
 exercise indexed drawing
 d3d device loss
-gl and d3d setGraphicsPipeline should check srb->generation
 hlsl version to qsb (qtshaderstack17)
 more what-if-resource-rebuilt cases
 test FrameOpDeviceLost somehow

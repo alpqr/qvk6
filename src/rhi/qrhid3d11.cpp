@@ -493,6 +493,68 @@ void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
     cbD->currentTarget = nullptr;
 }
 
+void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
+{
+    srbD->vsubufs.clear();
+    srbD->vsubufoffsets.clear();
+    srbD->vsubufsizes.clear();
+
+    srbD->fsubufs.clear();
+    srbD->fsubufoffsets.clear();
+    srbD->fsubufsizes.clear();
+
+    srbD->fssamplers.clear();
+    srbD->fsshaderresources.clear();
+
+    for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBindings::Binding &b(srbD->sortedBindings[i]);
+        switch (b.type) {
+        case QRhiShaderResourceBindings::Binding::UniformBuffer:
+        {
+            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
+            Q_ASSERT(aligned(b.ubuf.offset, 256) == b.ubuf.offset);
+            const uint offsetInConstants = b.ubuf.offset / 16;
+            // size must be 16 mult. (in constants, i.e. multiple of 256 bytes).
+            // We can round up if needed since the buffers's actual size
+            // (ByteWidth) is always a multiple of 256.
+            const uint sizeInConstants = aligned(b.ubuf.maybeSize ? b.ubuf.maybeSize : bufD->size, 256) / 16;
+            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::VertexStage)) {
+                srbD->vsubufs.feed(b.binding, bufD->buffer);
+                srbD->vsubufoffsets.feed(b.binding, offsetInConstants);
+                srbD->vsubufsizes.feed(b.binding, sizeInConstants);
+            }
+            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::FragmentStage)) {
+                srbD->fsubufs.feed(b.binding, bufD->buffer);
+                srbD->fsubufoffsets.feed(b.binding, offsetInConstants);
+                srbD->fsubufsizes.feed(b.binding, sizeInConstants);
+            }
+        }
+            break;
+        case QRhiShaderResourceBindings::Binding::SampledTexture:
+            // A sampler with binding N is mapped to a HLSL sampler and texture
+            // with registers sN and tN by SPIRV-Cross.
+            // ### vertex?
+            srbD->fssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
+            srbD->fsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
+    srbD->vsubufs.finish();
+    srbD->vsubufoffsets.finish();
+    srbD->vsubufsizes.finish();
+
+    srbD->fsubufs.finish();
+    srbD->fsubufoffsets.finish();
+    srbD->fsubufsizes.finish();
+
+    srbD->fssamplers.finish();
+    srbD->fsshaderresources.finish();
+}
+
 void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
 {
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
@@ -522,28 +584,28 @@ void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
         }
     }
 
-    for (const auto &batch : srbD->fssamplers.result.batches)
+    for (const auto &batch : srbD->fssamplers.batches)
         context->PSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
 
-    for (const auto &batch : srbD->fsshaderresources.result.batches) {
+    for (const auto &batch : srbD->fsshaderresources.batches) {
         context->PSSetShaderResources(batch.startBinding, batch.resources.count(), batch.resources.constData());
         contextState.fsLastActiveSrvBinding = batch.startBinding + batch.resources.count() - 1;
     }
 
-    for (int i = 0, ie = srbD->vsubufs.result.batches.count(); i != ie; ++i) {
-        context->VSSetConstantBuffers1(srbD->vsubufs.result.batches[i].startBinding,
-                                       srbD->vsubufs.result.batches[i].resources.count(),
-                                       srbD->vsubufs.result.batches[i].resources.constData(),
-                                       srbD->vsubufoffsets.result.batches[i].resources.constData(),
-                                       srbD->vsubufsizes.result.batches[i].resources.constData());
+    for (int i = 0, ie = srbD->vsubufs.batches.count(); i != ie; ++i) {
+        context->VSSetConstantBuffers1(srbD->vsubufs.batches[i].startBinding,
+                                       srbD->vsubufs.batches[i].resources.count(),
+                                       srbD->vsubufs.batches[i].resources.constData(),
+                                       srbD->vsubufoffsets.batches[i].resources.constData(),
+                                       srbD->vsubufsizes.batches[i].resources.constData());
     }
 
-    for (int i = 0, ie = srbD->fsubufs.result.batches.count(); i != ie; ++i) {
-        context->PSSetConstantBuffers1(srbD->fsubufs.result.batches[i].startBinding,
-                                       srbD->fsubufs.result.batches[i].resources.count(),
-                                       srbD->fsubufs.result.batches[i].resources.constData(),
-                                       srbD->fsubufoffsets.result.batches[i].resources.constData(),
-                                       srbD->fsubufsizes.result.batches[i].resources.constData());
+    for (int i = 0, ie = srbD->fsubufs.batches.count(); i != ie; ++i) {
+        context->PSSetConstantBuffers1(srbD->fsubufs.batches[i].startBinding,
+                                       srbD->fsubufs.batches[i].resources.count(),
+                                       srbD->fsubufs.batches[i].resources.constData(),
+                                       srbD->fsubufoffsets.batches[i].resources.constData(),
+                                       srbD->fsubufsizes.batches[i].resources.constData());
     }
 }
 
@@ -721,6 +783,7 @@ bool QD3D11Buffer::build()
         hasPendingDynamicUpdates = false;
     }
 
+    generation += 1;
     return true;
 }
 
@@ -886,6 +949,7 @@ bool QD3D11Texture::build()
         return false;
     }
 
+    generation += 1;
     return true;
 }
 
@@ -948,6 +1012,7 @@ bool QD3D11Sampler::build()
         return false;
     }
 
+    generation += 1;
     return true;
 }
 
@@ -1093,17 +1158,6 @@ QD3D11ShaderResourceBindings::QD3D11ShaderResourceBindings(QRhiImplementation *r
 void QD3D11ShaderResourceBindings::release()
 {
     sortedBindings.clear();
-
-    vsubufs.clear();
-    vsubufoffsets.clear();
-    vsubufsizes.clear();
-
-    fsubufs.clear();
-    fsubufoffsets.clear();
-    fsubufsizes.clear();
-
-    fssamplers.clear();
-    fsshaderresources.clear();
 }
 
 bool QD3D11ShaderResourceBindings::build()
@@ -1116,54 +1170,10 @@ bool QD3D11ShaderResourceBindings::build()
         return a.binding < b.binding;
     });
 
-    for (int i = 0, ie = sortedBindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBindings::Binding &b(sortedBindings[i]);
-        switch (b.type) {
-        case QRhiShaderResourceBindings::Binding::UniformBuffer:
-        {
-            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
-            Q_ASSERT(aligned(b.ubuf.offset, 256) == b.ubuf.offset);
-            const uint offsetInConstants = b.ubuf.offset / 16;
-            // size must be 16 mult. (in constants, i.e. multiple of 256 bytes).
-            // We can round up if needed since the buffers's actual size
-            // (ByteWidth) is always a multiple of 256.
-            const uint sizeInConstants = aligned(b.ubuf.maybeSize ? b.ubuf.maybeSize : bufD->size, 256) / 16;
-            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::VertexStage)) {
-                vsubufs.feed(b.binding, bufD->buffer);
-                vsubufoffsets.feed(b.binding, offsetInConstants);
-                vsubufsizes.feed(b.binding, sizeInConstants);
-            }
-            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::FragmentStage)) {
-                fsubufs.feed(b.binding, bufD->buffer);
-                fsubufoffsets.feed(b.binding, offsetInConstants);
-                fsubufsizes.feed(b.binding, sizeInConstants);
-            }
-        }
-            break;
-        case QRhiShaderResourceBindings::Binding::SampledTexture:
-            // A sampler with binding N is mapped to a HLSL sampler and texture
-            // with registers sN and tN by SPIRV-Cross.
-            // ### vertex?
-            fssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
-            fsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
-            break;
-        default:
-            Q_UNREACHABLE();
-            break;
-        }
-    }
+    QRHI_RES_RHI(QRhiD3D11);
+    rhiD->updateShaderResourceBindings(this);
 
-    vsubufs.finish();
-    vsubufoffsets.finish();
-    vsubufsizes.finish();
-
-    fsubufs.finish();
-    fsubufoffsets.finish();
-    fsubufsizes.finish();
-
-    fssamplers.finish();
-    fsshaderresources.finish();
-
+    generation += 1;
     return true;
 }
 

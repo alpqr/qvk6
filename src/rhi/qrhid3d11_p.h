@@ -188,6 +188,23 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     QVector<Binding> sortedBindings;
     uint generation = 0;
 
+    // Keep track of the generation number of each referenced QRhi* to be able
+    // to detect that the batched bindings are out of date.
+    struct BoundUniformBufferData {
+        uint generation;
+    };
+    struct BoundSampledTextureData {
+        uint texGeneration;
+        uint samplerGeneration;
+    };
+    struct BoundResourceData {
+        union {
+            BoundUniformBufferData ubuf;
+            BoundSampledTextureData stex;
+        };
+    };
+    QVector<BoundResourceData> boundResourceData;
+
     QD3D11BatchedBindings<ID3D11Buffer *> vsubufs;
     QD3D11BatchedBindings<UINT> vsubufoffsets;
     QD3D11BatchedBindings<UINT> vsubufsizes;

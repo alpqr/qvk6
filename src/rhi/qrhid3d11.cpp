@@ -228,8 +228,37 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     QD3D11ShaderResourceBindings *srbD = QRHI_RES(QD3D11ShaderResourceBindings, srb);
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
 
+    bool srbUpdate = false;
+    for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBindings::Binding &b(srbD->sortedBindings[i]);
+        QD3D11ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
+        switch (b.type) {
+        case QRhiShaderResourceBindings::Binding::UniformBuffer:
+            if (QRHI_RES(QD3D11Buffer, b.ubuf.buf)->generation != bd.ubuf.generation) {
+                srbUpdate = true;
+                bd.ubuf.generation = QRHI_RES(QD3D11Buffer, b.ubuf.buf)->generation;
+            }
+            break;
+        case QRhiShaderResourceBindings::Binding::SampledTexture:
+            if (QRHI_RES(QD3D11Texture, b.stex.tex)->generation != bd.stex.texGeneration
+                    || QRHI_RES(QD3D11Sampler, b.stex.sampler)->generation != bd.stex.samplerGeneration)
+            {
+                srbUpdate = true;
+                bd.stex.texGeneration = QRHI_RES(QD3D11Texture, b.stex.tex)->generation;
+                bd.stex.samplerGeneration = QRHI_RES(QD3D11Sampler, b.stex.sampler)->generation;
+            }
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+    if (srbUpdate)
+        updateShaderResourceBindings(srbD);
+
     if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation
-            || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation)
+            || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation
+            || srbUpdate)
     {
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
@@ -511,13 +540,16 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
     srbD->fssamplers.clear();
     srbD->fsshaderresources.clear();
 
+    srbD->boundResourceData.resize(srbD->sortedBindings.count());
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBindings::Binding &b(srbD->sortedBindings[i]);
+        QD3D11ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
         {
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
             Q_ASSERT(aligned(b.ubuf.offset, 256) == b.ubuf.offset);
+            bd.ubuf.generation = bufD->generation;
             const uint offsetInConstants = b.ubuf.offset / 16;
             // size must be 16 mult. (in constants, i.e. multiple of 256 bytes).
             // We can round up if needed since the buffers's actual size
@@ -539,6 +571,8 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
             // A sampler with binding N is mapped to a HLSL sampler and texture
             // with registers sN and tN by SPIRV-Cross.
             // ### vertex?
+            bd.stex.texGeneration = QRHI_RES(QD3D11Texture, b.stex.tex)->generation;
+            bd.stex.samplerGeneration = QRHI_RES(QD3D11Sampler, b.stex.sampler)->generation;
             srbD->fssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
             srbD->fsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
             break;

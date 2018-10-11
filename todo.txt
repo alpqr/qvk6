@@ -1,7 +1,6 @@
-d3d to track buffer, texture, sampler generation and update the buffer/srv/sampler in the batchedbinding lists
-gl setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
-drop front-and-back cull?
 exercise indexed drawing
+drop front-and-back cull?
+gl setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
 d3d device loss
 hlsl version to qsb (qtshaderstack17)
 more what-if-resource-rebuilt cases
@@ -25,6 +24,7 @@ gles2: ubuf structs, arrays
 gles2: target QOpenGLWindow ...
 
 +++ done
+d3d to track buffer, texture, sampler generation and update the buffer/srv/sampler in the batchedbinding lists
 d3d setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
 scissor-enable flag
 drop triangle fan

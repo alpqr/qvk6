@@ -289,6 +289,7 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             struct {
                 QD3D11GraphicsPipeline *ps;
                 QD3D11ShaderResourceBindings *srb;
+                bool resOnlyChange;
             } bindGraphicsPipeline;
             struct {
                 QD3D11GraphicsPipeline *ps;

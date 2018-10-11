@@ -242,6 +242,8 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     if (pipelineChanged || srbChanged) {
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
+        cbD->currentSrb = srb;
+        cbD->currentSrbGeneration = srbD->generation;
 
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::BindGraphicsPipeline;

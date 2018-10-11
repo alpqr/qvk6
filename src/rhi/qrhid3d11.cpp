@@ -717,7 +717,7 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
         case QD3D11CommandBuffer::Command::BindIndexBuffer:
             context->IASetIndexBuffer(cmd.args.bindIndexBuffer.buffer,
                                       cmd.args.bindIndexBuffer.format,
-                                      cmd.args.bindIndexBuffer.format);
+                                      cmd.args.bindIndexBuffer.offset);
             break;
         case QD3D11CommandBuffer::Command::BindGraphicsPipeline:
         {

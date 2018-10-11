@@ -26,50 +26,39 @@
  **
  ****************************************************************************/
 
-#ifndef EXAMPLEWINDOW_H
-#define EXAMPLEWINDOW_H
+#ifndef QUADRENDERER_H
+#define QUADRENDERER_H
 
 #include <QRhi>
-#include <QWindow>
-#include <QPlatformSurfaceEvent>
-#include "trianglerenderer.h"
-#include "quadrenderer.h"
-#include "texturedcuberenderer.h"
-#include "triangleoncuberenderer.h"
 
-class ExampleWindow : public QWindow
+class QuadRenderer
 {
 public:
-    virtual void init();
-    virtual void releaseResources();
-    virtual void recreateSwapChain();
-    virtual void releaseSwapChain();
+    void setRhi(QRhi *r) { m_r = r; }
+    void setSampleCount(int samples) { m_sampleCount = samples; }
+    int sampleCount() const { return m_sampleCount; }
+    void setTranslation(const QVector3D &v) { m_translation = v; }
+    void initResources();
+    void releaseResources();
+    void setPipeline(QRhiGraphicsPipeline *ps, const QSize &pixelSize);
+    QRhi::PassUpdates update();
+    void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
 
-    void setSampleCount(int sampleCount) { m_sampleCount = sampleCount; }
-    void setOnScreenOnly(bool v) { m_onScreenOnly = v; }
-    void setTriangleOnly(bool v) { m_triangleOnly = v; }
+private:
+    QRhi *m_r;
 
-protected:
-    void render();
-    void exposeEvent(QExposeEvent *) override;
-    bool event(QEvent *) override;
+    QRhiBuffer *m_vbuf = nullptr;
+    bool m_vbufReady = false;
+    QRhiBuffer *m_ibuf = nullptr;
+    bool m_opacityReady = false;
+    QRhiBuffer *m_ubuf = nullptr;
+    QRhiGraphicsPipeline *m_ps = nullptr;
+    QRhiShaderResourceBindings *m_srb = nullptr;
 
-    bool m_running = false;
-
-    QRhi *m_r = nullptr;
-    bool m_hasSwapChain = false;
-    bool m_swapChainChanged = false;
-    QRhiSwapChain *m_sc = nullptr;
-    QRhiRenderBuffer *m_ds = nullptr;
-
-    TriangleRenderer m_triRenderer;
-    QuadRenderer m_quadRenderer;
-    TexturedCubeRenderer m_cubeRenderer;
-    TriangleOnCubeRenderer m_liveTexCubeRenderer;
-
-    int m_sampleCount = 1;
-    bool m_onScreenOnly = false;
-    bool m_triangleOnly = false;
+    QVector3D m_translation;
+    QMatrix4x4 m_proj;
+    float m_rotation = 0;
+    int m_sampleCount = 1; // no MSAA by default
 };
 
 #endif

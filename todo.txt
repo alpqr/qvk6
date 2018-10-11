@@ -1,29 +1,38 @@
-exercise indexed drawing
+vk should update lastActiveFrameSlot even when cur.obj is same
+bring up metal
 drop front-and-back cull?
-gl setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
+figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 hlsl version to qsb (qtshaderstack17)
 more what-if-resource-rebuilt cases
-test FrameOpDeviceLost somehow
-gles2: more ubuf types
-gles2: reduce state, reduce texparam
 tex/QImage formats
-gles2: tex size stuff
-test depth texture
-depth only offscreen
-mipmaps
-cubemaps
+cubemap
+mipmap (gen with compute on vk?)
 anisotropic
 compressed textures
 adopt texture, buffer, ...
 more tex: 3d, array
+test FrameOpDeviceLost somehow
+test depth texture
+depth only offscreen
+gl: more ubuf types
+gl: reduce state, reduce texparam
+gl: tex size stuff (npot etc.)
+gl: texture filtering
+gl: depth texture
+d3d: texture filtering
+d3d: msaa (onscreen)
+d3d: tex/sampler for vs
 resize to 0 width or height fails (vk)
 upgrade vkmemalloc
+gl: ubuf structs, arrays
+gl: target QOpenGLWindow ...
 msaa offscreen
-gles2: ubuf structs, arrays
-gles2: target QOpenGLWindow ...
+other shader types? (gs?)
 
 +++ done
+exercise indexed drawing
+gl setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
 d3d to track buffer, texture, sampler generation and update the buffer/srv/sampler in the batchedbinding lists
 d3d setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
 scissor-enable flag

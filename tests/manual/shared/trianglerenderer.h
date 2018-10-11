@@ -40,6 +40,7 @@ public:
     void setTranslation(const QVector3D &v) { m_translation = v; }
     void setScale(float f) { m_scale = f; }
     bool isPipelineInitialized() const { return m_ps != nullptr; }
+    QRhiGraphicsPipeline *pipeline() const { return m_ps; }
     void initResources();
     void releaseResources();
     void initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize);

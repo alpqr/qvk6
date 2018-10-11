@@ -233,9 +233,13 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         srb = ps->shaderResourceBindings;
 
     QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, ps);
+    QGles2ShaderResourceBindings *srbD = QRHI_RES(QGles2ShaderResourceBindings, srb);
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
 
-    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
+    const bool pipelineChanged = cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation;
+    const bool srbChanged = cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation;
+
+    if (pipelineChanged || srbChanged) {
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
 
@@ -243,6 +247,7 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         cmd.cmd = QGles2CommandBuffer::Command::BindGraphicsPipeline;
         cmd.args.bindGraphicsPipeline.ps = ps;
         cmd.args.bindGraphicsPipeline.srb = srb;
+        cmd.args.bindGraphicsPipeline.resOnlyChange = !pipelineChanged && srbChanged;
         cbD->commands.append(cmd);
     }
 }
@@ -759,7 +764,10 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         }
             break;
         case QGles2CommandBuffer::Command::BindGraphicsPipeline:
-            executeBindGraphicsPipeline(cmd.args.bindGraphicsPipeline.ps, cmd.args.bindGraphicsPipeline.srb);
+            if (cmd.args.bindGraphicsPipeline.resOnlyChange)
+                setChangedUniforms(QRHI_RES(QGles2GraphicsPipeline, cmd.args.bindGraphicsPipeline.ps), cmd.args.bindGraphicsPipeline.srb);
+            else
+                executeBindGraphicsPipeline(cmd.args.bindGraphicsPipeline.ps, cmd.args.bindGraphicsPipeline.srb);
             break;
         case QGles2CommandBuffer::Command::BindFramebuffer:
             if (cmd.args.bindFramebuffer.rt)
@@ -1326,6 +1334,7 @@ void QGles2ShaderResourceBindings::release()
 
 bool QGles2ShaderResourceBindings::build()
 {
+    generation += 1;
     return true;
 }
 

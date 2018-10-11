@@ -149,6 +149,8 @@ struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
     QGles2ShaderResourceBindings(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
+
+    uint generation = 0;
 };
 
 struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
@@ -241,6 +243,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             struct {
                 QRhiGraphicsPipeline *ps;
                 QRhiShaderResourceBindings *srb;
+                bool resOnlyChange;
             } bindGraphicsPipeline;
             struct {
                 GLbitfield mask;
@@ -258,12 +261,16 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
+    QRhiShaderResourceBindings *currentSrb;
+    uint currentSrbGeneration;
 
     void resetState() {
         commands.clear();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
+        currentSrb = nullptr;
+        currentSrbGeneration = 0;
     }
 };
 

@@ -766,10 +766,13 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         }
             break;
         case QGles2CommandBuffer::Command::BindGraphicsPipeline:
-            if (cmd.args.bindGraphicsPipeline.resOnlyChange)
-                setChangedUniforms(QRHI_RES(QGles2GraphicsPipeline, cmd.args.bindGraphicsPipeline.ps), cmd.args.bindGraphicsPipeline.srb);
-            else
+            if (cmd.args.bindGraphicsPipeline.resOnlyChange) {
+                setChangedUniforms(QRHI_RES(QGles2GraphicsPipeline, cmd.args.bindGraphicsPipeline.ps),
+                                   cmd.args.bindGraphicsPipeline.srb,
+                                   false);
+            } else {
                 executeBindGraphicsPipeline(cmd.args.bindGraphicsPipeline.ps, cmd.args.bindGraphicsPipeline.srb);
+            }
             break;
         case QGles2CommandBuffer::Command::BindFramebuffer:
             if (cmd.args.bindFramebuffer.rt)
@@ -866,10 +869,10 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShader
 
     f->glUseProgram(psD->program);
     // buffer data cannot change within the pass so this time is as good to update uniforms as any
-    setChangedUniforms(psD, srb);
+    setChangedUniforms(psD, srb, false);
 }
 
-void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb)
+void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly)
 {
     for (int i = 0, ie = srb->bindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBindings::Binding &b(srb->bindings[i]);
@@ -877,14 +880,15 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
         {
             QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b.ubuf.buf);
-            if (bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
+            if (changedOnly && bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
                 break;
             const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b.ubuf.offset,
                                                                b.ubuf.maybeSize ? b.ubuf.maybeSize : bufD->size);
             for (QGles2GraphicsPipeline::Uniform &uniform : psD->uniforms) {
                 if (uniform.binding == b.binding
-                        && uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)
-                        && uniform.offset < uint(bufD->ubufChangeRange.changeEnd))
+                        && (!changedOnly ||
+                            (uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)
+                             && uniform.offset < uint(bufD->ubufChangeRange.changeEnd))))
                 {
                     memcpy(uniform.data.data(), bufView.constData() + uniform.offset, uniform.data.size());
 

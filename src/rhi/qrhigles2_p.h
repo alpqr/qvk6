@@ -372,7 +372,7 @@ public:
     void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);
     void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb);
-    void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb);
+    void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly);
 
     QOpenGLContext *ctx = nullptr;
     QWindow *maybeWindow = nullptr;

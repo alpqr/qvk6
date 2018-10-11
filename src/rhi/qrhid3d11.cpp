@@ -225,16 +225,21 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         srb = ps->shaderResourceBindings;
 
     QD3D11GraphicsPipeline *psD = QRHI_RES(QD3D11GraphicsPipeline, ps);
+    QD3D11ShaderResourceBindings *srbD = QRHI_RES(QD3D11ShaderResourceBindings, srb);
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
 
-    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
+    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation
+            || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation)
+    {
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
+        cbD->currentSrb = srb;
+        cbD->currentSrbGeneration = srbD->generation;
 
         QD3D11CommandBuffer::Command cmd;
         cmd.cmd = QD3D11CommandBuffer::Command::BindGraphicsPipeline;
         cmd.args.bindGraphicsPipeline.ps = psD;
-        cmd.args.bindGraphicsPipeline.srb = QRHI_RES(QD3D11ShaderResourceBindings, srb);
+        cmd.args.bindGraphicsPipeline.srb = srbD;
         cbD->commands.append(cmd);
     }
 }

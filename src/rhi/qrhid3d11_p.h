@@ -303,12 +303,16 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
+    QRhiShaderResourceBindings *currentSrb;
+    uint currentSrbGeneration;
 
     void resetState() {
         commands.clear();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
+        currentSrb = nullptr;
+        currentSrbGeneration = 0;
     }
 };
 

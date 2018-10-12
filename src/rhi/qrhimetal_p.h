@@ -48,6 +48,8 @@
 
 QT_BEGIN_NAMESPACE
 
+static const int QMTL_FRAMES_IN_FLIGHT = 2;
+
 struct QMetalBuffer : public QRhiBuffer
 {
     QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
@@ -133,10 +135,15 @@ struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
     uint generation = 0;
 };
 
+struct QMetalCommandBufferData;
+
 struct QMetalCommandBuffer : public QRhiCommandBuffer
 {
     QMetalCommandBuffer(QRhiImplementation *rhi);
+    ~QMetalCommandBuffer();
     void release() override;
+
+    QMetalCommandBufferData *d = nullptr;
 
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
@@ -149,9 +156,12 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     }
 };
 
+struct QMetalSwapChainData;
+
 struct QMetalSwapChain : public QRhiSwapChain
 {
     QMetalSwapChain(QRhiImplementation *rhi);
+    ~QMetalSwapChain();
     void release() override;
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
@@ -168,7 +178,13 @@ struct QMetalSwapChain : public QRhiSwapChain
     QWindow *window = nullptr;
     QSize requestedPixelSize;
     QSize effectivePixelSize;
+
+    int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
+    QMetalCommandBuffer cbWrapper;
+    QMetalSwapChainData *d = nullptr;
 };
+
+struct QRhiMetalData;
 
 class QRhiMetal : public QRhiImplementation
 {
@@ -240,9 +256,13 @@ public:
     void create();
     void destroy();
 
+    bool importedDevice = false;
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
+    int currentFrameSlot = 0;
+
+    QRhiMetalData *d = nullptr; // have to hide the ObjC stuff
 };
 
 QT_END_NAMESPACE

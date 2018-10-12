@@ -35,24 +35,55 @@
 ****************************************************************************/
 
 #include "qrhimetal_p.h"
-#include <QWindow>
-#include <QBakedShader>
-
 #include <QGuiApplication>
-#include <qpa/qplatformnativeinterface.h>
+#include <QWindow>
+#include <QElapsedTimer>
+#include <QBakedShader>
 #include <AppKit/AppKit.h>
 #include <Metal/Metal.h>
-#include <MetalKit/MetalKit.h> // for CAMetalLayer
+#include <QuartzCore/CAMetalLayer.h>
 
 QT_BEGIN_NAMESPACE
 
 /*
-
+    Metal backend. MRC. Double buffers and throttles to vsync.
 */
+
+#if __has_feature(objc_arc)
+#error ARC not supported
+#endif
+
+struct QRhiMetalData
+{
+    id<MTLDevice> dev;
+    id<MTLCommandQueue> cmdQueue;
+};
+
+struct QMetalCommandBufferData
+{
+    id<MTLCommandBuffer> cb;
+};
+
+struct QMetalSwapChainData
+{
+    CAMetalLayer *layer;
+    id<CAMetalDrawable> curDrawable;
+    dispatch_semaphore_t sem;
+    struct FrameData {
+        id<MTLCommandBuffer> cb;
+    } frame[QMTL_FRAMES_IN_FLIGHT];
+};
 
 QRhiMetal::QRhiMetal(QRhiInitParams *params)
 {
+    d = new QRhiMetalData;
+
     QRhiMetalInitParams *metalparams = static_cast<QRhiMetalInitParams *>(params);
+    importedDevice = metalparams->importExistingDevice;
+    if (importedDevice) {
+        d->dev = (id<MTLDevice>) metalparams->dev;
+        [d->dev retain];
+    }
 
     create();
 }
@@ -60,6 +91,7 @@ QRhiMetal::QRhiMetal(QRhiInitParams *params)
 QRhiMetal::~QRhiMetal()
 {
     destroy();
+    delete d;
 }
 
 static inline uint aligned(uint v, uint byteAlign)
@@ -69,10 +101,21 @@ static inline uint aligned(uint v, uint byteAlign)
 
 void QRhiMetal::create()
 {
+    if (!importedDevice)
+        d->dev = MTLCreateSystemDefaultDevice();
+
+    qDebug("Metal device: %s", qPrintable(QString::fromNSString([d->dev name])));
+
+    d->cmdQueue = [d->dev newCommandQueue];
 }
 
 void QRhiMetal::destroy()
 {
+    [d->cmdQueue release];
+    d->cmdQueue = nil;
+
+    [d->dev release];
+    d->dev = nil;
 }
 
 QVector<int> QRhiMetal::supportedSampleCounts() const
@@ -219,6 +262,25 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     Q_ASSERT(!inFrame);
     inFrame = true;
 
+    QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, swapChain);
+
+//    static QElapsedTimer t;
+//    qDebug() << t.restart();
+
+    dispatch_semaphore_wait(swapChainD->d->sem, DISPATCH_TIME_FOREVER);
+
+    swapChainD->d->curDrawable = [swapChainD->d->layer nextDrawable];
+    if (!swapChainD->d->curDrawable) {
+        qWarning("No drawable");
+        return QRhi::FrameOpSwapChainOutOfDate;
+    }
+
+    currentFrameSlot = swapChainD->currentFrame;
+    QMetalSwapChainData::FrameData &frame(swapChainD->d->frame[currentFrameSlot]);
+
+    frame.cb = [d->cmdQueue commandBufferWithUnretainedReferences];
+    swapChainD->cbWrapper.d->cb = frame.cb;
+
     return QRhi::FrameOpSuccess;
 }
 
@@ -226,6 +288,20 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 {
     Q_ASSERT(inFrame);
     inFrame = false;
+
+    QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, swapChain);
+    QMetalSwapChainData::FrameData &frame(swapChainD->d->frame[currentFrameSlot]);
+
+    [frame.cb presentDrawable: swapChainD->d->curDrawable];
+
+    __block dispatch_semaphore_t sem = swapChainD->d->sem;
+    [frame.cb addCompletedHandler: ^(id<MTLCommandBuffer> cb) {
+        dispatch_semaphore_signal(sem);
+    }];
+
+    [frame.cb commit];
+
+    swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QMTL_FRAMES_IN_FLIGHT;
 
     ++finishedFrameCount;
     return QRhi::FrameOpSuccess;
@@ -411,9 +487,15 @@ bool QMetalGraphicsPipeline::build()
 }
 
 QMetalCommandBuffer::QMetalCommandBuffer(QRhiImplementation *rhi)
-    : QRhiCommandBuffer(rhi)
+    : QRhiCommandBuffer(rhi),
+      d(new QMetalCommandBufferData)
 {
     resetState();
+}
+
+QMetalCommandBuffer::~QMetalCommandBuffer()
+{
+    delete d;
 }
 
 void QMetalCommandBuffer::release()
@@ -422,8 +504,15 @@ void QMetalCommandBuffer::release()
 }
 
 QMetalSwapChain::QMetalSwapChain(QRhiImplementation *rhi)
-    : QRhiSwapChain(rhi)
+    : QRhiSwapChain(rhi),
+      cbWrapper(rhi),
+      d(new QMetalSwapChainData)
 {
+}
+
+QMetalSwapChain::~QMetalSwapChain()
+{
+    delete d;
 }
 
 void QMetalSwapChain::release()
@@ -432,7 +521,7 @@ void QMetalSwapChain::release()
 
 QRhiCommandBuffer *QMetalSwapChain::currentFrameCommandBuffer()
 {
-    return nullptr;
+    return &cbWrapper;
 }
 
 QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
@@ -458,18 +547,25 @@ QSize QMetalSwapChain::effectiveSizeInPixels() const
 bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount)
 {
+    if (window_->surfaceType() != QSurface::MetalSurface) {
+        qWarning("QMetalSwapChain only supports MetalSurface windows");
+        return false;
+    }
     window = window_;
     requestedPixelSize = requestedPixelSize_;
 
-    void *p = qGuiApp->platformNativeInterface()->nativeResourceForWindow(QByteArrayLiteral("nsview"), window);
-    NSView *v = (NSView *) p;
-    CAMetalLayer *layer = (CAMetalLayer *) [v layer];
-    Q_ASSERT(layer);
+    NSView *v = (NSView *) window->winId();
+    d->layer = (CAMetalLayer *) [v layer];
+    Q_ASSERT(d->layer);
 
-    CGSize size = [layer drawableSize];
+    CGSize size = [d->layer drawableSize];
     effectivePixelSize = QSize(size.width, size.height);
 
-    qDebug() << layer << requestedPixelSize << effectivePixelSize;
+    QRHI_RES_RHI(QRhiMetal);
+    [d->layer setDevice: rhiD->d->dev];
+
+    d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
+    currentFrame = 0;
 
     return true;
 }

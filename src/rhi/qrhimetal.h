@@ -39,16 +39,16 @@
 
 #include <QtRhi/qrhi.h>
 
-#ifdef Q_OS_MAC
+// no Metal includes here, the user code may be plain C++
 
 QT_BEGIN_NAMESPACE
 
 struct Q_RHI_EXPORT QRhiMetalInitParams : public QRhiInitParams
 {
+    bool importExistingDevice = false;
+    void *dev = nullptr;
 };
 
 QT_END_NAMESPACE
-
-#endif // Q_OS_MAC
 
 #endif

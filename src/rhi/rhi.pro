@@ -2,7 +2,7 @@ TARGET = QtRhi
 
 load(qt_module)
 
-QT += gui-private shadertools
+QT += shadertools
 
 DEFINES += QT_BUILD_RHI_LIB
 

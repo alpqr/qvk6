@@ -1779,19 +1779,19 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
 
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
-        psD->lastActiveFrameSlot = currentFrameSlot;
         df->vkCmdBindPipeline(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
     }
+    psD->lastActiveFrameSlot = currentFrameSlot;
 
     if (hasDynamicBufferInSrb || srbUpdate || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
-        srbD->lastActiveFrameSlot = currentFrameSlot;
         df->vkCmdBindDescriptorSets(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
                                        &srbD->descSets[descSetIdx], 0, nullptr);
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
     }
+    srbD->lastActiveFrameSlot = currentFrameSlot;
 }
 
 void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
@@ -3095,7 +3095,9 @@ QSize QVkSwapChain::effectiveSizeInPixels() const
 bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, SurfaceImportFlags flags,
                          QRhiRenderBuffer *depthStencil, int sampleCount_)
 {
-    // Can be called multiple times without a call to release() - this is typical when a window is resized.
+    // Can be called multiple times due to window resizes - that is not the
+    // same as a simple release+build (as with other resources). Thus no
+    // release() here. See recreateSwapChain() below.
 
     VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(window);
     if (!surface) {

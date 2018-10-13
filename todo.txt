@@ -1,6 +1,5 @@
-vk should update lastActiveFrameSlot even when cur.obj is same
-vk: make cmdpool and gfxqueue optional when importing existing
 bring up metal
+vk: make cmdpool and gfxqueue optional when importing existing
 drop front-and-back cull?
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
@@ -37,6 +36,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+vk should update lastActiveFrameSlot even when cur.obj is same
 exercise indexed drawing
 gl setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
 d3d to track buffer, texture, sampler generation and update the buffer/srv/sampler in the batchedbinding lists

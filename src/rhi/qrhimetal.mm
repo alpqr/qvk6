@@ -57,6 +57,8 @@ struct QRhiMetalData
 {
     id<MTLDevice> dev;
     id<MTLCommandQueue> cmdQueue;
+
+    MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil);
 };
 
 struct QMetalCommandBufferData
@@ -64,14 +66,20 @@ struct QMetalCommandBufferData
     id<MTLCommandBuffer> cb;
 };
 
+struct QMetalRenderPassData
+{
+    MTLRenderPassDescriptor *rp;
+};
+
 struct QMetalSwapChainData
 {
-    CAMetalLayer *layer;
+    CAMetalLayer *layer = nullptr;
     id<CAMetalDrawable> curDrawable;
     dispatch_semaphore_t sem;
     struct FrameData {
         id<MTLCommandBuffer> cb;
     } frame[QMTL_FRAMES_IN_FLIGHT];
+    MTLRenderPassDescriptor *rp = nullptr;
 };
 
 QRhiMetal::QRhiMetal(QRhiInitParams *params)
@@ -275,10 +283,11 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
         return QRhi::FrameOpSwapChainOutOfDate;
     }
 
+    currentSwapChain = swapChainD;
     currentFrameSlot = swapChainD->currentFrame;
     QMetalSwapChainData::FrameData &frame(swapChainD->d->frame[currentFrameSlot]);
 
-    frame.cb = [d->cmdQueue commandBufferWithUnretainedReferences];
+    frame.cb = [d->cmdQueue commandBufferWithUnretainedReferences]; // no please no refcounting nonsense, what a nightmare
     swapChainD->cbWrapper.d->cb = frame.cb;
 
     return QRhi::FrameOpSuccess;
@@ -301,6 +310,7 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 
     [frame.cb commit];
 
+    currentSwapChain = nullptr;
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QMTL_FRAMES_IN_FLIGHT;
 
     ++finishedFrameCount;
@@ -311,6 +321,34 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
                           const QRhi::PassUpdates &updates)
 {
     Q_ASSERT(!inPass);
+
+    QMetalBasicRenderTargetData *rtD = nullptr;
+    switch (rt->type()) {
+    case QRhiRenderTarget::RtRef:
+        rtD = &QRHI_RES(QMetalReferenceRenderTarget, rt)->d;
+        rtD->rp.d->rp.colorAttachments[0].texture = currentSwapChain->d->curDrawable.texture;
+        break;
+    case QRhiRenderTarget::RtTexture:
+    {
+        QMetalTextureRenderTarget *rtTex = QRHI_RES(QMetalTextureRenderTarget, rt);
+        rtD = &rtTex->d;
+        //activateTextureRenderTarget(cb, rtTex);
+    }
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
+    for (int i = 0; i < rtD->attCount; ++i) {
+        if (clearValues[i].isDepthStencil) {
+            rtD->rp.d->rp.depthAttachment.clearDepth = clearValues[i].d;
+            rtD->rp.d->rp.stencilAttachment.clearStencil = clearValues[i].s;
+        } else {
+            MTLClearColor c = MTLClearColorMake(clearValues[i].rgba.x(), clearValues[i].rgba.y(), clearValues[i].rgba.z(), clearValues[i].rgba.w());
+            rtD->rp.d->rp.colorAttachments[0].clearColor = c;
+        }
+    }
 
     inPass = true;
 }
@@ -382,8 +420,14 @@ bool QMetalSampler::build()
 }
 
 QMetalRenderPass::QMetalRenderPass(QRhiImplementation *rhi)
-    : QRhiRenderPass(rhi)
+    : QRhiRenderPass(rhi),
+      d(new QMetalRenderPassData)
 {
+}
+
+QMetalRenderPass::~QMetalRenderPass()
+{
+    delete d;
 }
 
 void QMetalRenderPass::release()
@@ -505,6 +549,7 @@ void QMetalCommandBuffer::release()
 
 QMetalSwapChain::QMetalSwapChain(QRhiImplementation *rhi)
     : QRhiSwapChain(rhi),
+      rtWrapper(rhi),
       cbWrapper(rhi),
       d(new QMetalSwapChainData)
 {
@@ -517,6 +562,15 @@ QMetalSwapChain::~QMetalSwapChain()
 
 void QMetalSwapChain::release()
 {
+    if (!d->layer)
+        return;
+
+    d->layer = nullptr;
+
+    [d->rp release];
+    d->rp = nullptr;
+
+    dispatch_release(d->sem);
 }
 
 QRhiCommandBuffer *QMetalSwapChain::currentFrameCommandBuffer()
@@ -526,12 +580,12 @@ QRhiCommandBuffer *QMetalSwapChain::currentFrameCommandBuffer()
 
 QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
 {
-    return nullptr;
+    return &rtWrapper;
 }
 
 const QRhiRenderPass *QMetalSwapChain::defaultRenderPass() const
 {
-    return nullptr;
+    return rtWrapper.renderPass();
 }
 
 QSize QMetalSwapChain::requestedSizeInPixels() const
@@ -544,9 +598,26 @@ QSize QMetalSwapChain::effectiveSizeInPixels() const
     return effectivePixelSize;
 }
 
+MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthStencil)
+{
+    MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
+    rp.colorAttachments[0].loadAction = MTLLoadActionClear;
+    rp.colorAttachments[0].storeAction = MTLStoreActionStore;
+    if (hasDepthStencil) {
+        rp.depthAttachment.loadAction = MTLLoadActionClear;
+        rp.depthAttachment.storeAction = MTLStoreActionDontCare;
+        rp.stencilAttachment.loadAction = MTLLoadActionClear;
+        rp.stencilAttachment.storeAction = MTLStoreActionDontCare;
+    }
+    return rp;
+}
+
 bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount)
 {
+    if (d->layer)
+        release();
+
     if (window_->surfaceType() != QSurface::MetalSurface) {
         qWarning("QMetalSwapChain only supports MetalSurface windows");
         return false;
@@ -566,6 +637,15 @@ bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, 
 
     d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
     currentFrame = 0;
+
+    d->rp = rhiD->d->createDefaultRenderPass(false);
+    [d->rp retain];
+
+    rtWrapper.d.rp.d->rp = d->rp;
+    rtWrapper.d.pixelSize = effectivePixelSize;
+    rtWrapper.d.attCount = 1;
+
+    qDebug("got CAMetalLayer, size %dx%d", effectivePixelSize.width(), effectivePixelSize.height());
 
     return true;
 }

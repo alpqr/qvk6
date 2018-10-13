@@ -45,6 +45,9 @@ void MetalWindow::init()
     QRhiMetalInitParams params;
     m_r = QRhi::create(QRhi::Metal, &params);
 
+    setOnScreenOnly(true);
+    setTriangleOnly(true);
+
     ExampleWindow::init();
 }
 

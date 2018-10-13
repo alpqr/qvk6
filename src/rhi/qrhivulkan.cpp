@@ -1050,7 +1050,6 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->cbWrapper.cb = image.cmdBuf;
 
     swapChainD->rtWrapper.d.fb = image.fb;
-    swapChainD->rtWrapper.d.pixelSize = swapChainD->effectivePixelSize;
 
     currentFrameSlot = swapChainD->currentFrame;
     if (swapChainD->ds)

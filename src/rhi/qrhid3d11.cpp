@@ -1700,7 +1700,10 @@ QSize QD3D11SwapChain::effectiveSizeInPixels() const
 bool QD3D11SwapChain::build(QWindow *window_, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount)
 {
-    // Can be called multiple times without a call to release() - this is typical when a window is resized.
+    // Can be called multiple times due to window resizes - that is not the
+    // same as a simple release+build (as with other resources). Just need to
+    // resize the buffers then.
+
     Q_ASSERT(!swapChain || window == window_);
 
     Q_UNUSED(sampleCount); // ### MSAA

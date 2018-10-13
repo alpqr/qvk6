@@ -79,10 +79,15 @@ struct QMetalSampler : public QRhiSampler
     bool build() override;
 };
 
+struct QMetalRenderPassData;
+
 struct QMetalRenderPass : public QRhiRenderPass
 {
     QMetalRenderPass(QRhiImplementation *rhi);
+    ~QMetalRenderPass();
     void release() override;
+
+    QMetalRenderPassData *d;
 };
 
 struct QMetalBasicRenderTargetData
@@ -180,6 +185,7 @@ struct QMetalSwapChain : public QRhiSwapChain
     QSize effectivePixelSize;
 
     int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
+    QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;
     QMetalSwapChainData *d = nullptr;
 };
@@ -258,9 +264,10 @@ public:
 
     bool importedDevice = false;
     bool inFrame = false;
+    QMetalSwapChain *currentSwapChain = nullptr;
+    int currentFrameSlot = 0;
     int finishedFrameCount = 0;
     bool inPass = false;
-    int currentFrameSlot = 0;
 
     QRhiMetalData *d = nullptr; // have to hide the ObjC stuff
 };

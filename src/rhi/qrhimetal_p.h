@@ -129,6 +129,8 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
     QMetalShaderResourceBindings(QRhiImplementation *rhi);
     void release() override;
     bool build() override;
+
+    uint generation = 0;
 };
 
 struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
@@ -153,11 +155,15 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
+    QRhiShaderResourceBindings *currentSrb;
+    uint currentSrbGeneration;
 
     void resetState() {
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
+        currentSrb = nullptr;
+        currentSrbGeneration = 0;
     }
 };
 

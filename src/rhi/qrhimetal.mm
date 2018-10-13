@@ -78,6 +78,7 @@ struct QMetalSwapChainData
     dispatch_semaphore_t sem;
     struct FrameData {
         id<MTLCommandBuffer> cb;
+        id<MTLCommandEncoder> encoder;
     } frame[QMTL_FRAMES_IN_FLIGHT];
     MTLRenderPassDescriptor *rp = nullptr;
 };
@@ -350,6 +351,12 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
         }
     }
 
+    QMetalSwapChainData::FrameData &frame(currentSwapChain->d->frame[currentFrameSlot]);
+    frame.encoder = [frame.cb renderCommandEncoderWithDescriptor: rtD->rp.d->rp];
+
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+    cbD->currentTarget = rt;
+
     inPass = true;
 }
 
@@ -358,8 +365,11 @@ void QRhiMetal::endPass(QRhiCommandBuffer *cb)
     Q_ASSERT(inPass);
     inPass = false;
 
+    QMetalSwapChainData::FrameData &frame(currentSwapChain->d->frame[currentFrameSlot]);
+    [frame.encoder endEncoding];
+
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
-//    cbD->currentTarget = nullptr;
+    cbD->currentTarget = nullptr;
 }
 
 QMetalBuffer::QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
@@ -513,6 +523,7 @@ void QMetalShaderResourceBindings::release()
 
 bool QMetalShaderResourceBindings::build()
 {
+    generation += 1;
     return true;
 }
 
@@ -527,6 +538,7 @@ void QMetalGraphicsPipeline::release()
 
 bool QMetalGraphicsPipeline::build()
 {
+    generation += 1;
     return true;
 }
 
@@ -639,7 +651,7 @@ bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, 
     currentFrame = 0;
 
     d->rp = rhiD->d->createDefaultRenderPass(false);
-    [d->rp retain];
+    [d->rp retain]; // because it will be reused
 
     rtWrapper.d.rp.d->rp = d->rp;
     rtWrapper.d.pixelSize = effectivePixelSize;

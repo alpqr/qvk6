@@ -84,10 +84,9 @@ struct QMetalRenderPassData;
 struct QMetalRenderPass : public QRhiRenderPass
 {
     QMetalRenderPass(QRhiImplementation *rhi);
-    ~QMetalRenderPass();
     void release() override;
 
-    QMetalRenderPassData *d;
+    // there is no MTLRenderPassDescriptor here as one will be created for each pass in beginPass()
 };
 
 struct QMetalBasicRenderTargetData

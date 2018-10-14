@@ -431,7 +431,7 @@ public:
 
     void create();
     void destroy();
-    void applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD);

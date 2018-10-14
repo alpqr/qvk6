@@ -369,7 +369,7 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases();
-    void applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);
     void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb);
     void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly);

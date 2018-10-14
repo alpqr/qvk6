@@ -187,7 +187,7 @@ QRhiCommandBuffer::QRhiCommandBuffer(QRhiImplementation *rhi)
 
 QRhiImplementation::~QRhiImplementation()
 {
-    delete defaultResourceUpdateBatch;
+    qDeleteAll(resUpdPool);
 }
 
 QRhi::QRhi()
@@ -247,9 +247,11 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
     return nullptr;
 }
 
-QRhiResourceUpdateBatch::QRhiResourceUpdateBatch()
+QRhiResourceUpdateBatch::QRhiResourceUpdateBatch(QRhiImplementation *rhi)
     : d(new QRhiResourceUpdateBatchPrivate)
 {
+    d->q = this;
+    d->rhi = rhi;
 }
 
 QRhiResourceUpdateBatch::~QRhiResourceUpdateBatch()
@@ -272,13 +274,45 @@ void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &imag
     d->textureUploads.append({ tex, image, mipLevel, layer });
 }
 
-QRhiResourceUpdateBatch *QRhi::resourceUpdateBatch()
+QRhiResourceUpdateBatch *QRhi::nextResourceUpdateBatch()
 {
-    // For now just a global (per-QRhi) instance. Can become more sophisticated later on.
-    if (!d->defaultResourceUpdateBatch)
-        d->defaultResourceUpdateBatch = new QRhiResourceUpdateBatch;
+    auto nextFreeBatch = [this]() -> QRhiResourceUpdateBatch * {
+        for (int i = 0, ie = d->resUpdPoolMap.count(); i != ie; ++i) {
+            if (!d->resUpdPoolMap.testBit(i)) {
+                d->resUpdPoolMap.setBit(i);
+                QRhiResourceUpdateBatch *u = d->resUpdPool[i];
+                QRhiResourceUpdateBatchPrivate::get(u)->poolIndex = i;
+                return u;
+            }
+        }
+        return nullptr;
+    };
 
-    return d->defaultResourceUpdateBatch;
+    QRhiResourceUpdateBatch *u = nextFreeBatch();
+    if (!u) {
+        const int oldSize = d->resUpdPool.count();
+        const int newSize = oldSize + 4;
+        d->resUpdPool.resize(newSize);
+        d->resUpdPoolMap.resize(newSize);
+        for (int i = oldSize; i < newSize; ++i)
+            d->resUpdPool[i] = new QRhiResourceUpdateBatch(d);
+        u = nextFreeBatch();
+        Q_ASSERT(u);
+    }
+
+    return u;
+}
+
+void QRhiResourceUpdateBatchPrivate::free()
+{
+    Q_ASSERT(poolIndex >= 0 && rhi->resUpdPool[poolIndex] == q);
+
+    dynamicBufferUpdates.clear();
+    staticBufferUploads.clear();
+    textureUploads.clear();
+
+    rhi->resUpdPoolMap.clearBit(poolIndex);
+    poolIndex = -1;
 }
 
 int QRhi::ubufAligned(int v) const

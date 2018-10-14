@@ -198,7 +198,7 @@ void TriangleOnCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resou
 
 void TriangleOnCubeRenderer::queueOffscreenPass(QRhiCommandBuffer *cb)
 {
-    QRhiResourceUpdateBatch *u = m_r->resourceUpdateBatch();
+    QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
     m_offscreenTriangle.queueResourceUpdates(u);
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING && !m_image.isNull()) {

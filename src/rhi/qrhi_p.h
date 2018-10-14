@@ -43,6 +43,7 @@
 
 #include "qtrhiglobal_p.h"
 #include "qrhi.h"
+#include <QBitArray>
 
 QT_BEGIN_NAMESPACE
 
@@ -114,7 +115,8 @@ public:
     virtual bool isYUpInFramebuffer() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
 
-    QRhiResourceUpdateBatch *defaultResourceUpdateBatch = nullptr;
+    QVector<QRhiResourceUpdateBatch *> resUpdPool;
+    QBitArray resUpdPoolMap;
 };
 
 struct QRhiResourceUpdateBatchPrivate
@@ -156,11 +158,11 @@ struct QRhiResourceUpdateBatchPrivate
     QVector<StaticBufferUpload> staticBufferUploads;
     QVector<TextureUpload> textureUploads;
 
-    void clear() {
-        dynamicBufferUpdates.clear();
-        staticBufferUploads.clear();
-        textureUploads.clear();
-    }
+    QRhiResourceUpdateBatch *q = nullptr;
+    QRhiImplementation *rhi = nullptr;
+    int poolIndex = -1;
+
+    void free();
 
     static QRhiResourceUpdateBatchPrivate *get(QRhiResourceUpdateBatch *b) { return b->d; }
 };

@@ -402,7 +402,7 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-void QRhiGles2::applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
+void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
@@ -443,7 +443,7 @@ void QRhiGles2::applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                            texD->glformat, texD->gltype, u.image.constBits());
     }
 
-    ud->clear();
+    ud->free();
 }
 
 static inline GLenum toGlTopology(QRhiGraphicsPipeline::Topology t)
@@ -979,7 +979,7 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
     Q_ASSERT(!inPass);
 
     if (resourceUpdates)
-        applyResourceUpdates(resourceUpdates);
+        commitResourceUpdates(resourceUpdates);
 
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     bool needsColorClear = true;

@@ -1175,7 +1175,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QR
     Q_ASSERT(!inPass);
 
     if (resourceUpdates)
-        applyResourceUpdates(cb, resourceUpdates);
+        commitResourceUpdates(cb, resourceUpdates);
 
     QVkBasicRenderTargetData *rtD = nullptr;
     switch (rt->type()) {
@@ -1386,7 +1386,7 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     texD->layout = newLayout;
 }
 
-void QRhiVulkan::applyResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
+void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
@@ -1499,7 +1499,7 @@ void QRhiVulkan::applyResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateB
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
     }
 
-    ud->clear();
+    ud->free();
 }
 
 void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)

@@ -203,7 +203,7 @@ void ExampleWindow::render()
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueOffscreenPass(cb);
 
-    QRhiResourceUpdateBatch *u = m_r->resourceUpdateBatch();
+    QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
     m_triRenderer.queueResourceUpdates(u);
     if (!m_triangleOnly) {
         m_quadRenderer.queueResourceUpdates(u);

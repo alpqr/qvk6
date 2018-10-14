@@ -430,7 +430,7 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-void QRhiD3D11::applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
+void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
@@ -463,7 +463,7 @@ void QRhiD3D11::applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
         context->UpdateSubresource(texD->tex, 0, nullptr, u.image.constBits(), u.image.bytesPerLine(), 0);
     }
 
-    ud->clear();
+    ud->free();
 }
 
 void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
@@ -472,7 +472,7 @@ void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
     Q_ASSERT(!inPass);
 
     if (resourceUpdates)
-        applyResourceUpdates(resourceUpdates);
+        commitResourceUpdates(resourceUpdates);
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     bool needsColorClear = true;

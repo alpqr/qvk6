@@ -582,7 +582,7 @@ public:
     void uploadTexture(QRhiTexture *tex, const QImage &image, int mipLevel = 0, int layer = 0);
 
 private:
-    QRhiResourceUpdateBatch();
+    QRhiResourceUpdateBatch(QRhiImplementation *rhi);
     Q_DISABLE_COPY(QRhiResourceUpdateBatch)
     QRhiResourceUpdateBatchPrivate *d;
     friend struct QRhiResourceUpdateBatchPrivate;
@@ -701,8 +701,10 @@ public:
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
-    // Returns an instance to which updates can be queued.
-    QRhiResourceUpdateBatch *resourceUpdateBatch();
+    // Returns an instance to which updates can be queued. Batch instances are
+    // pooled. An instance is returned to the pool after a beginPass()
+    // processes it.
+    QRhiResourceUpdateBatch *nextResourceUpdateBatch();
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,

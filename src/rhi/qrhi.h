@@ -568,6 +568,27 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
 
+struct QRhiResourceUpdateBatchPrivate;
+
+class Q_RHI_EXPORT QRhiResourceUpdateBatch // sort of a command buffer for copy type of operations
+{
+public:
+    ~QRhiResourceUpdateBatch();
+
+    // None of these execute anything. Deferred to beginPass. What exactly then
+    // happens underneath is hidden from the applications.
+    void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
+    void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
+    void uploadTexture(QRhiTexture *tex, const QImage &image, int mipLevel = 0, int layer = 0);
+
+private:
+    QRhiResourceUpdateBatch();
+    Q_DISABLE_COPY(QRhiResourceUpdateBatch)
+    QRhiResourceUpdateBatchPrivate *d;
+    friend struct QRhiResourceUpdateBatchPrivate;
+    friend class QRhi;
+};
+
 struct Q_RHI_EXPORT QRhiInitParams
 {
 };
@@ -592,47 +613,6 @@ public:
     enum IndexFormat {
         IndexUInt16,
         IndexUInt32
-    };
-
-    struct Q_RHI_EXPORT DynamicBufferUpdate {
-        DynamicBufferUpdate() { }
-        DynamicBufferUpdate(QRhiBuffer *buf_, int offset_, int size_, const void *data_)
-            : buf(buf_), offset(offset_), data(reinterpret_cast<const char *>(data_), size_)
-        { }
-
-        QRhiBuffer *buf = nullptr;
-        int offset = 0;
-        QByteArray data;
-    };
-
-    struct Q_RHI_EXPORT StaticBufferUpload {
-        StaticBufferUpload() { }
-        StaticBufferUpload(QRhiBuffer *buf_, const void *data_)
-            : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size)
-        { }
-
-        QRhiBuffer *buf = nullptr;
-        QByteArray data;
-    };
-
-    struct Q_RHI_EXPORT TextureUpload {
-        TextureUpload() { }
-        TextureUpload(QRhiTexture *tex_, const QImage &image_, int mipLevel_ = 0, int layer_ = 0)
-            : tex(tex_), image(image_), mipLevel(mipLevel_), layer(layer_)
-        { }
-
-        QRhiTexture *tex = nullptr;
-        QImage image;
-        int mipLevel = 0;
-        int layer = 0;
-    };
-
-    struct Q_RHI_EXPORT PassUpdates {
-        QVector<DynamicBufferUpdate> dynamicBufferUpdates;
-        QVector<StaticBufferUpload> staticBufferUploads;
-        QVector<TextureUpload> textureUploads;
-
-        PassUpdates &operator+=(const PassUpdates &u);
     };
 
     ~QRhi();
@@ -721,10 +701,13 @@ public:
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
+    // Returns an instance to which updates can be queued.
+    QRhiResourceUpdateBatch *resourceUpdateBatch();
+
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
                    const QRhiClearValue *clearValues,
-                   const PassUpdates &updates);
+                   QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiCommandBuffer *cb);
 
     // When specified, srb can be different from ps' srb but the layouts must

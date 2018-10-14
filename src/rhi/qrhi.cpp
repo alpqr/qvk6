@@ -34,7 +34,7 @@
 **
 ****************************************************************************/
 
-#include "qrhi.h"
+#include "qrhi_p.h"
 #include "qrhigles2_p.h"
 #if QT_CONFIG(vulkan)
 #include "qrhivulkan_p.h"
@@ -187,6 +187,7 @@ QRhiCommandBuffer::QRhiCommandBuffer(QRhiImplementation *rhi)
 
 QRhiImplementation::~QRhiImplementation()
 {
+    delete defaultResourceUpdateBatch;
 }
 
 QRhi::QRhi()
@@ -246,12 +247,38 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
     return nullptr;
 }
 
-QRhi::PassUpdates &QRhi::PassUpdates::operator+=(const QRhi::PassUpdates &u)
+QRhiResourceUpdateBatch::QRhiResourceUpdateBatch()
+    : d(new QRhiResourceUpdateBatchPrivate)
 {
-    dynamicBufferUpdates += u.dynamicBufferUpdates;
-    staticBufferUploads += u.staticBufferUploads;
-    textureUploads += u.textureUploads;
-    return *this;
+}
+
+QRhiResourceUpdateBatch::~QRhiResourceUpdateBatch()
+{
+    delete d;
+}
+
+void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
+{
+    d->dynamicBufferUpdates.append({ buf, offset, size, data });
+}
+
+void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *data)
+{
+    d->staticBufferUploads.append({ buf, data });
+}
+
+void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &image, int mipLevel, int layer)
+{
+    d->textureUploads.append({ tex, image, mipLevel, layer });
+}
+
+QRhiResourceUpdateBatch *QRhi::resourceUpdateBatch()
+{
+    // For now just a global (per-QRhi) instance. Can become more sophisticated later on.
+    if (!d->defaultResourceUpdateBatch)
+        d->defaultResourceUpdateBatch = new QRhiResourceUpdateBatch;
+
+    return d->defaultResourceUpdateBatch;
 }
 
 int QRhi::ubufAligned(int v) const
@@ -347,9 +374,9 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
 void QRhi::beginPass(QRhiRenderTarget *rt,
                      QRhiCommandBuffer *cb,
                      const QRhiClearValue *clearValues,
-                     const QRhi::PassUpdates &updates)
+                     QRhiResourceUpdateBatch *resourceUpdates)
 {
-    d->beginPass(rt, cb, clearValues, updates);
+    d->beginPass(rt, cb, clearValues, resourceUpdates);
 }
 
 void QRhi::endPass(QRhiCommandBuffer *cb)

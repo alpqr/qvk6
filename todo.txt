@@ -1,4 +1,5 @@
 bring up metal
+make clearValues optional in beginPass (when preserving contents for offscreen)
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases

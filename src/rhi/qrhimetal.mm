@@ -338,7 +338,7 @@ MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthSte
 }
 
 void QRhiMetal::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
-                          const QRhi::PassUpdates &updates)
+                          QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
 

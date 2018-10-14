@@ -235,7 +235,7 @@ public:
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
                    const QRhiClearValue *clearValues,
-                   const QRhi::PassUpdates &updates) override;
+                   QRhiResourceUpdateBatch *resourceUpdates) override;
     void endPass(QRhiCommandBuffer *cb) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,

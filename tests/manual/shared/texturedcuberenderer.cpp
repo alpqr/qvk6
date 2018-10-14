@@ -145,19 +145,17 @@ void TexturedCubeRenderer::releaseOutputDependentResources()
     }
 }
 
-QRhi::PassUpdates TexturedCubeRenderer::update()
+void TexturedCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    QRhi::PassUpdates u;
-
     if (!m_vbufReady) {
         m_vbufReady = true;
-        u.staticBufferUploads.append({ m_vbuf, cube });
+        resourceUpdates->uploadStaticBuffer(m_vbuf, cube);
         qint32 flip = 0;
-        u.dynamicBufferUpdates.append({ m_ubuf, 64, 4, &flip });
+        resourceUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &flip);
     }
 
     if (!m_image.isNull()) {
-        u.textureUploads.append({ m_tex, m_image });
+        resourceUpdates->uploadTexture(m_tex, m_image);
         m_image = QImage();
     }
 
@@ -166,9 +164,7 @@ QRhi::PassUpdates TexturedCubeRenderer::update()
     mvp.translate(m_translation);
     mvp.scale(0.5f);
     mvp.rotate(m_rotation, 0, 1, 0);
-    u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
-
-    return u;
+    resourceUpdates->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
 }
 
 void TexturedCubeRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)

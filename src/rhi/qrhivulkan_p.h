@@ -68,7 +68,7 @@ struct QVkBuffer : public QRhiBuffer
 
     VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
-    QVector<QRhi::DynamicBufferUpdate> pendingDynamicUpdates[QVK_FRAMES_IN_FLIGHT];
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingDynamicUpdates[QVK_FRAMES_IN_FLIGHT];
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     int lastActiveFrameSlot = -1;
@@ -321,7 +321,7 @@ public:
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
                    const QRhiClearValue *clearValues,
-                   const QRhi::PassUpdates &updates) override;
+                   QRhiResourceUpdateBatch *resourceUpdates) override;
     void endPass(QRhiCommandBuffer *cb) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
@@ -375,7 +375,7 @@ public:
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void finishFrame();
-    void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
+    void applyResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD);
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void deactivateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);

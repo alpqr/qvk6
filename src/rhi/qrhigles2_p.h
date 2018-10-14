@@ -336,7 +336,7 @@ public:
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
                    const QRhiClearValue *clearValues,
-                   const QRhi::PassUpdates &updates) override;
+                   QRhiResourceUpdateBatch *resourceUpdates) override;
     void endPass(QRhiCommandBuffer *cb) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
@@ -369,7 +369,7 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases();
-    void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
+    void applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);
     void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb);
     void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly);

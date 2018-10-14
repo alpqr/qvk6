@@ -86,7 +86,7 @@ public:
     virtual void beginPass(QRhiRenderTarget *rt,
                            QRhiCommandBuffer *cb,
                            const QRhiClearValue *clearValues,
-                           const QRhi::PassUpdates &updates) = 0;
+                           QRhiResourceUpdateBatch *resourceUpdates) = 0;
     virtual void endPass(QRhiCommandBuffer *cb) = 0;
 
     virtual void setGraphicsPipeline(QRhiCommandBuffer *cb,
@@ -113,7 +113,61 @@ public:
     virtual int ubufAlignment() const = 0;
     virtual bool isYUpInFramebuffer() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
+
+    QRhiResourceUpdateBatch *defaultResourceUpdateBatch = nullptr;
 };
+
+struct QRhiResourceUpdateBatchPrivate
+{
+    struct DynamicBufferUpdate {
+        DynamicBufferUpdate() { }
+        DynamicBufferUpdate(QRhiBuffer *buf_, int offset_, int size_, const void *data_)
+            : buf(buf_), offset(offset_), data(reinterpret_cast<const char *>(data_), size_)
+        { }
+
+        QRhiBuffer *buf = nullptr;
+        int offset = 0;
+        QByteArray data;
+    };
+
+    struct StaticBufferUpload {
+        StaticBufferUpload() { }
+        StaticBufferUpload(QRhiBuffer *buf_, const void *data_)
+            : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size)
+        { }
+
+        QRhiBuffer *buf = nullptr;
+        QByteArray data;
+    };
+
+    struct TextureUpload {
+        TextureUpload() { }
+        TextureUpload(QRhiTexture *tex_, const QImage &image_, int mipLevel_, int layer_)
+            : tex(tex_), image(image_), mipLevel(mipLevel_), layer(layer_)
+        { }
+
+        QRhiTexture *tex = nullptr;
+        QImage image;
+        int mipLevel = 0;
+        int layer = 0;
+    };
+
+    QVector<DynamicBufferUpdate> dynamicBufferUpdates;
+    QVector<StaticBufferUpload> staticBufferUploads;
+    QVector<TextureUpload> textureUploads;
+
+    void clear() {
+        dynamicBufferUpdates.clear();
+        staticBufferUploads.clear();
+        textureUploads.clear();
+    }
+
+    static QRhiResourceUpdateBatchPrivate *get(QRhiResourceUpdateBatch *b) { return b->d; }
+};
+
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::StaticBufferUpload, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

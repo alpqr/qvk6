@@ -179,15 +179,13 @@ void TriangleOnCubeRenderer::releaseOutputDependentResources()
     }
 }
 
-QRhi::PassUpdates TriangleOnCubeRenderer::update()
+void TriangleOnCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    QRhi::PassUpdates u;
-
     if (!m_vbufReady) {
         m_vbufReady = true;
-        u.staticBufferUploads.append({ m_vbuf, cube });
+        resourceUpdates->uploadStaticBuffer(m_vbuf, cube);
         qint32 flip = m_r->isYUpInFramebuffer() ? 1 : 0;
-        u.dynamicBufferUpdates.append({ m_ubuf, 64, 4, &flip });
+        resourceUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &flip);
     }
 
     m_rotation += 1.0f;
@@ -195,17 +193,16 @@ QRhi::PassUpdates TriangleOnCubeRenderer::update()
     mvp.translate(m_translation);
     mvp.scale(0.5f);
     mvp.rotate(m_rotation, 1, 0, 0);
-    u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
-
-    return u;
+    resourceUpdates->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
 }
 
 void TriangleOnCubeRenderer::queueOffscreenPass(QRhiCommandBuffer *cb)
 {
-    QRhi::PassUpdates u = m_offscreenTriangle.update();
+    QRhiResourceUpdateBatch *u = m_r->resourceUpdateBatch();
+    m_offscreenTriangle.queueResourceUpdates(u);
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING && !m_image.isNull()) {
-        u.textureUploads.append({ m_tex, m_image });
+        u->uploadTexture(m_tex, m_image);
         if (!UPLOAD_UNDERLAY_ON_EVERY_FRAME)
             m_image = QImage();
     }

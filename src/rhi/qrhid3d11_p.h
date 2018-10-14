@@ -400,7 +400,7 @@ public:
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
                    const QRhiClearValue *clearValues,
-                   const QRhi::PassUpdates &updates) override;
+                   QRhiResourceUpdateBatch *resourceUpdates) override;
     void endPass(QRhiCommandBuffer *cb) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
@@ -431,7 +431,7 @@ public:
 
     void create();
     void destroy();
-    void applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates);
+    void applyResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD);

@@ -410,11 +410,11 @@ public:
         Points
     };
 
-    enum CullModeFlag {
-        Front = 1 << 0,
-        Back = 1 << 1
+    enum CullMode { // not a bitmask since some apis use a mask, some don't
+        None,
+        Front,
+        Back
     };
-    Q_DECLARE_FLAGS(CullMode, CullModeFlag)
 
     enum FrontFace {
         CCW,
@@ -501,7 +501,7 @@ public:
 
     Flags flags;
     Topology topology = Triangles;
-    CullMode cullMode; // no culling
+    CullMode cullMode = None;
     FrontFace frontFace = CCW;
     QVector<TargetBlend> targetBlends; // no blend when empty
     bool depthTest = false;
@@ -527,7 +527,6 @@ protected:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::CullMode)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 Q_DECLARE_TYPEINFO(QRhiGraphicsPipeline::TargetBlend, Q_MOVABLE_TYPE);
 

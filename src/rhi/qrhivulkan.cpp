@@ -2060,12 +2060,17 @@ static inline VkPrimitiveTopology toVkTopology(QRhiGraphicsPipeline::Topology t)
 
 static inline VkCullModeFlags toVkCullMode(QRhiGraphicsPipeline::CullMode c)
 {
-    int m = 0;
-    if (c.testFlag(QRhiGraphicsPipeline::Front))
-        m |= VK_CULL_MODE_FRONT_BIT;
-    if (c.testFlag(QRhiGraphicsPipeline::Back))
-        m |= VK_CULL_MODE_BACK_BIT;
-    return VkCullModeFlags(m);
+    switch (c) {
+    case QRhiGraphicsPipeline::None:
+        return VK_CULL_MODE_NONE;
+    case QRhiGraphicsPipeline::Front:
+        return VK_CULL_MODE_FRONT_BIT;
+    case QRhiGraphicsPipeline::Back:
+        return VK_CULL_MODE_BACK_BIT;
+    default:
+        Q_UNREACHABLE();
+        return VK_CULL_MODE_NONE;
+    }
 }
 
 static inline VkFrontFace toVkFrontFace(QRhiGraphicsPipeline::FrontFace f)

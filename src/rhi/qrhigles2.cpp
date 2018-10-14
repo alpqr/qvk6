@@ -463,14 +463,17 @@ static inline GLenum toGlTopology(QRhiGraphicsPipeline::Topology t)
     }
 }
 
-static inline GLenum toGlCullMode(QRhiGraphicsPipeline::CullMode mode)
+static inline GLenum toGlCullMode(QRhiGraphicsPipeline::CullMode c)
 {
-    if (mode.testFlag(QRhiGraphicsPipeline::Front)) {
-        if (mode.testFlag(QRhiGraphicsPipeline::Back))
-            return GL_FRONT_AND_BACK;
+    switch (c) {
+    case QRhiGraphicsPipeline::Front:
         return GL_FRONT;
+    case QRhiGraphicsPipeline::Back:
+        return GL_BACK;
+    default:
+        Q_UNREACHABLE();
+        return GL_BACK;
     }
-    return GL_BACK;
 }
 
 static inline GLenum toGlFrontFace(QRhiGraphicsPipeline::FrontFace f)
@@ -813,7 +816,7 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShader
         f->glEnable(GL_SCISSOR_TEST);
     else
         f->glDisable(GL_SCISSOR_TEST);
-    if (ps->cullMode == 0) {
+    if (ps->cullMode == QRhiGraphicsPipeline::None) {
         f->glDisable(GL_CULL_FACE);
     } else {
         f->glEnable(GL_CULL_FACE);

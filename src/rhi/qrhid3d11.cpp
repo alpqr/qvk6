@@ -1258,18 +1258,19 @@ void QD3D11GraphicsPipeline::release()
     }
 }
 
-static inline D3D11_CULL_MODE toD3DCullMode(QRhiGraphicsPipeline::CullMode mode)
+static inline D3D11_CULL_MODE toD3DCullMode(QRhiGraphicsPipeline::CullMode c)
 {
-    if (mode == 0)
+    switch (c) {
+    case QRhiGraphicsPipeline::None:
         return D3D11_CULL_NONE;
-    if (mode.testFlag(QRhiGraphicsPipeline::Front)) {
-        if (mode.testFlag(QRhiGraphicsPipeline::Back)) {
-            qWarning("Culling both front and back is not supported by Direct 3D");
-            return D3D11_CULL_BACK;
-        }
+    case QRhiGraphicsPipeline::Front:
         return D3D11_CULL_FRONT;
+    case QRhiGraphicsPipeline::Back:
+        return D3D11_CULL_BACK;
+    default:
+        Q_UNREACHABLE();
+        return D3D11_CULL_NONE;
     }
-    return D3D11_CULL_BACK;
 }
 
 static inline D3D11_COMPARISON_FUNC toD3DCompareOp(QRhiGraphicsPipeline::CompareOp op)

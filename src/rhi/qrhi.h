@@ -574,6 +574,8 @@ class Q_RHI_EXPORT QRhiResourceUpdateBatch // sort of a command buffer for copy 
 {
 public:
     ~QRhiResourceUpdateBatch();
+    // Puts the batch back to the pool without any processing.
+    void release();
 
     // None of these execute anything. Deferred to beginPass. What exactly then
     // happens underneath is hidden from the applications.
@@ -702,8 +704,9 @@ public:
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
     // Returns an instance to which updates can be queued. Batch instances are
-    // pooled. An instance is returned to the pool after a beginPass()
-    // processes it.
+    // pooled and never owned by the application. An instance is returned to
+    // the pool after a beginPass() processes it or when it is "canceled" by
+    // calling release().
     QRhiResourceUpdateBatch *nextResourceUpdateBatch();
 
     void beginPass(QRhiRenderTarget *rt,

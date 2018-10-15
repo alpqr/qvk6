@@ -259,6 +259,11 @@ QRhiResourceUpdateBatch::~QRhiResourceUpdateBatch()
     delete d;
 }
 
+void QRhiResourceUpdateBatch::release()
+{
+    d->free();
+}
+
 void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
 {
     d->dynamicBufferUpdates.append({ buf, offset, size, data });

@@ -100,29 +100,25 @@ void QuadRenderer::releaseResources()
     }
 }
 
-QRhi::PassUpdates QuadRenderer::update()
+void QuadRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    QRhi::PassUpdates u;
-
     if (!m_vbufReady) {
         m_vbufReady = true;
-        u.staticBufferUploads.append({ m_vbuf, vertexData });
-        u.staticBufferUploads.append({ m_ibuf, indexData });
+        resourceUpdates->uploadStaticBuffer(m_vbuf, vertexData);
+        resourceUpdates->uploadStaticBuffer(m_ibuf, indexData);
     }
 
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.translate(m_translation);
     mvp.rotate(m_rotation, 0, 1, 0);
-    u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
+    resourceUpdates->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
 
     if (!m_opacityReady) {
         m_opacityReady = true;
         const float opacity = 1.0f;
-        u.dynamicBufferUpdates.append({ m_ubuf, 64, 4, &opacity });
+        resourceUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &opacity);
     }
-
-    return u;
 }
 
 void QuadRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &/*outputSizeInPixels*/)

@@ -402,11 +402,11 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates)
+void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    Q_UNUSED(cb);
+    QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
-    for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
+    for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
         Q_ASSERT(!u.buf->isStatic());
         QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
         if (u.buf->usage.testFlag(QRhiBuffer::UniformBuffer)) {
@@ -422,7 +422,7 @@ void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
         }
     }
 
-    for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
+    for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         Q_ASSERT(u.buf->isStatic());
         QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
         Q_ASSERT(u.data.size() == u.buf->size);
@@ -435,13 +435,15 @@ void QRhiGles2::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
         }
     }
 
-    for (const QRhi::TextureUpload &u : updates.textureUploads) {
+    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
         f->glBindTexture(texD->target, texD->texture);
         f->glTexSubImage2D(texD->target, 0,
                            0, 0, u.tex->pixelSize.width(), u.tex->pixelSize.height(),
                            texD->glformat, texD->gltype, u.image.constBits());
     }
+
+    ud->free();
 }
 
 static inline GLenum toGlTopology(QRhiGraphicsPipeline::Topology t)
@@ -972,11 +974,12 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
 }
 
 void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
-                          const QRhi::PassUpdates &updates)
+                          QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
 
-    applyPassUpdates(cb, updates);
+    if (resourceUpdates)
+        commitResourceUpdates(resourceUpdates);
 
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     bool needsColorClear = true;

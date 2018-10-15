@@ -34,7 +34,7 @@
 **
 ****************************************************************************/
 
-#include "qrhi.h"
+#include "qrhi_p.h"
 #include "qrhigles2_p.h"
 #if QT_CONFIG(vulkan)
 #include "qrhivulkan_p.h"
@@ -187,6 +187,7 @@ QRhiCommandBuffer::QRhiCommandBuffer(QRhiImplementation *rhi)
 
 QRhiImplementation::~QRhiImplementation()
 {
+    qDeleteAll(resUpdPool);
 }
 
 QRhi::QRhi()
@@ -246,12 +247,72 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
     return nullptr;
 }
 
-QRhi::PassUpdates &QRhi::PassUpdates::operator+=(const QRhi::PassUpdates &u)
+QRhiResourceUpdateBatch::QRhiResourceUpdateBatch(QRhiImplementation *rhi)
+    : d(new QRhiResourceUpdateBatchPrivate)
 {
-    dynamicBufferUpdates += u.dynamicBufferUpdates;
-    staticBufferUploads += u.staticBufferUploads;
-    textureUploads += u.textureUploads;
-    return *this;
+    d->q = this;
+    d->rhi = rhi;
+}
+
+QRhiResourceUpdateBatch::~QRhiResourceUpdateBatch()
+{
+    delete d;
+}
+
+void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
+{
+    d->dynamicBufferUpdates.append({ buf, offset, size, data });
+}
+
+void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *data)
+{
+    d->staticBufferUploads.append({ buf, data });
+}
+
+void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &image, int mipLevel, int layer)
+{
+    d->textureUploads.append({ tex, image, mipLevel, layer });
+}
+
+QRhiResourceUpdateBatch *QRhi::nextResourceUpdateBatch()
+{
+    auto nextFreeBatch = [this]() -> QRhiResourceUpdateBatch * {
+        for (int i = 0, ie = d->resUpdPoolMap.count(); i != ie; ++i) {
+            if (!d->resUpdPoolMap.testBit(i)) {
+                d->resUpdPoolMap.setBit(i);
+                QRhiResourceUpdateBatch *u = d->resUpdPool[i];
+                QRhiResourceUpdateBatchPrivate::get(u)->poolIndex = i;
+                return u;
+            }
+        }
+        return nullptr;
+    };
+
+    QRhiResourceUpdateBatch *u = nextFreeBatch();
+    if (!u) {
+        const int oldSize = d->resUpdPool.count();
+        const int newSize = oldSize + 4;
+        d->resUpdPool.resize(newSize);
+        d->resUpdPoolMap.resize(newSize);
+        for (int i = oldSize; i < newSize; ++i)
+            d->resUpdPool[i] = new QRhiResourceUpdateBatch(d);
+        u = nextFreeBatch();
+        Q_ASSERT(u);
+    }
+
+    return u;
+}
+
+void QRhiResourceUpdateBatchPrivate::free()
+{
+    Q_ASSERT(poolIndex >= 0 && rhi->resUpdPool[poolIndex] == q);
+
+    dynamicBufferUpdates.clear();
+    staticBufferUploads.clear();
+    textureUploads.clear();
+
+    rhi->resUpdPoolMap.clearBit(poolIndex);
+    poolIndex = -1;
 }
 
 int QRhi::ubufAligned(int v) const
@@ -347,9 +408,9 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
 void QRhi::beginPass(QRhiRenderTarget *rt,
                      QRhiCommandBuffer *cb,
                      const QRhiClearValue *clearValues,
-                     const QRhi::PassUpdates &updates)
+                     QRhiResourceUpdateBatch *resourceUpdates)
 {
-    d->beginPass(rt, cb, clearValues, updates);
+    d->beginPass(rt, cb, clearValues, resourceUpdates);
 }
 
 void QRhi::endPass(QRhiCommandBuffer *cb)

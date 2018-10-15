@@ -430,18 +430,18 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-void QRhiD3D11::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates)
+void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    Q_UNUSED(cb);
+    QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
-    for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
+    for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
         Q_ASSERT(!u.buf->isStatic());
         QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
         memcpy(bufD->dynBuf.data() + u.offset, u.data.constData(), u.data.size());
         bufD->hasPendingDynamicUpdates = true;
     }
 
-    for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
+    for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
         Q_ASSERT(u.buf->isStatic());
         Q_ASSERT(u.data.size() == u.buf->size);
@@ -458,18 +458,21 @@ void QRhiD3D11::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates 
         }
     }
 
-    for (const QRhi::TextureUpload &u : updates.textureUploads) {
+    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.tex);
         context->UpdateSubresource(texD->tex, 0, nullptr, u.image.constBits(), u.image.bytesPerLine(), 0);
     }
+
+    ud->free();
 }
 
 void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
-                          const QRhi::PassUpdates &updates)
+                          QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
 
-    applyPassUpdates(cb, updates);
+    if (resourceUpdates)
+        commitResourceUpdates(resourceUpdates);
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     bool needsColorClear = true;

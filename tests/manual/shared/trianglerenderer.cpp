@@ -129,7 +129,7 @@ void TriangleRenderer::releaseOutputDependentResources()
     }
 }
 
-QRhi::PassUpdates TriangleRenderer::update()
+void TriangleRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
 #if 0
     static int messWithBufferTrigger = 0;
@@ -142,11 +142,9 @@ QRhi::PassUpdates TriangleRenderer::update()
     ++messWithBufferTrigger;
 #endif
 
-    QRhi::PassUpdates u;
-
     if (!m_vbufReady) {
         m_vbufReady = true;
-        u.staticBufferUploads.append({ m_vbuf, vertexData });
+        resourceUpdates->uploadStaticBuffer(m_vbuf, vertexData);
     }
 
     m_rotation += 1.0f;
@@ -154,16 +152,14 @@ QRhi::PassUpdates TriangleRenderer::update()
     mvp.translate(m_translation);
     mvp.scale(m_scale);
     mvp.rotate(m_rotation, 0, 1, 0);
-    u.dynamicBufferUpdates.append({ m_ubuf, 0, 64, mvp.constData() });
+    resourceUpdates->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
 
     m_opacity += m_opacityDir * 0.005f;
     if (m_opacity < 0.0f || m_opacity > 1.0f) {
         m_opacityDir *= -1;
         m_opacity = qBound(0.0f, m_opacity, 1.0f);
     }
-    u.dynamicBufferUpdates.append({ m_ubuf, 64, 4, &m_opacity });
-
-    return u;
+    resourceUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 }
 
 void TriangleRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)

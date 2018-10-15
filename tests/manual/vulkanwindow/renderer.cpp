@@ -106,7 +106,8 @@ void Renderer::startNextFrame()
     m_r->beginFrame(m_sc);
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
 
-    QRhi::PassUpdates u = m_triRenderer.update();
+    QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
+    m_triRenderer.queueResourceUpdates(u);
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
     const QRhiClearValue clearValues[] = {

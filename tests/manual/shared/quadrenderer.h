@@ -41,7 +41,7 @@ public:
     void initResources();
     void releaseResources();
     void setPipeline(QRhiGraphicsPipeline *ps, const QSize &pixelSize);
-    QRhi::PassUpdates update();
+    void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
 
 private:

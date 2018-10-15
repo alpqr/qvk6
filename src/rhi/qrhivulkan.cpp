@@ -1169,11 +1169,13 @@ void QRhiVulkan::finishFrame()
     ++finishedFrameCount;
 }
 
-void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues, const QRhi::PassUpdates &updates)
+void QRhiVulkan::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
+                           QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
 
-    applyPassUpdates(cb, updates);
+    if (resourceUpdates)
+        commitResourceUpdates(cb, resourceUpdates);
 
     QVkBasicRenderTargetData *rtD = nullptr;
     switch (rt->type()) {
@@ -1384,18 +1386,19 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     texD->layout = newLayout;
 }
 
-void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates &updates)
+void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
+    QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
-    for (const QRhi::DynamicBufferUpdate &u : updates.dynamicBufferUpdates) {
+    for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
         Q_ASSERT(!u.buf->isStatic());
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
         for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
             bufD->pendingDynamicUpdates[i].append(u);
     }
 
-    for (const QRhi::StaticBufferUpload &u : updates.staticBufferUploads) {
+    for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
         Q_ASSERT(u.buf->isStatic());
         Q_ASSERT(bufD->stagingBuffer);
@@ -1421,7 +1424,7 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
         bufD->lastActiveFrameSlot = currentFrameSlot;
     }
 
-    for (const QRhi::TextureUpload &u : updates.textureUploads) {
+    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         const qsizetype imageSize = u.image.sizeInBytes();
         if (imageSize < 1) {
             qWarning("Not uploading empty image");
@@ -1495,11 +1498,13 @@ void QRhiVulkan::applyPassUpdates(QRhiCommandBuffer *cb, const QRhi::PassUpdates
                      VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
     }
+
+    ud->free();
 }
 
 void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
 {
-    QVector<QRhi::DynamicBufferUpdate> &updates(bufD->pendingDynamicUpdates[currentFrameSlot]);
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> &updates(bufD->pendingDynamicUpdates[currentFrameSlot]);
     if (updates.isEmpty())
         return;
 
@@ -1512,7 +1517,7 @@ void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
     }
     int changeBegin = -1;
     int changeEnd = -1;
-    for (const QRhi::DynamicBufferUpdate &u : updates) {
+    for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : updates) {
         Q_ASSERT(!u.buf->isStatic());
         Q_ASSERT(bufD == QRHI_RES(QVkBuffer, u.buf));
         memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());

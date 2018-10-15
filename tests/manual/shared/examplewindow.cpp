@@ -203,14 +203,14 @@ void ExampleWindow::render()
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueOffscreenPass(cb);
 
-    QRhi::PassUpdates u;
-    u += m_triRenderer.update();
+    QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
+    m_triRenderer.queueResourceUpdates(u);
     if (!m_triangleOnly) {
-        u += m_quadRenderer.update();
-        u += m_cubeRenderer.update();
+        m_quadRenderer.queueResourceUpdates(u);
+        m_cubeRenderer.queueResourceUpdates(u);
     }
     if (!m_onScreenOnly)
-        u += m_liveTexCubeRenderer.update();
+        m_liveTexCubeRenderer.queueResourceUpdates(u);
 
     const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
     const QRhiClearValue clearValues[] = {

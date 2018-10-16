@@ -790,7 +790,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             f->glDisable(GL_SCISSOR_TEST);
             if (cmd.args.clear.mask & GL_COLOR_BUFFER_BIT) {
                 f->glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-                f->glClearColor(cmd.args.clear.r, cmd.args.clear.g, cmd.args.clear.b, cmd.args.clear.a);
+                f->glClearColor(cmd.args.clear.c[0], cmd.args.clear.c[1], cmd.args.clear.c[2], cmd.args.clear.c[3]);
             }
             if (cmd.args.clear.mask & GL_DEPTH_BUFFER_BIT) {
                 f->glDepthMask(GL_TRUE);
@@ -973,7 +973,10 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
     }
 }
 
-void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
+void QRhiGles2::beginPass(QRhiRenderTarget *rt,
+                          QRhiCommandBuffer *cb,
+                          const QRhiClearValue *colorClearValue,
+                          const QRhiClearValue *depthStencilClearValue,
                           QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
@@ -1015,18 +1018,22 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
         clearCmd.args.clear.mask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
     if (needsColorClear)
         clearCmd.args.clear.mask |= GL_COLOR_BUFFER_BIT;
-    for (int i = 0; i < rtD->attCount; ++i) {
-        if (clearValues[i].isDepthStencil) {
-            clearCmd.args.clear.d = clearValues[i].d;
-            clearCmd.args.clear.s = clearValues[i].s;
-        } else {
-            const QVector4D &c(clearValues[i].rgba);
-            clearCmd.args.clear.r = c.x();
-            clearCmd.args.clear.g = c.y();
-            clearCmd.args.clear.b = c.z();
-            clearCmd.args.clear.a = c.w();
-        }
+
+    if (colorClearValue) {
+        memcpy(clearCmd.args.clear.c, &colorClearValue->rgba, sizeof(float) * 4);
+    } else {
+        clearCmd.args.clear.c[0] = clearCmd.args.clear.c[1] = clearCmd.args.clear.c[2] = 0.0f;
+        clearCmd.args.clear.c[3] = 1.0f;
     }
+
+    if (depthStencilClearValue) {
+        clearCmd.args.clear.d = depthStencilClearValue->d;
+        clearCmd.args.clear.s = depthStencilClearValue->s;
+    } else {
+        clearCmd.args.clear.d = 1.0f;
+        clearCmd.args.clear.s = 0;
+    }
+
     cbD->commands.append(clearCmd);
 
     inPass = true;

@@ -212,13 +212,9 @@ void ExampleWindow::render()
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueResourceUpdates(u);
 
-    const QVector4D clearColor(0.4f, 0.7f, 0.0f, 1.0f);
-    const QRhiClearValue clearValues[] = {
-        clearColor,
-        QRhiClearValue(1.0f, 0), // depth, stencil
-        clearColor // 3 attachments when using MSAA
-    };
-    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, clearValues, u);
+    QRhiClearValue colorClear(QVector4D(0.4f, 0.7f, 0.0f, 1.0f));
+    QRhiClearValue dsClear(1.0f, 0);
+    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, &colorClear, &dsClear, u);
     m_triRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
     if (!m_triangleOnly) {
         m_quadRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());

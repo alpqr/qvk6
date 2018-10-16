@@ -466,7 +466,10 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     ud->free();
 }
 
-void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRhiClearValue *clearValues,
+void QRhiD3D11::beginPass(QRhiRenderTarget *rt,
+                          QRhiCommandBuffer *cb,
+                          const QRhiClearValue *colorClearValue,
+                          const QRhiClearValue *depthStencilClearValue,
                           QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
@@ -509,14 +512,22 @@ void QRhiD3D11::beginPass(QRhiRenderTarget *rt, QRhiCommandBuffer *cb, const QRh
         clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Depth | QD3D11CommandBuffer::Command::Stencil;
     if (needsColorClear)
         clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Color;
-    for (int i = 0; i < rtD->attCount; ++i) {
-        if (clearValues[i].isDepthStencil) {
-            clearCmd.args.clear.d = clearValues[i].d;
-            clearCmd.args.clear.s = clearValues[i].s;
-        } else {
-            memcpy(clearCmd.args.clear.c, &clearValues[i].rgba, sizeof(float) * 4);
-        }
+
+    if (colorClearValue) {
+        memcpy(clearCmd.args.clear.c, &colorClearValue->rgba, sizeof(float) * 4);
+    } else {
+        clearCmd.args.clear.c[0] = clearCmd.args.clear.c[1] = clearCmd.args.clear.c[2] = 0.0f;
+        clearCmd.args.clear.c[3] = 1.0f;
     }
+
+    if (depthStencilClearValue) {
+        clearCmd.args.clear.d = depthStencilClearValue->d;
+        clearCmd.args.clear.s = depthStencilClearValue->s;
+    } else {
+        clearCmd.args.clear.d = 1.0f;
+        clearCmd.args.clear.s = 0;
+    }
+
     cbD->commands.append(clearCmd);
 
     inPass = true;

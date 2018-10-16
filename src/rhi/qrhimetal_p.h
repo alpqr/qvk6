@@ -234,7 +234,8 @@ public:
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
-                   const QRhiClearValue *clearValues,
+                   const QRhiClearValue *colorClearValue,
+                   const QRhiClearValue *depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
     void endPass(QRhiCommandBuffer *cb) override;
 

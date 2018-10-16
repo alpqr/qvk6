@@ -247,7 +247,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             } bindGraphicsPipeline;
             struct {
                 GLbitfield mask;
-                float r, g, b, a;
+                float c[4];
                 float d;
                 quint32 s;
             } clear;
@@ -335,7 +335,8 @@ public:
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
-                   const QRhiClearValue *clearValues,
+                   const QRhiClearValue *colorClearValue,
+                   const QRhiClearValue *depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
     void endPass(QRhiCommandBuffer *cb) override;
 

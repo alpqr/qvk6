@@ -711,7 +711,8 @@ public:
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
-                   const QRhiClearValue *clearValues,
+                   const QRhiClearValue *colorClearValue = nullptr,
+                   const QRhiClearValue *depthStencilClearValue = nullptr,
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiCommandBuffer *cb);
 

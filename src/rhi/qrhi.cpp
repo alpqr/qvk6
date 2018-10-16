@@ -42,7 +42,7 @@
 #ifdef Q_OS_WIN
 #include "qrhid3d11_p.h"
 #endif
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
 #include "qrhimetal_p.h"
 #endif
 
@@ -232,7 +232,7 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
     }
     case Metal:
     {
-#ifdef Q_OS_MAC
+#ifdef Q_OS_DARWIN
         QRhi *r = new QRhi;
         r->d = new QRhiMetal(params);
         return r;

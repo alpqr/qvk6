@@ -50,11 +50,19 @@ QT_BEGIN_NAMESPACE
 
 static const int QMTL_FRAMES_IN_FLIGHT = 2;
 
+// have to hide the ObjC stuff, this header cannot contain MTL* at all
+struct QMetalBufferData;
+
 struct QMetalBuffer : public QRhiBuffer
 {
     QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    ~QMetalBuffer();
     void release() override;
     bool build() override;
+
+    QMetalBufferData *d;
+    uint generation = 0;
+    int lastActiveFrameSlot = -1;
 };
 
 struct QMetalRenderBuffer : public QRhiRenderBuffer
@@ -267,6 +275,7 @@ public:
 
     void create();
     void destroy();
+    void executeDeferredReleases(bool forced = false);
 
     bool importedDevice = false;
     bool inFrame = false;
@@ -275,7 +284,7 @@ public:
     int finishedFrameCount = 0;
     bool inPass = false;
 
-    QRhiMetalData *d = nullptr; // have to hide the ObjC stuff
+    QRhiMetalData *d = nullptr;
 };
 
 QT_END_NAMESPACE

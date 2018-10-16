@@ -14,6 +14,7 @@ more tex: 3d, array
 test FrameOpDeviceLost somehow
 test depth texture
 depth only offscreen
+mtl: msaa (onscreen)
 gl: more ubuf types
 gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)

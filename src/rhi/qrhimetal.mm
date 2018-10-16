@@ -46,7 +46,10 @@
 QT_BEGIN_NAMESPACE
 
 /*
-    Metal backend. MRC. Double buffers and throttles to vsync.
+    Metal backend. MRC. Double buffers and throttles to vsync. "Dynamic"
+    buffers are Shared and duplicated (due to 2 frames in flight), while
+    "static" buffers are Managed. However, buffers are always treated as
+    "dynamic" on iOS/tvOS.
 */
 
 #if __has_feature(objc_arc)
@@ -61,6 +64,25 @@ struct QRhiMetalData
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
                                                      const QRhiClearValue *colorClearValue,
                                                      const QRhiClearValue *depthStencilClearValue);
+
+    struct DeferredReleaseEntry {
+        enum Type {
+            Buffer,
+        };
+        Type type;
+        int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
+        union {
+            struct {
+                id<MTLBuffer> buffers[QMTL_FRAMES_IN_FLIGHT];
+            } buffer;
+        };
+    };
+    QVector<DeferredReleaseEntry> releaseQueue;
+};
+
+struct QMetalBufferData
+{
+    id<MTLBuffer> buf[QMTL_FRAMES_IN_FLIGHT];
 };
 
 struct QMetalCommandBufferData
@@ -118,6 +140,8 @@ void QRhiMetal::create()
 
 void QRhiMetal::destroy()
 {
+    executeDeferredReleases(true);
+
     [d->cmdQueue release];
     d->cmdQueue = nil;
 
@@ -127,7 +151,7 @@ void QRhiMetal::destroy()
 
 QVector<int> QRhiMetal::supportedSampleCounts() const
 {
-    return { 1 };
+    return { 1 }; // ###
 }
 
 QRhiSwapChain *QRhiMetal::createSwapChain()
@@ -288,6 +312,9 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     QMetalSwapChainData::FrameData &frame(swapChainD->d->frame[currentFrameSlot]);
     frame.cb = [d->cmdQueue commandBufferWithUnretainedReferences];
     swapChainD->cbWrapper.d->cb = frame.cb;
+    swapChainD->cbWrapper.resetState();
+
+    executeDeferredReleases();
 
     return QRhi::FrameOpSuccess;
 }
@@ -396,17 +423,75 @@ void QRhiMetal::endPass(QRhiCommandBuffer *cb)
     cbD->currentTarget = nullptr;
 }
 
-QMetalBuffer::QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
-    : QRhiBuffer(rhi, type, usage, size)
+void QRhiMetal::executeDeferredReleases(bool forced)
 {
+    for (int i = d->releaseQueue.count() - 1; i >= 0; --i) {
+        const QRhiMetalData::DeferredReleaseEntry &e(d->releaseQueue[i]);
+        if (forced || currentFrameSlot == e.lastActiveFrameSlot || e.lastActiveFrameSlot < 0) {
+            switch (e.type) {
+            case QRhiMetalData::DeferredReleaseEntry::Buffer:
+                for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+                    [e.buffer.buffers[i] release];
+                break;
+            default:
+                break;
+            }
+            d->releaseQueue.removeAt(i);
+        }
+    }
+}
+
+QMetalBuffer::QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
+    : QRhiBuffer(rhi, type, usage, size),
+      d(new QMetalBufferData)
+{
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+        d->buf[i] = nil;
+}
+
+QMetalBuffer::~QMetalBuffer()
+{
+    delete d;
 }
 
 void QMetalBuffer::release()
 {
+    if (!d->buf[0])
+        return;
+
+    QRhiMetalData::DeferredReleaseEntry e;
+    e.type = QRhiMetalData::DeferredReleaseEntry::Buffer;
+    e.lastActiveFrameSlot = lastActiveFrameSlot;
+
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+        e.buffer.buffers[i] = d->buf[i];
+        d->buf[i] = nil;
+    }
+
+    QRHI_RES_RHI(QRhiMetal);
+    rhiD->d->releaseQueue.append(e);
 }
 
 bool QMetalBuffer::build()
 {
+    if (d->buf[0])
+        release();
+
+#ifndef Q_OS_MACOS
+    type = DynamicType;
+#endif
+
+    const MTLResourceOptions opts = isStatic() ?
+                (MTLResourceCPUCacheModeWriteCombined | MTLResourceStorageModeManaged) :
+                MTLResourceStorageModeShared;
+
+    QRHI_RES_RHI(QRhiMetal);
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+        if (i == 0 || !isStatic())
+            d->buf[i] = [rhiD->d->dev newBufferWithLength: size options: opts];
+    }
+
+    generation += 1;
     return true;
 }
 

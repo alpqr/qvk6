@@ -78,6 +78,9 @@ struct QMetalTexture : public QRhiTexture
     QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
     void release() override;
     bool build() override;
+
+    uint generation = 0;
+    int lastActiveFrameSlot = -1;
 };
 
 struct QMetalSampler : public QRhiSampler
@@ -85,6 +88,9 @@ struct QMetalSampler : public QRhiSampler
     QMetalSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
     void release() override;
     bool build() override;
+
+    uint generation = 0;
+    int lastActiveFrameSlot = -1;
 };
 
 struct QMetalRenderPassData;
@@ -276,6 +282,8 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases(bool forced = false);
+    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
 
     bool importedDevice = false;
     bool inFrame = false;

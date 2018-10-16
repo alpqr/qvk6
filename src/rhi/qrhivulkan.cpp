@@ -1523,6 +1523,7 @@ void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
     if (updates.isEmpty())
         return;
 
+    Q_ASSERT(!bufD->isStatic());
     void *p = nullptr;
     VmaAllocation a = toVmaAllocation(bufD->allocations[currentFrameSlot]);
     VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
@@ -1533,7 +1534,6 @@ void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
     int changeBegin = -1;
     int changeEnd = -1;
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : updates) {
-        Q_ASSERT(!u.buf->isStatic());
         Q_ASSERT(bufD == QRHI_RES(QVkBuffer, u.buf));
         memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
         if (changeBegin == -1 || u.offset < changeBegin)

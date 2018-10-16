@@ -83,6 +83,7 @@ struct QRhiMetalData
 struct QMetalBufferData
 {
     id<MTLBuffer> buf[QMTL_FRAMES_IN_FLIGHT];
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingDynamicUpdates[QMTL_FRAMES_IN_FLIGHT];
 };
 
 struct QMetalCommandBufferData
@@ -234,6 +235,27 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     if (!srb)
         srb = ps->shaderResourceBindings;
 
+    for (const QRhiShaderResourceBindings::Binding &b : qAsConst(srb->bindings)) {
+        switch (b.type) {
+        case QRhiShaderResourceBindings::Binding::UniformBuffer:
+        {
+            Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
+            QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
+            bufD->lastActiveFrameSlot = currentFrameSlot;
+            if (!b.ubuf.buf->isStatic())
+                executeBufferHostWritesForCurrentFrame(bufD);
+        }
+            break;
+        case QRhiShaderResourceBindings::Binding::SampledTexture:
+            QRHI_RES(QMetalTexture, b.stex.tex)->lastActiveFrameSlot = currentFrameSlot;
+            QRHI_RES(QMetalSampler, b.stex.sampler)->lastActiveFrameSlot = currentFrameSlot;
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
     QMetalGraphicsPipeline *psD = QRHI_RES(QMetalGraphicsPipeline, ps);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
 
@@ -373,6 +395,51 @@ MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthSte
     return rp;
 }
 
+void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
+{
+    QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
+
+    for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
+        Q_ASSERT(!u.buf->isStatic());
+        QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
+        for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+            bufD->d->pendingDynamicUpdates[i].append(u);
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
+        QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
+        Q_ASSERT(u.buf->isStatic());
+        Q_ASSERT(u.data.size() == u.buf->size);
+        // Note that we can only get here if the mode is MTLStorageModeManaged,
+        // with separate CPU- and GPU-side copies managed by the driver.
+        void *p = [bufD->d->buf[0] contents];
+        memcpy(p, u.data.constData(), u.data.size());
+        [bufD->d->buf[0] didModifyRange: NSMakeRange(0, u.data.size())];
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
+        // ###
+    }
+
+    ud->free();
+}
+
+void QRhiMetal::executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD)
+{
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> &updates(bufD->d->pendingDynamicUpdates[currentFrameSlot]);
+    if (updates.isEmpty())
+        return;
+
+    Q_ASSERT(!bufD->isStatic());
+    void *p = [bufD->d->buf[currentFrameSlot] contents];
+    for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : updates) {
+        Q_ASSERT(bufD == QRHI_RES(QMetalBuffer, u.buf));
+        memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
+    }
+
+    updates.clear();
+}
+
 void QRhiMetal::beginPass(QRhiRenderTarget *rt,
                           QRhiCommandBuffer *cb,
                           const QRhiClearValue *colorClearValue,
@@ -380,6 +447,9 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
                           QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
+
+    if (resourceUpdates)
+        commitResourceUpdates(resourceUpdates);
 
     QMetalSwapChainData::FrameData &frame(currentSwapChain->d->frame[currentFrameSlot]);
 
@@ -395,6 +465,8 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
         QMetalTextureRenderTarget *rtTex = QRHI_RES(QMetalTextureRenderTarget, rt);
         rtD = &rtTex->d;
         frame.currentPassRpDesc = d->createDefaultRenderPass(false, colorClearValue, depthStencilClearValue);
+        if (rtTex->flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents))
+            frame.currentPassRpDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
         // ###
     }
         break;
@@ -466,6 +538,7 @@ void QMetalBuffer::release()
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
         e.buffer.buffers[i] = d->buf[i];
         d->buf[i] = nil;
+        d->pendingDynamicUpdates[i].clear();
     }
 
     QRHI_RES_RHI(QRhiMetal);
@@ -487,8 +560,11 @@ bool QMetalBuffer::build()
 
     QRHI_RES_RHI(QRhiMetal);
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
-        if (i == 0 || !isStatic())
+        if (i == 0 || !isStatic()) {
             d->buf[i] = [rhiD->d->dev newBufferWithLength: size options: opts];
+            if (!isStatic())
+                d->pendingDynamicUpdates[i].reserve(16);
+        }
     }
 
     generation += 1;
@@ -521,6 +597,7 @@ void QMetalTexture::release()
 
 bool QMetalTexture::build()
 {
+    generation += 1;
     return true;
 }
 
@@ -535,6 +612,7 @@ void QMetalSampler::release()
 
 bool QMetalSampler::build()
 {
+    generation += 1;
     return true;
 }
 

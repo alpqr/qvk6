@@ -181,7 +181,7 @@ class Q_RHI_EXPORT QRhiBuffer : public QRhiResource
 {
 public:
     enum Type {
-        Immutable, // data never changes - under the hood typically in device local (GPU) memory
+        Immutable, // data never changes after initial upload - under the hood typically in device local (GPU) memory
         Static,    // data changes infrequently - under the hood typically device local and updated via a separate, host visible staging buffer
         Dynamic    // data changes frequently - under the hood typically host visible
     };
@@ -235,7 +235,8 @@ class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 {
 public:
     enum Flag {
-        RenderTarget = 1 << 0
+        RenderTarget = 1 << 0,
+        ChangesInfrequently = 1 << 1 // hint for backend not to keep staging resources around
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 

@@ -292,6 +292,8 @@ void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         cmd.args.bindVertexBuffers.buffers[i] = bufD->buffer;
         cmd.args.bindVertexBuffers.offsets[i] = ofs;
         cmd.args.bindVertexBuffers.strides[i] = cbD->currentPipeline->vertexInputLayout.bindings[i].stride;
+        if (bufD->type == QRhiBuffer::Dynamic)
+            executeBufferHostWritesForCurrentFrame(bufD);
     }
     cbD->commands.append(cmd);
 
@@ -304,6 +306,8 @@ void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         cmd.args.bindIndexBuffer.offset = indexOffset;
         cmd.args.bindIndexBuffer.format = indexFormat == QRhi::IndexUInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
         cbD->commands.append(cmd);
+        if (ibufD->type == QRhiBuffer::Dynamic)
+            executeBufferHostWritesForCurrentFrame(ibufD);
     }
 }
 
@@ -609,6 +613,22 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
     srbD->fsshaderresources.finish();
 }
 
+void QRhiD3D11::executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD)
+{
+    if (!bufD->hasPendingDynamicUpdates)
+        return;
+
+    bufD->hasPendingDynamicUpdates = false;
+    D3D11_MAPPED_SUBRESOURCE mp;
+    HRESULT hr = context->Map(bufD->buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mp);
+    if (SUCCEEDED(hr)) {
+        memcpy(mp.pData, bufD->dynBuf.constData(), bufD->dynBuf.size());
+        context->Unmap(bufD->buffer, 0);
+    } else {
+        qWarning("Failed to map buffer: %s", qPrintable(comErrorMessage(hr)));
+    }
+}
+
 void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
 {
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
@@ -617,17 +637,8 @@ void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
         {
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
-            if (bufD->type == QRhiBuffer::Dynamic && bufD->hasPendingDynamicUpdates) {
-                bufD->hasPendingDynamicUpdates = false;
-                D3D11_MAPPED_SUBRESOURCE mp;
-                HRESULT hr = context->Map(bufD->buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mp);
-                if (SUCCEEDED(hr)) {
-                    memcpy(mp.pData, bufD->dynBuf.constData(), bufD->dynBuf.size());
-                    context->Unmap(bufD->buffer, 0);
-                } else {
-                    qWarning("Failed to map buffer: %s", qPrintable(comErrorMessage(hr)));
-                }
-            }
+            if (bufD->type == QRhiBuffer::Dynamic)
+                executeBufferHostWritesForCurrentFrame(bufD);
         }
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:

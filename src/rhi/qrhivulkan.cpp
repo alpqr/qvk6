@@ -1825,6 +1825,9 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
         Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
         bufD->lastActiveFrameSlot = currentFrameSlot;
+        if (bufD->type == QRhiBuffer::Dynamic)
+            executeBufferHostWritesForCurrentFrame(bufD);
+
         const int idx = buf->type == QRhiBuffer::Dynamic ? currentFrameSlot : 0;
         bufs.append(bufD->buffers[idx]);
         ofs.append(bindings[i].second);
@@ -1837,6 +1840,9 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, indexBuf);
         Q_ASSERT(indexBuf->usage.testFlag(QRhiBuffer::IndexBuffer));
         bufD->lastActiveFrameSlot = currentFrameSlot;
+        if (bufD->type == QRhiBuffer::Dynamic)
+            executeBufferHostWritesForCurrentFrame(bufD);
+
         const int idx = indexBuf->type == QRhiBuffer::Dynamic ? currentFrameSlot : 0;
         const VkIndexType type = indexFormat == QRhi::IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
         df->vkCmdBindIndexBuffer(cbD->cb, bufD->buffers[idx], indexOffset, type);

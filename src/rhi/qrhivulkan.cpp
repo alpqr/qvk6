@@ -1171,8 +1171,8 @@ void QRhiVulkan::finishFrame()
 
 void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
                            QRhiCommandBuffer *cb,
-                           const QRhiClearValue *colorClearValue,
-                           const QRhiClearValue *depthStencilClearValue,
+                           const QRhiColorClearValue &colorClearValue,
+                           const QRhiDepthStencilClearValue &depthStencilClearValue,
                            QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
@@ -1211,18 +1211,12 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
     QVarLengthArray<VkClearValue, 4> cvs;
 
     VkClearValue colorCv;
-    if (colorClearValue)
-        colorCv.color = { { colorClearValue->rgba.x(), colorClearValue->rgba.y(), colorClearValue->rgba.z(), colorClearValue->rgba.w() } };
-    else
-        colorCv.color = { { 0.0f, 0.0f, 0.0f, 1.0f } };
+    colorCv.color = { { colorClearValue.rgba.x(), colorClearValue.rgba.y(), colorClearValue.rgba.z(), colorClearValue.rgba.w() } };
     cvs.append(colorCv);
 
     if (rtD->attCount > 1) {
         VkClearValue cv;
-        if (depthStencilClearValue)
-            cv.depthStencil = { depthStencilClearValue->d, depthStencilClearValue->s };
-        else
-            cv.depthStencil = { 1.0f, 0 };
+        cv.depthStencil = { depthStencilClearValue.d, depthStencilClearValue.s };
         cvs.append(cv);
     }
 

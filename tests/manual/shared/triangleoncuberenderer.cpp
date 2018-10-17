@@ -207,9 +207,7 @@ void TriangleOnCubeRenderer::queueOffscreenPass(QRhiCommandBuffer *cb)
             m_image = QImage();
     }
 
-    QRhiClearValue colorClear(QVector4D(0.0f, 0.4f, 0.7f, 1.0f));
-    QRhiClearValue dsClear(1.0f, 0);
-    m_r->beginPass(m_rt, cb, &colorClear, &dsClear, u);
+    m_r->beginPass(m_rt, cb, { 0.0f, 0.4f, 0.7f, 1.0f }, { 1.0f, 0 }, u);
     m_offscreenTriangle.queueDraw(cb, OFFSCREEN_SIZE);
     m_r->endPass(cb);
 }

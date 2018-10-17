@@ -1,5 +1,4 @@
 bring up metal
-revise how clear values are handled (ref, not ptr)
 vk: drop staging buffer for immutable buffers
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
@@ -42,6 +41,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+revise how clear values are handled (ref, not ptr)
 d3d/vk: fix Dynamic for non-uniform buffers
 switch to immutable - static - dynamic buffer types (backends may not care for now)
 make clearValues optional in beginPass (when preserving contents for offscreen)

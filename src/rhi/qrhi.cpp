@@ -412,8 +412,8 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
 
 void QRhi::beginPass(QRhiRenderTarget *rt,
                      QRhiCommandBuffer *cb,
-                     const QRhiClearValue *colorClearValue,
-                     const QRhiClearValue *depthStencilClearValue,
+                     const QRhiColorClearValue &colorClearValue,
+                     const QRhiDepthStencilClearValue &depthStencilClearValue,
                      QRhiResourceUpdateBatch *resourceUpdates)
 {
     d->beginPass(rt, cb, colorClearValue, depthStencilClearValue, resourceUpdates);

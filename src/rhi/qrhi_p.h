@@ -86,8 +86,8 @@ public:
 
     virtual void beginPass(QRhiRenderTarget *rt,
                            QRhiCommandBuffer *cb,
-                           const QRhiClearValue *colorClearValue,
-                           const QRhiClearValue *depthStencilClearValue,
+                           const QRhiColorClearValue &colorClearValue,
+                           const QRhiDepthStencilClearValue &depthStencilClearValue,
                            QRhiResourceUpdateBatch *resourceUpdates) = 0;
     virtual void endPass(QRhiCommandBuffer *cb) = 0;
 

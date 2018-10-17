@@ -212,9 +212,7 @@ void ExampleWindow::render()
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueResourceUpdates(u);
 
-    QRhiClearValue colorClear(QVector4D(0.4f, 0.7f, 0.0f, 1.0f));
-    QRhiClearValue dsClear(1.0f, 0);
-    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, &colorClear, &dsClear, u);
+    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
     m_triRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
     if (!m_triangleOnly) {
         m_quadRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());

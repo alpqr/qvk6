@@ -472,8 +472,8 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 
 void QRhiD3D11::beginPass(QRhiRenderTarget *rt,
                           QRhiCommandBuffer *cb,
-                          const QRhiClearValue *colorClearValue,
-                          const QRhiClearValue *depthStencilClearValue,
+                          const QRhiColorClearValue &colorClearValue,
+                          const QRhiDepthStencilClearValue &depthStencilClearValue,
                           QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);
@@ -517,20 +517,9 @@ void QRhiD3D11::beginPass(QRhiRenderTarget *rt,
     if (needsColorClear)
         clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Color;
 
-    if (colorClearValue) {
-        memcpy(clearCmd.args.clear.c, &colorClearValue->rgba, sizeof(float) * 4);
-    } else {
-        clearCmd.args.clear.c[0] = clearCmd.args.clear.c[1] = clearCmd.args.clear.c[2] = 0.0f;
-        clearCmd.args.clear.c[3] = 1.0f;
-    }
-
-    if (depthStencilClearValue) {
-        clearCmd.args.clear.d = depthStencilClearValue->d;
-        clearCmd.args.clear.s = depthStencilClearValue->s;
-    } else {
-        clearCmd.args.clear.d = 1.0f;
-        clearCmd.args.clear.s = 0;
-    }
+    memcpy(clearCmd.args.clear.c, &colorClearValue.rgba, sizeof(float) * 4);
+    clearCmd.args.clear.d = depthStencilClearValue.d;
+    clearCmd.args.clear.s = depthStencilClearValue.s;
 
     cbD->commands.append(clearCmd);
 

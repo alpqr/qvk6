@@ -62,8 +62,8 @@ struct QRhiMetalData
     id<MTLCommandQueue> cmdQueue;
 
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
-                                                     const QRhiClearValue *colorClearValue,
-                                                     const QRhiClearValue *depthStencilClearValue);
+                                                     const QRhiClearValue &colorClearValue,
+                                                     const QRhiClearValue &depthStencilClearValue);
 
     struct DeferredReleaseEntry {
         enum Type {
@@ -367,30 +367,26 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 }
 
 MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthStencil,
-                                                                const QRhiClearValue *colorClearValue,
-                                                                const QRhiClearValue *depthStencilClearValue)
+                                                                const QRhiClearValue &colorClearValue,
+                                                                const QRhiClearValue &depthStencilClearValue)
 {
     MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
 
     rp.colorAttachments[0].loadAction = MTLLoadActionClear;
     rp.colorAttachments[0].storeAction = MTLStoreActionStore;
-    if (colorClearValue) {
-        MTLClearColor c = MTLClearColorMake(colorClearValue->rgba.x(),
-                                            colorClearValue->rgba.y(),
-                                            colorClearValue->rgba.z(),
-                                            colorClearValue->rgba.w());
-        rp.colorAttachments[0].clearColor = c;
-    }
+    MTLClearColor c = MTLClearColorMake(colorClearValue.rgba.x(),
+                                        colorClearValue.rgba.y(),
+                                        colorClearValue.rgba.z(),
+                                        colorClearValue.rgba.w());
+    rp.colorAttachments[0].clearColor = c;
 
     if (hasDepthStencil) {
         rp.depthAttachment.loadAction = MTLLoadActionClear;
         rp.depthAttachment.storeAction = MTLStoreActionDontCare;
         rp.stencilAttachment.loadAction = MTLLoadActionClear;
         rp.stencilAttachment.storeAction = MTLStoreActionDontCare;
-        if (depthStencilClearValue) {
-            rp.depthAttachment.clearDepth = depthStencilClearValue->d;
-            rp.stencilAttachment.clearStencil = depthStencilClearValue->s;
-        }
+        rp.depthAttachment.clearDepth = depthStencilClearValue.d;
+        rp.stencilAttachment.clearStencil = depthStencilClearValue.s;
     }
 
     return rp;
@@ -446,8 +442,8 @@ void QRhiMetal::executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD)
 
 void QRhiMetal::beginPass(QRhiRenderTarget *rt,
                           QRhiCommandBuffer *cb,
-                          const QRhiClearValue *colorClearValue,
-                          const QRhiClearValue *depthStencilClearValue,
+                          const QRhiColorClearValue &colorClearValue,
+                          const QRhiDepthStencilClearValue &depthStencilClearValue,
                           QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(!inPass);

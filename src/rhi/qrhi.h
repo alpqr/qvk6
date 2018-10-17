@@ -51,18 +51,25 @@ QT_BEGIN_NAMESPACE
 class QRhiImplementation;
 class QWindow;
 
-struct Q_RHI_EXPORT QRhiClearValue
+struct Q_RHI_EXPORT QRhiColorClearValue
 {
-    QRhiClearValue() { }
-    QRhiClearValue(const QVector4D &rgba_) : rgba(rgba_), isDepthStencil(false) { }
-    QRhiClearValue(float d_, quint32 s_) : d(d_), s(s_), isDepthStencil(true) { }
+    QRhiColorClearValue() : rgba(0, 0, 0, 1) { }
+    explicit QRhiColorClearValue(const QVector4D &rgba_) : rgba(rgba_) { }
+    QRhiColorClearValue(float r, float g, float b, float a) : rgba(r, g, b, a) { }
     QVector4D rgba;
-    float d;
-    quint32 s;
-    bool isDepthStencil;
 };
 
-Q_DECLARE_TYPEINFO(QRhiClearValue, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiColorClearValue, Q_MOVABLE_TYPE);
+
+struct Q_RHI_EXPORT QRhiDepthStencilClearValue
+{
+    QRhiDepthStencilClearValue() : d(1), s(0) { }
+    QRhiDepthStencilClearValue(float d_, quint32 s_) : d(d_), s(s_) { }
+    float d;
+    quint32 s;
+};
+
+Q_DECLARE_TYPEINFO(QRhiDepthStencilClearValue, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiViewport
 {
@@ -710,8 +717,8 @@ public:
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
-                   const QRhiClearValue *colorClearValue = nullptr,
-                   const QRhiClearValue *depthStencilClearValue = nullptr,
+                   const QRhiColorClearValue &colorClearValue,
+                   const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiCommandBuffer *cb);
 

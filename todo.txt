@@ -4,7 +4,6 @@ mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 immutable-or-not flag for QRhiTexture? (could drop staging alloc after 1st upload when immut.)
-vk: verify msaa (onscreen)
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
@@ -41,6 +40,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+vk: verify msaa (onscreen)
 revise how clear values are handled (ref, not ptr)
 d3d/vk: fix Dynamic for non-uniform buffers
 switch to immutable - static - dynamic buffer types (backends may not care for now)

@@ -49,6 +49,8 @@ void VWindow::init()
     params.window = this;
     m_r = QRhi::create(QRhi::Vulkan, &params);
 
+    //setSampleCount(4); // enable 4x MSAA (except for the render-to-texture pass)
+
     ExampleWindow::init();
 }
 

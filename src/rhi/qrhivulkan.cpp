@@ -3153,11 +3153,11 @@ bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, Surf
         colorSpace = formats[0].colorSpace;
     }
 
+    sampleCount = rhiD->effectiveSampleCount(sampleCount_);
     if (depthStencil && depthStencil->sampleCount != sampleCount) {
         qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
                  depthStencil->sampleCount, sampleCount);
     }
-    sampleCount = rhiD->effectiveSampleCount(sampleCount_);
 
     if (!rhiD->recreateSwapChain(surface, requestedPixelSize_, flags, this))
         return false;

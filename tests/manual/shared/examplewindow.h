@@ -55,6 +55,8 @@ protected:
     bool event(QEvent *) override;
 
     bool m_running = false;
+    bool m_notExposed = false;
+    bool m_newlyExposed = false;
 
     QRhi *m_r = nullptr;
     bool m_hasSwapChain = false;

@@ -30,6 +30,18 @@
 
 void ExampleWindow::exposeEvent(QExposeEvent *)
 {
+    // You never know how Vulkan behaves today - at some point it started
+    // requiring a swapchain recreate on unexpose-expose on Windows at least
+    // (where unexpose comes when e.g. minimizing the window). Manage this.
+    if (!isExposed() && m_running)
+        m_notExposed = true;
+
+    if (isExposed() && m_running && m_notExposed) {
+        m_notExposed = false;
+        m_newlyExposed = true;
+        render();
+    }
+
     if (isExposed() && !m_running) {
         m_running = true;
         init();
@@ -158,13 +170,14 @@ void ExampleWindow::releaseSwapChain()
 
 void ExampleWindow::render()
 {
-    if (!m_hasSwapChain)
+    if (!m_hasSwapChain || m_notExposed)
         return;
 
-    if (m_sc->requestedSizeInPixels() != size() * devicePixelRatio()) {
+    if (m_sc->requestedSizeInPixels() != size() * devicePixelRatio() || m_newlyExposed) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;
+        m_newlyExposed = false;
     }
 
     QRhi::FrameOpResult r = m_r->beginFrame(m_sc);

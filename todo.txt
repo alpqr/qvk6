@@ -1,5 +1,9 @@
 bring up metal
-revise how clear values are handled
+revise how clear values are handled (ref, not ptr)
+enable Dynamic for non-uniform buffers too (vk/d3d/mtl may be broken atm)
+vk: drop staging buffer for immutable buffers
+mtl: forcing immut. to Shared should not need multiple backing buffers
+immutable-or-not flag for QRhiTexture? (could drop staging alloc after 1st upload when immut.)
 vk: verify msaa (onscreen)
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
@@ -37,6 +41,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+switch to immutable - static - dynamic buffer types (backends may not care for now)
 make clearValues optional in beginPass (when preserving contents for offscreen)
 drop front-and-back cull
 vk should update lastActiveFrameSlot even when cur.obj is same

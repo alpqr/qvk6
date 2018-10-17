@@ -47,9 +47,9 @@ QT_BEGIN_NAMESPACE
 
 /*
     Metal backend. MRC. Double buffers and throttles to vsync. "Dynamic"
-    buffers are Shared and duplicated (due to 2 frames in flight), while
-    "static" buffers are Managed. However, buffers are always treated as
-    "dynamic" on iOS/tvOS.
+    buffers are Shared (host visible) and duplicated (due to 2 frames in
+    flight), while "static" buffers are Managed (CPU-GPU data duplication
+    managed by the driver) on macOS, but Shared on iOS/tvOS.
 */
 
 #if __has_feature(objc_arc)
@@ -82,8 +82,9 @@ struct QRhiMetalData
 
 struct QMetalBufferData
 {
+    bool forcedShared = false;
     id<MTLBuffer> buf[QMTL_FRAMES_IN_FLIGHT];
-    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingDynamicUpdates[QMTL_FRAMES_IN_FLIGHT];
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingSharedModeUpdates[QMTL_FRAMES_IN_FLIGHT];
 };
 
 struct QMetalCommandBufferData
@@ -242,7 +243,7 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
             bufD->lastActiveFrameSlot = currentFrameSlot;
-            if (!b.ubuf.buf->isStatic())
+            if (bufD->type == QRhiBuffer::Dynamic || bufD->d->forcedShared)
                 executeBufferHostWritesForCurrentFrame(bufD);
         }
             break;
@@ -400,21 +401,24 @@ void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
-        Q_ASSERT(!u.buf->isStatic());
+        Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
         for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
-            bufD->d->pendingDynamicUpdates[i].append(u);
+            bufD->d->pendingSharedModeUpdates[i].append(u);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
-        QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
-        Q_ASSERT(u.buf->isStatic());
+        Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == u.buf->size);
-        // Note that we can only get here if the mode is MTLStorageModeManaged,
-        // with separate CPU- and GPU-side copies managed by the driver.
-        void *p = [bufD->d->buf[0] contents];
-        memcpy(p, u.data.constData(), u.data.size());
-        [bufD->d->buf[0] didModifyRange: NSMakeRange(0, u.data.size())];
+        QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
+        if (!bufD->d->forcedShared) {
+            void *p = [bufD->d->buf[0] contents];
+            memcpy(p, u.data.constData(), u.data.size());
+            [bufD->d->buf[0] didModifyRange: NSMakeRange(0, u.data.size())];
+        } else {
+            for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+                bufD->d->pendingSharedModeUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
+        }
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
@@ -426,11 +430,11 @@ void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 
 void QRhiMetal::executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD)
 {
-    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> &updates(bufD->d->pendingDynamicUpdates[currentFrameSlot]);
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> &updates(bufD->d->pendingSharedModeUpdates[currentFrameSlot]);
     if (updates.isEmpty())
         return;
 
-    Q_ASSERT(!bufD->isStatic());
+    Q_ASSERT(bufD->type == QRhiBuffer::Dynamic || bufD->d->forcedShared);
     void *p = [bufD->d->buf[currentFrameSlot] contents];
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : updates) {
         Q_ASSERT(bufD == QRHI_RES(QMetalBuffer, u.buf));
@@ -538,7 +542,7 @@ void QMetalBuffer::release()
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
         e.buffer.buffers[i] = d->buf[i];
         d->buf[i] = nil;
-        d->pendingDynamicUpdates[i].clear();
+        d->pendingSharedModeUpdates[i].clear();
     }
 
     QRHI_RES_RHI(QRhiMetal);
@@ -550,20 +554,26 @@ bool QMetalBuffer::build()
     if (d->buf[0])
         release();
 
-#ifndef Q_OS_MACOS
-    type = DynamicType;
-#endif
+    MTLResourceOptions opts =
+            type == Dynamic ? MTLResourceStorageModeShared
+                            : (MTLResourceCPUCacheModeWriteCombined | MTLResourceStorageModeManaged);
 
-    const MTLResourceOptions opts = isStatic() ?
-                (MTLResourceCPUCacheModeWriteCombined | MTLResourceStorageModeManaged) :
-                MTLResourceStorageModeShared;
+    // no Managed mode for iOS and tvOS
+#ifndef Q_OS_MACOS
+    if (type != Dynamic) {
+        opts = MTLResourceStorageModeShared;
+        d->forcedShared = true;
+    }
+#else
+    d->forcedShared = false;
+#endif
 
     QRHI_RES_RHI(QRhiMetal);
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
-        if (i == 0 || !isStatic()) {
+        if (i == 0 || type == Dynamic || d->forcedShared) {
             d->buf[i] = [rhiD->d->dev newBufferWithLength: size options: opts];
-            if (!isStatic())
-                d->pendingDynamicUpdates[i].reserve(16);
+            if (type == Dynamic || d->forcedShared)
+                d->pendingSharedModeUpdates[i].reserve(16);
         }
     }
 

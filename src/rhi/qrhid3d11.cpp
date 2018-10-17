@@ -435,16 +435,16 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
-        Q_ASSERT(!u.buf->isStatic());
+        Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
         QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
         memcpy(bufD->dynBuf.data() + u.offset, u.data.constData(), u.data.size());
         bufD->hasPendingDynamicUpdates = true;
     }
 
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
-        QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
-        Q_ASSERT(u.buf->isStatic());
+        Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == u.buf->size);
+        QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
         if (!(u.data.size() & 0xF)) {
             context->UpdateSubresource(bufD->buffer, 0, nullptr, u.data.constData(), 0, 0);
         } else {
@@ -617,7 +617,7 @@ void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
         {
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
-            if (!bufD->isStatic() && bufD->hasPendingDynamicUpdates) {
+            if (bufD->type == QRhiBuffer::Dynamic && bufD->hasPendingDynamicUpdates) {
                 bufD->hasPendingDynamicUpdates = false;
                 D3D11_MAPPED_SUBRESOURCE mp;
                 HRESULT hr = context->Map(bufD->buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mp);
@@ -823,9 +823,9 @@ bool QD3D11Buffer::build()
     D3D11_BUFFER_DESC desc;
     memset(&desc, 0, sizeof(desc));
     desc.ByteWidth = usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(size, 256) : size;
-    desc.Usage = isStatic() ? D3D11_USAGE_DEFAULT : D3D11_USAGE_DYNAMIC;
+    desc.Usage = type == Dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
     desc.BindFlags = toD3DBufferUsage(usage);
-    desc.CPUAccessFlags = isStatic() ? 0 : D3D11_CPU_ACCESS_WRITE;
+    desc.CPUAccessFlags = type == Dynamic ? D3D11_CPU_ACCESS_WRITE : 0;
 
     QRHI_RES_RHI(QRhiD3D11);
     HRESULT hr = rhiD->dev->CreateBuffer(&desc, nullptr, &buffer);
@@ -834,7 +834,7 @@ bool QD3D11Buffer::build()
         return false;
     }
 
-    if (!isStatic()) {
+    if (type == Dynamic) {
         dynBuf.resize(size);
         hasPendingDynamicUpdates = false;
     }

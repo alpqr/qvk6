@@ -50,14 +50,14 @@ static quint16 indexData[] =
 
 void QuadRenderer::initResources()
 {
-    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ibuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::IndexBuffer, sizeof(indexData));
+    m_ibuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, sizeof(indexData));
     m_ibuf->build();
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 68);
+    m_ubuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
     m_ubuf->build();
 
     m_srb = m_r->createShaderResourceBindings();

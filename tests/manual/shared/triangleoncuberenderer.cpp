@@ -49,11 +49,11 @@ static const QSize OFFSCREEN_SIZE(512, 512);
 
 void TriangleOnCubeRenderer::initResources()
 {
-    m_vbuf = m_r->createBuffer(QRhiBuffer::StaticType, QRhiBuffer::VertexBuffer, sizeof(cube));
+    m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::DynamicType, QRhiBuffer::UniformBuffer, 64 + 4);
+    m_ubuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
     m_ubuf->build();
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING) {

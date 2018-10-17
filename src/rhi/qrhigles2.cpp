@@ -407,7 +407,7 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
-        Q_ASSERT(!u.buf->isStatic());
+        Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
         QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
         if (u.buf->usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
@@ -423,9 +423,9 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     }
 
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
-        Q_ASSERT(u.buf->isStatic());
-        QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
+        Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == u.buf->size);
+        QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
         if (u.buf->usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data(), u.data.constData(), u.data.size());
             bufD->ubufChangeRange = { 0, u.data.size() };
@@ -1091,7 +1091,7 @@ bool QGles2Buffer::build()
 
     rhiD->f->glGenBuffers(1, &buffer);
     rhiD->f->glBindBuffer(target, buffer);
-    rhiD->f->glBufferData(target, size, nullptr, isStatic() ? GL_STATIC_DRAW : GL_DYNAMIC_DRAW);
+    rhiD->f->glBufferData(target, size, nullptr, type == Dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
 
     return true;
 }

@@ -174,8 +174,9 @@ class Q_RHI_EXPORT QRhiBuffer : public QRhiResource
 {
 public:
     enum Type {
-        StaticType,
-        DynamicType
+        Immutable, // data never changes - under the hood typically in device local (GPU) memory
+        Static,    // data changes infrequently - under the hood typically device local and updated via a separate, host visible staging buffer
+        Dynamic    // data changes frequently - under the hood typically host visible
     };
 
     enum UsageFlag {
@@ -188,8 +189,6 @@ public:
     Type type;
     UsageFlags usage;
     int size; // no restrictions here, up to the backend to round up if needed
-
-    bool isStatic() const { return type == StaticType; }
 
     virtual bool build() = 0;
 

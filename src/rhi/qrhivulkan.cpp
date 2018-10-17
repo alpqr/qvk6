@@ -1311,7 +1311,7 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
                 QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
                 bd.ubuf.generation = bufD->generation;
                 VkDescriptorBufferInfo bufInfo;
-                bufInfo.buffer = buf->isStatic() ? bufD->buffers[0] : bufD->buffers[frameSlot];
+                bufInfo.buffer = bufD->type == QRhiBuffer::Dynamic ? bufD->buffers[frameSlot] : bufD->buffers[0];
                 bufInfo.offset = b.ubuf.offset;
                 bufInfo.range = b.ubuf.maybeSize ? b.ubuf.maybeSize : buf->size;
                 // be nice and assert when we know the vulkan device would die a horrible death due to non-aligned reads
@@ -1407,17 +1407,17 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
-        Q_ASSERT(!u.buf->isStatic());
+        Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
         for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
             bufD->pendingDynamicUpdates[i].append(u);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
-        QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
-        Q_ASSERT(u.buf->isStatic());
-        Q_ASSERT(bufD->stagingBuffer);
+        Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == u.buf->size);
+        QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
+        Q_ASSERT(bufD->stagingBuffer);
 
         void *p = nullptr;
         VmaAllocation a = toVmaAllocation(bufD->stagingAlloc);
@@ -1523,7 +1523,7 @@ void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
     if (updates.isEmpty())
         return;
 
-    Q_ASSERT(!bufD->isStatic());
+    Q_ASSERT(bufD->type == QRhiBuffer::Dynamic);
     void *p = nullptr;
     VmaAllocation a = toVmaAllocation(bufD->allocations[currentFrameSlot]);
     VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
@@ -1749,7 +1749,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
             QVkBuffer *bufD = QRHI_RES(QVkBuffer, b.ubuf.buf);
             bufD->lastActiveFrameSlot = currentFrameSlot;
-            if (!b.ubuf.buf->isStatic()) {
+            if (b.ubuf.buf->type == QRhiBuffer::Dynamic) {
                 hasDynamicBufferInSrb = true;
                 executeBufferHostWritesForCurrentFrame(bufD);
             }
@@ -1825,7 +1825,7 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
         Q_ASSERT(buf->usage.testFlag(QRhiBuffer::VertexBuffer));
         bufD->lastActiveFrameSlot = currentFrameSlot;
-        const int idx = buf->isStatic() ? 0 : currentFrameSlot;
+        const int idx = buf->type == QRhiBuffer::Dynamic ? currentFrameSlot : 0;
         bufs.append(bufD->buffers[idx]);
         ofs.append(bindings[i].second);
     }
@@ -1837,7 +1837,7 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, indexBuf);
         Q_ASSERT(indexBuf->usage.testFlag(QRhiBuffer::IndexBuffer));
         bufD->lastActiveFrameSlot = currentFrameSlot;
-        const int idx = indexBuf->isStatic() ? 0 : currentFrameSlot;
+        const int idx = indexBuf->type == QRhiBuffer::Dynamic ? currentFrameSlot : 0;
         const VkIndexType type = indexFormat == QRhi::IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
         df->vkCmdBindIndexBuffer(cbD->cb, bufD->buffers[idx], indexOffset, type);
     }
@@ -2329,11 +2329,11 @@ bool QVkBuffer::build()
     VmaAllocationCreateInfo allocInfo;
     memset(&allocInfo, 0, sizeof(allocInfo));
 
-    if (isStatic()) {
+    if (type == Dynamic) {
+        allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+    } else {
         allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
         bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-    } else {
-        allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
     }
 
     QRHI_RES_RHI(QRhiVulkan);
@@ -2341,18 +2341,18 @@ bool QVkBuffer::build()
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         buffers[i] = VK_NULL_HANDLE;
         allocations[i] = nullptr;
-        if (i == 0 || !isStatic()) {
+        if (i == 0 || type == Dynamic) {
             VmaAllocation allocation;
             err = vmaCreateBuffer(toVmaAllocator(rhiD->allocator), &bufferInfo, &allocInfo, &buffers[i], &allocation, nullptr);
             if (err != VK_SUCCESS)
                 break;
             allocations[i] = allocation;
-            if (!isStatic())
+            if (type == Dynamic)
                 pendingDynamicUpdates[i].reserve(16);
         }
     }
 
-    if (err == VK_SUCCESS && isStatic()) {
+    if (err == VK_SUCCESS && type != Dynamic) {
         allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
         bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
         VmaAllocation allocation;

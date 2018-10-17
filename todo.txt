@@ -2,6 +2,7 @@ bring up metal
 revise how clear values are handled (ref, not ptr)
 enable Dynamic for non-uniform buffers too (vk/d3d/mtl may be broken atm)
 vk: drop staging buffer for immutable buffers
+mtl: buffer logic is borked
 mtl: forcing immut. to Shared should not need multiple backing buffers
 immutable-or-not flag for QRhiTexture? (could drop staging alloc after 1st upload when immut.)
 vk: verify msaa (onscreen)

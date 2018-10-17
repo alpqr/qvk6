@@ -568,6 +568,12 @@ bool QMetalBuffer::build()
     d->forcedShared = false;
 #endif
 
+    // ###
+    // Unlike other backends like Vulkan, Static needs multiple backing buffers
+    // as well, not just Dynamic - this is because we rely on Managed mode as
+    // opposed to a manually managed separate staging buffer and explicit
+    // copy commands on the command buffer.
+
     QRHI_RES_RHI(QRhiMetal);
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
         if (i == 0 || type == Dynamic || d->forcedShared) {

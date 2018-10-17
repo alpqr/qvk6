@@ -1411,7 +1411,28 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == u.buf->size);
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
-        Q_ASSERT(bufD->stagingBuffer);
+
+        if (!bufD->stagingBuffer) {
+            VkBufferCreateInfo bufferInfo;
+            memset(&bufferInfo, 0, sizeof(bufferInfo));
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = bufD->size;
+            bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+
+            VmaAllocationCreateInfo allocInfo;
+            memset(&allocInfo, 0, sizeof(allocInfo));
+            allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+
+            VmaAllocation allocation;
+            VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo,
+                                           &bufD->stagingBuffer, &allocation, nullptr);
+            if (err == VK_SUCCESS) {
+                bufD->stagingAlloc = allocation;
+            } else {
+                qWarning("Failed to create staging buffer of size %d: %d", bufD->size, err);
+                continue;
+            }
+        }
 
         void *p = nullptr;
         VmaAllocation a = toVmaAllocation(bufD->stagingAlloc);
@@ -2350,15 +2371,6 @@ bool QVkBuffer::build()
             if (type == Dynamic)
                 pendingDynamicUpdates[i].reserve(16);
         }
-    }
-
-    if (err == VK_SUCCESS && type != Dynamic) {
-        allocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
-        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-        VmaAllocation allocation;
-        err = vmaCreateBuffer(toVmaAllocator(rhiD->allocator), &bufferInfo, &allocInfo, &stagingBuffer, &allocation, nullptr);
-        if (err == VK_SUCCESS)
-            stagingAlloc = allocation;
     }
 
     if (err == VK_SUCCESS) {

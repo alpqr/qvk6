@@ -30,6 +30,8 @@
 #include <QFile>
 #include <QBakedShader>
 
+//#define VBUF_IS_DYNAMIC
+
 static float vertexData[] = { // Y up (note m_proj), CCW
      0.0f,   0.5f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,
     -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
@@ -47,7 +49,11 @@ static QBakedShader getShader(const QString &name)
 
 void TriangleRenderer::initResources()
 {
+#ifdef VBUF_IS_DYNAMIC
+    m_vbuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+#else
     m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+#endif
     m_vbuf->build();
     m_vbufReady = false;
 
@@ -144,7 +150,11 @@ void TriangleRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpd
 
     if (!m_vbufReady) {
         m_vbufReady = true;
+#ifdef VBUF_IS_DYNAMIC
+        resourceUpdates->updateDynamicBuffer(m_vbuf, 0, m_vbuf->size, vertexData);
+#else
         resourceUpdates->uploadStaticBuffer(m_vbuf, vertexData);
+#endif
     }
 
     m_rotation += 1.0f;

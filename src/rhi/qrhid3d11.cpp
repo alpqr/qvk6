@@ -545,6 +545,9 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
     srbD->fsubufoffsets.clear();
     srbD->fsubufsizes.clear();
 
+    srbD->vssamplers.clear();
+    srbD->vsshaderresources.clear();
+
     srbD->fssamplers.clear();
     srbD->fsshaderresources.clear();
 
@@ -578,11 +581,16 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
         case QRhiShaderResourceBindings::Binding::SampledTexture:
             // A sampler with binding N is mapped to a HLSL sampler and texture
             // with registers sN and tN by SPIRV-Cross.
-            // ### vertex?
             bd.stex.texGeneration = QRHI_RES(QD3D11Texture, b.stex.tex)->generation;
             bd.stex.samplerGeneration = QRHI_RES(QD3D11Sampler, b.stex.sampler)->generation;
-            srbD->fssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
-            srbD->fsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
+            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::VertexStage)) {
+                srbD->vssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
+                srbD->vsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
+            }
+            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::FragmentStage)) {
+                srbD->fssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
+                srbD->fsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
+            }
             break;
         default:
             Q_UNREACHABLE();
@@ -597,6 +605,9 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
     srbD->fsubufs.finish();
     srbD->fsubufoffsets.finish();
     srbD->fsubufsizes.finish();
+
+    srbD->vssamplers.finish();
+    srbD->vsshaderresources.finish();
 
     srbD->fssamplers.finish();
     srbD->fsshaderresources.finish();
@@ -638,6 +649,14 @@ void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
         }
     }
 
+    for (const auto &batch : srbD->vssamplers.batches)
+        context->VSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
+
+    for (const auto &batch : srbD->vsshaderresources.batches) {
+        context->VSSetShaderResources(batch.startBinding, batch.resources.count(), batch.resources.constData());
+        contextState.vsLastActiveSrvBinding = batch.startBinding + batch.resources.count() - 1;
+    }
+
     for (const auto &batch : srbD->fssamplers.batches)
         context->PSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
 
@@ -677,10 +696,12 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
             Q_ASSERT(rp);
             // The new output cannot be bound as input from the previous frame,
             // otherwise the debug layer complains. Avoid this.
+            const int nullsrvCount = qMax(contextState.vsLastActiveSrvBinding, contextState.fsLastActiveSrvBinding) + 1;
             QVarLengthArray<ID3D11ShaderResourceView *,
-                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> nullsrvs(contextState.fsLastActiveSrvBinding + 1);
+                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> nullsrvs(nullsrvCount);
             for (int i = 0; i < nullsrvs.count(); ++i)
                 nullsrvs[i] = nullptr;
+            context->VSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
             context->PSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
             context->OMSetRenderTargets(rp->rtv ? 1 : 0, rp->rtv ? &rp->rtv : nullptr, rp->dsv);
         }

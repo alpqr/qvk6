@@ -213,6 +213,9 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     QD3D11BatchedBindings<UINT> fsubufoffsets;
     QD3D11BatchedBindings<UINT> fsubufsizes;
 
+    QD3D11BatchedBindings<ID3D11SamplerState *> vssamplers;
+    QD3D11BatchedBindings<ID3D11ShaderResourceView *> vsshaderresources;
+
     QD3D11BatchedBindings<ID3D11SamplerState *> fssamplers;
     QD3D11BatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
 };
@@ -452,6 +455,7 @@ public:
     bool inPass = false;
 
     struct {
+        int vsLastActiveSrvBinding = 0;
         int fsLastActiveSrvBinding = 0;
     } contextState;
 };

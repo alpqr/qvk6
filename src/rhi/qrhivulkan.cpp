@@ -1176,8 +1176,8 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 
     executeDeferredReleases();
 
-    destroyStagingBufferIfCompleted(&stagedImmutableBuffers, this);
-    destroyStagingBufferIfCompleted(&stagedChangesInfrequentlyTextures, this);
+    destroyStagingBufferIfCompleted(&pendingStagingReleaseBuffers, this);
+    destroyStagingBufferIfCompleted(&pendingStagingReleaseTextures, this);
 
     QRHI_RES(QVkCommandBuffer, cb)->resetState();
 }
@@ -1474,7 +1474,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         bufD->lastActiveFrameSlot = currentFrameSlot;
         bufD->stagingFrameSlot = currentFrameSlot;
         if (bufD->type == QRhiBuffer::Immutable)
-            stagedImmutableBuffers.insert(bufD);
+            pendingStagingReleaseBuffers.insert(bufD);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
@@ -1547,7 +1547,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         utexD->lastActiveFrameSlot = currentFrameSlot;
         utexD->stagingFrameSlot = currentFrameSlot;
         if (utexD->flags.testFlag(QRhiTexture::ChangesInfrequently))
-            stagedChangesInfrequentlyTextures.insert(utexD);
+            pendingStagingReleaseTextures.insert(utexD);
 
         imageBarrier(cb, u.tex,
                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -2361,7 +2361,7 @@ void QVkBuffer::release()
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 
-    rhiD->stagedImmutableBuffers.remove(this);
+    rhiD->pendingStagingReleaseBuffers.remove(this);
 }
 
 bool QVkBuffer::build()
@@ -2497,7 +2497,7 @@ void QVkTexture::release()
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 
-    rhiD->stagedChangesInfrequentlyTextures.remove(this);
+    rhiD->pendingStagingReleaseTextures.remove(this);
 }
 
 bool QVkTexture::build()

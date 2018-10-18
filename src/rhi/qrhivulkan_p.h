@@ -490,8 +490,8 @@ public:
     };
     QVector<DeferredReleaseEntry> releaseQueue;
 
-    QSet<QVkBuffer *> stagedImmutableBuffers;
-    QSet<QVkTexture *> stagedChangesInfrequentlyTextures;
+    QSet<QVkBuffer *> pendingStagingReleaseBuffers;
+    QSet<QVkTexture *> pendingStagingReleaseTextures;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);

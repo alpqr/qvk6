@@ -2,7 +2,6 @@ bring up metal
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
-immutable-or-not flag for QRhiTexture? (could drop staging alloc after 1st upload when immut.)
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
@@ -40,6 +39,7 @@ bytecode for metal?
 
 +++ done
 vk: free staging buffer for textures after upload when ChangesInfrequently is set
+immutable-or-not flag for QRhiTexture? (could drop staging alloc after 1st upload when immut.)
 vk: free staging buffer for immutable buffers after upload
 vk: verify msaa (onscreen)
 revise how clear values are handled (ref, not ptr)

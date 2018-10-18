@@ -48,8 +48,7 @@ QT_BEGIN_NAMESPACE
 /*
     Metal backend. MRC. Double buffers and throttles to vsync. "Dynamic"
     buffers are Shared (host visible) and duplicated (due to 2 frames in
-    flight), while "static" buffers are Managed (CPU-GPU data duplication
-    managed by the driver) on macOS, but Shared on iOS/tvOS.
+    flight), while "static" buffers are ###
 */
 
 #if __has_feature(objc_arc)
@@ -82,7 +81,6 @@ struct QRhiMetalData
 
 struct QMetalBufferData
 {
-    bool forcedShared = false;
     id<MTLBuffer> buf[QMTL_FRAMES_IN_FLIGHT];
     QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingSharedModeUpdates[QMTL_FRAMES_IN_FLIGHT];
 };
@@ -90,6 +88,11 @@ struct QMetalBufferData
 struct QMetalCommandBufferData
 {
     id<MTLCommandBuffer> cb;
+};
+
+struct QMetalGraphicsPipelineData
+{
+    id<MTLRenderPipelineState> ps = nil;
 };
 
 struct QMetalSwapChainData
@@ -243,8 +246,7 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
             bufD->lastActiveFrameSlot = currentFrameSlot;
-            if (bufD->type == QRhiBuffer::Dynamic || bufD->d->forcedShared)
-                executeBufferHostWritesForCurrentFrame(bufD);
+            executeBufferHostWritesForCurrentFrame(bufD);
         }
             break;
         case QRhiShaderResourceBindings::Binding::SampledTexture:
@@ -397,24 +399,18 @@ void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
-        Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
+        //Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
         for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
             bufD->d->pendingSharedModeUpdates[i].append(u);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
-        Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
+        //Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == u.buf->size);
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
-        if (!bufD->d->forcedShared) {
-            void *p = [bufD->d->buf[0] contents];
-            memcpy(p, u.data.constData(), u.data.size());
-            [bufD->d->buf[0] didModifyRange: NSMakeRange(0, u.data.size())];
-        } else {
-            for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
-                bufD->d->pendingSharedModeUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
-        }
+        for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+            bufD->d->pendingSharedModeUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
@@ -430,7 +426,6 @@ void QRhiMetal::executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD)
     if (updates.isEmpty())
         return;
 
-    Q_ASSERT(bufD->type == QRhiBuffer::Dynamic || bufD->d->forcedShared);
     void *p = [bufD->d->buf[currentFrameSlot] contents];
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : updates) {
         Q_ASSERT(bufD == QRHI_RES(QMetalBuffer, u.buf));
@@ -550,35 +545,15 @@ bool QMetalBuffer::build()
     if (d->buf[0])
         release();
 
-    MTLResourceOptions opts =
-            type == Dynamic ? MTLResourceStorageModeShared
-                            : (MTLResourceCPUCacheModeWriteCombined | MTLResourceStorageModeManaged);
-
-    // no Managed mode for iOS and tvOS
-#ifndef Q_OS_MACOS
-    if (type != Dynamic) {
-        opts = MTLResourceStorageModeShared;
-        d->forcedShared = true;
-    }
-#else
-    d->forcedShared = false;
-#endif
-
-    // ###
-    // Unlike other backends like Vulkan, Static needs multiple backing buffers
-    // as well, not just Dynamic - this is because we rely on Managed mode as
-    // opposed to a manually managed separate staging buffer and explicit
-    // copy commands on the command buffer.
+    MTLResourceOptions opts = MTLResourceStorageModeShared; // ### for now everything host visible and double buffered
 
     QRHI_RES_RHI(QRhiMetal);
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
-        if (i == 0 || type == Dynamic || d->forcedShared) {
-            d->buf[i] = [rhiD->d->dev newBufferWithLength: size options: opts];
-            if (type == Dynamic || d->forcedShared)
-                d->pendingSharedModeUpdates[i].reserve(16);
-        }
+        d->buf[i] = [rhiD->d->dev newBufferWithLength: size options: opts];
+        d->pendingSharedModeUpdates[i].reserve(16);
     }
 
+    lastActiveFrameSlot = -1;
     generation += 1;
     return true;
 }
@@ -609,6 +584,7 @@ void QMetalTexture::release()
 
 bool QMetalTexture::build()
 {
+    lastActiveFrameSlot = -1;
     generation += 1;
     return true;
 }
@@ -624,6 +600,7 @@ void QMetalSampler::release()
 
 bool QMetalSampler::build()
 {
+    lastActiveFrameSlot = -1;
     generation += 1;
     return true;
 }
@@ -722,16 +699,87 @@ bool QMetalShaderResourceBindings::build()
 }
 
 QMetalGraphicsPipeline::QMetalGraphicsPipeline(QRhiImplementation *rhi)
-    : QRhiGraphicsPipeline(rhi)
+    : QRhiGraphicsPipeline(rhi),
+      d(new QMetalGraphicsPipelineData)
 {
+}
+
+QMetalGraphicsPipeline::~QMetalGraphicsPipeline()
+{
+    delete d;
 }
 
 void QMetalGraphicsPipeline::release()
 {
+    if (!d->ps)
+        return;
+
+    [d->ps release];
+    d->ps = nil;
+}
+
+static inline MTLVertexFormat toMetalAttributeFormat(QRhiVertexInputLayout::Attribute::Format format)
+{
+    switch (format) {
+    case QRhiVertexInputLayout::Attribute::Float4:
+        return MTLVertexFormatFloat4;
+    case QRhiVertexInputLayout::Attribute::Float3:
+        return MTLVertexFormatFloat3;
+    case QRhiVertexInputLayout::Attribute::Float2:
+        return MTLVertexFormatFloat2;
+    case QRhiVertexInputLayout::Attribute::Float:
+        return MTLVertexFormatFloat;
+    case QRhiVertexInputLayout::Attribute::UNormByte4:
+        return MTLVertexFormatUChar4;
+    case QRhiVertexInputLayout::Attribute::UNormByte2:
+        return MTLVertexFormatUChar2;
+    case QRhiVertexInputLayout::Attribute::UNormByte:
+        if (@available(macOS 10.13, iOS 11.0, *))
+            return MTLVertexFormatUChar;
+        else
+            Q_UNREACHABLE();
+    default:
+        Q_UNREACHABLE();
+        return MTLVertexFormatFloat4;
+    }
 }
 
 bool QMetalGraphicsPipeline::build()
 {
+    if (d->ps)
+        release();
+
+    MTLVertexDescriptor *inputLayout = [MTLVertexDescriptor vertexDescriptor];
+    for (const QRhiVertexInputLayout::Attribute &attribute : vertexInputLayout.attributes) {
+        inputLayout.attributes[attribute.location].format = toMetalAttributeFormat(attribute.format);
+        inputLayout.attributes[attribute.location].offset = attribute.offset;
+        inputLayout.attributes[attribute.location].bufferIndex = attribute.binding;
+    }
+    for (int i = 0; i < vertexInputLayout.bindings.count(); ++i) {
+        const QRhiVertexInputLayout::Binding &binding(vertexInputLayout.bindings[i]);
+        inputLayout.layouts[i].stepFunction =
+                binding.classification == QRhiVertexInputLayout::Binding::PerInstance
+                ? MTLVertexStepFunctionPerInstance : MTLVertexStepFunctionPerVertex;
+        inputLayout.layouts[i].stepRate = 1;
+        inputLayout.layouts[i].stride = binding.stride;
+    }
+
+    MTLRenderPipelineDescriptor *rpDesc = [[MTLRenderPipelineDescriptor alloc] init];
+    rpDesc.vertexDescriptor = inputLayout;
+    // ###
+
+    QRHI_RES_RHI(QRhiMetal);
+    NSError *err = nil;
+    d->ps = [rhiD->d->dev newRenderPipelineStateWithDescriptor: rpDesc error: &err];
+    if (!d->ps) {
+        const QString msg = QString::fromNSString(err.localizedDescription);
+        qWarning("Failed to create render pipeline state: %s", qPrintable(msg));
+        [rpDesc release];
+        return false;
+    }
+
+    [rpDesc release];
+    lastActiveFrameSlot = -1;
     generation += 1;
     return true;
 }

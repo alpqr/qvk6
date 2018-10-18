@@ -146,13 +146,18 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
     uint generation = 0;
 };
 
+struct QMetalGraphicsPipelineData;
+
 struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
 {
     QMetalGraphicsPipeline(QRhiImplementation *rhi);
+    ~QMetalGraphicsPipeline();
     void release() override;
     bool build() override;
 
+    QMetalGraphicsPipelineData *d;
     uint generation = 0;
+    int lastActiveFrameSlot = -1;
 };
 
 struct QMetalCommandBufferData;

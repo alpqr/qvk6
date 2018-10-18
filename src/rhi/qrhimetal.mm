@@ -62,8 +62,8 @@ struct QRhiMetalData
     id<MTLCommandQueue> cmdQueue;
 
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
-                                                     const QRhiClearValue &colorClearValue,
-                                                     const QRhiClearValue &depthStencilClearValue);
+                                                     const QRhiColorClearValue &colorClearValue,
+                                                     const QRhiDepthStencilClearValue &depthStencilClearValue);
 
     struct DeferredReleaseEntry {
         enum Type {
@@ -367,8 +367,8 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 }
 
 MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthStencil,
-                                                                const QRhiClearValue &colorClearValue,
-                                                                const QRhiClearValue &depthStencilClearValue)
+                                                                const QRhiColorClearValue &colorClearValue,
+                                                                const QRhiDepthStencilClearValue &depthStencilClearValue)
 {
     MTLRenderPassDescriptor *rp = [MTLRenderPassDescriptor renderPassDescriptor];
 

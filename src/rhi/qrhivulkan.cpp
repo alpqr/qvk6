@@ -1152,6 +1152,23 @@ void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureR
     QRHI_RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 
+template<typename T>
+void destroyStagingBufferIfCompleted(QSet<T *> *resList, QRhiVulkan *rhiD)
+{
+    for (auto it = resList->begin(); it != resList->end(); ) {
+        T *res = *it;
+        if (res->stagingFrameSlot == rhiD->currentFrameSlot) {
+            vmaDestroyBuffer(toVmaAllocator(rhiD->allocator), res->stagingBuffer, toVmaAllocation(res->stagingAlloc));
+            res->stagingBuffer = VK_NULL_HANDLE;
+            res->stagingAlloc = nullptr;
+            res->stagingFrameSlot = -1;
+            it = resList->erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
 void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 {
     Q_ASSERT(!inFrame);
@@ -1159,19 +1176,8 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 
     executeDeferredReleases();
 
-    // get rid of staging resources for completed copy operations (for buffers/textures that want this)
-    for (auto it = stagedImmutableBuffers.begin(); it != stagedImmutableBuffers.end(); ) {
-        QVkBuffer *buf = *it;
-        if (buf->stagingFrameSlot == currentFrameSlot) {
-            vmaDestroyBuffer(toVmaAllocator(allocator), buf->stagingBuffer, toVmaAllocation(buf->stagingAlloc));
-            buf->stagingBuffer = VK_NULL_HANDLE;
-            buf->stagingAlloc = nullptr;
-            buf->stagingFrameSlot = -1;
-            it = stagedImmutableBuffers.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    destroyStagingBufferIfCompleted(&stagedImmutableBuffers, this);
+    destroyStagingBufferIfCompleted(&stagedChangesInfrequentlyTextures, this);
 
     QRHI_RES(QVkCommandBuffer, cb)->resetState();
 }
@@ -1539,6 +1545,9 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
         df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffer, utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
         utexD->lastActiveFrameSlot = currentFrameSlot;
+        utexD->stagingFrameSlot = currentFrameSlot;
+        if (utexD->flags.testFlag(QRhiTexture::ChangesInfrequently))
+            stagedChangesInfrequentlyTextures.insert(utexD);
 
         imageBarrier(cb, u.tex,
                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -2352,8 +2361,7 @@ void QVkBuffer::release()
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 
-    if (type == Immutable)
-        rhiD->stagedImmutableBuffers.remove(this);
+    rhiD->stagedImmutableBuffers.remove(this);
 }
 
 bool QVkBuffer::build()
@@ -2488,6 +2496,8 @@ void QVkTexture::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    rhiD->stagedChangesInfrequentlyTextures.remove(this);
 }
 
 bool QVkTexture::build()

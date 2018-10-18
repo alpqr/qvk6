@@ -102,6 +102,7 @@ struct QVkTexture : public QRhiTexture
     QVkAlloc stagingAlloc = nullptr;
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     int lastActiveFrameSlot = -1;
+    int stagingFrameSlot = -1;
     uint generation = 0;
 };
 
@@ -490,6 +491,7 @@ public:
     QVector<DeferredReleaseEntry> releaseQueue;
 
     QSet<QVkBuffer *> stagedImmutableBuffers;
+    QSet<QVkTexture *> stagedChangesInfrequentlyTextures;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);

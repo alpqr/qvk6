@@ -1,5 +1,4 @@
 bring up metal
-vk: free staging buffer for immutable buffers after upload
 vk: free staging buffer for textures after upload when ChangesInfrequently is set
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
@@ -41,6 +40,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+vk: free staging buffer for immutable buffers after upload
 vk: verify msaa (onscreen)
 revise how clear values are handled (ref, not ptr)
 d3d/vk: fix Dynamic for non-uniform buffers

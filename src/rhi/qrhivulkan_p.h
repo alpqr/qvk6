@@ -72,6 +72,7 @@ struct QVkBuffer : public QRhiBuffer
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     int lastActiveFrameSlot = -1;
+    int stagingFrameSlot = -1;
     uint generation = 0;
 };
 
@@ -487,6 +488,8 @@ public:
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
+
+    QSet<QVkBuffer *> stagedImmutableBuffers;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);

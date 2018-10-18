@@ -1159,6 +1159,20 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 
     executeDeferredReleases();
 
+    // get rid of staging resources for completed copy operations (for buffers/textures that want this)
+    for (auto it = stagedImmutableBuffers.begin(); it != stagedImmutableBuffers.end(); ) {
+        QVkBuffer *buf = *it;
+        if (buf->stagingFrameSlot == currentFrameSlot) {
+            vmaDestroyBuffer(toVmaAllocator(allocator), buf->stagingBuffer, toVmaAllocation(buf->stagingAlloc));
+            buf->stagingBuffer = VK_NULL_HANDLE;
+            buf->stagingAlloc = nullptr;
+            buf->stagingFrameSlot = -1;
+            it = stagedImmutableBuffers.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
     QRHI_RES(QVkCommandBuffer, cb)->resetState();
 }
 
@@ -1452,6 +1466,9 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         df->vkCmdCopyBuffer(cbD->cb, bufD->stagingBuffer, bufD->buffers[0], 1, &copyInfo);
         bufferBarrier(cb, u.buf);
         bufD->lastActiveFrameSlot = currentFrameSlot;
+        bufD->stagingFrameSlot = currentFrameSlot;
+        if (bufD->type == QRhiBuffer::Immutable)
+            stagedImmutableBuffers.insert(bufD);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
@@ -2334,6 +2351,9 @@ void QVkBuffer::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    if (type == Immutable)
+        rhiD->stagedImmutableBuffers.remove(this);
 }
 
 bool QVkBuffer::build()

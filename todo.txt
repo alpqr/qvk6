@@ -2,6 +2,7 @@ bring up metal
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
+mtl: shader lang. version
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
@@ -23,6 +24,7 @@ gl: texture filtering
 gl: depth texture
 d3d: texture filtering
 d3d: msaa (onscreen)
+d3d, gl, mtl: cache shader sources?
 resize to 0 width or height fails (vk)
 upgrade vkmemalloc
 gl: ubuf structs, arrays
@@ -33,6 +35,7 @@ other shader types? (gs?)
 
 qtshaderstack17:
 hlsl version to qsb
+msl version to qsb (?)
 bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 

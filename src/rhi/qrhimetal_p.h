@@ -211,6 +211,7 @@ struct QMetalSwapChain : public QRhiSwapChain
     int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
     QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;
+    QMetalRenderBuffer *ds = nullptr;
     QMetalSwapChainData *d = nullptr;
 };
 

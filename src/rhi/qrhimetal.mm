@@ -63,6 +63,8 @@ struct QRhiMetalData
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
                                                      const QRhiColorClearValue &colorClearValue,
                                                      const QRhiDepthStencilClearValue &depthStencilClearValue);
+    id<MTLLibrary> compileMSLShaderSource(const QBakedShader &shader, QString *error, QByteArray *entryPoint);
+    id<MTLFunction> createMSLShaderFunction(id<MTLLibrary> lib, const QByteArray &entryPoint);
 
     struct DeferredReleaseEntry {
         enum Type {
@@ -93,6 +95,12 @@ struct QMetalCommandBufferData
 struct QMetalGraphicsPipelineData
 {
     id<MTLRenderPipelineState> ps = nil;
+    id<MTLDepthStencilState> ds = nil;
+    MTLPrimitiveType primitiveType;
+    id<MTLLibrary> vsLib = nil;
+    id<MTLFunction> vsFunc = nil;
+    id<MTLLibrary> fsLib = nil;
+    id<MTLFunction> fsFunc = nil;
 };
 
 struct QMetalSwapChainData
@@ -147,11 +155,15 @@ void QRhiMetal::destroy()
 {
     executeDeferredReleases(true);
 
-    [d->cmdQueue release];
-    d->cmdQueue = nil;
+    if (d->cmdQueue) {
+        [d->cmdQueue release];
+        d->cmdQueue = nil;
+    }
 
-    [d->dev release];
-    d->dev = nil;
+    if (d->dev) {
+        [d->dev release];
+        d->dev = nil;
+    }
 }
 
 QVector<int> QRhiMetal::supportedSampleCounts() const
@@ -714,8 +726,33 @@ void QMetalGraphicsPipeline::release()
     if (!d->ps)
         return;
 
-    [d->ps release];
-    d->ps = nil;
+    if (d->ps) {
+        [d->ps release];
+        d->ps = nil;
+    }
+
+    if (d->ds) {
+        [d->ds release];
+        d->ds = nil;
+    }
+
+    if (d->vsFunc) {
+        [d->vsFunc release];
+        d->vsFunc = nil;
+    }
+    if (d->vsLib) {
+        [d->vsLib release];
+        d->vsLib = nil;
+    }
+
+    if (d->fsFunc) {
+        [d->fsFunc release];
+        d->fsFunc = nil;
+    }
+    if (d->fsLib) {
+        [d->fsLib release];
+        d->fsLib = nil;
+    }
 }
 
 static inline MTLVertexFormat toMetalAttributeFormat(QRhiVertexInputLayout::Attribute::Format format)
@@ -744,10 +781,192 @@ static inline MTLVertexFormat toMetalAttributeFormat(QRhiVertexInputLayout::Attr
     }
 }
 
+static inline MTLBlendFactor toMetalBlendFactor(QRhiGraphicsPipeline::BlendFactor f)
+{
+    switch (f) {
+    case QRhiGraphicsPipeline::Zero:
+        return MTLBlendFactorZero;
+    case QRhiGraphicsPipeline::One:
+        return MTLBlendFactorOne;
+    case QRhiGraphicsPipeline::SrcColor:
+        return MTLBlendFactorSourceColor;
+    case QRhiGraphicsPipeline::OneMinusSrcColor:
+        return MTLBlendFactorOneMinusSourceColor;
+    case QRhiGraphicsPipeline::DstColor:
+        return MTLBlendFactorDestinationColor;
+    case QRhiGraphicsPipeline::OneMinusDstColor:
+        return MTLBlendFactorOneMinusDestinationColor;
+    case QRhiGraphicsPipeline::SrcAlpha:
+        return MTLBlendFactorSourceAlpha;
+    case QRhiGraphicsPipeline::OneMinusSrcAlpha:
+        return MTLBlendFactorOneMinusSourceAlpha;
+    case QRhiGraphicsPipeline::DstAlpha:
+        return MTLBlendFactorDestinationAlpha;
+    case QRhiGraphicsPipeline::OneMinusDstAlpha:
+        return MTLBlendFactorOneMinusDestinationAlpha;
+    case QRhiGraphicsPipeline::ConstantColor:
+        return MTLBlendFactorBlendColor;
+    case QRhiGraphicsPipeline::ConstantAlpha:
+        return MTLBlendFactorBlendAlpha;
+    case QRhiGraphicsPipeline::OneMinusConstantColor:
+        return MTLBlendFactorOneMinusBlendColor;
+    case QRhiGraphicsPipeline::OneMinusConstantAlpha:
+        return MTLBlendFactorOneMinusBlendAlpha;
+    case QRhiGraphicsPipeline::SrcAlphaSaturate:
+        return MTLBlendFactorSourceAlphaSaturated;
+    case QRhiGraphicsPipeline::Src1Color:
+        return MTLBlendFactorSource1Color;
+    case QRhiGraphicsPipeline::OneMinusSrc1Color:
+        return MTLBlendFactorOneMinusSource1Color;
+    case QRhiGraphicsPipeline::Src1Alpha:
+        return MTLBlendFactorSource1Alpha;
+    case QRhiGraphicsPipeline::OneMinusSrc1Alpha:
+        return MTLBlendFactorOneMinusSource1Alpha;
+    default:
+        Q_UNREACHABLE();
+        return MTLBlendFactorZero;
+    }
+}
+
+static inline MTLBlendOperation toMetalBlendOp(QRhiGraphicsPipeline::BlendOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Add:
+        return MTLBlendOperationAdd;
+    case QRhiGraphicsPipeline::Subtract:
+        return MTLBlendOperationSubtract;
+    case QRhiGraphicsPipeline::ReverseSubtract:
+        return MTLBlendOperationReverseSubtract;
+    case QRhiGraphicsPipeline::Min:
+        return MTLBlendOperationMin;
+    case QRhiGraphicsPipeline::Max:
+        return MTLBlendOperationMax;
+    default:
+        Q_UNREACHABLE();
+        return MTLBlendOperationAdd;
+    }
+}
+
+static inline uint toMetalColorWriteMask(QRhiGraphicsPipeline::ColorMask c)
+{
+    uint f = 0;
+    if (c.testFlag(QRhiGraphicsPipeline::R))
+        f |= MTLColorWriteMaskRed;
+    if (c.testFlag(QRhiGraphicsPipeline::G))
+        f |= MTLColorWriteMaskGreen;
+    if (c.testFlag(QRhiGraphicsPipeline::B))
+        f |= MTLColorWriteMaskBlue;
+    if (c.testFlag(QRhiGraphicsPipeline::A))
+        f |= MTLColorWriteMaskAlpha;
+    return f;
+}
+
+static inline MTLCompareFunction toMetalCompareOp(QRhiGraphicsPipeline::CompareOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::Never:
+        return MTLCompareFunctionNever;
+    case QRhiGraphicsPipeline::Less:
+        return MTLCompareFunctionLess;
+    case QRhiGraphicsPipeline::Equal:
+        return MTLCompareFunctionEqual;
+    case QRhiGraphicsPipeline::LessOrEqual:
+        return MTLCompareFunctionLessEqual;
+    case QRhiGraphicsPipeline::Greater:
+        return MTLCompareFunctionGreater;
+    case QRhiGraphicsPipeline::NotEqual:
+        return MTLCompareFunctionNotEqual;
+    case QRhiGraphicsPipeline::GreaterOrEqual:
+        return MTLCompareFunctionGreaterEqual;
+    case QRhiGraphicsPipeline::Always:
+        return MTLCompareFunctionAlways;
+    default:
+        Q_UNREACHABLE();
+        return MTLCompareFunctionAlways;
+    }
+}
+
+static inline MTLStencilOperation toMetalStencilOp(QRhiGraphicsPipeline::StencilOp op)
+{
+    switch (op) {
+    case QRhiGraphicsPipeline::StencilZero:
+        return MTLStencilOperationZero;
+    case QRhiGraphicsPipeline::Keep:
+        return MTLStencilOperationKeep;
+    case QRhiGraphicsPipeline::Replace:
+        return MTLStencilOperationReplace;
+    case QRhiGraphicsPipeline::IncrementAndClamp:
+        return MTLStencilOperationIncrementClamp;
+    case QRhiGraphicsPipeline::DecrementAndClamp:
+        return MTLStencilOperationDecrementClamp;
+    case QRhiGraphicsPipeline::Invert:
+        return MTLStencilOperationInvert;
+    case QRhiGraphicsPipeline::IncrementAndWrap:
+        return MTLStencilOperationIncrementWrap;
+    case QRhiGraphicsPipeline::DecrementAndWrap:
+        return MTLStencilOperationDecrementWrap;
+    default:
+        Q_UNREACHABLE();
+        return MTLStencilOperationKeep;
+    }
+}
+
+static inline MTLPrimitiveType toMetalPrimitiveType(QRhiGraphicsPipeline::Topology t)
+{
+    switch (t) {
+    case QRhiGraphicsPipeline::Triangles:
+        return MTLPrimitiveTypeTriangle;
+    case QRhiGraphicsPipeline::TriangleStrip:
+        return MTLPrimitiveTypeTriangleStrip;
+    case QRhiGraphicsPipeline::Lines:
+        return MTLPrimitiveTypeLine;
+    case QRhiGraphicsPipeline::LineStrip:
+        return MTLPrimitiveTypeLineStrip;
+    case QRhiGraphicsPipeline::Points:
+        return MTLPrimitiveTypePoint;
+    default:
+        Q_UNREACHABLE();
+        return MTLPrimitiveTypeTriangle;
+    }
+}
+
+id<MTLLibrary> QRhiMetalData::compileMSLShaderSource(const QBakedShader &shader, QString *error, QByteArray *entryPoint)
+{
+    QBakedShader::Shader mslSource = shader.shader({ QBakedShader::MslShader });
+    if (mslSource.shader.isEmpty()) {
+        qWarning() << "No MetalSL code found in baked shader" << shader;
+        return nil;
+    }
+
+    NSString *src = [NSString stringWithUTF8String: mslSource.shader.constData()];
+    NSError *err = nil;
+    id<MTLLibrary> lib = [dev newLibraryWithSource: src options: nil error: &err];
+    // [src release]; ### WTF? why is this autoreleased?
+
+    if (err) {
+        const QString msg = QString::fromNSString(err.localizedDescription);
+        *error = msg;
+        return nil;
+    }
+
+    *entryPoint = mslSource.entryPoint;
+    return lib;
+}
+
+id<MTLFunction> QRhiMetalData::createMSLShaderFunction(id<MTLLibrary> lib, const QByteArray &entryPoint)
+{
+    NSString *name = [NSString stringWithUTF8String: entryPoint.constData()];
+    id<MTLFunction> f = [lib newFunctionWithName: name];
+    [name release];
+    return f;
+}
+
 bool QMetalGraphicsPipeline::build()
 {
     if (d->ps)
         release();
+
+    QRHI_RES_RHI(QRhiMetal);
 
     MTLVertexDescriptor *inputLayout = [MTLVertexDescriptor vertexDescriptor];
     for (const QRhiVertexInputLayout::Attribute &attribute : vertexInputLayout.attributes) {
@@ -766,9 +985,75 @@ bool QMetalGraphicsPipeline::build()
 
     MTLRenderPipelineDescriptor *rpDesc = [[MTLRenderPipelineDescriptor alloc] init];
     rpDesc.vertexDescriptor = inputLayout;
-    // ###
 
-    QRHI_RES_RHI(QRhiMetal);
+    for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(shaderStages)) {
+        QString error;
+        QByteArray entryPoint;
+        id<MTLLibrary> lib = rhiD->d->compileMSLShaderSource(shaderStage.shader, &error, &entryPoint);
+        if (!lib) {
+            qWarning("MetalSL shader compilation failed: %s", qPrintable(error));
+            return false;
+        }
+        id<MTLFunction> func = rhiD->d->createMSLShaderFunction(lib, entryPoint);
+        if (!func) {
+            qWarning("MetalSL function for entry point %s not found", entryPoint.constData());
+            [lib release];
+            return false;
+        }
+        switch (shaderStage.type) {
+        case QRhiGraphicsShaderStage::Vertex:
+            rpDesc.vertexFunction = func;
+            d->vsLib = lib;
+            d->vsFunc = func;
+            break;
+        case QRhiGraphicsShaderStage::Fragment:
+            rpDesc.fragmentFunction = func;
+            d->fsLib = lib;
+            d->fsFunc = func;
+            break;
+        default:
+            [func release];
+            [lib release];
+            break;
+        }
+    }
+
+    int vertexBufferCount = 0; // ###
+    int fragmentBufferCount = 0;
+    if (@available(macOS 10.13, iOS 11.0, *)) {
+        for (int i = 0; i < vertexBufferCount; ++i)
+            rpDesc.vertexBuffers[i].mutability = MTLMutabilityImmutable;
+        for (int i = 0; i < fragmentBufferCount; ++i)
+            rpDesc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
+    }
+
+    rpDesc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    rpDesc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+    rpDesc.colorAttachments[0].blendingEnabled = false;
+
+    for (int i = 0, ie = targetBlends.count(); i != ie; ++i) {
+        const QRhiGraphicsPipeline::TargetBlend &b(targetBlends[i]);
+        rpDesc.colorAttachments[i].pixelFormat = MTLPixelFormatBGRA8Unorm;
+        rpDesc.colorAttachments[i].blendingEnabled = b.enable;
+        rpDesc.colorAttachments[i].sourceRGBBlendFactor = toMetalBlendFactor(b.srcColor);
+        rpDesc.colorAttachments[i].destinationRGBBlendFactor = toMetalBlendFactor(b.dstColor);
+        rpDesc.colorAttachments[i].rgbBlendOperation = toMetalBlendOp(b.opColor);
+        rpDesc.colorAttachments[i].sourceAlphaBlendFactor = toMetalBlendFactor(b.srcAlpha);
+        rpDesc.colorAttachments[i].destinationAlphaBlendFactor = toMetalBlendFactor(b.dstAlpha);
+        rpDesc.colorAttachments[i].alphaBlendOperation = toMetalBlendOp(b.opAlpha);
+        rpDesc.colorAttachments[i].writeMask = toMetalColorWriteMask(b.colorWrite);
+    }
+
+    if (rhiD->d->dev.depth24Stencil8PixelFormatSupported) {
+        rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
+        rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
+    } else {
+        rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+    }
+
+    rpDesc.sampleCount = 1; // ###
+
     NSError *err = nil;
     d->ps = [rhiD->d->dev newRenderPipelineStateWithDescriptor: rpDesc error: &err];
     if (!d->ps) {
@@ -777,8 +1062,34 @@ bool QMetalGraphicsPipeline::build()
         [rpDesc release];
         return false;
     }
-
     [rpDesc release];
+
+    MTLDepthStencilDescriptor *dsDesc = [[MTLDepthStencilDescriptor alloc] init];
+    dsDesc.depthCompareFunction = depthTest ? toMetalCompareOp(depthOp) : MTLCompareFunctionAlways;
+    dsDesc.depthWriteEnabled = depthWrite;
+    if (stencilTest) {
+        dsDesc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
+        dsDesc.frontFaceStencil.stencilFailureOperation = toMetalStencilOp(stencilFront.failOp);
+        dsDesc.frontFaceStencil.depthFailureOperation = toMetalStencilOp(stencilFront.depthFailOp);
+        dsDesc.frontFaceStencil.depthStencilPassOperation = toMetalStencilOp(stencilFront.passOp);
+        dsDesc.frontFaceStencil.stencilCompareFunction = toMetalCompareOp(stencilFront.compareOp);
+        dsDesc.frontFaceStencil.readMask = stencilReadMask;
+        dsDesc.frontFaceStencil.writeMask = stencilWriteMask;
+
+        dsDesc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
+        dsDesc.backFaceStencil.stencilFailureOperation = toMetalStencilOp(stencilBack.failOp);
+        dsDesc.backFaceStencil.depthFailureOperation = toMetalStencilOp(stencilBack.depthFailOp);
+        dsDesc.backFaceStencil.depthStencilPassOperation = toMetalStencilOp(stencilBack.passOp);
+        dsDesc.backFaceStencil.stencilCompareFunction = toMetalCompareOp(stencilBack.compareOp);
+        dsDesc.backFaceStencil.readMask = stencilReadMask;
+        dsDesc.backFaceStencil.writeMask = stencilWriteMask;
+    }
+
+    d->ds = [rhiD->d->dev newDepthStencilStateWithDescriptor: dsDesc];
+    [dsDesc release];
+
+    d->primitiveType = toMetalPrimitiveType(topology);
+
     lastActiveFrameSlot = -1;
     generation += 1;
     return true;
@@ -852,6 +1163,10 @@ QSize QMetalSwapChain::effectiveSizeInPixels() const
 bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, SurfaceImportFlags flags,
                             QRhiRenderBuffer *depthStencil, int sampleCount)
 {
+    Q_UNUSED(flags);
+
+    Q_UNUSED(sampleCount); // ###
+
     if (d->layer)
         release();
 
@@ -874,6 +1189,8 @@ bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, 
 
     d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
     currentFrame = 0;
+
+    ds = depthStencil ? QRHI_RES(QMetalRenderBuffer, depthStencil) : nullptr;
 
     rtWrapper.d.pixelSize = effectivePixelSize;
     rtWrapper.d.attCount = 1;

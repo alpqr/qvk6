@@ -143,6 +143,8 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
     void release() override;
     bool build() override;
 
+    QVector<Binding> sortedBindings;
+    int maxBinding = -1;
     uint generation = 0;
 };
 
@@ -161,6 +163,7 @@ struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
 };
 
 struct QMetalCommandBufferData;
+struct QMetalSwapChain;
 
 struct QMetalCommandBuffer : public QRhiCommandBuffer
 {
@@ -170,6 +173,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
 
     QMetalCommandBufferData *d = nullptr;
 
+    QMetalSwapChain *currentSwapChain;
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
@@ -177,6 +181,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     uint currentSrbGeneration;
 
     void resetState() {
+        currentSwapChain = nullptr;
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
@@ -293,7 +298,7 @@ public:
 
     bool importedDevice = false;
     bool inFrame = false;
-    QMetalSwapChain *currentSwapChain = nullptr;
+    QMetalSwapChain *currentFrameSwapChain = nullptr;
     int currentFrameSlot = 0;
     int finishedFrameCount = 0;
     bool inPass = false;

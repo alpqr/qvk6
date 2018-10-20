@@ -109,6 +109,7 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
         Binding(quint32 stride_, Classification cls = PerVertex)
             : stride(stride_), classification(cls)
         { }
+        // stride must be a multiple of 4
         quint32 stride; // if another api needs this in setVertexInput, make the cb store a ptr to the current ps and look up the stride via that
         Classification classification;
     };
@@ -524,7 +525,7 @@ public:
     int sampleCount = 1; // MSAA, swapchain+depthstencil must match
     QVector<QRhiGraphicsShaderStage> shaderStages;
     QRhiVertexInputLayout vertexInputLayout;
-    QRhiShaderResourceBindings *shaderResourceBindings = nullptr;
+    QRhiShaderResourceBindings *shaderResourceBindings = nullptr; // must be built by the time ps' build() is called
     const QRhiRenderPass *renderPass = nullptr;
 
     virtual bool build() = 0;
@@ -727,9 +728,9 @@ public:
     // match. Basic tracking is included: no command is added to the cb when
     // the pipeline or desc.set are the same as in the last call in the same
     // frame; srb is updated automatically at this point whenever a referenced
-    // buffer, texture, etc. is out of date internally (due to release+create
-    // since the creation of the srb) - hence no need to manually recreate the
-    // srb in case a QRhiBuffer is "resized" etc.
+    // buffer, texture, etc. is out of date internally (due to rebuilding since
+    // the creation of the srb) - hence no need to manually recreate the srb in
+    // case a QRhiBuffer is "resized" etc.
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
                              QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb = nullptr);

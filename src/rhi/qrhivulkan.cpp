@@ -1137,19 +1137,61 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+static inline VkFormat toVkTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::RGBA8:
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    case QRhiTexture::BGRA8:
+        return VK_FORMAT_B8G8R8A8_UNORM;
+    case QRhiTexture::R8:
+        return VK_FORMAT_R8_UNORM;
+    case QRhiTexture::R16:
+        return VK_FORMAT_R16_UNORM;
+
+    case QRhiTexture::D16:
+        return VK_FORMAT_D16_UNORM;
+    case QRhiTexture::D32:
+        return VK_FORMAT_D32_SFLOAT;
+
+    default:
+        Q_UNREACHABLE();
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    }
+}
+
+static inline bool isDepthTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::Format::D16:
+        Q_FALLTHROUGH();
+    case QRhiTexture::Format::D32:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
     QVkTextureRenderTarget *rtD = QRHI_RES(QVkTextureRenderTarget, rt);
     rtD->lastActiveFrameSlot = currentFrameSlot;
     QRHI_RES(QVkRenderPass, &rtD->d.rp)->lastActiveFrameSlot = currentFrameSlot;
     // the renderpass will implicitly transition so no barrier needed here
-    QRHI_RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (rt->texture)
+        QRHI_RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    if (rt->depthTexture)
+        QRHI_RES(QVkTexture, rt->depthTexture)->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 }
 
 void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
     // already in the right layout when the renderpass ends
-    QRHI_RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    if (rt->texture)
+        QRHI_RES(QVkTexture, rt->texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    if (rt->depthTexture)
+        QRHI_RES(QVkTexture, rt->depthTexture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 
 template<typename T>
@@ -1980,42 +2022,6 @@ static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage
     return VkBufferUsageFlagBits(u);
 }
 
-static inline VkFormat toVkTextureFormat(QRhiTexture::Format format)
-{
-    switch (format) {
-    case QRhiTexture::RGBA8:
-        return VK_FORMAT_R8G8B8A8_UNORM;
-    case QRhiTexture::BGRA8:
-        return VK_FORMAT_B8G8R8A8_UNORM;
-    case QRhiTexture::R8:
-        return VK_FORMAT_R8_UNORM;
-    case QRhiTexture::R16:
-        return VK_FORMAT_R16_UNORM;
-
-    case QRhiTexture::D16:
-        return VK_FORMAT_D16_UNORM;
-    case QRhiTexture::D32:
-        return VK_FORMAT_D32_SFLOAT;
-
-    default:
-        Q_UNREACHABLE();
-        return VK_FORMAT_R8G8B8A8_UNORM;
-    }
-}
-
-static inline bool isDepthTextureFormat(QRhiTexture::Format format)
-{
-    switch (format) {
-    case QRhiTexture::Format::D16:
-        Q_FALLTHROUGH();
-    case QRhiTexture::Format::D32:
-        return true;
-
-    default:
-        return false;
-    }
-}
-
 static inline QSize safeSize(const QSize &size)
 {
     return size.isEmpty() ? QSize(16, 16) : size;
@@ -2740,6 +2746,7 @@ bool QVkTextureRenderTarget::build()
         attDesc[attIdx].initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
         attDesc[attIdx].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         d.colorAttCount = 1;
+        d.pixelSize = texture->pixelSize;
         colorAtt = attIdx;
         ++attIdx;
     } else {
@@ -2758,6 +2765,7 @@ bool QVkTextureRenderTarget::build()
         attDesc[attIdx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attDesc[attIdx].finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
         d.dsAttCount = 1;
+        d.pixelSize = depthTexture ? depthTexture->pixelSize : depthStencilBuffer->pixelSize;
         dsAtt = attIdx;
         ++attIdx;
     } else {
@@ -2806,8 +2814,8 @@ bool QVkTextureRenderTarget::build()
     fbInfo.renderPass = d.rp.rp;
     fbInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
     fbInfo.pAttachments = views;
-    fbInfo.width = texture->pixelSize.width();
-    fbInfo.height = texture->pixelSize.height();
+    fbInfo.width = d.pixelSize.width();
+    fbInfo.height = d.pixelSize.height();
     fbInfo.layers = 1;
 
     err = rhiD->df->vkCreateFramebuffer(rhiD->dev, &fbInfo, nullptr, &d.fb);
@@ -2815,8 +2823,6 @@ bool QVkTextureRenderTarget::build()
         qWarning("Failed to create framebuffer: %d", err);
         return false;
     }
-
-    d.pixelSize = texture->pixelSize;
 
     lastActiveFrameSlot = -1;
     return true;

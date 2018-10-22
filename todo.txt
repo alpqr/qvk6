@@ -3,7 +3,7 @@ mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: shader lang. version
 mtl: textures
-depth only offscreen passes (crash on vk, not impl on d3d)
+d3d: depth only offscreen pass
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
@@ -39,6 +39,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+vk: depth only offscreen pass
 vk, d3d: test depth texture
 bring up metal
 d3d: tex/sampler for vs

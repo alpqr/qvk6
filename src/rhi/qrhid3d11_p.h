@@ -109,7 +109,8 @@ struct QD3D11BasicRenderTargetData
 
     QD3D11RenderPass rp;
     QSize pixelSize;
-    int attCount;
+    int colorAttCount = 0;
+    int dsAttCount = 0;
 };
 
 struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget

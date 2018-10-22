@@ -517,12 +517,13 @@ void QRhiD3D11::beginPass(QRhiRenderTarget *rt,
     fbCmd.args.setRenderTarget.rt = rt;
     cbD->commands.append(fbCmd);
 
-    Q_ASSERT(rtD->attCount == 1 || rtD->attCount == 2);
     QD3D11CommandBuffer::Command clearCmd;
     clearCmd.cmd = QD3D11CommandBuffer::Command::Clear;
     clearCmd.args.clear.rt = rt;
     clearCmd.args.clear.mask = 0;
-    if (rtD->attCount > 1)
+    if (!rtD->colorAttCount)
+        needsColorClear = false;
+    if (rtD->dsAttCount)
         clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Depth | QD3D11CommandBuffer::Command::Stencil;
     if (needsColorClear)
         clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Color;
@@ -1187,7 +1188,7 @@ QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi, QR
 
 void QD3D11TextureRenderTarget::release()
 {
-    if (!rtv)
+    if (!rtv && !dsv)
         return;
 
     if (dsv) {
@@ -1196,34 +1197,38 @@ void QD3D11TextureRenderTarget::release()
         dsv = nullptr;
     }
 
-    rtv->Release();
-    rtv = nullptr;
+    if (rtv) {
+        rtv->Release();
+        rtv = nullptr;
+    }
 }
 
 bool QD3D11TextureRenderTarget::build()
 {
-    if (rtv)
+    if (rtv || dsv)
         release();
 
-    Q_ASSERT(texture);
+    Q_ASSERT(texture || depthTexture);
     Q_ASSERT(!depthStencilBuffer || !depthTexture);
     const bool hasDepthStencil = depthStencilBuffer || depthTexture;
 
-    QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
-    D3D11_RENDER_TARGET_VIEW_DESC desc;
-    memset(&desc, 0, sizeof(desc));
-    desc.Format = toD3DTextureFormat(texD->format);
-    desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-
     QRHI_RES_RHI(QRhiD3D11);
-    HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &desc, &rtv);
-    if (FAILED(hr)) {
-        qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
-        return false;
-    }
+    if (texture) {
+        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
+        D3D11_RENDER_TARGET_VIEW_DESC desc;
+        memset(&desc, 0, sizeof(desc));
+        desc.Format = toD3DTextureFormat(texD->format);
+        desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 
-    d.pixelSize = texture->pixelSize;
-    d.attCount = 1;
+        HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &desc, &rtv);
+        if (FAILED(hr)) {
+            qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+
+        d.pixelSize = texture->pixelSize;
+        d.colorAttCount = 1;
+    }
 
     if (hasDepthStencil) {
         if (depthTexture) {
@@ -1232,16 +1237,22 @@ bool QD3D11TextureRenderTarget::build()
             memset(&dsvDesc, 0, sizeof(dsvDesc));
             dsvDesc.Format = toD3DDepthTextureDSVFormat(depthTexture->format);
             dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-            hr = rhiD->dev->CreateDepthStencilView(QRHI_RES(QD3D11Texture, depthTexture)->tex, &dsvDesc, &dsv);
+            HRESULT hr = rhiD->dev->CreateDepthStencilView(QRHI_RES(QD3D11Texture, depthTexture)->tex, &dsvDesc, &dsv);
             if (FAILED(hr)) {
                 qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
                 return false;
             }
+            if (!texture)
+                d.pixelSize = depthTexture->pixelSize;
         } else {
             ownsDsv = false;
             dsv = QRHI_RES(QD3D11RenderBuffer, depthStencilBuffer)->dsv;
+            if (!texture)
+                d.pixelSize = depthStencilBuffer->pixelSize;
         }
-        d.attCount += 1;
+        d.dsAttCount = 1;
+    } else {
+        d.dsAttCount = 0;
     }
 
     d.rp.rtv = rtv;
@@ -1855,7 +1866,8 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &requestedPixelSize, S
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
     rtD->d.pixelSize = pixelSize;
-    rtD->d.attCount = depthStencil ? 2 : 1;
+    rtD->d.colorAttCount = 1;
+    rtD->d.dsAttCount = depthStencil ? 1 : 0;
 
     return true;
 }

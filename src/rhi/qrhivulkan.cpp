@@ -2765,7 +2765,8 @@ bool QVkTextureRenderTarget::build()
         attDesc[attIdx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attDesc[attIdx].finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
         d.dsAttCount = 1;
-        d.pixelSize = depthTexture ? depthTexture->pixelSize : depthStencilBuffer->pixelSize;
+        if (!texture)
+            d.pixelSize = depthTexture ? depthTexture->pixelSize : depthStencilBuffer->pixelSize;
         dsAtt = attIdx;
         ++attIdx;
     } else {

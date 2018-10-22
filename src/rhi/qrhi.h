@@ -764,9 +764,9 @@ public:
     bool isYUpInFramebuffer() const;
 
     // Make Y up and allow using 0..1 as the depth range. This lets
-    // applications keep using OpenGL-style vertex data regardless of the
-    // backend (by passing this_matrix * mvp, instead of just mvp, to their
-    // vertex shaders).
+    // applications keep using OpenGL-targeted vertex data and perspective
+    // matrices regardless of the backend. (by passing this_matrix * mvp,
+    // instead of just mvp, to their vertex shaders)
     QMatrix4x4 clipSpaceCorrMatrix() const;
 
 protected:

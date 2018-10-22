@@ -1227,22 +1227,24 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
     rpBeginInfo.framebuffer = rtD->fb;
     rpBeginInfo.renderArea.extent.width = rtD->pixelSize.width();
     rpBeginInfo.renderArea.extent.height = rtD->pixelSize.height();
-    rpBeginInfo.clearValueCount = rtD->attCount;
+
     QVarLengthArray<VkClearValue, 4> cvs;
-
-    VkClearValue colorCv;
-    colorCv.color = { { colorClearValue.rgba.x(), colorClearValue.rgba.y(), colorClearValue.rgba.z(), colorClearValue.rgba.w() } };
-    cvs.append(colorCv);
-
-    if (rtD->attCount > 1) {
+    for (int i = 0; i < rtD->colorAttCount; ++i) {
+        VkClearValue cv;
+        cv.color = { { colorClearValue.rgba.x(), colorClearValue.rgba.y(), colorClearValue.rgba.z(), colorClearValue.rgba.w() } };
+        cvs.append(cv);
+    }
+    for (int i = 0; i < rtD->dsAttCount; ++i) {
         VkClearValue cv;
         cv.depthStencil = { depthStencilClearValue.d, depthStencilClearValue.s };
         cvs.append(cv);
     }
-
-    if (rtD->attCount > 2) // 3 attachments when MSAA
-        cvs.append(colorCv);
-
+    for (int i = 0; i < rtD->msaaAttCount; ++i) {
+        VkClearValue cv;
+        cv.color = { { colorClearValue.rgba.x(), colorClearValue.rgba.y(), colorClearValue.rgba.z(), colorClearValue.rgba.w() } };
+        cvs.append(cv);
+    }
+    rpBeginInfo.clearValueCount = cvs.count();
     rpBeginInfo.pClearValues = cvs.constData();
 
     df->vkCmdBeginRenderPass(cbD->cb, &rpBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -2001,7 +2003,7 @@ static inline VkFormat toVkTextureFormat(QRhiTexture::Format format)
     }
 }
 
-static inline bool isDepthStencilTextureFormat(QRhiTexture::Format format)
+static inline bool isDepthTextureFormat(QRhiTexture::Format format)
 {
     switch (format) {
     case QRhiTexture::Format::D16:
@@ -2516,7 +2518,7 @@ bool QVkTexture::build()
     }
 
     const QSize size = safeSize(pixelSize);
-    const bool isDepthStencil = isDepthStencilTextureFormat(format);
+    const bool isDepth = isDepthTextureFormat(format);
 
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));
@@ -2534,7 +2536,7 @@ bool QVkTexture::build()
 
     imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     if (flags.testFlag(QRhiTexture::RenderTarget)) {
-        if (isDepthStencil)
+        if (isDepth)
             imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         else
             imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -2562,8 +2564,7 @@ bool QVkTexture::build()
     viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
     viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
     viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-    viewInfo.subresourceRange.aspectMask = isDepthStencil ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
-                                                          : VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
     viewInfo.subresourceRange.levelCount = viewInfo.subresourceRange.layerCount = 1;
 
     err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &imageView);
@@ -2719,7 +2720,7 @@ bool QVkTextureRenderTarget::build()
     if (d.fb)
         release();
 
-    Q_ASSERT(texture);
+    Q_ASSERT(texture || depthTexture);
     Q_ASSERT(!depthStencilBuffer || !depthTexture);
     const bool hasDepthStencil = depthStencilBuffer || depthTexture;
     const bool preserved = flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
@@ -2727,49 +2728,59 @@ bool QVkTextureRenderTarget::build()
     VkAttachmentDescription attDesc[2];
     memset(attDesc, 0, sizeof(attDesc));
 
-    // ### what about depth-only passes?
-
-    attDesc[0].format = toVkTextureFormat(texture->format);
-    attDesc[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attDesc[0].loadOp = preserved ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attDesc[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attDesc[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attDesc[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attDesc[0].initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-    attDesc[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    QRHI_RES_RHI(QRhiVulkan);
-    if (hasDepthStencil) {
-        attDesc[1].format = depthTexture ? toVkTextureFormat(depthTexture->format) : rhiD->optimalDepthStencilFormat();
-        attDesc[1].samples = VK_SAMPLE_COUNT_1_BIT;
-        attDesc[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc[1].storeOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc[1].stencilStoreOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc[1].finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+    int attIdx = 0;
+    int colorAtt = -1;
+    if (texture) {
+        attDesc[attIdx].format = toVkTextureFormat(texture->format);
+        attDesc[attIdx].samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc[attIdx].loadOp = preserved ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc[attIdx].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attDesc[attIdx].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attDesc[attIdx].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[attIdx].initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc[attIdx].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        d.colorAttCount = 1;
+        colorAtt = attIdx;
+        ++attIdx;
+    } else {
+        d.colorAttCount = 0;
     }
 
-    VkAttachmentReference colorRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-    VkAttachmentReference dsRef = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+    QRHI_RES_RHI(QRhiVulkan);
+    int dsAtt = -1;
+    if (hasDepthStencil) {
+        attDesc[attIdx].format = depthTexture ? toVkTextureFormat(depthTexture->format) : rhiD->optimalDepthStencilFormat();
+        attDesc[attIdx].samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc[attIdx].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc[attIdx].storeOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[attIdx].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc[attIdx].stencilStoreOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc[attIdx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc[attIdx].finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+        d.dsAttCount = 1;
+        dsAtt = attIdx;
+        ++attIdx;
+    } else {
+        d.dsAttCount = 0;
+    }
+
+    VkAttachmentReference colorRef = { uint32_t(colorAtt), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+    VkAttachmentReference dsRef = { uint32_t(dsAtt), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
     VkSubpassDescription subPassDesc;
     memset(&subPassDesc, 0, sizeof(subPassDesc));
     subPassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subPassDesc.colorAttachmentCount = 1;
-    subPassDesc.pColorAttachments = &colorRef;
-    subPassDesc.pDepthStencilAttachment = hasDepthStencil ? &dsRef : nullptr;
+    subPassDesc.colorAttachmentCount = d.colorAttCount;
+    subPassDesc.pColorAttachments = d.colorAttCount ? &colorRef : nullptr;
+    subPassDesc.pDepthStencilAttachment = d.dsAttCount ? &dsRef : nullptr;
 
     VkRenderPassCreateInfo rpInfo;
     memset(&rpInfo, 0, sizeof(rpInfo));
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpInfo.attachmentCount = 1;
+    rpInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
     rpInfo.pAttachments = attDesc;
     rpInfo.subpassCount = 1;
     rpInfo.pSubpasses = &subPassDesc;
-
-    if (hasDepthStencil)
-        rpInfo.attachmentCount += 1;
 
     VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, &d.rp.rp);
     if (err != VK_SUCCESS) {
@@ -2777,19 +2788,23 @@ bool QVkTextureRenderTarget::build()
         return false;
     }
 
-    const VkImageView views[] = {
-        QRHI_RES(QVkTexture, texture)->imageView,
-        hasDepthStencil ? (depthTexture ? QRHI_RES(QVkTexture, depthTexture)->imageView
-                : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->imageView)
-            : VK_NULL_HANDLE
-    };
-    d.attCount = hasDepthStencil ? 2 : 1;
+    VkImageView views[2];
+    int viewIdx = 0;
+    if (d.colorAttCount) {
+        views[viewIdx] = QRHI_RES(QVkTexture, texture)->imageView;
+        ++viewIdx;
+    }
+    if (d.dsAttCount) {
+        views[viewIdx] = depthTexture ? QRHI_RES(QVkTexture, depthTexture)->imageView
+                                      : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->imageView;
+        ++viewIdx;
+    }
 
     VkFramebufferCreateInfo fbInfo;
     memset(&fbInfo, 0, sizeof(fbInfo));
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     fbInfo.renderPass = d.rp.rp;
-    fbInfo.attachmentCount = d.attCount;
+    fbInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
     fbInfo.pAttachments = views;
     fbInfo.width = texture->pixelSize.width();
     fbInfo.height = texture->pixelSize.height();
@@ -3208,15 +3223,18 @@ bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, Surf
 
     rtWrapper.d.rp.rp = rp;
     rtWrapper.d.pixelSize = effectivePixelSize;
-    rtWrapper.d.attCount = 1;
+    rtWrapper.d.colorAttCount = 1;
     if (depthStencil) {
-        rtWrapper.d.attCount += 1;
+        rtWrapper.d.dsAttCount = 1;
         ds = QRHI_RES(QVkRenderBuffer, depthStencil);
     } else {
+        rtWrapper.d.dsAttCount = 0;
         ds = nullptr;
     }
     if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
-        rtWrapper.d.attCount += 1;
+        rtWrapper.d.msaaAttCount = 1;
+    else
+        rtWrapper.d.msaaAttCount = 0;
 
     for (int i = 0; i < bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(imageRes[i]);
@@ -3230,7 +3248,7 @@ bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, Surf
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass = rtWrapper.d.rp.rp;
-        fbInfo.attachmentCount = rtWrapper.d.attCount;
+        fbInfo.attachmentCount = rtWrapper.d.colorAttCount + rtWrapper.d.dsAttCount + rtWrapper.d.msaaAttCount;
         fbInfo.pAttachments = views;
         fbInfo.width = effectivePixelSize.width();
         fbInfo.height = effectivePixelSize.height();
@@ -3255,7 +3273,9 @@ bool QVkSwapChain::build(QObject *target)
     if (vkw) {
         rtWrapper.d.rp.rp = vkw->defaultRenderPass();
         requestedPixelSize = effectivePixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
-        rtWrapper.d.attCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
+        rtWrapper.d.colorAttCount = 1;
+        rtWrapper.d.dsAttCount = 1;
+        rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
         wrapWindow = vkw;
         return true;
     }

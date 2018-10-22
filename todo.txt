@@ -1,8 +1,9 @@
-bring up metal
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: shader lang. version
+mtl: textures
+depth only offscreen passes (crash on vk, not impl on d3d)
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
@@ -14,8 +15,6 @@ compressed textures
 adopt texture, buffer, ...
 more tex: 3d, array
 test FrameOpDeviceLost somehow
-test depth texture
-depth only offscreen
 mtl: msaa (onscreen)
 gl: more ubuf types
 gl: reduce state, reduce texparam
@@ -40,6 +39,8 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+vk, d3d: test depth texture
+bring up metal
 d3d: tex/sampler for vs
 vk: free staging buffer for textures after upload when ChangesInfrequently is set
 immutable-or-not flag for QRhiTexture? (could drop staging alloc after 1st upload when immut.)

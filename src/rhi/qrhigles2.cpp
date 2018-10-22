@@ -1285,6 +1285,9 @@ bool QGles2TextureRenderTarget::build()
     Q_ASSERT(texture);
     Q_ASSERT(!depthStencilBuffer || !depthTexture);
 
+    if (depthTexture)
+        qWarning("QGles2TextureRenderTarget: depth textures not supported");
+
     rhiD->ensureContext();
 
     rhiD->f->glGenFramebuffers(1, &framebuffer);
@@ -1303,8 +1306,6 @@ bool QGles2TextureRenderTarget::build()
         rhiD->f->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbD->renderbuffer);
         d.attCount += 1;
     }
-
-    // ### depthTexture is not handled yet
 
     GLenum status = rhiD->f->glCheckFramebufferStatus(GL_FRAMEBUFFER);
     if (status != GL_NO_ERROR && status != GL_FRAMEBUFFER_COMPLETE) {

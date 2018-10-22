@@ -166,7 +166,17 @@ bool QRhiD3D11::isYUpInFramebuffer() const
 
 QMatrix4x4 QRhiD3D11::clipSpaceCorrMatrix() const
 {
-    return QMatrix4x4(); // identity
+    // Like with Vulkan, but Y is already good.
+
+    static QMatrix4x4 m;
+    if (m.isIdentity()) {
+        // NB the ctor takes row-major
+        m = QMatrix4x4(1.0f, 0.0f, 0.0f, 0.0f,
+                       0.0f, 1.0f, 0.0f, 0.0f,
+                       0.0f, 0.0f, 0.5f, 0.5f,
+                       0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    return m;
 }
 
 QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -954,9 +964,9 @@ static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format)
         return DXGI_FORMAT_R16_UNORM;
 
     case QRhiTexture::D16:
-        return DXGI_FORMAT_D16_UNORM;
+        return DXGI_FORMAT_R16_TYPELESS;
     case QRhiTexture::D32:
-        return DXGI_FORMAT_D32_FLOAT;
+        return DXGI_FORMAT_R32_TYPELESS;
 
     default:
         Q_UNREACHABLE();
@@ -964,7 +974,7 @@ static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format)
     }
 }
 
-static inline bool isDepthStencilTextureFormat(QRhiTexture::Format format)
+static inline bool isDepthTextureFormat(QRhiTexture::Format format)
 {
     switch (format) {
     case QRhiTexture::Format::D16:
@@ -974,6 +984,32 @@ static inline bool isDepthStencilTextureFormat(QRhiTexture::Format format)
 
     default:
         return false;
+    }
+}
+
+static inline DXGI_FORMAT toD3DDepthTextureSRVFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::Format::D16:
+        return DXGI_FORMAT_R16_FLOAT;
+    case QRhiTexture::Format::D32:
+        return DXGI_FORMAT_R32_FLOAT;
+    default:
+        Q_UNREACHABLE();
+        return DXGI_FORMAT_R32_FLOAT;
+    }
+}
+
+static inline DXGI_FORMAT toD3DDepthTextureDSVFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::Format::D16:
+        return DXGI_FORMAT_D16_UNORM;
+    case QRhiTexture::Format::D32:
+        return DXGI_FORMAT_D32_FLOAT;
+    default:
+        Q_UNREACHABLE();
+        return DXGI_FORMAT_D32_FLOAT;
     }
 }
 
@@ -988,13 +1024,15 @@ bool QD3D11Texture::build()
         release();
 
     const QSize size = safeSize(pixelSize);
-    const bool isDepthStencil = isDepthStencilTextureFormat(format);
+    const bool isDepth = isDepthTextureFormat(format);
 
     uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
-    if (isDepthStencil)
-        bindFlags |= D3D11_BIND_DEPTH_STENCIL;
-    if (flags.testFlag(RenderTarget))
-        bindFlags |= D3D11_BIND_RENDER_TARGET;
+    if (flags.testFlag(RenderTarget)) {
+        if (isDepth)
+            bindFlags |= D3D11_BIND_DEPTH_STENCIL;
+        else
+            bindFlags |= D3D11_BIND_RENDER_TARGET;
+    }
 
     D3D11_TEXTURE2D_DESC desc;
     memset(&desc, 0, sizeof(desc));
@@ -1016,7 +1054,7 @@ bool QD3D11Texture::build()
 
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
     memset(&srvDesc, 0, sizeof(srvDesc));
-    srvDesc.Format = desc.Format;
+    srvDesc.Format = isDepth ? toD3DDepthTextureSRVFormat(format) : desc.Format;
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
     srvDesc.Texture2D.MipLevels = 1;
 
@@ -1192,7 +1230,7 @@ bool QD3D11TextureRenderTarget::build()
             ownsDsv = true;
             D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
             memset(&dsvDesc, 0, sizeof(dsvDesc));
-            dsvDesc.Format = toD3DTextureFormat(depthTexture->format);
+            dsvDesc.Format = toD3DDepthTextureDSVFormat(depthTexture->format);
             dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
             hr = rhiD->dev->CreateDepthStencilView(QRHI_RES(QD3D11Texture, depthTexture)->tex, &dsvDesc, &dsv);
             if (FAILED(hr)) {

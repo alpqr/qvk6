@@ -132,7 +132,9 @@ struct QVkBasicRenderTargetData
     VkFramebuffer fb = VK_NULL_HANDLE;
     QVkRenderPass rp;
     QSize pixelSize;
-    int attCount = 0;
+    int colorAttCount = 0;
+    int dsAttCount = 0;
+    int msaaAttCount = 0;
 };
 
 struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget

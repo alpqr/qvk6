@@ -80,6 +80,12 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
 
     m_ps->sampleCount = m_sampleCount;
 
+    if (m_depthWrite) { // TriangleOnCube may want to exercise this
+        m_ps->depthTest = true;
+        m_ps->depthOp = QRhiGraphicsPipeline::Always;
+        m_ps->depthWrite = true;
+    }
+
     QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());
     QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));

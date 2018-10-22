@@ -34,6 +34,8 @@
 const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
 const bool UPLOAD_UNDERLAY_ON_EVERY_FRAME = false;
 
+const bool DEPTH_TEXTURE = false;
+
 #include "cube.h"
 
 static QBakedShader getShader(const QString &name)
@@ -76,11 +78,21 @@ void TriangleOnCubeRenderer::initResources()
     };
     m_srb->build();
 
+    if (DEPTH_TEXTURE) {
+        m_offscreenTriangle.setDepthWrite(true);
+        m_depthTex = m_r->createTexture(QRhiTexture::D32, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+        m_depthTex->build();
+    }
+
     QRhiTextureRenderTarget::Flags rtFlags = 0;
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
 
-    m_rt = m_r->createTextureRenderTarget(m_tex, rtFlags);
+    if (DEPTH_TEXTURE)
+        m_rt = m_r->createTextureRenderTarget(m_tex, m_depthTex, rtFlags);
+    else
+        m_rt = m_r->createTextureRenderTarget(m_tex, rtFlags);
+
     m_rt->build();
 
     m_offscreenTriangle.setRhi(m_r);
@@ -151,6 +163,11 @@ void TriangleOnCubeRenderer::releaseResources()
     if (m_sampler) {
         m_sampler->releaseAndDestroy();
         m_sampler = nullptr;
+    }
+
+    if (m_depthTex) {
+        m_depthTex->releaseAndDestroy();
+        m_depthTex = nullptr;
     }
 
     if (m_tex) {

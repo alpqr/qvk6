@@ -3,8 +3,6 @@ mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: shader lang. version
 mtl: textures
-vk: texture filtering
-d3d: texture filtering
 test mipmap and cubemap
 texture rt api, cubemap face as target, mrt
 mipmap gen (?)
@@ -38,6 +36,8 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+vk: texture filtering
+d3d: texture filtering
 gl: texture filtering
 cubemaps, pregenerated mipmap, upload multiple faces/mipmaps in one copy
 d3d: depth only offscreen pass

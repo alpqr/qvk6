@@ -2067,6 +2067,8 @@ static inline VkFilter toVkFilter(QRhiSampler::Filter f)
 static inline VkSamplerMipmapMode toVkMipmapMode(QRhiSampler::Filter f)
 {
     switch (f) {
+    case QRhiSampler::None:
+        return VK_SAMPLER_MIPMAP_MODE_NEAREST;
     case QRhiSampler::Nearest:
         return VK_SAMPLER_MIPMAP_MODE_NEAREST;
     case QRhiSampler::Linear:
@@ -2645,12 +2647,12 @@ bool QVkSampler::build()
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
     samplerInfo.magFilter = toVkFilter(magFilter);
     samplerInfo.minFilter = toVkFilter(minFilter);
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; // ### toVkMipmapMode(mipmapMode);
+    samplerInfo.mipmapMode = toVkMipmapMode(mipmapMode);
     samplerInfo.addressModeU = toVkAddressMode(addressU);
     samplerInfo.addressModeV = toVkAddressMode(addressV);
     samplerInfo.addressModeW = toVkAddressMode(addressW);
     samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.maxLod = 0.25f; // ###
+    samplerInfo.maxLod = mipmapMode == None ? 0.25f : VK_LOD_CLAMP_NONE;
 
     QRHI_RES_RHI(QRhiVulkan);
     VkResult err = rhiD->df->vkCreateSampler(rhiD->dev, &samplerInfo, nullptr, &sampler);

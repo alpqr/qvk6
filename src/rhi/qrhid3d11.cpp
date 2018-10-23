@@ -1098,7 +1098,33 @@ void QD3D11Sampler::release()
 
 static inline D3D11_FILTER toD3DFilter(QRhiSampler::Filter minFilter, QRhiSampler::Filter magFilter, QRhiSampler::Filter mipFilter)
 {
-    // ### fixme
+    if (minFilter == QRhiSampler::Nearest) {
+        if (magFilter == QRhiSampler::Nearest) {
+            if (mipFilter == QRhiSampler::Linear)
+                return D3D11_FILTER_MIN_MAG_POINT_MIP_LINEAR;
+            else
+                return D3D11_FILTER_MIN_MAG_MIP_POINT;
+        } else {
+            if (mipFilter == QRhiSampler::Linear)
+                return D3D11_FILTER_MIN_POINT_MAG_MIP_LINEAR;
+            else
+                return D3D11_FILTER_MIN_POINT_MAG_LINEAR_MIP_POINT;
+        }
+    } else {
+        if (magFilter == QRhiSampler::Nearest) {
+            if (mipFilter == QRhiSampler::Linear)
+                return D3D11_FILTER_MIN_LINEAR_MAG_POINT_MIP_LINEAR;
+            else
+                return D3D11_FILTER_MIN_LINEAR_MAG_MIP_POINT;
+        } else {
+            if (mipFilter == QRhiSampler::Linear)
+                return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+            else
+                return D3D11_FILTER_MIN_MAG_LINEAR_MIP_POINT;
+        }
+    }
+
+    Q_UNREACHABLE();
     return D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 }
 

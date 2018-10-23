@@ -35,6 +35,8 @@
 ****************************************************************************/
 
 #include "qrhi_p.h"
+#include <qmath.h>
+
 #include "qrhigles2_p.h"
 #if QT_CONFIG(vulkan)
 #include "qrhivulkan_p.h"
@@ -329,6 +331,11 @@ int QRhi::ubufAligned(int v) const
 {
     const int byteAlign = ubufAlignment();
     return (v + byteAlign - 1) & ~(byteAlign - 1);
+}
+
+int QRhi::mipLevelsForSize(const QSize &size) const
+{
+    return ceil(log2(qMax(size.width(), size.height()))) + 1;
 }
 
 bool QRhi::isYUpInFramebuffer() const

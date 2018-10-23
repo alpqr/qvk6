@@ -44,6 +44,7 @@
 #endif
 #include "vk_mem_alloc.h"
 
+#include <qmath.h>
 #include <QVulkanFunctions>
 #include <QVulkanWindow>
 
@@ -2549,6 +2550,7 @@ bool QVkTexture::build()
     const QSize size = safeSize(pixelSize);
     const bool isDepth = isDepthTextureFormat(format);
     const bool isCube = flags.testFlag(CubeMap);
+    const bool hasMipMaps = flags.testFlag(MipMapped);
 
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));
@@ -2559,7 +2561,7 @@ bool QVkTexture::build()
     imageInfo.extent.width = size.width();
     imageInfo.extent.height = size.height();
     imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
+    imageInfo.mipLevels = hasMipMaps ? ceil(log2(qMax(size.width(), size.height()))) + 1 : 1;
     imageInfo.arrayLayers = isCube ? 6 : 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;

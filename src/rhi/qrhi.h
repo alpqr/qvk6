@@ -238,7 +238,8 @@ public:
     enum Flag {
         RenderTarget = 1 << 0,
         ChangesInfrequently = 1 << 1, // hint for backend not to keep staging resources around
-        CubeMap = 1 << 2
+        CubeMap = 1 << 2,
+        MipMapped = 1 << 3
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -782,6 +783,8 @@ public:
 
     int ubufAlignment() const;
     int ubufAligned(int v) const;
+
+    int mipLevelsForSize(const QSize &size) const;
 
     bool isYUpInFramebuffer() const;
 

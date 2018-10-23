@@ -1439,14 +1439,15 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                                VkAccessFlags srcAccess, VkAccessFlags dstAccess,
                                VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
 {
+    QVkTexture *texD = QRHI_RES(QVkTexture, tex);
+
     VkImageMemoryBarrier barrier;
     memset(&barrier, 0, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.levelCount = texD->mipLevelCount;
     barrier.subresourceRange.layerCount = tex->flags.testFlag(QRhiTexture::CubeMap) ? 6 : 1;
 
-    QVkTexture *texD = QRHI_RES(QVkTexture, tex);
     barrier.oldLayout = texD->layout;
     barrier.newLayout = newLayout;
     barrier.srcAccessMask = srcAccess;
@@ -1533,6 +1534,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
         for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
             const QRhiResourceUpdateBatch::TextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            Q_ASSERT(layerDesc.mipImages.count() == 1 || utexD->flags.testFlag(QRhiTexture::MipMapped));
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiResourceUpdateBatch::TextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
                 const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
@@ -2553,6 +2555,8 @@ bool QVkTexture::build()
     const bool isDepth = isDepthTextureFormat(format);
     const bool isCube = flags.testFlag(CubeMap);
     const bool hasMipMaps = flags.testFlag(MipMapped);
+
+    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
 
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));

@@ -38,6 +38,7 @@
 #include <QWindow>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
+#include <qmath.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -441,9 +442,9 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
         const GLenum targetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
         for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
             const QRhiResourceUpdateBatch::TextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            f->glBindTexture(targetBase + layer, texD->texture);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiResourceUpdateBatch::TextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                f->glBindTexture(targetBase + layer, texD->texture);
                 f->glTexSubImage2D(targetBase + layer, level,
                                    0, 0, mipDesc.image.width(), mipDesc.image.height(),
                                    texD->glformat, texD->gltype, mipDesc.image.constBits());
@@ -1183,7 +1184,12 @@ bool QGles2Texture::build()
 
     rhiD->ensureContext();
 
+    const QSize size = safeSize(pixelSize);
+    // ### adjust size for npot when repeat with npot is not supported?
+
     const bool isCube = flags.testFlag(CubeMap);
+    const bool hasMipMaps = flags.testFlag(MipMapped);
+    const int mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
 
     // ### more formats
     target = isCube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
@@ -1191,12 +1197,21 @@ bool QGles2Texture::build()
     glformat = GL_RGBA;
     gltype = GL_UNSIGNED_BYTE;
 
-    const QSize size = safeSize(pixelSize);
-    // ### adjust size for npot when repeat with npot is not supported?
-
     rhiD->f->glGenTextures(1, &texture);
-    rhiD->f->glBindTexture(target, texture);
-    rhiD->f->glTexImage2D(target, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
+    if (hasMipMaps) {
+        const GLenum targetBase = isCube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : target;
+        for (int layer = 0, layerCount = isCube ? 6 : 1; layer != layerCount; ++layer) {
+            rhiD->f->glBindTexture(targetBase + layer, texture);
+            for (int level = 0; level != mipLevelCount; ++level) {
+                rhiD->f->glTexImage2D(targetBase + layer, level, glintformat,
+                                      qFloor(double(qMax(1, size.width() >> level))), qFloor(double(qMax(1, size.height() >> level))),
+                                      0, glformat, gltype, nullptr);
+            }
+        }
+    } else {
+        rhiD->f->glBindTexture(target, texture);
+        rhiD->f->glTexImage2D(target, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
+    }
 
     return true;
 }

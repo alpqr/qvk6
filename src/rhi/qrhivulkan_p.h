@@ -101,6 +101,7 @@ struct QVkTexture : public QRhiTexture
     VkBuffer stagingBuffer = VK_NULL_HANDLE;
     QVkAlloc stagingAlloc = nullptr;
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    uint mipLevelCount = 0;
     int lastActiveFrameSlot = -1;
     int stagingFrameSlot = -1;
     uint generation = 0;

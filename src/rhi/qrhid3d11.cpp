@@ -37,6 +37,7 @@
 #include "qrhid3d11_p.h"
 #include <QWindow>
 #include <QBakedShader>
+#include <qmath.h>
 
 #include <d3dcompiler.h>
 #include <comdef.h>
@@ -1036,7 +1037,7 @@ bool QD3D11Texture::build()
     const bool isCube = flags.testFlag(CubeMap);
     const bool hasMipMaps = flags.testFlag(MipMapped);
 
-    mipLevelCount = hasMipMaps ? ceil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
 
     uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
     if (flags.testFlag(RenderTarget)) {

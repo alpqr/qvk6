@@ -32,6 +32,8 @@
 
 #include "cube.h"
 
+const bool MIPMAP = true;
+
 static QBakedShader getShader(const QString &name)
 {
     QFile f(name);
@@ -51,10 +53,14 @@ void TexturedCubeRenderer::initResources()
     m_ubuf->build();
 
     m_image = QImage(QLatin1String(":/qt256.png")).convertToFormat(QImage::Format_RGBA8888);
-    m_tex = m_r->createTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()));
+    QRhiTexture::Flags texFlags = 0;
+    if (MIPMAP)
+        texFlags |= QRhiTexture::MipMapped;
+    m_tex = m_r->createTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), texFlags);
     m_tex->build();
 
-    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, MIPMAP ? QRhiSampler::Linear : QRhiSampler::None,
+                                   QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sampler->build();
 
     m_srb = m_r->createShaderResourceBindings();
@@ -155,7 +161,18 @@ void TexturedCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourc
     }
 
     if (!m_image.isNull()) {
-        resourceUpdates->uploadTexture(m_tex, m_image);
+        if (MIPMAP) {
+            QRhiResourceUpdateBatch::TextureUploadDescription desc;
+            desc.layers.append(QRhiResourceUpdateBatch::TextureUploadDescription::Layer());
+            // the ghetto mipmap generator...
+            for (int i = 0, ie = m_r->mipLevelsForSize(m_image.size()); i != ie; ++i) {
+                QImage image = m_image.scaled(m_r->sizeForMipLevel(i, m_image.size()));
+                desc.layers[0].mipImages.append({ image });
+            }
+            resourceUpdates->uploadTexture(m_tex, desc);
+        } else {
+            resourceUpdates->uploadTexture(m_tex, m_image);
+        }
         m_image = QImage();
     }
 

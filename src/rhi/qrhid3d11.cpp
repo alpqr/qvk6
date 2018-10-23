@@ -473,9 +473,15 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        const QImage &image(u.desc.layers[0].mipImages[0].image);
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.tex);
-        context->UpdateSubresource(texD->tex, 0, nullptr, image.constBits(), image.bytesPerLine(), 0);
+        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
+            const QRhiResourceUpdateBatch::TextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
+                const QRhiResourceUpdateBatch::TextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+                UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
+                context->UpdateSubresource(texD->tex, subres, nullptr, mipDesc.image.constBits(), mipDesc.image.bytesPerLine(), 0);
+            }
+        }
     }
 
     ud->free();
@@ -1027,6 +1033,10 @@ bool QD3D11Texture::build()
 
     const QSize size = safeSize(pixelSize);
     const bool isDepth = isDepthTextureFormat(format);
+    const bool isCube = flags.testFlag(CubeMap);
+    const bool hasMipMaps = flags.testFlag(MipMapped);
+
+    mipLevelCount = hasMipMaps ? ceil(log2(qMax(size.width(), size.height()))) + 1 : 1;
 
     uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
     if (flags.testFlag(RenderTarget)) {
@@ -1040,12 +1050,13 @@ bool QD3D11Texture::build()
     memset(&desc, 0, sizeof(desc));
     desc.Width = size.width();
     desc.Height = size.height();
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
+    desc.MipLevels = mipLevelCount;
+    desc.ArraySize = isCube ? 6 : 1;;
     desc.Format = toD3DTextureFormat(format);
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = bindFlags;
+    desc.MiscFlags = isCube ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
 
     QRHI_RES_RHI(QRhiD3D11);
     HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
@@ -1057,8 +1068,8 @@ bool QD3D11Texture::build()
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
     memset(&srvDesc, 0, sizeof(srvDesc));
     srvDesc.Format = isDepth ? toD3DDepthTextureSRVFormat(format) : desc.Format;
-    srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = 1;
+    srvDesc.ViewDimension = isCube ? D3D11_SRV_DIMENSION_TEXTURECUBE : D3D11_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Texture2D.MipLevels = desc.MipLevels;
 
     hr = rhiD->dev->CreateShaderResourceView(tex, &srvDesc, &srv);
     if (FAILED(hr)) {

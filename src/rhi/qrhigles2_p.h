@@ -93,7 +93,8 @@ struct QGles2Texture : public QRhiTexture
 
 struct QGles2Sampler : public QRhiSampler
 {
-    QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
+    QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
+                  AddressMode u, AddressMode v, AddressMode w);
     void release() override;
     bool build() override;
 
@@ -101,6 +102,7 @@ struct QGles2Sampler : public QRhiSampler
     GLenum glmagfilter;
     GLenum glwraps;
     GLenum glwrapt;
+    GLenum glwrapr;
 };
 
 struct QGles2RenderPass : public QRhiRenderPass
@@ -318,7 +320,7 @@ public:
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
-                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) override;
+                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w) override;
 
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiTextureRenderTarget::Flags flags) override;

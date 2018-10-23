@@ -190,9 +190,9 @@ QRhiTexture *QRhiGles2::createTexture(QRhiTexture::Format format, const QSize &p
 
 QRhiSampler *QRhiGles2::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                       QRhiSampler::Filter mipmapMode,
-                                      QRhiSampler::AddressMode u, QRhiSampler::AddressMode v)
+                                      QRhiSampler::AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w)
 {
-    return new QGles2Sampler(this, magFilter, minFilter, mipmapMode, u, v);
+    return new QGles2Sampler(this, magFilter, minFilter, mipmapMode, u, v, w);
 }
 
 QRhiTextureRenderTarget *QRhiGles2::createTextureRenderTarget(QRhiTexture *texture,
@@ -436,12 +436,19 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        const QImage &image(u.desc.layers[0].mipImages[0].image);
         QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
-        f->glBindTexture(texD->target, texD->texture);
-        f->glTexSubImage2D(texD->target, 0,
-                           0, 0, u.tex->pixelSize.width(), u.tex->pixelSize.height(),
-                           texD->glformat, texD->gltype, image.constBits());
+        const bool isCubeMap = texD->flags.testFlag(QRhiTexture::CubeMap);
+        const GLenum targetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
+            const QRhiResourceUpdateBatch::TextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
+                const QRhiResourceUpdateBatch::TextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+                f->glBindTexture(targetBase + layer, texD->texture);
+                f->glTexSubImage2D(targetBase + layer, level,
+                                   0, 0, mipDesc.image.width(), mipDesc.image.height(),
+                                   texD->glformat, texD->gltype, mipDesc.image.constBits());
+            }
+        }
     }
 
     ud->free();
@@ -958,6 +965,7 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
                     f->glTexParameteri(texD->target, GL_TEXTURE_MAG_FILTER, samplerD->glmagfilter);
                     f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_S, samplerD->glwraps);
                     f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_T, samplerD->glwrapt);
+                    f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_R, samplerD->glwrapr);
 
                     f->glUniform1i(sampler.glslLocation, texUnit);
                     ++texUnit;
@@ -1170,8 +1178,10 @@ bool QGles2Texture::build()
 
     rhiD->ensureContext();
 
+    const bool isCube = flags.testFlag(CubeMap);
+
     // ### more formats
-    target = GL_TEXTURE_2D;
+    target = isCube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
     glintformat = GL_RGBA;
     glformat = GL_RGBA;
     gltype = GL_UNSIGNED_BYTE;
@@ -1186,8 +1196,9 @@ bool QGles2Texture::build()
     return true;
 }
 
-QGles2Sampler::QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)
-    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v)
+QGles2Sampler::QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
+                             AddressMode u, AddressMode v, AddressMode w)
+    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v, w)
 {
 }
 
@@ -1202,6 +1213,7 @@ bool QGles2Sampler::build()
     glmagfilter = toGlMagFilter(magFilter);
     glwraps = toGlWrapMode(addressU);
     glwrapt = toGlWrapMode(addressV);
+    glwrapr = toGlWrapMode(addressW);
 
     return true;
 }

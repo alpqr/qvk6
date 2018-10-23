@@ -192,9 +192,9 @@ QRhiTexture *QRhiD3D11::createTexture(QRhiTexture::Format format, const QSize &p
 
 QRhiSampler *QRhiD3D11::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                       QRhiSampler::Filter mipmapMode,
-                                      QRhiSampler::AddressMode u, QRhiSampler::AddressMode v)
+                                      QRhiSampler::AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w)
 {
-    return new QD3D11Sampler(this, magFilter, minFilter, mipmapMode, u, v);
+    return new QD3D11Sampler(this, magFilter, minFilter, mipmapMode, u, v, w);
 }
 
 QRhiTextureRenderTarget *QRhiD3D11::createTextureRenderTarget(QRhiTexture *texture,
@@ -1081,8 +1081,9 @@ bool QD3D11Texture::build()
     return true;
 }
 
-QD3D11Sampler::QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)
-    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v)
+QD3D11Sampler::QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
+                             AddressMode u, AddressMode v, AddressMode w)
+    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v, w)
 {
 }
 
@@ -1130,7 +1131,7 @@ bool QD3D11Sampler::build()
     desc.Filter = toD3DFilter(minFilter, magFilter, mipmapMode);
     desc.AddressU = toD3DAddressMode(addressU);
     desc.AddressV = toD3DAddressMode(addressV);
-    desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+    desc.AddressW = toD3DAddressMode(addressW);
     desc.MaxAnisotropy = 1.0f;
 
     QRHI_RES_RHI(QRhiD3D11);

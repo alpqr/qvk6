@@ -85,10 +85,11 @@ QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &p
 }
 
 QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
-                         Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_)
+                         Filter magFilter_, Filter minFilter_, Filter mipmapMode_,
+                         AddressMode u_, AddressMode v_, AddressMode w_)
     : QRhiResource(rhi),
       magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
-      addressU(u_), addressV(v_)
+      addressU(u_), addressV(v_), addressW(w_)
 {
 }
 
@@ -335,7 +336,14 @@ int QRhi::ubufAligned(int v) const
 
 int QRhi::mipLevelsForSize(const QSize &size) const
 {
-    return ceil(log2(qMax(size.width(), size.height()))) + 1;
+    return qCeil(std::log2(qMax(size.width(), size.height()))) + 1;
+}
+
+QSize QRhi::sizeForMipLevel(int mipLevel, const QSize &baseLevelSize) const
+{
+    const int w = qFloor(double(qMax(1, baseLevelSize.width() >> mipLevel)));
+    const int h = qFloor(double(qMax(1, baseLevelSize.height() >> mipLevel)));
+    return QSize(w, h);
 }
 
 bool QRhi::isYUpInFramebuffer() const
@@ -382,9 +390,9 @@ QRhiTexture *QRhi::createTexture(QRhiTexture::Format format,
 
 QRhiSampler *QRhi::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                  QRhiSampler::Filter mipmapMode,
-                                 QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v)
+                                 QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w)
 {
-    return d->createSampler(magFilter, minFilter, mipmapMode, u, v);
+    return d->createSampler(magFilter, minFilter, mipmapMode, u, v, w);
 }
 
 QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,

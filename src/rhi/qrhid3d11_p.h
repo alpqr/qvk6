@@ -87,7 +87,8 @@ struct QD3D11Texture : public QRhiTexture
 
 struct QD3D11Sampler : public QRhiSampler
 {
-    QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
+    QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
+                  AddressMode u, AddressMode v, AddressMode w);
     void release() override;
     bool build() override;
 
@@ -387,7 +388,7 @@ public:
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
-                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) override;
+                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w) override;
 
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiTextureRenderTarget::Flags flags) override;

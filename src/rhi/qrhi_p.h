@@ -69,7 +69,7 @@ public:
                                        QRhiTexture::Flags flags) = 0;
     virtual QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                        QRhiSampler::Filter mipmapMode,
-                                       QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) = 0;
+                                       QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w) = 0;
 
     virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                                QRhiTextureRenderTarget::Flags flags) = 0;

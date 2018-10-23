@@ -286,12 +286,14 @@ public:
     Filter mipmapMode;
     AddressMode addressU;
     AddressMode addressV;
+    AddressMode addressW;
 
     virtual bool build() = 0;
 
 protected:
     QRhiSampler(QRhiImplementation *rhi,
-                Filter magFilter_, Filter minFilter_, Filter mipmapMode_, AddressMode u_, AddressMode v_);
+                Filter magFilter_, Filter minFilter_, Filter mipmapMode_,
+                AddressMode u_, AddressMode v_, AddressMode w_);
 };
 
 class Q_RHI_EXPORT QRhiRenderPass : public QRhiResource
@@ -702,7 +704,7 @@ public:
 
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
-                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v);
+                               QRhiSampler::AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w = QRhiSampler::ClampToEdge);
 
     // color only
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
@@ -785,6 +787,7 @@ public:
     int ubufAligned(int v) const;
 
     int mipLevelsForSize(const QSize &size) const;
+    QSize sizeForMipLevel(int mipLevel, const QSize &baseLevelSize) const;
 
     bool isYUpInFramebuffer() const;
 

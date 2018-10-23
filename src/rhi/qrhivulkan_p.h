@@ -108,7 +108,8 @@ struct QVkTexture : public QRhiTexture
 
 struct QVkSampler : public QRhiSampler
 {
-    QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v);
+    QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
+               AddressMode u, AddressMode v, AddressMode w);
     void release() override;
     bool build() override;
 
@@ -307,7 +308,7 @@ public:
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
-                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) override;
+                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w) override;
 
     QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
                                                        QRhiTextureRenderTarget::Flags flags) override;

@@ -1806,9 +1806,9 @@ QRhiTexture *QRhiVulkan::createTexture(QRhiTexture::Format format, const QSize &
 
 QRhiSampler *QRhiVulkan::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                        QRhiSampler::Filter mipmapMode,
-                                       QRhiSampler::AddressMode u, QRhiSampler::AddressMode v)
+                                       QRhiSampler::AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w)
 {
-    return new QVkSampler(this, magFilter, minFilter, mipmapMode, u, v);
+    return new QVkSampler(this, magFilter, minFilter, mipmapMode, u, v, w);
 }
 
 QRhiTextureRenderTarget *QRhiVulkan::createTextureRenderTarget(QRhiTexture *texture,
@@ -2613,8 +2613,9 @@ bool QVkTexture::build()
     return true;
 }
 
-QVkSampler::QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode, AddressMode u, AddressMode v)
-    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v)
+QVkSampler::QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
+                       AddressMode u, AddressMode v, AddressMode w)
+    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v, w)
 {
 }
 
@@ -2647,6 +2648,7 @@ bool QVkSampler::build()
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST; // ### toVkMipmapMode(mipmapMode);
     samplerInfo.addressModeU = toVkAddressMode(addressU);
     samplerInfo.addressModeV = toVkAddressMode(addressV);
+    samplerInfo.addressModeW = toVkAddressMode(addressW);
     samplerInfo.maxAnisotropy = 1.0f;
     samplerInfo.maxLod = 0.25f; // ###
 

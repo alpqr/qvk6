@@ -269,6 +269,7 @@ class Q_RHI_EXPORT QRhiSampler : public QRhiResource
 {
 public:
     enum Filter {
+        None, // for mipmapMode only
         Nearest,
         Linear
     };

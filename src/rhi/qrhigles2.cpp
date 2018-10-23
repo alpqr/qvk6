@@ -618,12 +618,17 @@ static inline GLenum toGlStencilOp(QRhiGraphicsPipeline::StencilOp op)
 
 static inline GLenum toGlMinFilter(QRhiSampler::Filter f, QRhiSampler::Filter m)
 {
-    Q_UNUSED(m); // ###
     switch (f) {
     case QRhiSampler::Nearest:
-        return GL_NEAREST;
+        if (m == QRhiSampler::None)
+            return GL_NEAREST;
+        else
+            return m == QRhiSampler::Nearest ? GL_NEAREST_MIPMAP_NEAREST : GL_NEAREST_MIPMAP_LINEAR;
     case QRhiSampler::Linear:
-        return GL_LINEAR;
+        if (m == QRhiSampler::None)
+            return GL_LINEAR;
+        else
+            return m == QRhiSampler::Nearest ? GL_LINEAR_MIPMAP_NEAREST : GL_LINEAR_MIPMAP_LINEAR;
     default:
         Q_UNREACHABLE();
         return GL_LINEAR;

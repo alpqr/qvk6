@@ -145,14 +145,12 @@ struct QRhiResourceUpdateBatchPrivate
 
     struct TextureUpload {
         TextureUpload() { }
-        TextureUpload(QRhiTexture *tex_, const QImage &image_, int mipLevel_, int layer_)
-            : tex(tex_), image(image_), mipLevel(mipLevel_), layer(layer_)
+        TextureUpload(QRhiTexture *tex_, const QRhiResourceUpdateBatch::TextureUploadDescription &desc_)
+            : tex(tex_), desc(desc_)
         { }
 
         QRhiTexture *tex = nullptr;
-        QImage image;
-        int mipLevel = 0;
-        int layer = 0;
+        QRhiResourceUpdateBatch::TextureUploadDescription desc;
     };
 
     QVector<DynamicBufferUpdate> dynamicBufferUpdates;

@@ -3,13 +3,16 @@ mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: shader lang. version
 mtl: textures
-mrt
+cubemaps, pregenerated mipmap, upload multiple faces/mipmaps in one copy
+vk: texture filtering
+d3d: texture filtering
+gl: texture filtering
+texture rt api, cubemap face as target, mrt
+mipmap gen (?)
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
 tex/QImage formats
-cubemap
-mipmap (gen with compute on vk?)
 anisotropic
 compressed textures
 adopt texture, buffer, ...
@@ -19,9 +22,6 @@ mtl: msaa (onscreen)
 gl: more ubuf types
 gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)
-gl: texture filtering
-gl: depth texture
-d3d: texture filtering
 d3d: msaa (onscreen)
 d3d, gl, mtl: cache shader sources?
 resize to 0 width or height fails (vk)

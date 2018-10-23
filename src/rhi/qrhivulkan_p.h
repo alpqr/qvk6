@@ -410,6 +410,7 @@ public:
     QVulkanDeviceFunctions *df = nullptr;
     VkPhysicalDeviceProperties physDevProperties;
     VkDeviceSize ubufAlign;
+    VkDeviceSize texbufAlign;
 
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;

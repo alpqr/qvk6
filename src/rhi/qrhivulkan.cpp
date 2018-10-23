@@ -291,6 +291,7 @@ void QRhiVulkan::create()
 
     f->vkGetPhysicalDeviceProperties(physDev, &physDevProperties);
     ubufAlign = physDevProperties.limits.minUniformBufferOffsetAlignment;
+    texbufAlign = physDevProperties.limits.optimalBufferCopyOffsetAlignment;
 
     qDebug("Device name: %s Driver version: %d.%d.%d", physDevProperties.deviceName,
            VK_VERSION_MAJOR(physDevProperties.driverVersion),
@@ -1441,7 +1442,8 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     memset(&barrier, 0, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.layerCount = tex->flags.testFlag(QRhiTexture::CubeMap) ? 6 : 1;
 
     QVkTexture *texD = QRHI_RES(QVkTexture, tex);
     barrier.oldLayout = texD->layout;
@@ -1522,23 +1524,27 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        const qsizetype imageSize = u.image.sizeInBytes();
-        if (imageSize < 1) {
-            qWarning("Not uploading empty image");
+        if (u.desc.layers.isEmpty() || u.desc.layers[0].mipImages.isEmpty())
             continue;
-        }
-        if (u.image.size() != u.tex->pixelSize) {
-            qWarning("Attempted to upload data of size %dx%d to texture of size %dx%d",
-                     u.image.width(), u.image.height(), u.tex->pixelSize.width(), u.tex->pixelSize.height());
-            continue;
-        }
 
         QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
+        VkDeviceSize stagingSize = 0;
+
+        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
+            const QRhiResourceUpdateBatch::TextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
+                const QRhiResourceUpdateBatch::TextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
+                if (imageSizeBytes > 0)
+                    stagingSize += aligned(imageSizeBytes, texbufAlign);
+            }
+        }
+
         if (!utexD->stagingBuffer) {
             VkBufferCreateInfo bufferInfo;
             memset(&bufferInfo, 0, sizeof(bufferInfo));
             bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferInfo.size = imageSize;
+            bufferInfo.size = stagingSize;
             bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
             VmaAllocationCreateInfo allocInfo;
@@ -1548,12 +1554,14 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             VmaAllocation allocation;
             VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &utexD->stagingBuffer, &allocation, nullptr);
             if (err != VK_SUCCESS) {
-                qWarning("Failed to create image staging buffer of size %d: %d", int(imageSize), err);
+                qWarning("Failed to create image staging buffer of size %d: %d", int(stagingSize), err);
                 continue;
             }
             utexD->stagingAlloc = allocation;
         }
 
+        QVarLengthArray<VkBufferImageCopy, 4> copyInfos;
+        size_t curOfs = 0;
         void *mp = nullptr;
         VmaAllocation a = toVmaAllocation(utexD->stagingAlloc);
         VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &mp);
@@ -1561,9 +1569,31 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             qWarning("Failed to map image data: %d", err);
             continue;
         }
-        memcpy(mp, u.image.constBits(), imageSize);
+        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
+            const QRhiResourceUpdateBatch::TextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
+                const QRhiResourceUpdateBatch::TextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
+                if (imageSizeBytes > 0) {
+                    VkBufferImageCopy copyInfo;
+                    memset(&copyInfo, 0, sizeof(copyInfo));
+                    copyInfo.bufferOffset = curOfs;
+                    copyInfo.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    copyInfo.imageSubresource.mipLevel = level;
+                    copyInfo.imageSubresource.baseArrayLayer = layer;
+                    copyInfo.imageSubresource.layerCount = 1;
+                    copyInfo.imageExtent.width = mipDesc.image.width();
+                    copyInfo.imageExtent.height = mipDesc.image.height();
+                    copyInfo.imageExtent.depth = 1;
+                    copyInfos.append(copyInfo);
+
+                    memcpy(reinterpret_cast<char *>(mp) + curOfs, mipDesc.image.constBits(), imageSizeBytes);
+                    curOfs += aligned(imageSizeBytes, texbufAlign);
+                }
+            }
+        }
         vmaUnmapMemory(toVmaAllocator(allocator), a);
-        vmaFlushAllocation(toVmaAllocator(allocator), a, 0, imageSize);
+        vmaFlushAllocation(toVmaAllocator(allocator), a, 0, stagingSize);
 
         if (utexD->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
             if (utexD->layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
@@ -1579,15 +1609,8 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             }
         }
 
-        VkBufferImageCopy copyInfo;
-        memset(&copyInfo, 0, sizeof(copyInfo));
-        copyInfo.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyInfo.imageSubresource.layerCount = 1;
-        copyInfo.imageExtent.width = u.image.width();
-        copyInfo.imageExtent.height = u.image.height();
-        copyInfo.imageExtent.depth = 1;
-
-        df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffer, utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyInfo);
+        df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffer, utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                   copyInfos.count(), copyInfos.constData());
         utexD->lastActiveFrameSlot = currentFrameSlot;
         utexD->stagingFrameSlot = currentFrameSlot;
         if (utexD->flags.testFlag(QRhiTexture::ChangesInfrequently))
@@ -2525,17 +2548,19 @@ bool QVkTexture::build()
 
     const QSize size = safeSize(pixelSize);
     const bool isDepth = isDepthTextureFormat(format);
+    const bool isCube = flags.testFlag(CubeMap);
 
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.flags = isCube ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.format = vkformat;
     imageInfo.extent.width = size.width();
     imageInfo.extent.height = size.height();
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
+    imageInfo.arrayLayers = isCube ? 6 : 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
@@ -2564,14 +2589,15 @@ bool QVkTexture::build()
     memset(&viewInfo, 0, sizeof(viewInfo));
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = image;
-    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.viewType = isCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = vkformat;
     viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
     viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
     viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
     viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
     viewInfo.subresourceRange.aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.levelCount = viewInfo.subresourceRange.layerCount = 1;
+    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.layerCount = isCube ? 6 : 1;
 
     err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &imageView);
     if (err != VK_SUCCESS) {

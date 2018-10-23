@@ -274,9 +274,14 @@ void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *da
     d->staticBufferUploads.append({ buf, data });
 }
 
-void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &image, int mipLevel, int layer)
+void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const TextureUploadDescription &desc)
 {
-    d->textureUploads.append({ tex, image, mipLevel, layer });
+    d->textureUploads.append({ tex, desc });
+}
+
+void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &image)
+{
+    uploadTexture(tex, {{{{{ image }}}}});
 }
 
 QRhiResourceUpdateBatch *QRhi::nextResourceUpdateBatch()

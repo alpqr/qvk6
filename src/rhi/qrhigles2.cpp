@@ -436,11 +436,12 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
+        const QImage &image(u.desc.layers[0].mipImages[0].image);
         QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
         f->glBindTexture(texD->target, texD->texture);
         f->glTexSubImage2D(texD->target, 0,
                            0, 0, u.tex->pixelSize.width(), u.tex->pixelSize.height(),
-                           texD->glformat, texD->gltype, u.image.constBits());
+                           texD->glformat, texD->gltype, image.constBits());
     }
 
     ud->free();

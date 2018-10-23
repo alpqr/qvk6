@@ -237,7 +237,8 @@ class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 public:
     enum Flag {
         RenderTarget = 1 << 0,
-        ChangesInfrequently = 1 << 1 // hint for backend not to keep staging resources around
+        ChangesInfrequently = 1 << 1, // hint for backend not to keep staging resources around
+        CubeMap = 1 << 2
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -581,6 +582,22 @@ struct QRhiResourceUpdateBatchPrivate;
 class Q_RHI_EXPORT QRhiResourceUpdateBatch // sort of a command buffer for copy type of operations
 {
 public:
+    struct TextureUploadDescription {
+        struct Layer {
+            struct MipLevel {
+                MipLevel() { }
+                MipLevel(const QImage &image_) : image(image_) { }
+                QImage image;
+            };
+            Layer() { }
+            Layer(const QVector<MipLevel> &mipImages_) : mipImages(mipImages_) { }
+            QVector<MipLevel> mipImages;
+        };
+        TextureUploadDescription() { }
+        TextureUploadDescription(const QVector<Layer> &layers_) : layers(layers_) { }
+        QVector<Layer> layers; // 6 layers for cubemaps, 1 otherwise
+    };
+
     ~QRhiResourceUpdateBatch();
     // Puts the batch back to the pool without any processing.
     void release();
@@ -589,7 +606,8 @@ public:
     // happens underneath is hidden from the applications.
     void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
-    void uploadTexture(QRhiTexture *tex, const QImage &image, int mipLevel = 0, int layer = 0);
+    void uploadTexture(QRhiTexture *tex, const TextureUploadDescription &desc);
+    void uploadTexture(QRhiTexture *tex, const QImage &image);
 
 private:
     QRhiResourceUpdateBatch(QRhiImplementation *rhi);
@@ -598,6 +616,10 @@ private:
     friend struct QRhiResourceUpdateBatchPrivate;
     friend class QRhi;
 };
+
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatch::TextureUploadDescription::Layer::MipLevel, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatch::TextureUploadDescription::Layer, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatch::TextureUploadDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiInitParams
 {

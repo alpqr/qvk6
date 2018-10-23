@@ -473,8 +473,9 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
+        const QImage &image(u.desc.layers[0].mipImages[0].image);
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.tex);
-        context->UpdateSubresource(texD->tex, 0, nullptr, u.image.constBits(), u.image.bytesPerLine(), 0);
+        context->UpdateSubresource(texD->tex, 0, nullptr, image.constBits(), image.bytesPerLine(), 0);
     }
 
     ud->free();

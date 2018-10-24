@@ -1160,6 +1160,7 @@ bool QD3D11Sampler::build()
     desc.AddressV = toD3DAddressMode(addressV);
     desc.AddressW = toD3DAddressMode(addressW);
     desc.MaxAnisotropy = 1.0f;
+    desc.MaxLOD = mipmapMode == None ? 0.0f : 1000.0f;
 
     QRHI_RES_RHI(QRhiD3D11);
     HRESULT hr = rhiD->dev->CreateSamplerState(&desc, &samplerState);

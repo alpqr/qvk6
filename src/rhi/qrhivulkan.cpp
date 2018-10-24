@@ -2656,7 +2656,7 @@ bool QVkSampler::build()
     samplerInfo.addressModeV = toVkAddressMode(addressV);
     samplerInfo.addressModeW = toVkAddressMode(addressW);
     samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.maxLod = mipmapMode == None ? 0.25f : VK_LOD_CLAMP_NONE;
+    samplerInfo.maxLod = mipmapMode == None ? 0.25f : 1000.0f;
 
     QRHI_RES_RHI(QRhiVulkan);
     VkResult err = rhiD->df->vkCreateSampler(rhiD->dev, &samplerInfo, nullptr, &sampler);

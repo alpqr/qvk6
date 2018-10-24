@@ -1198,7 +1198,7 @@ bool QGles2Texture::build()
     gltype = GL_UNSIGNED_BYTE;
 
     rhiD->f->glGenTextures(1, &texture);
-    if (hasMipMaps) {
+    if (hasMipMaps || isCube) {
         const GLenum targetBase = isCube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : target;
         for (int layer = 0, layerCount = isCube ? 6 : 1; layer != layerCount; ++layer) {
             rhiD->f->glBindTexture(targetBase + layer, texture);

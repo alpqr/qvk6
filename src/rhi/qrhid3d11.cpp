@@ -460,7 +460,7 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
         Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == u.buf->size);
         QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
-        if (!(u.data.size() & 0xF)) {
+        if (!(u.data.size() & 0xFF)) {
             context->UpdateSubresource(bufD->buffer, 0, nullptr, u.data.constData(), 0, 0);
         } else {
             // Specify the region since the ID3D11Buffer's size is rounded up to be
@@ -1069,8 +1069,13 @@ bool QD3D11Texture::build()
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
     memset(&srvDesc, 0, sizeof(srvDesc));
     srvDesc.Format = isDepth ? toD3DDepthTextureSRVFormat(format) : desc.Format;
-    srvDesc.ViewDimension = isCube ? D3D11_SRV_DIMENSION_TEXTURECUBE : D3D11_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MipLevels = desc.MipLevels;
+    if (isCube) {
+        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+        srvDesc.TextureCube.MipLevels = desc.MipLevels;
+    } else {
+        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+        srvDesc.Texture2D.MipLevels = desc.MipLevels;
+    }
 
     hr = rhiD->dev->CreateShaderResourceView(tex, &srvDesc, &srv);
     if (FAILED(hr)) {

@@ -325,6 +325,28 @@ protected:
     QRhiReferenceRenderTarget(QRhiImplementation *rhi);
 };
 
+struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
+{
+    QRhiTextureRenderTargetDescription() { }
+    QRhiTextureRenderTargetDescription(QRhiTexture *texture_)
+        : texture(texture_)
+    { }
+    QRhiTextureRenderTargetDescription(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_)
+        : texture(texture_),
+          depthStencilBuffer(depthStencilBuffer_)
+    { }
+    QRhiTextureRenderTargetDescription(QRhiTexture *texture_, QRhiTexture *depthTexture_)
+        : texture(texture_),
+          depthTexture(depthTexture_)
+    { }
+
+    QRhiTexture *texture = nullptr;
+    QRhiRenderBuffer *depthStencilBuffer = nullptr;
+    QRhiTexture *depthTexture = nullptr;
+};
+
+Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription, Q_MOVABLE_TYPE);
+
 class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
 public:
@@ -333,20 +355,13 @@ public:
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
-    QRhiTexture *texture;
-    QRhiTexture *depthTexture;
-    QRhiRenderBuffer *depthStencilBuffer;
+    QRhiTextureRenderTargetDescription desc;
     Flags flags;
 
     virtual bool build() = 0;
 
 protected:
-    QRhiTextureRenderTarget(QRhiImplementation *rhi,
-                            QRhiTexture *texture_, Flags flags_);
-    QRhiTextureRenderTarget(QRhiImplementation *rhi,
-                            QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_);
-    QRhiTextureRenderTarget(QRhiImplementation *rhi,
-                            QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_);
+    QRhiTextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc_, Flags flags_);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTextureRenderTarget::Flags)
@@ -707,16 +722,7 @@ public:
                                QRhiSampler::Filter mipmapMode,
                                QRhiSampler::AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w = QRhiSampler::ClampToEdge);
 
-    // color only
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
-    // color and depth-stencil, only color accessed afterwards
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiRenderBuffer *depthStencilBuffer,
-                                                       QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
-    // color and depth, both as textures accessible afterwards
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTexture *depthTexture,
+    QRhiTextureRenderTarget *createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                        QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
 
     /*

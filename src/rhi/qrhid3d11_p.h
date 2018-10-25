@@ -128,9 +128,7 @@ struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
 
 struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
 {
-    QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags);
-    QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags);
-    QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags);
+    QD3D11TextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
     void release() override;
     Type type() const override;
     bool build() override;
@@ -390,13 +388,7 @@ public:
                                QRhiSampler::Filter mipmapMode,
                                QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w) override;
 
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTextureRenderTarget::Flags flags) override;
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiRenderBuffer *depthStencilBuffer,
-                                                       QRhiTextureRenderTarget::Flags flags) override;
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTexture *depthTexture,
+    QRhiTextureRenderTarget *createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                        QRhiTextureRenderTarget::Flags flags) override;
 
     QRhiSwapChain *createSwapChain() override;

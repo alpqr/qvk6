@@ -125,9 +125,7 @@ struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
 
 struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
 {
-    QMetalTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags);
-    QMetalTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags);
-    QMetalTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags);
+    QMetalTextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
     void release() override;
     Type type() const override;
     bool build() override;
@@ -244,13 +242,7 @@ public:
                                QRhiSampler::Filter mipmapMode,
                                QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v) override;
 
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTextureRenderTarget::Flags flags) override;
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiRenderBuffer *depthStencilBuffer,
-                                                       QRhiTextureRenderTarget::Flags flags) override;
-    QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                       QRhiTexture *depthTexture,
+    QRhiTextureRenderTarget *createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                        QRhiTextureRenderTarget::Flags flags) override;
 
     QRhiSwapChain *createSwapChain() override;

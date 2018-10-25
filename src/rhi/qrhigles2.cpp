@@ -196,24 +196,10 @@ QRhiSampler *QRhiGles2::createSampler(QRhiSampler::Filter magFilter, QRhiSampler
     return new QGles2Sampler(this, magFilter, minFilter, mipmapMode, u, v, w);
 }
 
-QRhiTextureRenderTarget *QRhiGles2::createTextureRenderTarget(QRhiTexture *texture,
+QRhiTextureRenderTarget *QRhiGles2::createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                               QRhiTextureRenderTarget::Flags flags)
 {
-    return new QGles2TextureRenderTarget(this, texture, flags);
-}
-
-QRhiTextureRenderTarget *QRhiGles2::createTextureRenderTarget(QRhiTexture *texture,
-                                                              QRhiRenderBuffer *depthStencilBuffer,
-                                                              QRhiTextureRenderTarget::Flags flags)
-{
-    return new QGles2TextureRenderTarget(this, texture, depthStencilBuffer, flags);
-}
-
-QRhiTextureRenderTarget *QRhiGles2::createTextureRenderTarget(QRhiTexture *texture,
-                                                              QRhiTexture *depthTexture,
-                                                              QRhiTextureRenderTarget::Flags flags)
-{
-    return new QGles2TextureRenderTarget(this, texture, depthTexture, flags);
+    return new QGles2TextureRenderTarget(this, desc, flags);
 }
 
 QRhiGraphicsPipeline *QRhiGles2::createGraphicsPipeline()
@@ -1274,20 +1260,10 @@ const QRhiRenderPass *QGles2ReferenceRenderTarget::renderPass() const
     return &d.rp;
 }
 
-QGles2TextureRenderTarget::QGles2TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, flags),
-      d(rhi)
-{
-}
-
-QGles2TextureRenderTarget::QGles2TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, depthStencilBuffer, flags),
-      d(rhi)
-{
-}
-
-QGles2TextureRenderTarget::QGles2TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, depthTexture, flags),
+QGles2TextureRenderTarget::QGles2TextureRenderTarget(QRhiImplementation *rhi,
+                                                     const QRhiTextureRenderTargetDescription &desc,
+                                                     Flags flags)
+    : QRhiTextureRenderTarget(rhi, desc, flags),
       d(rhi)
 {
 }
@@ -1315,10 +1291,10 @@ bool QGles2TextureRenderTarget::build()
     if (framebuffer)
         release();
 
-    Q_ASSERT(texture);
-    Q_ASSERT(!depthStencilBuffer || !depthTexture);
+    Q_ASSERT(desc.texture);
+    Q_ASSERT(!desc.depthStencilBuffer || !desc.depthTexture);
 
-    if (depthTexture)
+    if (desc.depthTexture)
         qWarning("QGles2TextureRenderTarget: depth textures not supported");
 
     rhiD->ensureContext();
@@ -1326,15 +1302,15 @@ bool QGles2TextureRenderTarget::build()
     rhiD->f->glGenFramebuffers(1, &framebuffer);
     rhiD->f->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
-    QGles2Texture *texD = QRHI_RES(QGles2Texture, texture);
+    QGles2Texture *texD = QRHI_RES(QGles2Texture, desc.texture);
     Q_ASSERT(texD->texture);
 
     rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
-    d.pixelSize = texture->pixelSize;
+    d.pixelSize = desc.texture->pixelSize;
     d.attCount = 1;
 
-    if (depthStencilBuffer) {
-        QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, depthStencilBuffer);
+    if (desc.depthStencilBuffer) {
+        QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, desc.depthStencilBuffer);
         rhiD->f->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbD->renderbuffer);
         rhiD->f->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbD->renderbuffer);
         d.attCount += 1;

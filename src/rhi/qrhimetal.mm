@@ -216,24 +216,10 @@ QRhiSampler *QRhiMetal::createSampler(QRhiSampler::Filter magFilter, QRhiSampler
     return new QMetalSampler(this, magFilter, minFilter, mipmapMode, u, v);
 }
 
-QRhiTextureRenderTarget *QRhiMetal::createTextureRenderTarget(QRhiTexture *texture,
+QRhiTextureRenderTarget *QRhiMetal::createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                               QRhiTextureRenderTarget::Flags flags)
 {
-    return new QMetalTextureRenderTarget(this, texture, flags);
-}
-
-QRhiTextureRenderTarget *QRhiMetal::createTextureRenderTarget(QRhiTexture *texture,
-                                                              QRhiRenderBuffer *depthStencilBuffer,
-                                                              QRhiTextureRenderTarget::Flags flags)
-{
-    return new QMetalTextureRenderTarget(this, texture, depthStencilBuffer, flags);
-}
-
-QRhiTextureRenderTarget *QRhiMetal::createTextureRenderTarget(QRhiTexture *texture,
-                                                              QRhiTexture *depthTexture,
-                                                              QRhiTextureRenderTarget::Flags flags)
-{
-    return new QMetalTextureRenderTarget(this, texture, depthTexture, flags);
+    return new QMetalTextureRenderTarget(this, desc, flags);
 }
 
 QRhiGraphicsPipeline *QRhiMetal::createGraphicsPipeline()
@@ -731,20 +717,10 @@ const QRhiRenderPass *QMetalReferenceRenderTarget::renderPass() const
     return &d.rp;
 }
 
-QMetalTextureRenderTarget::QMetalTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags)
+QMetalTextureRenderTarget::QMetalTextureRenderTarget(QRhiImplementation *rhi,
+                                                     const QRhiTextureRenderTargetDescription &desc,
+                                                     Flags flags)
     : QRhiTextureRenderTarget(rhi, texture, flags),
-      d(rhi)
-{
-}
-
-QMetalTextureRenderTarget::QMetalTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, depthStencilBuffer, flags),
-      d(rhi)
-{
-}
-
-QMetalTextureRenderTarget::QMetalTextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, depthTexture, flags),
       d(rhi)
 {
 }

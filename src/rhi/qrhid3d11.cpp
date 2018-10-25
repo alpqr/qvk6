@@ -198,24 +198,10 @@ QRhiSampler *QRhiD3D11::createSampler(QRhiSampler::Filter magFilter, QRhiSampler
     return new QD3D11Sampler(this, magFilter, minFilter, mipmapMode, u, v, w);
 }
 
-QRhiTextureRenderTarget *QRhiD3D11::createTextureRenderTarget(QRhiTexture *texture,
+QRhiTextureRenderTarget *QRhiD3D11::createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                               QRhiTextureRenderTarget::Flags flags)
 {
-    return new QD3D11TextureRenderTarget(this, texture, flags);
-}
-
-QRhiTextureRenderTarget *QRhiD3D11::createTextureRenderTarget(QRhiTexture *texture,
-                                                              QRhiRenderBuffer *depthStencilBuffer,
-                                                              QRhiTextureRenderTarget::Flags flags)
-{
-    return new QD3D11TextureRenderTarget(this, texture, depthStencilBuffer, flags);
-}
-
-QRhiTextureRenderTarget *QRhiD3D11::createTextureRenderTarget(QRhiTexture *texture,
-                                                              QRhiTexture *depthTexture,
-                                                              QRhiTextureRenderTarget::Flags flags)
-{
-    return new QD3D11TextureRenderTarget(this, texture, depthTexture, flags);
+    return new QD3D11TextureRenderTarget(this, desc, flags);
 }
 
 QRhiGraphicsPipeline *QRhiD3D11::createGraphicsPipeline()
@@ -1214,20 +1200,10 @@ const QRhiRenderPass *QD3D11ReferenceRenderTarget::renderPass() const
     return &d.rp;
 }
 
-QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, flags),
-      d(rhi)
-{
-}
-
-QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, depthStencilBuffer, flags),
-      d(rhi)
-{
-}
-
-QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi, QRhiTexture *texture, QRhiTexture *depthTexture, Flags flags)
-    : QRhiTextureRenderTarget(rhi, texture, depthTexture, flags),
+QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi,
+                                                     const QRhiTextureRenderTargetDescription &desc,
+                                                     Flags flags)
+    : QRhiTextureRenderTarget(rhi, desc, flags),
       d(rhi)
 {
 }
@@ -1254,47 +1230,47 @@ bool QD3D11TextureRenderTarget::build()
     if (rtv || dsv)
         release();
 
-    Q_ASSERT(texture || depthTexture);
-    Q_ASSERT(!depthStencilBuffer || !depthTexture);
-    const bool hasDepthStencil = depthStencilBuffer || depthTexture;
+    Q_ASSERT(desc.texture || desc.depthTexture);
+    Q_ASSERT(!desc.depthStencilBuffer || !desc.depthTexture);
+    const bool hasDepthStencil = desc.depthStencilBuffer || desc.depthTexture;
 
     QRHI_RES_RHI(QRhiD3D11);
-    if (texture) {
-        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
-        D3D11_RENDER_TARGET_VIEW_DESC desc;
-        memset(&desc, 0, sizeof(desc));
-        desc.Format = toD3DTextureFormat(texD->format);
-        desc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+    if (desc.texture) {
+        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, desc.texture);
+        D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+        memset(&rtvDesc, 0, sizeof(rtvDesc));
+        rtvDesc.Format = toD3DTextureFormat(texD->format);
+        rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 
-        HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &desc, &rtv);
+        HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv);
         if (FAILED(hr)) {
             qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
 
-        d.pixelSize = texture->pixelSize;
+        d.pixelSize = desc.texture->pixelSize;
         d.colorAttCount = 1;
     }
 
     if (hasDepthStencil) {
-        if (depthTexture) {
+        if (desc.depthTexture) {
             ownsDsv = true;
             D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
             memset(&dsvDesc, 0, sizeof(dsvDesc));
-            dsvDesc.Format = toD3DDepthTextureDSVFormat(depthTexture->format);
+            dsvDesc.Format = toD3DDepthTextureDSVFormat(desc.depthTexture->format);
             dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-            HRESULT hr = rhiD->dev->CreateDepthStencilView(QRHI_RES(QD3D11Texture, depthTexture)->tex, &dsvDesc, &dsv);
+            HRESULT hr = rhiD->dev->CreateDepthStencilView(QRHI_RES(QD3D11Texture, desc.depthTexture)->tex, &dsvDesc, &dsv);
             if (FAILED(hr)) {
                 qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
                 return false;
             }
-            if (!texture)
-                d.pixelSize = depthTexture->pixelSize;
+            if (!desc.texture)
+                d.pixelSize = desc.depthTexture->pixelSize;
         } else {
             ownsDsv = false;
-            dsv = QRHI_RES(QD3D11RenderBuffer, depthStencilBuffer)->dsv;
-            if (!texture)
-                d.pixelSize = depthStencilBuffer->pixelSize;
+            dsv = QRHI_RES(QD3D11RenderBuffer, desc.depthStencilBuffer)->dsv;
+            if (!desc.texture)
+                d.pixelSize = desc.depthStencilBuffer->pixelSize;
         }
         d.dsAttCount = 1;
     } else {

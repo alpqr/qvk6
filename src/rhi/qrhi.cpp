@@ -109,23 +109,11 @@ QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhiImplementation *rhi)
 }
 
 QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
-                                                 QRhiTexture *texture_, Flags flags_)
+                                                 const QRhiTextureRenderTargetDescription &desc_,
+                                                 Flags flags_)
     : QRhiRenderTarget(rhi),
-      texture(texture_), depthTexture(nullptr), depthStencilBuffer(nullptr), flags(flags_)
-{
-}
-
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
-                                                 QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_, Flags flags_)
-    : QRhiRenderTarget(rhi),
-      texture(texture_), depthTexture(nullptr), depthStencilBuffer(depthStencilBuffer_), flags(flags_)
-{
-}
-
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
-                                                 QRhiTexture *texture_, QRhiTexture *depthTexture_, Flags flags_)
-    : QRhiRenderTarget(rhi),
-      texture(texture_), depthTexture(depthTexture_), depthStencilBuffer(nullptr), flags(flags_)
+      desc(desc_),
+      flags(flags_)
 {
 }
 
@@ -395,24 +383,10 @@ QRhiSampler *QRhi::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Fil
     return d->createSampler(magFilter, minFilter, mipmapMode, u, v, w);
 }
 
-QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
+QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                          QRhiTextureRenderTarget::Flags flags)
 {
-    return d->createTextureRenderTarget(texture, flags);
-}
-
-QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
-                                                         QRhiRenderBuffer *depthStencilBuffer,
-                                                         QRhiTextureRenderTarget::Flags flags)
-{
-    return d->createTextureRenderTarget(texture, depthStencilBuffer, flags);
-}
-
-QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(QRhiTexture *texture,
-                                                         QRhiTexture *depthTexture,
-                                                         QRhiTextureRenderTarget::Flags flags)
-{
-    return d->createTextureRenderTarget(texture, depthTexture, flags);
+    return d->createTextureRenderTarget(desc, flags);
 }
 
 QRhiSwapChain *QRhi::createSwapChain()

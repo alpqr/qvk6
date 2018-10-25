@@ -89,9 +89,9 @@ void TriangleOnCubeRenderer::initResources()
         rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
 
     if (DEPTH_TEXTURE)
-        m_rt = m_r->createTextureRenderTarget(nullptr, m_depthTex, rtFlags);
+        m_rt = m_r->createTextureRenderTarget({ nullptr, m_depthTex }, rtFlags);
     else
-        m_rt = m_r->createTextureRenderTarget(m_tex, rtFlags);
+        m_rt = m_r->createTextureRenderTarget({ m_tex }, rtFlags);
 
     m_rt->build();
 

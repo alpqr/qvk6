@@ -71,13 +71,7 @@ public:
                                        QRhiSampler::Filter mipmapMode,
                                        QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w) = 0;
 
-    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                               QRhiTextureRenderTarget::Flags flags) = 0;
-    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                               QRhiRenderBuffer *depthStencilBuffer,
-                                                               QRhiTextureRenderTarget::Flags flags) = 0;
-    virtual QRhiTextureRenderTarget *createTextureRenderTarget(QRhiTexture *texture,
-                                                               QRhiTexture *depthTexture,
+    virtual QRhiTextureRenderTarget *createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                                QRhiTextureRenderTarget::Flags flags) = 0;
 
     virtual QRhiSwapChain *createSwapChain() = 0;

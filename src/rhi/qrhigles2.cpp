@@ -1304,7 +1304,8 @@ bool QGles2TextureRenderTarget::build()
     rhiD->f->glGenFramebuffers(1, &framebuffer);
     rhiD->f->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
-    QRhiTexture *texture = desc.colorAttachments.first();
+    QRhiTexture *texture = desc.colorAttachments.first().texture;
+    Q_ASSERT(texture);
     QGles2Texture *texD = QRHI_RES(QGles2Texture, texture);
     Q_ASSERT(texD->texture);
 

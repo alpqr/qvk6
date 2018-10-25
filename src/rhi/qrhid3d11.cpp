@@ -1250,12 +1250,18 @@ bool QD3D11TextureRenderTarget::build()
 
     d.colorAttCount = desc.colorAttachments.count();
     for (int i = 0; i < d.colorAttCount; ++i) {
-        QRhiTexture *texture = desc.colorAttachments[i];
+        QRhiTexture *texture = desc.colorAttachments[i].texture;
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
         memset(&rtvDesc, 0, sizeof(rtvDesc));
         rtvDesc.Format = toD3DTextureFormat(texD->format);
-        rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        if (texD->flags.testFlag(QRhiTexture::CubeMap)) {
+            rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+            rtvDesc.Texture2DArray.FirstArraySlice = desc.colorAttachments[i].layer;
+            rtvDesc.Texture2DArray.ArraySize = 1;
+        } else {
+            rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        }
 
         HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv[i]);
         if (FAILED(hr)) {

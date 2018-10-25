@@ -327,22 +327,30 @@ protected:
 
 struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
 {
+    struct Q_RHI_EXPORT ColorAttachment {
+        ColorAttachment() { }
+        ColorAttachment(QRhiTexture *texture_) : texture(texture_) { }
+        QRhiTexture *texture = nullptr;
+        int layer = 0; // face (0..5) for cubemaps
+    };
+
     QRhiTextureRenderTargetDescription()
     { }
-    QRhiTextureRenderTargetDescription(QRhiTexture *texture)
-    { colorAttachments << texture; }
-    QRhiTextureRenderTargetDescription(QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer_)
+    QRhiTextureRenderTargetDescription(const ColorAttachment &colorAttachment)
+    { colorAttachments.append(colorAttachment); }
+    QRhiTextureRenderTargetDescription(const ColorAttachment &colorAttachment, QRhiRenderBuffer *depthStencilBuffer_)
         : depthStencilBuffer(depthStencilBuffer_)
-    { colorAttachments << texture; }
-    QRhiTextureRenderTargetDescription(QRhiTexture *texture, QRhiTexture *depthTexture_)
+    { colorAttachments.append(colorAttachment); }
+    QRhiTextureRenderTargetDescription(const ColorAttachment &colorAttachment, QRhiTexture *depthTexture_)
         : depthTexture(depthTexture_)
-    { colorAttachments << texture; }
+    { colorAttachments.append(colorAttachment); }
 
-    QVector<QRhiTexture *> colorAttachments;
+    QVector<ColorAttachment> colorAttachments;
     QRhiRenderBuffer *depthStencilBuffer = nullptr;
     QRhiTexture *depthTexture = nullptr;
 };
 
+Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription::ColorAttachment, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription, Q_MOVABLE_TYPE);
 
 class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget

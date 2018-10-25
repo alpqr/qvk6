@@ -160,6 +160,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
     const QRhiRenderPass *renderPass() const override;
 
     QVkBasicRenderTargetData d;
+    VkImageView cubeFaceView[6];
     int lastActiveFrameSlot = -1;
 };
 
@@ -479,6 +480,7 @@ public:
             } sampler;
             struct {
                 VkFramebuffer fb;
+                VkImageView cubeFaceView[6];
             } textureRenderTarget;
             struct {
                 VkRenderPass rp;

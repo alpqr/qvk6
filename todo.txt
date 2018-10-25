@@ -3,8 +3,8 @@ mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: shader lang. version
 mtl: textures
+mrt, cubemap face as target
 test cubemap
-texture rt api, cubemap face as target, mrt
 mipmap gen (?)
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
@@ -27,6 +27,7 @@ gl: ubuf structs, arrays
 gl: target QOpenGLWindow ...
 msaa offscreen (msaa texture? renderbuffer?)
 blitframebuffer?
+vk: subpasses?
 other shader types? (gs?)
 
 qtshaderstack17:
@@ -36,6 +37,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+texture rt api revamp
 test mipmap
 vk: texture filtering
 d3d: texture filtering

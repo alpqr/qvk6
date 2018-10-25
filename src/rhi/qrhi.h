@@ -327,20 +327,18 @@ protected:
 
 struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
 {
-    QRhiTextureRenderTargetDescription() { }
-    QRhiTextureRenderTargetDescription(QRhiTexture *texture_)
-        : texture(texture_)
+    QRhiTextureRenderTargetDescription()
     { }
-    QRhiTextureRenderTargetDescription(QRhiTexture *texture_, QRhiRenderBuffer *depthStencilBuffer_)
-        : texture(texture_),
-          depthStencilBuffer(depthStencilBuffer_)
-    { }
-    QRhiTextureRenderTargetDescription(QRhiTexture *texture_, QRhiTexture *depthTexture_)
-        : texture(texture_),
-          depthTexture(depthTexture_)
-    { }
+    QRhiTextureRenderTargetDescription(QRhiTexture *texture)
+    { colorAttachments << texture; }
+    QRhiTextureRenderTargetDescription(QRhiTexture *texture, QRhiRenderBuffer *depthStencilBuffer_)
+        : depthStencilBuffer(depthStencilBuffer_)
+    { colorAttachments << texture; }
+    QRhiTextureRenderTargetDescription(QRhiTexture *texture, QRhiTexture *depthTexture_)
+        : depthTexture(depthTexture_)
+    { colorAttachments << texture; }
 
-    QRhiTexture *texture = nullptr;
+    QVector<QRhiTexture *> colorAttachments;
     QRhiRenderBuffer *depthStencilBuffer = nullptr;
     QRhiTexture *depthTexture = nullptr;
 };

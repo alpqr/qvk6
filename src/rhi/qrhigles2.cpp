@@ -1291,22 +1291,25 @@ bool QGles2TextureRenderTarget::build()
     if (framebuffer)
         release();
 
-    Q_ASSERT(desc.texture);
+    Q_ASSERT(!desc.colorAttachments.isEmpty());
     Q_ASSERT(!desc.depthStencilBuffer || !desc.depthTexture);
 
+    if (desc.colorAttachments.count() > 1)
+        qWarning("QGles2TextureRenderTarget: Multiple color attachments are not supported");
     if (desc.depthTexture)
-        qWarning("QGles2TextureRenderTarget: depth textures not supported");
+        qWarning("QGles2TextureRenderTarget: Depth texture is not supported and will be ignored");
 
     rhiD->ensureContext();
 
     rhiD->f->glGenFramebuffers(1, &framebuffer);
     rhiD->f->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
-    QGles2Texture *texD = QRHI_RES(QGles2Texture, desc.texture);
+    QRhiTexture *texture = desc.colorAttachments.first();
+    QGles2Texture *texD = QRHI_RES(QGles2Texture, texture);
     Q_ASSERT(texD->texture);
 
     rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
-    d.pixelSize = desc.texture->pixelSize;
+    d.pixelSize = texD->pixelSize;
     d.attCount = 1;
 
     if (desc.depthStencilBuffer) {

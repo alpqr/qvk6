@@ -1230,13 +1230,14 @@ bool QD3D11TextureRenderTarget::build()
     if (rtv || dsv)
         release();
 
-    Q_ASSERT(desc.texture || desc.depthTexture);
+    Q_ASSERT(!desc.colorAttachments.isEmpty() || desc.depthTexture);
     Q_ASSERT(!desc.depthStencilBuffer || !desc.depthTexture);
     const bool hasDepthStencil = desc.depthStencilBuffer || desc.depthTexture;
 
     QRHI_RES_RHI(QRhiD3D11);
-    if (desc.texture) {
-        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, desc.texture);
+    QRhiTexture *texture = !desc.colorAttachments.isEmpty() ? desc.colorAttachments.first() : nullptr;
+    if (texture) {
+        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
         memset(&rtvDesc, 0, sizeof(rtvDesc));
         rtvDesc.Format = toD3DTextureFormat(texD->format);
@@ -1248,7 +1249,7 @@ bool QD3D11TextureRenderTarget::build()
             return false;
         }
 
-        d.pixelSize = desc.texture->pixelSize;
+        d.pixelSize = texD->pixelSize;
         d.colorAttCount = 1;
     }
 
@@ -1264,12 +1265,12 @@ bool QD3D11TextureRenderTarget::build()
                 qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
                 return false;
             }
-            if (!desc.texture)
+            if (!texture)
                 d.pixelSize = desc.depthTexture->pixelSize;
         } else {
             ownsDsv = false;
             dsv = QRHI_RES(QD3D11RenderBuffer, desc.depthStencilBuffer)->dsv;
-            if (!desc.texture)
+            if (!texture)
                 d.pixelSize = desc.depthStencilBuffer->pixelSize;
         }
         d.dsAttCount = 1;

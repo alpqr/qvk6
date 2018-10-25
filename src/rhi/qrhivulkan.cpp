@@ -1181,8 +1181,8 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
     rtD->lastActiveFrameSlot = currentFrameSlot;
     QRHI_RES(QVkRenderPass, &rtD->d.rp)->lastActiveFrameSlot = currentFrameSlot;
     // the renderpass will implicitly transition so no barrier needed here
-    if (rt->desc.texture)
-        QRHI_RES(QVkTexture, rt->desc.texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    for (QRhiTexture *texture : qAsConst(rt->desc.colorAttachments))
+        QRHI_RES(QVkTexture, texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     if (rt->desc.depthTexture)
         QRHI_RES(QVkTexture, rt->desc.depthTexture)->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 }
@@ -1190,8 +1190,8 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
 void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
     // already in the right layout when the renderpass ends
-    if (rt->desc.texture)
-        QRHI_RES(QVkTexture, rt->desc.texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    for (QRhiTexture *texture : qAsConst(rt->desc.colorAttachments))
+        QRHI_RES(QVkTexture, texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     if (rt->desc.depthTexture)
         QRHI_RES(QVkTexture, rt->desc.depthTexture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
@@ -2736,7 +2736,7 @@ bool QVkTextureRenderTarget::build()
     if (d.fb)
         release();
 
-    Q_ASSERT(desc.texture || desc.depthTexture);
+    Q_ASSERT(!desc.colorAttachments.isEmpty() || desc.depthTexture);
     Q_ASSERT(!desc.depthStencilBuffer || !desc.depthTexture);
     const bool hasDepthStencil = desc.depthStencilBuffer || desc.depthTexture;
     const bool preserved = flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
@@ -2746,8 +2746,9 @@ bool QVkTextureRenderTarget::build()
 
     int attIdx = 0;
     int colorAtt = -1;
-    if (desc.texture) {
-        attDesc[attIdx].format = toVkTextureFormat(desc.texture->format);
+    QRhiTexture *texture = !desc.colorAttachments.isEmpty() ? desc.colorAttachments.first() : nullptr;
+    if (texture) {
+        attDesc[attIdx].format = toVkTextureFormat(texture->format);
         attDesc[attIdx].samples = VK_SAMPLE_COUNT_1_BIT;
         attDesc[attIdx].loadOp = preserved ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
         attDesc[attIdx].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2756,7 +2757,7 @@ bool QVkTextureRenderTarget::build()
         attDesc[attIdx].initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
         attDesc[attIdx].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         d.colorAttCount = 1;
-        d.pixelSize = desc.texture->pixelSize;
+        d.pixelSize = texture->pixelSize;
         colorAtt = attIdx;
         ++attIdx;
     } else {
@@ -2775,7 +2776,7 @@ bool QVkTextureRenderTarget::build()
         attDesc[attIdx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attDesc[attIdx].finalLayout = desc.depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
         d.dsAttCount = 1;
-        if (!desc.texture)
+        if (!texture)
             d.pixelSize = desc.depthTexture ? desc.depthTexture->pixelSize : desc.depthStencilBuffer->pixelSize;
         dsAtt = attIdx;
         ++attIdx;
@@ -2810,7 +2811,7 @@ bool QVkTextureRenderTarget::build()
     VkImageView views[2];
     int viewIdx = 0;
     if (d.colorAttCount) {
-        views[viewIdx] = QRHI_RES(QVkTexture, desc.texture)->imageView;
+        views[viewIdx] = QRHI_RES(QVkTexture, texture)->imageView;
         ++viewIdx;
     }
     if (d.dsAttCount) {

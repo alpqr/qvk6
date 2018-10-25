@@ -2741,64 +2741,71 @@ bool QVkTextureRenderTarget::build()
     const bool hasDepthStencil = desc.depthStencilBuffer || desc.depthTexture;
     const bool preserved = flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
 
-    VkAttachmentDescription attDesc[2];
-    memset(attDesc, 0, sizeof(attDesc));
+    QRHI_RES_RHI(QRhiVulkan);
+    QVarLengthArray<VkAttachmentDescription, 8> attDescs;
 
-    int attIdx = 0;
-    int colorAtt = -1;
-    QRhiTexture *texture = !desc.colorAttachments.isEmpty() ? desc.colorAttachments.first() : nullptr;
-    if (texture) {
-        attDesc[attIdx].format = toVkTextureFormat(texture->format);
-        attDesc[attIdx].samples = VK_SAMPLE_COUNT_1_BIT;
-        attDesc[attIdx].loadOp = preserved ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc[attIdx].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attDesc[attIdx].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attDesc[attIdx].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc[attIdx].initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc[attIdx].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        d.colorAttCount = 1;
-        d.pixelSize = texture->pixelSize;
-        colorAtt = attIdx;
-        ++attIdx;
-    } else {
-        d.colorAttCount = 0;
+    d.colorAttCount = desc.colorAttachments.count();
+    for (int i = 0; i < d.colorAttCount; ++i) {
+        QRhiTexture *texture = desc.colorAttachments[i];
+        VkAttachmentDescription attDesc;
+        memset(&attDesc, 0, sizeof(attDesc));
+        attDesc.format = toVkTextureFormat(texture->format);
+        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc.loadOp = preserved ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        attDescs.append(attDesc);
+        if (i == 0)
+            d.pixelSize = texture->pixelSize;
     }
 
-    QRHI_RES_RHI(QRhiVulkan);
-    int dsAtt = -1;
     if (hasDepthStencil) {
-        attDesc[attIdx].format = desc.depthTexture ? toVkTextureFormat(desc.depthTexture->format) : rhiD->optimalDepthStencilFormat();
-        attDesc[attIdx].samples = VK_SAMPLE_COUNT_1_BIT;
-        attDesc[attIdx].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc[attIdx].storeOp = desc.depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc[attIdx].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc[attIdx].stencilStoreOp = desc.depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc[attIdx].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc[attIdx].finalLayout = desc.depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
         d.dsAttCount = 1;
-        if (!texture)
+        VkAttachmentDescription attDesc;
+        memset(&attDesc, 0, sizeof(attDesc));
+        attDesc.format = desc.depthTexture ? toVkTextureFormat(desc.depthTexture->format) : rhiD->optimalDepthStencilFormat();
+        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc.storeOp = desc.depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc.stencilStoreOp = desc.depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc.finalLayout = desc.depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+        attDescs.append(attDesc);
+        if (d.colorAttCount == 0)
             d.pixelSize = desc.depthTexture ? desc.depthTexture->pixelSize : desc.depthStencilBuffer->pixelSize;
-        dsAtt = attIdx;
-        ++attIdx;
     } else {
         d.dsAttCount = 0;
     }
 
-    VkAttachmentReference colorRef = { uint32_t(colorAtt), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-    VkAttachmentReference dsRef = { uint32_t(dsAtt), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+    QVarLengthArray<VkAttachmentReference, 8> colorRefs;
+    QVarLengthArray<VkImageView, 8> views;
+    for (int i = 0; i < d.colorAttCount; ++i) {
+        const VkAttachmentReference ref = { uint32_t(i), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        colorRefs.append(ref);
+        views.append(QRHI_RES(QVkTexture, desc.colorAttachments[i])->imageView);
+    }
+    VkAttachmentReference dsRef = { uint32_t(d.colorAttCount), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+    if (d.dsAttCount) {
+        views.append(desc.depthTexture ? QRHI_RES(QVkTexture, desc.depthTexture)->imageView
+                                       : QRHI_RES(QVkRenderBuffer, desc.depthStencilBuffer)->imageView);
+    }
 
     VkSubpassDescription subPassDesc;
     memset(&subPassDesc, 0, sizeof(subPassDesc));
     subPassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subPassDesc.colorAttachmentCount = d.colorAttCount;
-    subPassDesc.pColorAttachments = d.colorAttCount ? &colorRef : nullptr;
+    subPassDesc.colorAttachmentCount = colorRefs.count();
+    subPassDesc.pColorAttachments = !colorRefs.isEmpty() ? colorRefs.constData() : nullptr;
     subPassDesc.pDepthStencilAttachment = d.dsAttCount ? &dsRef : nullptr;
 
     VkRenderPassCreateInfo rpInfo;
     memset(&rpInfo, 0, sizeof(rpInfo));
     rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     rpInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
-    rpInfo.pAttachments = attDesc;
+    rpInfo.pAttachments = attDescs.constData();
     rpInfo.subpassCount = 1;
     rpInfo.pSubpasses = &subPassDesc;
 
@@ -2808,24 +2815,12 @@ bool QVkTextureRenderTarget::build()
         return false;
     }
 
-    VkImageView views[2];
-    int viewIdx = 0;
-    if (d.colorAttCount) {
-        views[viewIdx] = QRHI_RES(QVkTexture, texture)->imageView;
-        ++viewIdx;
-    }
-    if (d.dsAttCount) {
-        views[viewIdx] = desc.depthTexture ? QRHI_RES(QVkTexture, desc.depthTexture)->imageView
-                                           : QRHI_RES(QVkRenderBuffer, desc.depthStencilBuffer)->imageView;
-        ++viewIdx;
-    }
-
     VkFramebufferCreateInfo fbInfo;
     memset(&fbInfo, 0, sizeof(fbInfo));
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     fbInfo.renderPass = d.rp.rp;
     fbInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
-    fbInfo.pAttachments = views;
+    fbInfo.pAttachments = views.constData();
     fbInfo.width = d.pixelSize.width();
     fbInfo.height = d.pixelSize.height();
     fbInfo.layers = 1;

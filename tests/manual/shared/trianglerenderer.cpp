@@ -76,7 +76,8 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
 
     QRhiGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
     premulAlphaBlend.enable = true;
-    m_ps->targetBlends = { premulAlphaBlend };
+    for (int i = 0; i < m_colorAttCount; ++i)
+        m_ps->targetBlends << premulAlphaBlend;
 
     m_ps->sampleCount = m_sampleCount;
 

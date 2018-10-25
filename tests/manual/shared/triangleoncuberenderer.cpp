@@ -34,7 +34,8 @@
 const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
 const bool UPLOAD_UNDERLAY_ON_EVERY_FRAME = false;
 
-const bool DEPTH_TEXTURE = false;
+const bool DEPTH_TEXTURE = false; // offscreen pass uses a depth texture (verify with renderdoc etc.)
+const bool MRT = false; // two textures, the second is just cleared as the shader does not write anything (vk valid.layer may warn but for testing that's ok)
 
 #include "cube.h"
 
@@ -67,6 +68,11 @@ void TriangleOnCubeRenderer::initResources()
     m_tex = m_r->createTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
     m_tex->build();
 
+    if (MRT) {
+        m_tex2 = m_r->createTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+        m_tex2->build();
+    }
+
     m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sampler->build();
 
@@ -88,10 +94,16 @@ void TriangleOnCubeRenderer::initResources()
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
 
-    if (DEPTH_TEXTURE)
+    if (DEPTH_TEXTURE) {
         m_rt = m_r->createTextureRenderTarget({ nullptr, m_depthTex }, rtFlags);
-    else
-        m_rt = m_r->createTextureRenderTarget({ m_tex }, rtFlags);
+    } else {
+        QRhiTextureRenderTargetDescription desc { m_tex };
+        if (MRT) {
+            m_offscreenTriangle.setColorAttCount(2);
+            desc.colorAttachments.append(m_tex2);
+        }
+        m_rt = m_r->createTextureRenderTarget(desc, rtFlags);
+    }
 
     m_rt->build();
 
@@ -168,6 +180,11 @@ void TriangleOnCubeRenderer::releaseResources()
     if (m_depthTex) {
         m_depthTex->releaseAndDestroy();
         m_depthTex = nullptr;
+    }
+
+    if (m_tex2) {
+        m_tex2->releaseAndDestroy();
+        m_tex2 = nullptr;
     }
 
     if (m_tex) {

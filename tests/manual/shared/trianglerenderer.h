@@ -40,6 +40,7 @@ public:
     void setTranslation(const QVector3D &v) { m_translation = v; }
     void setScale(float f) { m_scale = f; }
     void setDepthWrite(bool enable) { m_depthWrite = enable; }
+    void setColorAttCount(int count) { m_colorAttCount = count; }
     bool isPipelineInitialized() const { return m_ps != nullptr; }
     QRhiGraphicsPipeline *pipeline() const { return m_ps; }
     void initResources();
@@ -61,6 +62,7 @@ private:
     QVector3D m_translation;
     float m_scale = 1;
     bool m_depthWrite = false;
+    int m_colorAttCount = 1;
     QMatrix4x4 m_proj;
     float m_rotation = 0;
     float m_opacity = 1;

@@ -3,7 +3,6 @@ mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: shader lang. version
 mtl: textures
-test mrt
 cubemap face as target
 test cubemap
 mipmap gen (?)
@@ -38,6 +37,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+test mrt
 vk: mrt
 d3d: mrt
 texture rt api revamp

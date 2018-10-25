@@ -53,6 +53,7 @@ private:
     bool m_vbufReady = false;
     QRhiBuffer *m_ubuf = nullptr;
     QRhiTexture *m_tex = nullptr;
+    QRhiTexture *m_tex2 = nullptr;
     QRhiTexture *m_depthTex = nullptr;
     QRhiSampler *m_sampler = nullptr;
     QRhiTextureRenderTarget *m_rt = nullptr;

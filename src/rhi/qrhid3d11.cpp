@@ -405,7 +405,7 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     currentFrameSlot = swapChainD->currentFrame;
 
     swapChainD->rt.d.pixelSize = swapChainD->pixelSize;
-    swapChainD->rt.d.rp.rtv = swapChainD->rtv[currentFrameSlot];
+    swapChainD->rt.d.rp.rtv[0] = swapChainD->rtv[currentFrameSlot];
     swapChainD->rt.d.rp.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
 
     return QRhi::FrameOpSuccess;
@@ -474,6 +474,19 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     ud->free();
 }
 
+static inline QD3D11BasicRenderTargetData *basicRtData(QRhiRenderTarget *rt)
+{
+    switch (rt->type()) {
+    case QRhiRenderTarget::RtRef:
+        return &QRHI_RES(QD3D11ReferenceRenderTarget, rt)->d;
+    case QRhiRenderTarget::RtTexture:
+        return &QRHI_RES(QD3D11TextureRenderTarget, rt)->d;
+    default:
+        Q_UNREACHABLE();
+        return nullptr;
+    }
+}
+
 void QRhiD3D11::beginPass(QRhiRenderTarget *rt,
                           QRhiCommandBuffer *cb,
                           const QRhiColorClearValue &colorClearValue,
@@ -487,21 +500,10 @@ void QRhiD3D11::beginPass(QRhiRenderTarget *rt,
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     bool needsColorClear = true;
-    QD3D11BasicRenderTargetData *rtD = nullptr;
-    switch (rt->type()) {
-    case QRhiRenderTarget::RtRef:
-        rtD = &QRHI_RES(QD3D11ReferenceRenderTarget, rt)->d;
-        break;
-    case QRhiRenderTarget::RtTexture:
-    {
+    QD3D11BasicRenderTargetData *rtD = basicRtData(rt);
+    if (rt->type() == QRhiRenderTarget::RtTexture) {
         QD3D11TextureRenderTarget *rtTex = QRHI_RES(QD3D11TextureRenderTarget, rt);
-        rtD = &rtTex->d;
         needsColorClear = !rtTex->flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
-    }
-        break;
-    default:
-        Q_UNREACHABLE();
-        break;
     }
 
     cbD->currentTarget = rt;
@@ -708,14 +710,18 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
                 nullsrvs[i] = nullptr;
             context->VSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
             context->PSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
-            context->OMSetRenderTargets(rp->rtv ? 1 : 0, rp->rtv ? &rp->rtv : nullptr, rp->dsv);
+            QD3D11BasicRenderTargetData *rtD = basicRtData(rt);
+            context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rp->rtv : nullptr, rp->dsv);
         }
             break;
         case QD3D11CommandBuffer::Command::Clear:
         {
             const QD3D11RenderPass *rp = QRHI_RES(const QD3D11RenderPass, cmd.args.clear.rt->renderPass());
-            if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Color)
-                context->ClearRenderTargetView(rp->rtv, cmd.args.clear.c);
+            if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Color) {
+                QD3D11BasicRenderTargetData *rtD = basicRtData(cmd.args.clear.rt);
+                for (int i = 0; i < rtD->colorAttCount; ++i)
+                    context->ClearRenderTargetView(rp->rtv[i], cmd.args.clear.c);
+            }
             uint ds = 0;
             if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Depth)
                 ds |= D3D11_CLEAR_DEPTH;
@@ -1167,6 +1173,8 @@ bool QD3D11Sampler::build()
 QD3D11RenderPass::QD3D11RenderPass(QRhiImplementation *rhi)
     : QRhiRenderPass(rhi)
 {
+    for (int i = 0; i < MAX_COLOR_ATTACHMENTS; ++i)
+        rtv[i] = nullptr;
 }
 
 void QD3D11RenderPass::release()
@@ -1206,11 +1214,13 @@ QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi,
     : QRhiTextureRenderTarget(rhi, desc, flags),
       d(rhi)
 {
+    for (int i = 0; i < QD3D11RenderPass::MAX_COLOR_ATTACHMENTS; ++i)
+        rtv[i] = nullptr;
 }
 
 void QD3D11TextureRenderTarget::release()
 {
-    if (!rtv && !dsv)
+    if (!rtv[0] && !dsv)
         return;
 
     if (dsv) {
@@ -1219,15 +1229,17 @@ void QD3D11TextureRenderTarget::release()
         dsv = nullptr;
     }
 
-    if (rtv) {
-        rtv->Release();
-        rtv = nullptr;
+    for (int i = 0; i < QD3D11RenderPass::MAX_COLOR_ATTACHMENTS; ++i) {
+        if (rtv[i]) {
+            rtv[i]->Release();
+            rtv[i] = nullptr;
+        }
     }
 }
 
 bool QD3D11TextureRenderTarget::build()
 {
-    if (rtv || dsv)
+    if (rtv[0] || dsv)
         release();
 
     Q_ASSERT(!desc.colorAttachments.isEmpty() || desc.depthTexture);
@@ -1235,22 +1247,24 @@ bool QD3D11TextureRenderTarget::build()
     const bool hasDepthStencil = desc.depthStencilBuffer || desc.depthTexture;
 
     QRHI_RES_RHI(QRhiD3D11);
-    QRhiTexture *texture = !desc.colorAttachments.isEmpty() ? desc.colorAttachments.first() : nullptr;
-    if (texture) {
+
+    d.colorAttCount = desc.colorAttachments.count();
+    for (int i = 0; i < d.colorAttCount; ++i) {
+        QRhiTexture *texture = desc.colorAttachments[i];
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
         memset(&rtvDesc, 0, sizeof(rtvDesc));
         rtvDesc.Format = toD3DTextureFormat(texD->format);
         rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 
-        HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv);
+        HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv[i]);
         if (FAILED(hr)) {
             qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
 
-        d.pixelSize = texD->pixelSize;
-        d.colorAttCount = 1;
+        if (i == 0)
+            d.pixelSize = texD->pixelSize;
     }
 
     if (hasDepthStencil) {
@@ -1265,12 +1279,12 @@ bool QD3D11TextureRenderTarget::build()
                 qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
                 return false;
             }
-            if (!texture)
+            if (d.colorAttCount == 0)
                 d.pixelSize = desc.depthTexture->pixelSize;
         } else {
             ownsDsv = false;
             dsv = QRHI_RES(QD3D11RenderBuffer, desc.depthStencilBuffer)->dsv;
-            if (!texture)
+            if (d.colorAttCount == 0)
                 d.pixelSize = desc.depthStencilBuffer->pixelSize;
         }
         d.dsAttCount = 1;
@@ -1278,7 +1292,9 @@ bool QD3D11TextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
-    d.rp.rtv = rtv;
+    for (int i = 0; i < QD3D11RenderPass::MAX_COLOR_ATTACHMENTS; ++i)
+        d.rp.rtv[i] = i < d.colorAttCount ? rtv[i] : nullptr;
+
     d.rp.dsv = dsv;
 
     return true;

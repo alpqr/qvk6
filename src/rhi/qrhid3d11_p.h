@@ -101,7 +101,8 @@ struct QD3D11RenderPass : public QRhiRenderPass
     QD3D11RenderPass(QRhiImplementation *rhi);
     void release() override;
 
-    ID3D11RenderTargetView *rtv = nullptr;
+    static const int MAX_COLOR_ATTACHMENTS = 8;
+    ID3D11RenderTargetView *rtv[MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView *dsv = nullptr;
 };
 
@@ -136,7 +137,7 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     const QRhiRenderPass *renderPass() const override;
 
     QD3D11BasicRenderTargetData d;
-    ID3D11RenderTargetView *rtv = nullptr;
+    ID3D11RenderTargetView *rtv[QD3D11RenderPass::MAX_COLOR_ATTACHMENTS];
     bool ownsDsv = false;
     ID3D11DepthStencilView *dsv = nullptr;
 };

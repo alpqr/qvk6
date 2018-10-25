@@ -167,7 +167,7 @@ void TexturedCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourc
             // the ghetto mipmap generator...
             for (int i = 0, ie = m_r->mipLevelsForSize(m_image.size()); i != ie; ++i) {
                 QImage image = m_image.scaled(m_r->sizeForMipLevel(i, m_image.size()));
-                desc.layers[0].mipImages.append({ image });
+                desc.layers[0].mipImages.push_back({ image });
             }
             resourceUpdates->uploadTexture(m_tex, desc);
         } else {

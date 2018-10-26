@@ -1,3 +1,5 @@
+Note: Further development is now happening at https://git.qt.io/laagocs/qtrhi
+
 Experiments for a Rendering Hardware Interface abstraction for Qt 6.
 
 Relies on https://github.com/alpqr/qtshaderstack17 for shader management.

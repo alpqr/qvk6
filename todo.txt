@@ -30,7 +30,7 @@ blitframebuffer?
 vk: subpasses?
 other shader types? (gs?)
 
-qtshaderstack17:
+shadertools:
 hlsl version to qsb
 msl version to qsb (?)
 bytecode (fxc/dxc) for d3d?

@@ -7,7 +7,7 @@
         "QtUsage": "Shader code generation",
 
         "Homepage": "https://github.com/KhronosGroup/SPIRV-Cross",
-        "Version": "",
+        "Version": "bfeb388edfb63c9a927e517b634abaaa5bfb1caf",
         "License": "Apache License 2.0",
         "LicenseId": "Apache-2.0",
         "LicenseFile": "LICENSE",

@@ -7,7 +7,7 @@
         "QtUsage": "Memory management for the Vulkan backend",
 
         "Homepage": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
-        "Version": "",
+        "Version": "2.1.0",
         "License": "MIT License",
         "LicenseId": "MIT",
         "LicenseFile": "LICENSE.txt",

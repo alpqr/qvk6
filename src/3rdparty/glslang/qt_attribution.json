@@ -7,7 +7,7 @@
         "QtUsage": "Compile Vulkan-flavor GLSL to SPIR-V",
 
         "Homepage": "https://github.com/KhronosGroup/glslang",
-        "Version": "",
+        "Version": "816bc4447ce58c048a40e3f2a3a46b4d1019083b",
         "License": "BSD License",
         "LicenseId": "BSD",
         "LicenseFile": "LICENSE.glslang",

@@ -12,9 +12,13 @@ DEFINES += SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS
 SPIRVCROSS_PATH=$$PWD/../3rdparty/SPIRV-Cross
 
 SOURCES += \
-    $$SPIRVCROSS_PATH/spirv_cross.cpp \
     $$SPIRVCROSS_PATH/spirv_cfg.cpp \
-    $$SPIRVCROSS_PATH/spirv_glsl.cpp \
     $$SPIRVCROSS_PATH/spirv_cpp.cpp \
+    $$SPIRVCROSS_PATH/spirv_cross.cpp \
+    $$SPIRVCROSS_PATH/spirv_cross_parsed_ir.cpp \
+    $$SPIRVCROSS_PATH/spirv_cross_util.cpp \
+    $$SPIRVCROSS_PATH/spirv_glsl.cpp \
+    $$SPIRVCROSS_PATH/spirv_hlsl.cpp \
     $$SPIRVCROSS_PATH/spirv_msl.cpp \
-    $$SPIRVCROSS_PATH/spirv_hlsl.cpp
+    $$SPIRVCROSS_PATH/spirv_parser.cpp \
+    $$SPIRVCROSS_PATH/spirv_reflect.cpp

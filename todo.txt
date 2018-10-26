@@ -1,0 +1,93 @@
+mtl: buffer logic is borked
+mtl: fix Dynamic for non-uniform buffers
+mtl: forcing immut. to Shared should not need multiple backing buffers
+mtl: shader lang. version
+mtl: textures
+test cubemap
+test cubemap face as target
+mipmap gen (?)
+figure sg out for minimizing viewport/scissor cmds
+d3d device loss
+more what-if-resource-rebuilt cases
+tex/QImage formats
+anisotropic
+compressed textures
+adopt texture, buffer, ...
+more tex: 3d, array
+test FrameOpDeviceLost somehow
+mtl: msaa (onscreen)
+gl: more ubuf types
+gl: reduce state, reduce texparam
+gl: tex size stuff (npot etc.)
+d3d: msaa (onscreen)
+d3d, gl, mtl: cache shader sources?
+resize to 0 width or height fails (vk)
+upgrade vkmemalloc
+gl: ubuf structs, arrays
+gl: target QOpenGLWindow ...
+msaa offscreen (msaa texture? renderbuffer?)
+blitframebuffer?
+vk: subpasses?
+other shader types? (gs?)
+
+qtshaderstack17:
+hlsl version to qsb
+msl version to qsb (?)
+bytecode (fxc/dxc) for d3d?
+bytecode for metal?
+
++++ done
+cubemap face as target
+test mrt
+vk: mrt
+d3d: mrt
+texture rt api revamp
+test mipmap
+vk: texture filtering
+d3d: texture filtering
+gl: texture filtering
+cubemaps, pregenerated mipmap, upload multiple faces/mipmaps in one copy
+d3d: depth only offscreen pass
+vk: depth only offscreen pass
+vk, d3d: test depth texture
+bring up metal
+d3d: tex/sampler for vs
+vk: free staging buffer for textures after upload when ChangesInfrequently is set
+immutable-or-not flag for QRhiTexture? (could drop staging alloc after 1st upload when immut.)
+vk: free staging buffer for immutable buffers after upload
+vk: verify msaa (onscreen)
+revise how clear values are handled (ref, not ptr)
+d3d/vk: fix Dynamic for non-uniform buffers
+switch to immutable - static - dynamic buffer types (backends may not care for now)
+make clearValues optional in beginPass (when preserving contents for offscreen)
+drop front-and-back cull
+vk should update lastActiveFrameSlot even when cur.obj is same
+exercise indexed drawing
+gl setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
+d3d to track buffer, texture, sampler generation and update the buffer/srv/sampler in the batchedbinding lists
+d3d setGraphicsPipeline should track srb->generation and issue BindGraphicsPipeline when different
+scissor-enable flag
+drop triangle fan
+do something with offset and size in srb::Binding::uniformBuffer
+start d3d11 backend
+what if ps is rebuilt
+move correctionmatrix to backend
+remove some inlines in public api
+hide virtuals
+remove QVk*Private
+buf rebuilt -> srb? srb rebuilt -> ps? texture rebuilt -> texture rt?
+hide VkSurfaceKHR from api
+vkcmdcopybuffertoimage
+test upload+render-to (preserved)
+barriers
+rendertarget
+scheduleRelease -> releaseLater (+ update recreate example)
+static buffer -> gpu_only, staging cpu_only, vkCmdCopyBuffer
+textures
+msaastencil
+depth
+bring back startBinding
+pipeline obj destroy (deferred d.list?)
+shader resource if.
+topology, cull
+blend

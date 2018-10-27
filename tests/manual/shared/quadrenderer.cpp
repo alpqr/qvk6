@@ -61,10 +61,9 @@ void QuadRenderer::initResources()
     m_ubuf->build();
 
     m_srb = m_r->createShaderResourceBindings();
-    const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
-    m_srb->bindings = {
-        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf)
-    };
+    m_srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
+    });
     m_srb->build();
 }
 

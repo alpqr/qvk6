@@ -236,8 +236,9 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
 {
     Q_ASSERT(inPass);
 
+    QMetalGraphicsPipeline *psD = QRHI_RES(QMetalGraphicsPipeline, ps);
     if (!srb)
-        srb = ps->shaderResourceBindings;
+        srb = psD->m_shaderResourceBindings;
 
     QMetalShaderResourceBindings *srbD = QRHI_RES(QMetalShaderResourceBindings, srb);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
@@ -247,8 +248,8 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         switch (b.type) {
         case QRhiShaderResourceBindings::Binding::UniformBuffer:
         {
-            Q_ASSERT(b.ubuf.buf->usage.testFlag(QRhiBuffer::UniformBuffer));
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
+            Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             bufD->lastActiveFrameSlot = currentFrameSlot;
             executeBufferHostWritesForCurrentFrame(bufD);
             id<MTLBuffer> mtlbuf = bufD->d->buf[currentFrameSlot]; // ###
@@ -268,7 +269,6 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         }
     }
 
-    QMetalGraphicsPipeline *psD = QRHI_RES(QMetalGraphicsPipeline, ps);
     if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation
             || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation)
     {
@@ -471,16 +471,16 @@ void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
-        //Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
+        //Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
         for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
             bufD->d->pendingSharedModeUpdates[i].append(u);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
-        //Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
-        Q_ASSERT(u.data.size() == u.buf->size);
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
+        //Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
+        Q_ASSERT(u.data.size() == bufD->m_size);
         for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
             bufD->d->pendingSharedModeUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
     }
@@ -619,7 +619,7 @@ bool QMetalBuffer::build()
     if (d->buf[0])
         release();
 
-    const int roundedSize = usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(size, 256) : size;
+    const int roundedSize = m_usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(m_size, 256) : m_size;
 
     MTLResourceOptions opts = MTLResourceStorageModeShared; // ### for now everything host visible and double buffered
 
@@ -766,8 +766,10 @@ bool QMetalShaderResourceBindings::build()
     if (!sortedBindings.isEmpty())
         release();
 
-    sortedBindings = bindings;
-    std::sort(sortedBindings.begin(), sortedBindings.end(), [](const Binding &a, const Binding &b) {
+    sortedBindings = m_bindings;
+    std::sort(sortedBindings.begin(), sortedBindings.end(),
+              [](const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
+    {
         return a.binding < b.binding;
     });
     if (!sortedBindings.isEmpty())
@@ -1053,16 +1055,16 @@ bool QMetalGraphicsPipeline::build()
     QRHI_RES_RHI(QRhiMetal);
 
     // same binding space for vertex and constant buffers - work it around
-    const int firstVertexBinding = QRHI_RES(QMetalShaderResourceBindings, shaderResourceBindings)->maxBinding + 1;
+    const int firstVertexBinding = QRHI_RES(QMetalShaderResourceBindings, m_shaderResourceBindings)->maxBinding + 1;
 
     MTLVertexDescriptor *inputLayout = [MTLVertexDescriptor vertexDescriptor];
-    for (const QRhiVertexInputLayout::Attribute &attribute : vertexInputLayout.attributes) {
+    for (const QRhiVertexInputLayout::Attribute &attribute : m_vertexInputLayout.attributes) {
         inputLayout.attributes[attribute.location].format = toMetalAttributeFormat(attribute.format);
         inputLayout.attributes[attribute.location].offset = attribute.offset;
         inputLayout.attributes[attribute.location].bufferIndex = firstVertexBinding + attribute.binding;
     }
-    for (int i = 0; i < vertexInputLayout.bindings.count(); ++i) {
-        const QRhiVertexInputLayout::Binding &binding(vertexInputLayout.bindings[i]);
+    for (int i = 0; i < m_vertexInputLayout.bindings.count(); ++i) {
+        const QRhiVertexInputLayout::Binding &binding(m_vertexInputLayout.bindings[i]);
         const int layoutIdx = firstVertexBinding + i;
         inputLayout.layouts[layoutIdx].stepFunction =
                 binding.classification == QRhiVertexInputLayout::Binding::PerInstance
@@ -1074,7 +1076,7 @@ bool QMetalGraphicsPipeline::build()
     MTLRenderPipelineDescriptor *rpDesc = [[MTLRenderPipelineDescriptor alloc] init];
     rpDesc.vertexDescriptor = inputLayout;
 
-    for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(shaderStages)) {
+    for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(m_shaderStages)) {
         QString error;
         QByteArray entryPoint;
         id<MTLLibrary> lib = rhiD->d->compileMSLShaderSource(shaderStage.shader, &error, &entryPoint);
@@ -1119,8 +1121,8 @@ bool QMetalGraphicsPipeline::build()
     rpDesc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
     rpDesc.colorAttachments[0].blendingEnabled = false;
 
-    for (int i = 0, ie = targetBlends.count(); i != ie; ++i) {
-        const QRhiGraphicsPipeline::TargetBlend &b(targetBlends[i]);
+    for (int i = 0, ie = m_targetBlends.count(); i != ie; ++i) {
+        const QRhiGraphicsPipeline::TargetBlend &b(m_targetBlends[i]);
         rpDesc.colorAttachments[i].pixelFormat = MTLPixelFormatBGRA8Unorm;
         rpDesc.colorAttachments[i].blendingEnabled = b.enable;
         rpDesc.colorAttachments[i].sourceRGBBlendFactor = toMetalBlendFactor(b.srcColor);
@@ -1154,32 +1156,32 @@ bool QMetalGraphicsPipeline::build()
     [rpDesc release];
 
     MTLDepthStencilDescriptor *dsDesc = [[MTLDepthStencilDescriptor alloc] init];
-    dsDesc.depthCompareFunction = depthTest ? toMetalCompareOp(depthOp) : MTLCompareFunctionAlways;
-    dsDesc.depthWriteEnabled = depthWrite;
-    if (stencilTest) {
+    dsDesc.depthCompareFunction = m_depthTest ? toMetalCompareOp(m_depthOp) : MTLCompareFunctionAlways;
+    dsDesc.depthWriteEnabled = m_depthWrite;
+    if (m_stencilTest) {
         dsDesc.frontFaceStencil = [[MTLStencilDescriptor alloc] init];
-        dsDesc.frontFaceStencil.stencilFailureOperation = toMetalStencilOp(stencilFront.failOp);
-        dsDesc.frontFaceStencil.depthFailureOperation = toMetalStencilOp(stencilFront.depthFailOp);
-        dsDesc.frontFaceStencil.depthStencilPassOperation = toMetalStencilOp(stencilFront.passOp);
-        dsDesc.frontFaceStencil.stencilCompareFunction = toMetalCompareOp(stencilFront.compareOp);
-        dsDesc.frontFaceStencil.readMask = stencilReadMask;
-        dsDesc.frontFaceStencil.writeMask = stencilWriteMask;
+        dsDesc.frontFaceStencil.stencilFailureOperation = toMetalStencilOp(m_stencilFront.failOp);
+        dsDesc.frontFaceStencil.depthFailureOperation = toMetalStencilOp(m_stencilFront.depthFailOp);
+        dsDesc.frontFaceStencil.depthStencilPassOperation = toMetalStencilOp(m_stencilFront.passOp);
+        dsDesc.frontFaceStencil.stencilCompareFunction = toMetalCompareOp(m_stencilFront.compareOp);
+        dsDesc.frontFaceStencil.readMask = m_stencilReadMask;
+        dsDesc.frontFaceStencil.writeMask = m_stencilWriteMask;
 
         dsDesc.backFaceStencil = [[MTLStencilDescriptor alloc] init];
-        dsDesc.backFaceStencil.stencilFailureOperation = toMetalStencilOp(stencilBack.failOp);
-        dsDesc.backFaceStencil.depthFailureOperation = toMetalStencilOp(stencilBack.depthFailOp);
-        dsDesc.backFaceStencil.depthStencilPassOperation = toMetalStencilOp(stencilBack.passOp);
-        dsDesc.backFaceStencil.stencilCompareFunction = toMetalCompareOp(stencilBack.compareOp);
-        dsDesc.backFaceStencil.readMask = stencilReadMask;
-        dsDesc.backFaceStencil.writeMask = stencilWriteMask;
+        dsDesc.backFaceStencil.stencilFailureOperation = toMetalStencilOp(m_stencilBack.failOp);
+        dsDesc.backFaceStencil.depthFailureOperation = toMetalStencilOp(m_stencilBack.depthFailOp);
+        dsDesc.backFaceStencil.depthStencilPassOperation = toMetalStencilOp(m_stencilBack.passOp);
+        dsDesc.backFaceStencil.stencilCompareFunction = toMetalCompareOp(m_stencilBack.compareOp);
+        dsDesc.backFaceStencil.readMask = m_stencilReadMask;
+        dsDesc.backFaceStencil.writeMask = m_stencilWriteMask;
     }
 
     d->ds = [rhiD->d->dev newDepthStencilStateWithDescriptor: dsDesc];
     [dsDesc release];
 
-    d->primitiveType = toMetalPrimitiveType(topology);
-    d->winding = frontFace == CCW ? MTLWindingCounterClockwise : MTLWindingClockwise;
-    d->cullMode = toMetalCullMode(cullMode);
+    d->primitiveType = toMetalPrimitiveType(m_topology);
+    d->winding = m_frontFace == CCW ? MTLWindingCounterClockwise : MTLWindingClockwise;
+    d->cullMode = toMetalCullMode(m_cullMode);
 
     lastActiveFrameSlot = -1;
     generation += 1;

@@ -144,7 +144,7 @@ void ExampleWindow::recreateSwapChain()
                                        QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
     } else {
         m_ds->release();
-        m_ds->pixelSize = outputSize;
+        m_ds->setPixelSize(outputSize);
     }
 
     if (!m_ds)

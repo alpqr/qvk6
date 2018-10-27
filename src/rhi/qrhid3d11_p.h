@@ -60,6 +60,7 @@ struct QD3D11Buffer : public QRhiBuffer
     QByteArray dynBuf;
     bool hasPendingDynamicUpdates = false;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11RenderBuffer : public QRhiRenderBuffer
@@ -71,6 +72,7 @@ struct QD3D11RenderBuffer : public QRhiRenderBuffer
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11DepthStencilView *dsv = nullptr;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11Texture : public QRhiTexture
@@ -83,6 +85,7 @@ struct QD3D11Texture : public QRhiTexture
     ID3D11ShaderResourceView *srv = nullptr;
     uint mipLevelCount = 0;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11Sampler : public QRhiSampler
@@ -94,6 +97,7 @@ struct QD3D11Sampler : public QRhiSampler
 
     ID3D11SamplerState *samplerState = nullptr;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11RenderPass : public QRhiRenderPass
@@ -140,6 +144,7 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     ID3D11RenderTargetView *rtv[QD3D11RenderPass::MAX_COLOR_ATTACHMENTS];
     bool ownsDsv = false;
     ID3D11DepthStencilView *dsv = nullptr;
+    friend class QRhiD3D11;
 };
 
 template<typename T>
@@ -187,7 +192,7 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     void release() override;
     bool build() override;
 
-    QVector<Binding> sortedBindings;
+    QVector<QRhiShaderResourceBinding> sortedBindings;
     uint generation = 0;
 
     // Keep track of the generation number of each referenced QRhi* to be able
@@ -220,6 +225,8 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
 
     QD3D11BatchedBindings<ID3D11SamplerState *> fssamplers;
     QD3D11BatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
+
+    friend class QRhiD3D11;
 };
 
 struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
@@ -236,6 +243,7 @@ struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
     D3D11_PRIMITIVE_TOPOLOGY d3dTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
     ID3D11RasterizerState *rastState = nullptr;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11SwapChain;

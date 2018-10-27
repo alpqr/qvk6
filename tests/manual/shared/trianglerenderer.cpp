@@ -61,10 +61,9 @@ void TriangleRenderer::initResources()
     m_ubuf->build();
 
     m_srb = m_r->createShaderResourceBindings();
-    const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
-    m_srb->bindings = {
-        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf)
-    };
+    m_srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
+    });
     m_srb->build();
 }
 
@@ -76,25 +75,27 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
 
     QRhiGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
     premulAlphaBlend.enable = true;
+    QVector<QRhiGraphicsPipeline::TargetBlend> rtblends;
     for (int i = 0; i < m_colorAttCount; ++i)
-        m_ps->targetBlends << premulAlphaBlend;
+        rtblends << premulAlphaBlend;
 
-    m_ps->sampleCount = m_sampleCount;
+    m_ps->setTargetBlends(rtblends);
+    m_ps->setSampleCount(m_sampleCount);
 
     if (m_depthWrite) { // TriangleOnCube may want to exercise this
-        m_ps->depthTest = true;
-        m_ps->depthOp = QRhiGraphicsPipeline::Always;
-        m_ps->depthWrite = true;
+        m_ps->setDepthTest(true);
+        m_ps->setDepthOp(QRhiGraphicsPipeline::Always);
+        m_ps->setDepthWrite(true);
     }
 
     QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());
     QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
     Q_ASSERT(fs.isValid());
-    m_ps->shaderStages = {
+    m_ps->setShaderStages({
         { QRhiGraphicsShaderStage::Vertex, vs },
         { QRhiGraphicsShaderStage::Fragment, fs }
-    };
+    });
 
     QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
@@ -105,9 +106,9 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
         { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
     };
 
-    m_ps->vertexInputLayout = inputLayout;
-    m_ps->shaderResourceBindings = m_srb;
-    m_ps->renderPass = rp;
+    m_ps->setVertexInputLayout(inputLayout);
+    m_ps->setShaderResourceBindings(m_srb);
+    m_ps->setRenderPass(rp);
 
     m_ps->build();
 

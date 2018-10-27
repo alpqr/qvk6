@@ -66,6 +66,7 @@ struct QGles2Buffer : public QRhiBuffer
         int changeEnd;
     };
     ChangeRange ubufChangeRange;
+    friend class QRhiGles2;
 };
 
 struct QGles2RenderBuffer : public QRhiRenderBuffer
@@ -76,6 +77,7 @@ struct QGles2RenderBuffer : public QRhiRenderBuffer
     bool build() override;
 
     GLuint renderbuffer = 0;
+    friend class QRhiGles2;
 };
 
 struct QGles2Texture : public QRhiTexture
@@ -89,6 +91,7 @@ struct QGles2Texture : public QRhiTexture
     GLenum glintformat;
     GLenum glformat;
     GLenum gltype;
+    friend class QRhiGles2;
 };
 
 struct QGles2Sampler : public QRhiSampler
@@ -103,6 +106,7 @@ struct QGles2Sampler : public QRhiSampler
     GLenum glwraps;
     GLenum glwrapt;
     GLenum glwrapr;
+    friend class QRhiGles2;
 };
 
 struct QGles2RenderPass : public QRhiRenderPass
@@ -142,6 +146,7 @@ struct QGles2TextureRenderTarget : public QRhiTextureRenderTarget
 
     QGles2BasicRenderTargetData d;
     GLuint framebuffer = 0;
+    friend class QRhiGles2;
 };
 
 struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
@@ -151,6 +156,7 @@ struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
     bool build() override;
 
     uint generation = 0;
+    friend class QRhiGles2;
 };
 
 struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
@@ -179,6 +185,8 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
         int binding;
     };
     QVector<Sampler> samplers;
+
+    friend class QRhiGles2;
 };
 
 Q_DECLARE_TYPEINFO(QGles2GraphicsPipeline::Uniform, Q_MOVABLE_TYPE);

@@ -74,6 +74,7 @@ struct QVkBuffer : public QRhiBuffer
     int lastActiveFrameSlot = -1;
     int stagingFrameSlot = -1;
     uint generation = 0;
+    friend class QRhiVulkan;
 };
 
 struct QVkRenderBuffer : public QRhiRenderBuffer
@@ -87,6 +88,7 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
     VkImage image;
     VkImageView imageView;
     int lastActiveFrameSlot = -1;
+    friend class QRhiVulkan;
 };
 
 struct QVkTexture : public QRhiTexture
@@ -105,6 +107,7 @@ struct QVkTexture : public QRhiTexture
     int lastActiveFrameSlot = -1;
     int stagingFrameSlot = -1;
     uint generation = 0;
+    friend class QRhiVulkan;
 };
 
 struct QVkSampler : public QRhiSampler
@@ -117,6 +120,7 @@ struct QVkSampler : public QRhiSampler
     VkSampler sampler = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
     uint generation = 0;
+    friend class QRhiVulkan;
 };
 
 struct QVkRenderPass : public QRhiRenderPass
@@ -162,6 +166,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
     QVkBasicRenderTargetData d;
     VkImageView cubeFaceView[6];
     int lastActiveFrameSlot = -1;
+    friend class QRhiVulkan;
 };
 
 struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
@@ -193,6 +198,8 @@ struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
         };
     };
     QVector<BoundResourceData> boundResourceData[QVK_FRAMES_IN_FLIGHT];
+
+    friend class QRhiVulkan;
 };
 
 Q_DECLARE_TYPEINFO(QVkShaderResourceBindings::BoundResourceData, Q_MOVABLE_TYPE);
@@ -207,6 +214,7 @@ struct QVkGraphicsPipeline : public QRhiGraphicsPipeline
     VkPipeline pipeline = VK_NULL_HANDLE;
     int lastActiveFrameSlot = -1;
     uint generation = 0;
+    friend class QRhiVulkan;
 };
 
 struct QVkCommandBuffer : public QRhiCommandBuffer

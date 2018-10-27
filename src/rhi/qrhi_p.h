@@ -130,7 +130,7 @@ struct QRhiResourceUpdateBatchPrivate
     struct StaticBufferUpload {
         StaticBufferUpload() { }
         StaticBufferUpload(QRhiBuffer *buf_, const void *data_)
-            : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size)
+            : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size())
         { }
 
         QRhiBuffer *buf = nullptr;
@@ -139,12 +139,12 @@ struct QRhiResourceUpdateBatchPrivate
 
     struct TextureUpload {
         TextureUpload() { }
-        TextureUpload(QRhiTexture *tex_, const QRhiResourceUpdateBatch::TextureUploadDescription &desc_)
+        TextureUpload(QRhiTexture *tex_, const QRhiTextureUploadDescription &desc_)
             : tex(tex_), desc(desc_)
         { }
 
         QRhiTexture *tex = nullptr;
-        QRhiResourceUpdateBatch::TextureUploadDescription desc;
+        QRhiTextureUploadDescription desc;
     };
 
     QVector<DynamicBufferUpdate> dynamicBufferUpdates;

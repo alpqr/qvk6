@@ -63,6 +63,7 @@ struct QMetalBuffer : public QRhiBuffer
     QMetalBufferData *d;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
 
 struct QMetalRenderBuffer : public QRhiRenderBuffer
@@ -71,6 +72,8 @@ struct QMetalRenderBuffer : public QRhiRenderBuffer
                        int sampleCount, QRhiRenderBuffer::Hints hints);
     void release() override;
     bool build() override;
+
+    friend class QRhiMetal;
 };
 
 struct QMetalTexture : public QRhiTexture
@@ -81,6 +84,7 @@ struct QMetalTexture : public QRhiTexture
 
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
 
 struct QMetalSampler : public QRhiSampler
@@ -92,6 +96,7 @@ struct QMetalSampler : public QRhiSampler
 
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
 
 struct QMetalRenderPassData;
@@ -134,6 +139,7 @@ struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
     const QRhiRenderPass *renderPass() const override;
 
     QMetalBasicRenderTargetData d;
+    friend class QRhiMetal;
 };
 
 struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
@@ -145,6 +151,7 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
     QVector<Binding> sortedBindings;
     int maxBinding = -1;
     uint generation = 0;
+    friend class QRhiMetal;
 };
 
 struct QMetalGraphicsPipelineData;
@@ -159,6 +166,7 @@ struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
     QMetalGraphicsPipelineData *d;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
 
 struct QMetalCommandBufferData;

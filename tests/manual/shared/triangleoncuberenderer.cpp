@@ -77,11 +77,10 @@ void TriangleOnCubeRenderer::initResources()
     m_sampler->build();
 
     m_srb = m_r->createShaderResourceBindings();
-    const auto ubufVisibility = QRhiShaderResourceBindings::Binding::VertexStage | QRhiShaderResourceBindings::Binding::FragmentStage;
-    m_srb->bindings = {
-        QRhiShaderResourceBindings::Binding::uniformBuffer(0, ubufVisibility, m_ubuf),
-        QRhiShaderResourceBindings::Binding::sampledTexture(1, QRhiShaderResourceBindings::Binding::FragmentStage, m_tex, m_sampler)
-    };
+    m_srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf),
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_tex, m_sampler)
+    });
     m_srb->build();
 
     if (DEPTH_TEXTURE) {
@@ -117,23 +116,23 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
 {
     m_ps = m_r->createGraphicsPipeline();
 
-    m_ps->depthTest = true;
-    m_ps->depthWrite = true;
-    m_ps->depthOp = QRhiGraphicsPipeline::Less;
+    m_ps->setDepthTest(true);
+    m_ps->setDepthWrite(true);
+    m_ps->setDepthOp(QRhiGraphicsPipeline::Less);
 
-    m_ps->cullMode = QRhiGraphicsPipeline::Back;
-    m_ps->frontFace = QRhiGraphicsPipeline::CCW;
+    m_ps->setCullMode(QRhiGraphicsPipeline::Back);
+    m_ps->setFrontFace(QRhiGraphicsPipeline::CCW);
 
-    m_ps->sampleCount = m_sampleCount;
+    m_ps->setSampleCount(m_sampleCount);
 
     QBakedShader vs = getShader(QLatin1String(":/texture.vert.qsb"));
     Q_ASSERT(vs.isValid());
     QBakedShader fs = getShader(QLatin1String(":/texture.frag.qsb"));
     Q_ASSERT(fs.isValid());
-    m_ps->shaderStages = {
+    m_ps->setShaderStages({
         { QRhiGraphicsShaderStage::Vertex, vs },
         { QRhiGraphicsShaderStage::Fragment, fs }
-    };
+    });
 
     QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
@@ -145,9 +144,9 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
         { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
     };
 
-    m_ps->vertexInputLayout = inputLayout;
-    m_ps->shaderResourceBindings = m_srb;
-    m_ps->renderPass = rp;
+    m_ps->setVertexInputLayout(inputLayout);
+    m_ps->setShaderResourceBindings(m_srb);
+    m_ps->setRenderPass(rp);
 
     m_ps->build();
 

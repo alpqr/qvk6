@@ -67,20 +67,20 @@ void QRhiResource::releaseAndDestroy()
 
 QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
     : QRhiResource(rhi),
-      type(type_), usage(usage_), size(size_)
+      m_type(type_), m_usage(usage_), m_size(size_)
 {
 }
 
 QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
                                    int sampleCount_, Hints hints_)
     : QRhiResource(rhi),
-      type(type_), pixelSize(pixelSize_), sampleCount(sampleCount_), hints(hints_)
+      m_type(type_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_hints(hints_)
 {
 }
 
 QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_, Flags flags_)
     : QRhiResource(rhi),
-      format(format_), pixelSize(pixelSize_), flags(flags_)
+      m_format(format_), m_pixelSize(pixelSize_), m_flags(flags_)
 {
 }
 
@@ -88,8 +88,8 @@ QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
                          Filter magFilter_, Filter minFilter_, Filter mipmapMode_,
                          AddressMode u_, AddressMode v_, AddressMode w_)
     : QRhiResource(rhi),
-      magFilter(magFilter_), minFilter(minFilter_), mipmapMode(mipmapMode_),
-      addressU(u_), addressV(v_), addressW(w_)
+      m_magFilter(magFilter_), m_minFilter(minFilter_), m_mipmapMode(mipmapMode_),
+      m_addressU(u_), m_addressV(v_), m_addressW(w_)
 {
 }
 
@@ -112,8 +112,8 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
                                                  const QRhiTextureRenderTargetDescription &desc_,
                                                  Flags flags_)
     : QRhiRenderTarget(rhi),
-      desc(desc_),
-      flags(flags_)
+      m_desc(desc_),
+      m_flags(flags_)
 {
 }
 
@@ -122,10 +122,10 @@ QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
 {
 }
 
-QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::uniformBuffer(
+QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
         int binding_, StageFlags stage_, QRhiBuffer *buf_)
 {
-    Binding b;
+    QRhiShaderResourceBinding b;
     b.binding = binding_;
     b.stage = stage_;
     b.type = UniformBuffer;
@@ -135,11 +135,11 @@ QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::uniform
     return b;
 }
 
-QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::uniformBuffer(
+QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
         int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_)
 {
     Q_ASSERT(size_ > 0);
-    Binding b;
+    QRhiShaderResourceBinding b;
     b.binding = binding_;
     b.stage = stage_;
     b.type = UniformBuffer;
@@ -149,10 +149,10 @@ QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::uniform
     return b;
 }
 
-QRhiShaderResourceBindings::Binding QRhiShaderResourceBindings::Binding::sampledTexture(
+QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
         int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_)
 {
-    Binding b;
+    QRhiShaderResourceBinding b;
     b.binding = binding_;
     b.stage = stage_;
     b.type = SampledTexture;
@@ -265,7 +265,7 @@ void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *da
     d->staticBufferUploads.append({ buf, data });
 }
 
-void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const TextureUploadDescription &desc)
+void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc)
 {
     d->textureUploads.append({ tex, desc });
 }

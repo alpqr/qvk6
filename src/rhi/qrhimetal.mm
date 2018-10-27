@@ -244,22 +244,22 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QMetalSwapChainData::FrameData &frame(cbD->currentSwapChain->d->frame[currentFrameSlot]);
 
-    for (const QRhiShaderResourceBindings::Binding &b : qAsConst(srbD->sortedBindings)) {
+    for (const QRhiShaderResourceBinding &b : qAsConst(srbD->sortedBindings)) {
         switch (b.type) {
-        case QRhiShaderResourceBindings::Binding::UniformBuffer:
+        case QRhiShaderResourceBinding::UniformBuffer:
         {
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             bufD->lastActiveFrameSlot = currentFrameSlot;
             executeBufferHostWritesForCurrentFrame(bufD);
             id<MTLBuffer> mtlbuf = bufD->d->buf[currentFrameSlot]; // ###
-            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::VertexStage))
+            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage))
                 [frame.currentPassEncoder setVertexBuffer: mtlbuf offset: b.ubuf.offset atIndex: b.binding];
-            if (b.stage.testFlag(QRhiShaderResourceBindings::Binding::FragmentStage))
+            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage))
                 [frame.currentPassEncoder setFragmentBuffer: mtlbuf offset: b.ubuf.offset atIndex: b.binding];
         }
             break;
-        case QRhiShaderResourceBindings::Binding::SampledTexture:
+        case QRhiShaderResourceBinding::SampledTexture:
             QRHI_RES(QMetalTexture, b.stex.tex)->lastActiveFrameSlot = currentFrameSlot;
             QRHI_RES(QMetalSampler, b.stex.sampler)->lastActiveFrameSlot = currentFrameSlot;
             break;
@@ -533,7 +533,7 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
         QMetalTextureRenderTarget *rtTex = QRHI_RES(QMetalTextureRenderTarget, rt);
         rtD = &rtTex->d;
         frame.currentPassRpDesc = d->createDefaultRenderPass(false, colorClearValue, depthStencilClearValue);
-        if (rtTex->flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents))
+        if (rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents))
             frame.currentPassRpDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
         // ###
     }

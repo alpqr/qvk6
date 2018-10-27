@@ -148,7 +148,7 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
     void release() override;
     bool build() override;
 
-    QVector<Binding> sortedBindings;
+    QVector<QRhiShaderResourceBinding> sortedBindings;
     int maxBinding = -1;
     uint generation = 0;
     friend class QRhiMetal;

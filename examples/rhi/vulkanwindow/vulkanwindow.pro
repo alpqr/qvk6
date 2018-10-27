@@ -14,3 +14,6 @@ HEADERS = \
 INCLUDEPATH += ../shared
 
 RESOURCES = vulkanwindow.qrc
+
+target.path = $$[QT_INSTALL_EXAMPLES]/rhi/vulkanwindow
+INSTALLS += target

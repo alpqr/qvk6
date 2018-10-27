@@ -16,5 +16,5 @@ qtConfig(vulkan) {
 
 RESOURCES = tri.qrc
 
-target.path = $$[QT_INSTALL_EXAMPLES]/oneshaderthreecontexts_runtime
+target.path = $$[QT_INSTALL_EXAMPLES]/shadertools/oneshaderthreecontexts_prebaked
 INSTALLS += target

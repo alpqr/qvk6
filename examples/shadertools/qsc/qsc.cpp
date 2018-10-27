@@ -88,6 +88,11 @@ int main(int argc, char **argv)
 
     cmdLineParser.process(app);
 
+    if (cmdLineParser.positionalArguments().isEmpty()) {
+        cmdLineParser.showHelp();
+        return 0;
+    }
+
     for (const QString &fn : cmdLineParser.positionalArguments()) {
         // Compile to SPIR-V.
         QString spvName;

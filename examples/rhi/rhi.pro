@@ -1,4 +1,5 @@
 TEMPLATE = subdirs
+
 SUBDIRS += \
     plainqwindow_gles2
 
@@ -17,8 +18,3 @@ mac {
     SUBDIRS += \
         plainqwindow_metal
 }
-
-SUBDIRS += \
-    oneshaderthreecontexts_prebaked \
-    oneshaderthreecontexts_runtime \
-    qsc

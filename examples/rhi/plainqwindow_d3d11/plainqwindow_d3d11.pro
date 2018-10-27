@@ -20,3 +20,6 @@ HEADERS = \
 INCLUDEPATH += ../shared
 
 RESOURCES = plainqwindow_d3d11.qrc
+
+target.path = $$[QT_INSTALL_EXAMPLES]/rhi/plainqwindow_d3d11
+INSTALLS += target

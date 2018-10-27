@@ -19,4 +19,7 @@ HEADERS = \
 
 INCLUDEPATH += ../shared
 
-RESOURCES = plainqwindow_vulkan.qrc
+RESOURCES = plainqwindow_gles2.qrc
+
+target.path = $$[QT_INSTALL_EXAMPLES]/rhi/plainqwindow_gles2
+INSTALLS += target

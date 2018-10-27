@@ -19,4 +19,7 @@ HEADERS = \
 
 INCLUDEPATH += ../shared
 
-RESOURCES = plainqwindow_gles2.qrc
+RESOURCES = plainqwindow_metal.qrc
+
+target.path = $$[QT_INSTALL_EXAMPLES]/rhi/plainqwindow_metal
+INSTALLS += target

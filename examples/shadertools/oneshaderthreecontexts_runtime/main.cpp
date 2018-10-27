@@ -68,7 +68,7 @@
 #include "renderwindow.h"
 
 #if QT_CONFIG(vulkan)
-#include "trianglerenderer.h"
+#include "vulkantrianglerenderer.h"
 
 class VulkanWindow : public QVulkanWindow
 {

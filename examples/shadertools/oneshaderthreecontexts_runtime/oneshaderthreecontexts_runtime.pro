@@ -14,6 +14,8 @@ qtConfig(vulkan) {
     HEADERS += ../shared/vulkantrianglerenderer.h
 }
 
+INCLUDEPATH += ../shared
+
 RESOURCES = tri.qrc
 
 target.path = $$[QT_INSTALL_EXAMPLES]/shadertools/oneshaderthreecontexts_runtime

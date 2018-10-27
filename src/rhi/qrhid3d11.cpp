@@ -1750,8 +1750,12 @@ bool QD3D11GraphicsPipeline::build()
             desc.InputSlot = attribute.binding;
             desc.AlignedByteOffset = attribute.offset;
             const QRhiVertexInputLayout::Binding &binding(m_vertexInputLayout.bindings[attribute.binding]);
-            desc.InputSlotClass = binding.classification == QRhiVertexInputLayout::Binding::PerInstance
-                    ? D3D11_INPUT_PER_INSTANCE_DATA : D3D11_INPUT_PER_VERTEX_DATA;
+            if (binding.classification == QRhiVertexInputLayout::Binding::PerInstance) {
+                desc.InputSlotClass = D3D11_INPUT_PER_INSTANCE_DATA;
+                desc.InstanceDataStepRate = 1;
+            } else {
+                desc.InputSlotClass = D3D11_INPUT_PER_VERTEX_DATA;
+            }
             inputDescs.append(desc);
         }
         hr = rhiD->dev->CreateInputLayout(inputDescs.constData(), inputDescs.count(), vsByteCode, vsByteCode.size(), &inputLayout);

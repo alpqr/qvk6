@@ -80,10 +80,11 @@
 #include <QRhiMetalInitParams>
 #endif
 
-static float vertexData[] = { // Y up (note m_proj), CCW
-     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,
-    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
-     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,   1.0f, 1.0f
+static float vertexData[] = {
+    // Y up (note clipSpaceCorrMatrix in m_proj), CCW
+     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
+    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
+     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,
 };
 
 static QBakedShader getShader(const QString &name)
@@ -170,6 +171,7 @@ protected:
 
 Window::Window()
 {
+    // Tell the platform plugin what we want.
     switch (graphicsApi) {
     case OpenGL:
         setSurfaceType(OpenGLSurface);
@@ -197,19 +199,22 @@ Window::~Window()
 
 void Window::exposeEvent(QExposeEvent *)
 {
-    if (!isExposed() && m_running)
-        m_notExposed = true;
-
-    if (isExposed() && m_running && m_notExposed) {
-        m_notExposed = false;
-        m_newlyExposed = true;
-        render();
-    }
-
+    // initialize and start rendering when the window becomes usable for graphics purposes
     if (isExposed() && !m_running) {
         m_running = true;
         init();
         recreateSwapChain();
+        render();
+    }
+
+    // stop pushing frames when not exposed (on some platforms this is essential, optional on others)
+    if (!isExposed() && m_running)
+        m_notExposed = true;
+
+    // continue when exposed again
+    if (isExposed() && m_running && m_notExposed) {
+        m_notExposed = false;
+        m_newlyExposed = true;
         render();
     }
 }
@@ -222,6 +227,7 @@ bool Window::event(QEvent *e)
         break;
 
     case QEvent::PlatformSurface:
+        // this is the proper time to tear down the swapchain (while the native window and surface are still around)
         if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
             releaseSwapChain();
         break;
@@ -277,6 +283,8 @@ void Window::init()
     if (!m_r)
         qFatal("Failed to create RHI backend");
 
+    // now onto the backend-independent init
+
     m_sc = m_r->createSwapChain();
 
     m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
@@ -329,6 +337,7 @@ void Window::recreateSwapChain()
 
     const QSize outputSize = size() * devicePixelRatio();
 
+    // allow depth-stencil, although we do not actually enable depth test/write for the triangle
     if (!m_ds) {
         m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
                                        outputSize,
@@ -366,7 +375,7 @@ void Window::recreateSwapChain()
 
     QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        { 7 * sizeof(float) }
+        { 5 * sizeof(float) }
     };
     inputLayout.attributes = {
         { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
@@ -406,6 +415,9 @@ void Window::render()
     if (!m_hasSwapChain || m_notExposed)
         return;
 
+    // If the window got resized or got newly exposed, recreate the swapchain.
+    // (the newly-exposed case is not actually required by some
+    // platforms/backends, but f.ex. Vulkan on Windows seems to need it)
     if (m_sc->requestedSizeInPixels() != size() * devicePixelRatio() || m_newlyExposed) {
         recreateSwapChain();
         if (!m_hasSwapChain)
@@ -413,6 +425,7 @@ void Window::render()
         m_newlyExposed = false;
     }
 
+    // Start a new frame. This is where we block when too far ahead of GPU/present.
     QRhi::FrameOpResult r = m_r->beginFrame(m_sc);
     if (r == QRhi::FrameOpSwapChainOutOfDate) {
         recreateSwapChain();
@@ -435,6 +448,7 @@ void Window::render()
         m_elapsedCount = 0;
     }
 
+    // Set up buffer updates.
     QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
     if (!m_vbufReady) {
         m_vbufReady = true;
@@ -454,6 +468,7 @@ void Window::render()
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
     const QSize outputSizeInPixels = m_sc->effectiveSizeInPixels();
 
+    // Apply buffer/texture updates, clear, queue the renderpass begin (where applicable).
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
 
     m_r->setGraphicsPipeline(cb, m_ps);
@@ -463,9 +478,10 @@ void Window::render()
 
     m_r->endPass(cb);
 
+    // Submit.
     m_r->endFrame(m_sc);
 
-    requestUpdate(); // render continuously, throttled by the presentation rate
+    requestUpdate(); // render continuously, throttled by the presentation rate (due to beginFrame above)
 }
 
 int main(int argc, char **argv)
@@ -522,6 +538,7 @@ int main(int argc, char **argv)
     }
 #endif
 
+    // Create and show the window.
     Window w;
 #if QT_CONFIG(vulkan)
     if (graphicsApi == Vulkan)

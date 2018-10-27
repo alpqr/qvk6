@@ -1,5 +1,7 @@
+d3d: something is wrong with the input stride
 try figuring out something for making the rp dep in ps less invasive
 gl: offscreensurface ownership not taken (fix examples)
+figure out what's up with instance step rate
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
@@ -34,6 +36,7 @@ vk: subpasses?
 other shader types? (gs?)
 
 shadertools:
+version to qsb data stream
 hlsl version to qsb
 msl version to qsb (?)
 bytecode (fxc/dxc) for d3d?

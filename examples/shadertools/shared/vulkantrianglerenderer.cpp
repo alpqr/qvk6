@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2017 The Qt Company Ltd.
+** Copyright (C) 2018 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
@@ -48,7 +48,7 @@
 **
 ****************************************************************************/
 
-#include "trianglerenderer.h"
+#include "vulkantrianglerenderer.h"
 #include <QVulkanFunctions>
 #include <QFile>
 

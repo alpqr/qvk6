@@ -10,8 +10,8 @@ HEADERS = \
     renderwindow.h
 
 qtConfig(vulkan) {
-    SOURCES += trianglerenderer.cpp
-    HEADERS += trianglerenderer.h
+    SOURCES += ../shared/vulkantrianglerenderer.cpp
+    HEADERS += ../shared/vulkantrianglerenderer.h
 }
 
 RESOURCES = tri.qrc

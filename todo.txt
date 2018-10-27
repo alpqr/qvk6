@@ -1,8 +1,11 @@
+try figuring out something for making the rp dep in ps less invasive
+gl: offscreensurface ownership not taken (fix examples)
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: shader lang. version
 mtl: textures
+d3d: show something about adapter or such when starting up
 test cubemap
 test cubemap face as target
 mipmap gen (?)
@@ -37,6 +40,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+new "minimal" example
 cubemap face as target
 test mrt
 vk: mrt

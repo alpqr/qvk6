@@ -126,6 +126,8 @@ void QRhiD3D11::create()
         qWarning("Failed to create DXGI factory: %s", qPrintable(comErrorMessage(hr)));
         return;
     }
+
+    qDebug("D3D11");
 }
 
 void QRhiD3D11::destroy()

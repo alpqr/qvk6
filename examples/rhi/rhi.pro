@@ -1,6 +1,7 @@
 TEMPLATE = subdirs
 
 SUBDIRS += \
+    hellominimalcrossgfxtriangle \
     plainqwindow_gles2
 
 qtConfig(vulkan) {

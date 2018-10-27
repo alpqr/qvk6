@@ -58,7 +58,7 @@ struct Q_RHI_EXPORT QRhiGles2InitParams : public QRhiInitParams
 
     // Why doesn't the RHI create a QOffscreenSurface on its own? Because that
     // must be done on the gui/main thread while the RHI in principle can operate
-    // on any (one) thread.
+    // on any (one) thread. Ownership not taken.
     QOffscreenSurface *fallbackSurface = nullptr;
 };
 

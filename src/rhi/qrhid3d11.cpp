@@ -457,7 +457,7 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             D3D11_BOX box;
             box.left = box.top = box.front = 0;
             box.back = box.bottom = 1;
-            box.right = u.data.size() - 1;
+            box.right = u.data.size(); // no -1: right, bottom, back are exclusive, see D3D11_BOX doc
             context->UpdateSubresource(bufD->buffer, 0, &box, u.data.constData(), 0, 0);
         }
     }

@@ -465,12 +465,6 @@ protected:
     void *m_reserved;
 };
 
-class Q_RHI_EXPORT QRhiReferenceRenderTarget : public QRhiRenderTarget
-{
-protected:
-    QRhiReferenceRenderTarget(QRhiImplementation *rhi);
-};
-
 class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
 public:

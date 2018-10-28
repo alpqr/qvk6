@@ -1,5 +1,5 @@
-d3d: something is wrong with the input stride
-try figuring out something for making the rp dep in ps less invasive
+make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)
+d3d: why duplicate rtv/dsv in rp?
 gl: offscreensurface ownership not taken (fix examples)
 figure out what's up with instance step rate
 mtl: buffer logic is borked

@@ -50,6 +50,12 @@ QT_BEGIN_NAMESPACE
 #define QRHI_RES(t, x) static_cast<t *>(x)
 #define QRHI_RES_RHI(t) t *rhiD = static_cast<t *>(rhi)
 
+class QRhiReferenceRenderTarget : public QRhiRenderTarget
+{
+protected:
+    QRhiReferenceRenderTarget(QRhiImplementation *rhi);
+};
+
 class QRhiImplementation
 {
 public:

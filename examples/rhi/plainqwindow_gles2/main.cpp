@@ -65,6 +65,7 @@ private:
     void releaseResources() override;
 
     QOpenGLContext *ctx = nullptr;
+    QOffscreenSurface *fallbackSurface = nullptr;
 };
 
 void GlWindow::init()
@@ -73,12 +74,14 @@ void GlWindow::init()
     if (!ctx->create())
         qFatal("Failed to get OpenGL context");
 
+    fallbackSurface = new QOffscreenSurface;
+    fallbackSurface->setFormat(ctx->format());
+    fallbackSurface->create();
+
     QRhiGles2InitParams params;
     params.context = ctx;
     params.window = this;
-    params.fallbackSurface = new QOffscreenSurface;
-    params.fallbackSurface->setFormat(ctx->format());
-    params.fallbackSurface->create();
+    params.fallbackSurface = fallbackSurface;
     m_r = QRhi::create(QRhi::OpenGLES2, &params);
 
     ExampleWindow::init();
@@ -89,6 +92,8 @@ void GlWindow::releaseResources()
     ExampleWindow::releaseResources();
     delete ctx;
     ctx = nullptr;
+    delete fallbackSurface;
+    fallbackSurface = nullptr;
 }
 
 int main(int argc, char **argv)

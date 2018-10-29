@@ -166,6 +166,7 @@ protected:
 
 #ifndef QT_NO_OPENGL
     QOpenGLContext *m_context = nullptr;
+    QOffscreenSurface *m_fallbackSurface = nullptr;
 #endif
 };
 
@@ -247,12 +248,14 @@ void Window::init()
         if (!m_context->create())
             qFatal("Failed to get OpenGL context");
 
+        m_fallbackSurface = new QOffscreenSurface;
+        m_fallbackSurface->setFormat(m_context->format());
+        m_fallbackSurface->create();
+
         QRhiGles2InitParams params;
         params.context = m_context;
         params.window = this;
-        params.fallbackSurface = new QOffscreenSurface;
-        params.fallbackSurface->setFormat(m_context->format());
-        params.fallbackSurface->create();
+        params.fallbackSurface = m_fallbackSurface;
         m_r = QRhi::create(QRhi::OpenGLES2, &params);
     }
 #endif
@@ -327,6 +330,8 @@ void Window::releaseResources()
 #ifndef QT_NO_OPENGL
     delete m_context;
     m_context = nullptr;
+    delete m_fallbackSurface;
+    m_fallbackSurface = nullptr;
 #endif
 }
 

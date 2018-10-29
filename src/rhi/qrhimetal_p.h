@@ -136,7 +136,7 @@ struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
     QSize sizeInPixels() const override;
     const QRhiRenderPass *renderPass() const override;
 
-    QRhiRenderPass *buildCompatibleRenderPass() override;
+    QRhiRenderPass *newCompatibleRenderPass() override;
     bool build() override;
 
     QMetalBasicRenderTargetData d;
@@ -212,7 +212,7 @@ struct QMetalSwapChain : public QRhiSwapChain
     QSize requestedSizeInPixels() const override;
     QSize effectiveSizeInPixels() const override;
 
-    QRhiRenderPass *buildCompatibleRenderPass() override;
+    QRhiRenderPass *newCompatibleRenderPass() override;
 
     bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
                QRhiRenderBuffer *depthStencil, int sampleCount) override;

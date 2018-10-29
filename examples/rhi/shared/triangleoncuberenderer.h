@@ -59,7 +59,7 @@ public:
     void setRhi(QRhi *r) { m_r = r; }
     void setSampleCount(int samples) { m_sampleCount = samples; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
-    void initResources(QRhiRenderPass *rp);
+    void initResources(QRhiRenderPassDescriptor *rp);
     void releaseResources();
     void resize(const QSize &pixelSize);
     void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
@@ -77,7 +77,7 @@ private:
     QRhiTexture *m_depthTex = nullptr;
     QRhiSampler *m_sampler = nullptr;
     QRhiTextureRenderTarget *m_rt = nullptr;
-    QRhiRenderPass *m_rp = nullptr;
+    QRhiRenderPassDescriptor *m_rp = nullptr;
     QRhiShaderResourceBindings *m_srb = nullptr;
     QRhiGraphicsPipeline *m_ps = nullptr;
 

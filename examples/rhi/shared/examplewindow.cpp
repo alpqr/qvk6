@@ -98,20 +98,20 @@ bool ExampleWindow::event(QEvent *e)
 
 void ExampleWindow::init()
 {
-    m_sc = m_r->createSwapChain();
+    m_sc = m_r->newSwapChain();
     if (!m_sc)
         return;
 
     // allow depth-stencil, although we do not actually enable depth test/write for the triangle
-    m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
-                                   QSize(), // we don't know the size yet, this is fine
-                                   m_sampleCount,
-                                   QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+    m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
+                                QSize(), // we don't know the size yet, this is fine
+                                m_sampleCount,
+                                QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
     m_sc->setSampleCount(m_sampleCount);
-    m_scrp = m_sc->buildCompatibleRenderPass();
-    m_sc->setRenderPass(m_scrp);
+    m_scrp = m_sc->newCompatibleRenderPassDescriptor();
+    m_sc->setRenderPassDescriptor(m_scrp);
 
     m_triRenderer.setRhi(m_r);
     m_triRenderer.setSampleCount(m_sampleCount);

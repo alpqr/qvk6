@@ -2723,12 +2723,12 @@ bool QVkSampler::build()
     return true;
 }
 
-QVkRenderPass::QVkRenderPass(QRhiImplementation *rhi)
-    : QRhiRenderPass(rhi)
+QVkRenderPassDescriptor::QVkRenderPassDescriptor(QRhiImplementation *rhi)
+    : QRhiRenderPassDescriptor(rhi)
 {
 }
 
-void QVkRenderPass::release()
+void QVkRenderPassDescriptor::release()
 {
     if (!rp)
         return;
@@ -2797,10 +2797,10 @@ void QVkTextureRenderTarget::release()
     rhiD->releaseQueue.append(e);
 }
 
-QRhiRenderPass *QVkTextureRenderTarget::buildCompatibleRenderPass()
+QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
     QRHI_RES_RHI(QRhiVulkan);
-    QVkRenderPass *rp = new QVkRenderPass(rhi);
+    QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
     const VkFormat dsFormat = m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format())
                                                   : rhiD->optimalDepthStencilFormat();
     if (!rhiD->createOffscreenRenderPass(&rp->rp,
@@ -2875,10 +2875,10 @@ bool QVkTextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
-    if (!m_renderPass)
-        qWarning("QVkTextureRenderTarget: No renderpass set. See buildCompatibleRenderPass() and setRenderPass().");
+    if (!m_renderPassDesc)
+        qWarning("QVkTextureRenderTarget: No renderpass descriptor set. See newCompatibleRenderPassDescriptor() and setRenderPassDescriptor().");
 
-    d.rp = QRHI_RES(QVkRenderPass, m_renderPass);
+    d.rp = QRHI_RES(QVkRenderPassDescriptor, m_renderPassDesc);
     Q_ASSERT(d.rp && d.rp->rp);
 
     VkFramebufferCreateInfo fbInfo;
@@ -3177,8 +3177,8 @@ bool QVkGraphicsPipeline::build()
 
     pipelineInfo.layout = layout;
 
-    Q_ASSERT(m_renderPass && QRHI_RES(const QVkRenderPass, m_renderPass)->rp);
-    pipelineInfo.renderPass = QRHI_RES(const QVkRenderPass, m_renderPass)->rp;
+    Q_ASSERT(m_renderPassDesc && QRHI_RES(const QVkRenderPassDescriptor, m_renderPassDesc)->rp);
+    pipelineInfo.renderPass = QRHI_RES(const QVkRenderPassDescriptor, m_renderPassDesc)->rp;
 
     err = rhiD->df->vkCreateGraphicsPipelines(rhiD->dev, rhiD->pipelineCache, 1, &pipelineInfo, nullptr, &pipeline);
 
@@ -3240,10 +3240,10 @@ QSize QVkSwapChain::effectiveSizeInPixels() const
     return effectivePixelSize;
 }
 
-QRhiRenderPass *QVkSwapChain::buildCompatibleRenderPass()
+QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
 {
     QRHI_RES_RHI(QRhiVulkan);
-    QVkRenderPass *rp = new QVkRenderPass(rhi);
+    QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
     if (!rhiD->createDefaultRenderPass(&rp->rp, m_depthStencil != nullptr, sampleCount, colorFormat)) {
         delete rp;
         return nullptr;
@@ -3258,9 +3258,9 @@ bool QVkSwapChain::buildOrResize()
             release();
         QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
         if (vkw) {
-            rtWrapper.d.rp = new QVkRenderPass(rhi);
+            rtWrapper.d.rp = new QVkRenderPassDescriptor(rhi);
             rtWrapper.d.rp->rp = vkw->defaultRenderPass();
-            m_renderPass = rtWrapper.d.rp;
+            m_renderPassDesc = rtWrapper.d.rp;
             m_requestedPixelSize = effectivePixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
             rtWrapper.d.colorAttCount = 1;
             rtWrapper.d.dsAttCount = 1;
@@ -3314,10 +3314,10 @@ bool QVkSwapChain::buildOrResize()
     if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
         return false;
 
-    if (!m_renderPass)
-        qWarning("QVkSwapChain: No renderpass set. See buildCompatibleRenderPass() and setRenderPass().");
+    if (!m_renderPassDesc)
+        qWarning("QVkSwapChain: No renderpass descriptor set. See newCompatibleRenderPassDescriptor() and setRenderPassDescriptor().");
 
-    rtWrapper.d.rp = QRHI_RES(QVkRenderPass, m_renderPass);
+    rtWrapper.d.rp = QRHI_RES(QVkRenderPassDescriptor, m_renderPassDesc);
     Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);
 
     rtWrapper.d.pixelSize = effectivePixelSize;

@@ -75,7 +75,7 @@ void Renderer::initResources()
     m_triRenderer.setSampleCount(SAMPLES);
     m_initPending = true;
 
-    m_sc = m_r->createSwapChain();
+    m_sc = m_r->newSwapChain();
 }
 
 void Renderer::initSwapChainResources()
@@ -86,7 +86,7 @@ void Renderer::initSwapChainResources()
     if (m_initPending) {
         m_initPending = false;
         // had to defer init until we can query the imported renderpass
-        m_triRenderer.initResources(m_sc->renderPass());
+        m_triRenderer.initResources(m_sc->renderPassDescriptor());
     }
     m_triRenderer.resize(m_sc->effectiveSizeInPixels());
 }

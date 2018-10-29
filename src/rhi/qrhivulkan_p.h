@@ -123,9 +123,9 @@ struct QVkSampler : public QRhiSampler
     friend class QRhiVulkan;
 };
 
-struct QVkRenderPass : public QRhiRenderPass
+struct QVkRenderPassDescriptor : public QRhiRenderPassDescriptor
 {
-    QVkRenderPass(QRhiImplementation *rhi);
+    QVkRenderPassDescriptor(QRhiImplementation *rhi);
     void release() override;
 
     VkRenderPass rp = VK_NULL_HANDLE;
@@ -136,7 +136,7 @@ struct QVkBasicRenderTargetData
 {
     QVkBasicRenderTargetData(QRhiImplementation *) { }
     VkFramebuffer fb = VK_NULL_HANDLE;
-    QVkRenderPass *rp = nullptr;
+    QVkRenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
     int colorAttCount = 0;
     int dsAttCount = 0;
@@ -161,7 +161,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
     Type type() const override;
     QSize sizeInPixels() const override;
 
-    QRhiRenderPass *buildCompatibleRenderPass() override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
     QVkBasicRenderTargetData d;
@@ -251,7 +251,7 @@ struct QVkSwapChain : public QRhiSwapChain
 
     QSize effectiveSizeInPixels() const override;
 
-    QRhiRenderPass *buildCompatibleRenderPass() override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool buildOrResize() override;
 
     static const int DEFAULT_BUFFER_COUNT = 2;

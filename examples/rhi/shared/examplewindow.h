@@ -84,7 +84,7 @@ protected:
     bool m_hasSwapChain = false;
     bool m_resizedSwapChain = false;
     QRhiSwapChain *m_sc = nullptr;
-    QRhiRenderPass *m_scrp = nullptr;
+    QRhiRenderPassDescriptor *m_scrp = nullptr;
     QRhiRenderBuffer *m_ds = nullptr;
 
     TriangleRenderer m_triRenderer;

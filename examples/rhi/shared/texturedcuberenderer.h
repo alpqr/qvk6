@@ -59,7 +59,7 @@ public:
     void setRhi(QRhi *r) { m_r = r; }
     void setSampleCount(int samples) { m_sampleCount = samples; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
-    void initResources(QRhiRenderPass *rp);
+    void initResources(QRhiRenderPassDescriptor *rp);
     void releaseResources();
     void resize(const QSize &pixelSize);
     void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);

@@ -93,7 +93,7 @@ QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
 {
 }
 
-QRhiRenderPass::QRhiRenderPass(QRhiImplementation *rhi)
+QRhiRenderPassDescriptor::QRhiRenderPassDescriptor(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
@@ -344,52 +344,52 @@ QMatrix4x4 QRhi::clipSpaceCorrMatrix() const
     return d->clipSpaceCorrMatrix();
 }
 
-QRhiGraphicsPipeline *QRhi::createGraphicsPipeline()
+QRhiGraphicsPipeline *QRhi::newGraphicsPipeline()
 {
     return d->createGraphicsPipeline();
 }
 
-QRhiShaderResourceBindings *QRhi::createShaderResourceBindings()
+QRhiShaderResourceBindings *QRhi::newShaderResourceBindings()
 {
     return d->createShaderResourceBindings();
 }
 
-QRhiBuffer *QRhi::createBuffer(QRhiBuffer::Type type,
-                               QRhiBuffer::UsageFlags usage,
-                               int size)
+QRhiBuffer *QRhi::newBuffer(QRhiBuffer::Type type,
+                            QRhiBuffer::UsageFlags usage,
+                            int size)
 {
     return d->createBuffer(type, usage, size);
 }
 
-QRhiRenderBuffer *QRhi::createRenderBuffer(QRhiRenderBuffer::Type type,
-                                           const QSize &pixelSize,
-                                           int sampleCount,
-                                           QRhiRenderBuffer::Hints hints)
+QRhiRenderBuffer *QRhi::newRenderBuffer(QRhiRenderBuffer::Type type,
+                                        const QSize &pixelSize,
+                                        int sampleCount,
+                                        QRhiRenderBuffer::Hints hints)
 {
     return d->createRenderBuffer(type, pixelSize, sampleCount, hints);
 }
 
-QRhiTexture *QRhi::createTexture(QRhiTexture::Format format,
-                                 const QSize &pixelSize,
-                                 QRhiTexture::Flags flags)
+QRhiTexture *QRhi::newTexture(QRhiTexture::Format format,
+                              const QSize &pixelSize,
+                              QRhiTexture::Flags flags)
 {
     return d->createTexture(format, pixelSize, flags);
 }
 
-QRhiSampler *QRhi::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
-                                 QRhiSampler::Filter mipmapMode,
-                                 QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w)
+QRhiSampler *QRhi::newSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                              QRhiSampler::Filter mipmapMode,
+                              QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w)
 {
     return d->createSampler(magFilter, minFilter, mipmapMode, u, v, w);
 }
 
-QRhiTextureRenderTarget *QRhi::createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
-                                                         QRhiTextureRenderTarget::Flags flags)
+QRhiTextureRenderTarget *QRhi::newTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
+                                                      QRhiTextureRenderTarget::Flags flags)
 {
     return d->createTextureRenderTarget(desc, flags);
 }
 
-QRhiSwapChain *QRhi::createSwapChain()
+QRhiSwapChain *QRhi::newSwapChain()
 {
     return d->createSwapChain();
 }

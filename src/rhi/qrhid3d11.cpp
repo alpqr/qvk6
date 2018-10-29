@@ -1171,12 +1171,12 @@ bool QD3D11Sampler::build()
 }
 
 // dummy, no Vulkan-style RenderPass+Framebuffer concept here
-QD3D11RenderPass::QD3D11RenderPass(QRhiImplementation *rhi)
-    : QRhiRenderPass(rhi)
+QD3D11RenderPassDescriptor::QD3D11RenderPassDescriptor(QRhiImplementation *rhi)
+    : QRhiRenderPassDescriptor(rhi)
 {
 }
 
-void QD3D11RenderPass::release()
+void QD3D11RenderPassDescriptor::release()
 {
     // nothing to do here
 }
@@ -1231,9 +1231,9 @@ void QD3D11TextureRenderTarget::release()
     }
 }
 
-QRhiRenderPass *QD3D11TextureRenderTarget::buildCompatibleRenderPass()
+QRhiRenderPassDescriptor *QD3D11TextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
-    return new QD3D11RenderPass(rhi);
+    return new QD3D11RenderPassDescriptor(rhi);
 }
 
 bool QD3D11TextureRenderTarget::build()
@@ -1301,7 +1301,7 @@ bool QD3D11TextureRenderTarget::build()
         d.rtv[i] = i < d.colorAttCount ? rtv[i] : nullptr;
 
     d.dsv = dsv;
-    d.rp = QRHI_RES(QD3D11RenderPass, m_renderPass);
+    d.rp = QRHI_RES(QD3D11RenderPassDescriptor, m_renderPassDesc);
 
     return true;
 }
@@ -1818,9 +1818,9 @@ QSize QD3D11SwapChain::effectiveSizeInPixels() const
     return pixelSize;
 }
 
-QRhiRenderPass *QD3D11SwapChain::buildCompatibleRenderPass()
+QRhiRenderPassDescriptor *QD3D11SwapChain::newCompatibleRenderPassDescriptor()
 {
-    return new QD3D11RenderPass(rhi);
+    return new QD3D11RenderPassDescriptor(rhi);
 }
 
 bool QD3D11SwapChain::buildOrResize()
@@ -1903,7 +1903,7 @@ bool QD3D11SwapChain::buildOrResize()
     ds = m_depthStencil ? QRHI_RES(QD3D11RenderBuffer, m_depthStencil) : nullptr;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
-    rtD->d.rp = QRHI_RES(QD3D11RenderPass, m_renderPass);
+    rtD->d.rp = QRHI_RES(QD3D11RenderPassDescriptor, m_renderPassDesc);
     rtD->d.pixelSize = pixelSize;
     rtD->d.colorAttCount = 1;
     rtD->d.dsAttCount = m_depthStencil ? 1 : 0;

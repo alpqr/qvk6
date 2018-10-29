@@ -72,13 +72,13 @@ static QBakedShader getShader(const QString &name)
 
 static const QSize OFFSCREEN_SIZE(512, 512);
 
-void TriangleOnCubeRenderer::initResources(QRhiRenderPass *rp)
+void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 {
-    m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
+    m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
+    m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
     m_ubuf->build();
 
     if (IMAGE_UNDER_OFFSCREEN_RENDERING) {
@@ -87,25 +87,25 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPass *rp)
             m_image = m_image.mirrored(); // just cause we'll flip texcoord Y when y up so accomodate our static background image as well
     }
 
-    m_tex = m_r->createTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+    m_tex = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
     m_tex->build();
 
     if (MRT) {
-        m_tex2 = m_r->createTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+        m_tex2 = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
         m_tex2->build();
     }
 
-    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    m_sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sampler->build();
 
-    m_srb = m_r->createShaderResourceBindings();
+    m_srb = m_r->newShaderResourceBindings();
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf),
         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_tex, m_sampler)
     });
     m_srb->build();
 
-    m_ps = m_r->createGraphicsPipeline();
+    m_ps = m_r->newGraphicsPipeline();
 
     m_ps->setDepthTest(true);
     m_ps->setDepthWrite(true);
@@ -137,13 +137,13 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPass *rp)
 
     m_ps->setVertexInputLayout(inputLayout);
     m_ps->setShaderResourceBindings(m_srb);
-    m_ps->setRenderPass(rp);
+    m_ps->setRenderPassDescriptor(rp);
 
     m_ps->build();
 
     if (DEPTH_TEXTURE) {
         m_offscreenTriangle.setDepthWrite(true);
-        m_depthTex = m_r->createTexture(QRhiTexture::D32, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+        m_depthTex = m_r->newTexture(QRhiTexture::D32, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
         m_depthTex->build();
     }
 
@@ -152,18 +152,18 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPass *rp)
         rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
 
     if (DEPTH_TEXTURE) {
-        m_rt = m_r->createTextureRenderTarget({ nullptr, m_depthTex }, rtFlags);
+        m_rt = m_r->newTextureRenderTarget({ nullptr, m_depthTex }, rtFlags);
     } else {
         QRhiTextureRenderTargetDescription desc { m_tex };
         if (MRT) {
             m_offscreenTriangle.setColorAttCount(2);
             desc.colorAttachments.append(m_tex2);
         }
-        m_rt = m_r->createTextureRenderTarget(desc, rtFlags);
+        m_rt = m_r->newTextureRenderTarget(desc, rtFlags);
     }
 
-    m_rp = m_rt->buildCompatibleRenderPass();
-    m_rt->setRenderPass(m_rp);
+    m_rp = m_rt->newCompatibleRenderPassDescriptor();
+    m_rt->setRenderPassDescriptor(m_rp);
 
     m_rt->build();
 

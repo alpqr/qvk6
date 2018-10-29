@@ -70,19 +70,19 @@ static quint16 indexData[] =
     0, 1, 2, 0, 2, 3
 };
 
-void QuadRenderer::initResources(QRhiRenderPass *)
+void QuadRenderer::initResources(QRhiRenderPassDescriptor *)
 {
-    m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ibuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, sizeof(indexData));
+    m_ibuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, sizeof(indexData));
     m_ibuf->build();
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
     m_ubuf->build();
 
-    m_srb = m_r->createShaderResourceBindings();
+    m_srb = m_r->newShaderResourceBindings();
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
     });

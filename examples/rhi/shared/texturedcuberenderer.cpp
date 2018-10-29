@@ -65,34 +65,34 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-void TexturedCubeRenderer::initResources(QRhiRenderPass *rp)
+void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 {
-    m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
+    m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
+    m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
     m_ubuf->build();
 
     m_image = QImage(QLatin1String(":/qt256.png")).convertToFormat(QImage::Format_RGBA8888);
     QRhiTexture::Flags texFlags = 0;
     if (MIPMAP)
         texFlags |= QRhiTexture::MipMapped;
-    m_tex = m_r->createTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), texFlags);
+    m_tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), texFlags);
     m_tex->build();
 
-    m_sampler = m_r->createSampler(QRhiSampler::Linear, QRhiSampler::Linear, MIPMAP ? QRhiSampler::Linear : QRhiSampler::None,
-                                   QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    m_sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, MIPMAP ? QRhiSampler::Linear : QRhiSampler::None,
+                                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sampler->build();
 
-    m_srb = m_r->createShaderResourceBindings();
+    m_srb = m_r->newShaderResourceBindings();
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf),
         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_tex, m_sampler)
     });
     m_srb->build();
 
-    m_ps = m_r->createGraphicsPipeline();
+    m_ps = m_r->newGraphicsPipeline();
 
     m_ps->setDepthTest(true);
     m_ps->setDepthWrite(true);
@@ -124,7 +124,7 @@ void TexturedCubeRenderer::initResources(QRhiRenderPass *rp)
 
     m_ps->setVertexInputLayout(inputLayout);
     m_ps->setShaderResourceBindings(m_srb);
-    m_ps->setRenderPass(rp);
+    m_ps->setRenderPassDescriptor(rp);
 
     m_ps->build();
 }

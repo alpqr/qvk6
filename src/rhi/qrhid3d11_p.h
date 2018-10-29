@@ -100,9 +100,9 @@ struct QD3D11Sampler : public QRhiSampler
     friend class QRhiD3D11;
 };
 
-struct QD3D11RenderPass : public QRhiRenderPass
+struct QD3D11RenderPassDescriptor : public QRhiRenderPassDescriptor
 {
-    QD3D11RenderPass(QRhiImplementation *rhi);
+    QD3D11RenderPassDescriptor(QRhiImplementation *rhi);
     void release() override;
 };
 
@@ -114,7 +114,7 @@ struct QD3D11BasicRenderTargetData
             rtv[i] = nullptr;
     }
 
-    QD3D11RenderPass *rp = nullptr;
+    QD3D11RenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
     int colorAttCount = 0;
     int dsAttCount = 0;
@@ -142,7 +142,7 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     Type type() const override;
     QSize sizeInPixels() const override;
 
-    QRhiRenderPass *buildCompatibleRenderPass() override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
     QD3D11BasicRenderTargetData d;
@@ -362,7 +362,7 @@ struct QD3D11SwapChain : public QRhiSwapChain
 
     QSize effectiveSizeInPixels() const override;
 
-    QRhiRenderPass *buildCompatibleRenderPass() override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool buildOrResize();
 
     QWindow *window = nullptr;

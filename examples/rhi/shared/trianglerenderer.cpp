@@ -69,26 +69,26 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-void TriangleRenderer::initResources(QRhiRenderPass *rp)
+void TriangleRenderer::initResources(QRhiRenderPassDescriptor *rp)
 {
 #ifdef VBUF_IS_DYNAMIC
-    m_vbuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, sizeof(vertexData));
 #else
-    m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
 #endif
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
     m_ubuf->build();
 
-    m_srb = m_r->createShaderResourceBindings();
+    m_srb = m_r->newShaderResourceBindings();
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
     });
     m_srb->build();
 
-    m_ps = m_r->createGraphicsPipeline();
+    m_ps = m_r->newGraphicsPipeline();
 
     QRhiGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
     premulAlphaBlend.enable = true;
@@ -125,7 +125,7 @@ void TriangleRenderer::initResources(QRhiRenderPass *rp)
 
     m_ps->setVertexInputLayout(inputLayout);
     m_ps->setShaderResourceBindings(m_srb);
-    m_ps->setRenderPass(rp);
+    m_ps->setRenderPassDescriptor(rp);
 
     m_ps->build();
 }

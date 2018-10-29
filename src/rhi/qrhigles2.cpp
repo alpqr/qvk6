@@ -1226,12 +1226,12 @@ bool QGles2Sampler::build()
 }
 
 // dummy, no Vulkan-style RenderPass+Framebuffer concept here
-QGles2RenderPass::QGles2RenderPass(QRhiImplementation *rhi)
-    : QRhiRenderPass(rhi)
+QGles2RenderPassDescriptor::QGles2RenderPassDescriptor(QRhiImplementation *rhi)
+    : QRhiRenderPassDescriptor(rhi)
 {
 }
 
-void QGles2RenderPass::release()
+void QGles2RenderPassDescriptor::release()
 {
     // nothing to do here
 }
@@ -1281,9 +1281,9 @@ void QGles2TextureRenderTarget::release()
     rhiD->releaseQueue.append(e);
 }
 
-QRhiRenderPass *QGles2TextureRenderTarget::buildCompatibleRenderPass()
+QRhiRenderPassDescriptor *QGles2TextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
-    return new QGles2RenderPass(rhi);
+    return new QGles2RenderPassDescriptor(rhi);
 }
 
 bool QGles2TextureRenderTarget::build()
@@ -1313,7 +1313,7 @@ bool QGles2TextureRenderTarget::build()
 
     rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
 
-    d.rp = QRHI_RES(QGles2RenderPass, m_renderPass);
+    d.rp = QRHI_RES(QGles2RenderPassDescriptor, m_renderPassDesc);
     d.pixelSize = texD->pixelSize();
     d.attCount = 1;
 
@@ -1542,9 +1542,9 @@ QSize QGles2SwapChain::effectiveSizeInPixels() const
     return pixelSize;
 }
 
-QRhiRenderPass *QGles2SwapChain::buildCompatibleRenderPass()
+QRhiRenderPassDescriptor *QGles2SwapChain::newCompatibleRenderPassDescriptor()
 {
-    return new QGles2RenderPass(rhi);
+    return new QGles2RenderPassDescriptor(rhi);
 }
 
 bool QGles2SwapChain::buildOrResize()
@@ -1552,7 +1552,7 @@ bool QGles2SwapChain::buildOrResize()
     surface = m_window;
     pixelSize = m_requestedPixelSize;
 
-    rt.d.rp = QRHI_RES(QGles2RenderPass, m_renderPass);
+    rt.d.rp = QRHI_RES(QGles2RenderPassDescriptor, m_renderPassDesc);
     rt.d.pixelSize = pixelSize;
     rt.d.attCount = m_depthStencil ? 2 : 1;
 

@@ -56,6 +56,22 @@ class QRhiTexture;
 class QRhiSampler;
 struct QRhiResourceUpdateBatchPrivate;
 
+// C++ object ownership rules:
+//   1. new*() and create() return value owned by the caller.
+//   2. next*() return value not owned by the caller.
+//   3. Passing a pointer via set*() or the structs does not transfer ownership.
+//   4. release() does not destroy the C++ object. releaseAndDestroy() does, and is equivalent to o->release(); delete o;
+//
+// Graphics resource ownership rules:
+//   1. new*() does not create underlying graphics resources. build() does.
+//   2. release() schedules graphics resources for destruction. The C++ object is reusable immediately via build(), or can be destroyed.
+//   3. build() on an already built object calls release() implicitly. Except swapchains. (buildOrResize - special semantics)
+//   4. newCompatible*() implicitly "builds". (no build() for QRhiRenderPassDescriptor)
+//   5. Ownership of resources imported via QRhi*InitParams is not taken.
+//
+// Other:
+//   1. QRhiResourceUpdateBatch manages no graphics resources underneath. beginPass() implicitly calls release() on the batch.
+
 struct Q_RHI_EXPORT QRhiColorClearValue
 {
     QRhiColorClearValue() : rgba(0, 0, 0, 1) { }
@@ -441,10 +457,10 @@ protected:
     void *m_reserved;
 };
 
-class Q_RHI_EXPORT QRhiRenderPass : public QRhiResource
+class Q_RHI_EXPORT QRhiRenderPassDescriptor : public QRhiResource
 {
 protected:
-    QRhiRenderPass(QRhiImplementation *rhi);
+    QRhiRenderPassDescriptor(QRhiImplementation *rhi);
     void *m_reserved;
 };
 
@@ -459,12 +475,12 @@ public:
     virtual Type type() const = 0;
     virtual QSize sizeInPixels() const = 0;
 
-    QRhiRenderPass *renderPass() const { return m_renderPass; }
-    void setRenderPass(QRhiRenderPass *renderPass) { m_renderPass = renderPass; }
+    QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_renderPassDesc; }
+    void setRenderPassDescriptor(QRhiRenderPassDescriptor *desc) { m_renderPassDesc = desc; }
 
 protected:
     QRhiRenderTarget(QRhiImplementation *rhi);
-    QRhiRenderPass *m_renderPass = nullptr;
+    QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
     void *m_reserved;
 };
 
@@ -483,8 +499,8 @@ public:
     void setFlags(Flags f) { m_flags = f; }
 
     // To be called before build() with description and flags set.
-    // Note setRenderPass() in the base class, that must still be called afterwards.
-    virtual QRhiRenderPass *buildCompatibleRenderPass() = 0;
+    // Note setRenderPassDescriptor() in the base class, that must still be called afterwards.
+    virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
 
     // as usual, textures in desc must be built before calling build() on the rt
     virtual bool build() = 0;
@@ -669,8 +685,8 @@ public:
     QRhiShaderResourceBindings *shaderResourceBindings() const { return m_shaderResourceBindings; }
     void setShaderResourceBindings(QRhiShaderResourceBindings *srb) { m_shaderResourceBindings = srb; }
 
-    QRhiRenderPass *renderPass() const { return m_renderPass; }
-    void setRenderPass(QRhiRenderPass *pass) { m_renderPass = pass; }
+    QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_renderPassDesc; }
+    void setRenderPassDescriptor(QRhiRenderPassDescriptor *desc) { m_renderPassDesc = desc; }
 
     virtual bool build() = 0;
 
@@ -693,7 +709,7 @@ protected:
     QVector<QRhiGraphicsShaderStage> m_shaderStages;
     QRhiVertexInputLayout m_vertexInputLayout;
     QRhiShaderResourceBindings *m_shaderResourceBindings = nullptr; // must be built by the time ps' build() is called
-    QRhiRenderPass *m_renderPass = nullptr;
+    QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
     void *m_reserved;
 };
 
@@ -732,8 +748,8 @@ public:
     int sampleCount() const { return m_sampleCount; }
     void setSampleCount(int samples) { m_sampleCount = samples; }
 
-    QRhiRenderPass *renderPass() const { return m_renderPass; }
-    void setRenderPass(QRhiRenderPass *renderPass) { m_renderPass = renderPass; }
+    QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_renderPassDesc; }
+    void setRenderPassDescriptor(QRhiRenderPassDescriptor *desc) { m_renderPassDesc = desc; }
 
     // Alternatively, integrate with an existing swapchain, f.ex.
     // QVulkanWindow. Other settings have no effect when this is set.
@@ -752,15 +768,15 @@ public:
 
     // To be called before build() with relevant parameters like depthStencil and sampleCount set.
     // (things like the window or the size of depthStencil are irrelevant here)
-    // Note setRenderPass(), that must still be called afterwards (but before buildOrResize).
-    virtual QRhiRenderPass *buildCompatibleRenderPass() = 0;
+    // Note setRenderPassDescriptor(), that must still be called afterwards (but before buildOrResize).
+    virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
 
-    // As an exception to the typical build+release pattern, note that
-    // buildOrResize - buildOrResize is not the same as buildOrResize - release
-    // - buildOrResize. A swapchain is often able to, depending on the
-    // underlying APIs, accomodate changed output sizes in a manner that is
-    // more efficient than a full destroy - create. So use the former when a
-    // window is resized.
+    // As the name suggests, this is slightly different from the typical
+    // build+release pattern: buildOrResize - buildOrResize is not the same as
+    // buildOrResize - release - buildOrResize. A swapchain is often able to,
+    // depending on the underlying APIs, accomodate changed output sizes in a
+    // manner that is more efficient than a full destroy - create. So use the
+    // former when a window is resized.
     virtual bool buildOrResize() = 0;
 
 protected:
@@ -770,7 +786,7 @@ protected:
     SurfaceImportFlags m_flags;
     QRhiRenderBuffer *m_depthStencil = nullptr;
     int m_sampleCount = 1;
-    QRhiRenderPass *m_renderPass = nullptr;
+    QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
     QObject *m_target = nullptr;
     void *m_reserved;
 };
@@ -849,8 +865,8 @@ public:
        when invoked on an object with valid resources underneath.
      */
 
-    QRhiGraphicsPipeline *createGraphicsPipeline();
-    QRhiShaderResourceBindings *createShaderResourceBindings();
+    QRhiGraphicsPipeline *newGraphicsPipeline();
+    QRhiShaderResourceBindings *newShaderResourceBindings();
 
     // Buffers are immutable like other resources but the underlying data can
     // change. (its size cannot) Having multiple frames in flight is handled
@@ -859,30 +875,30 @@ public:
     // buffers. For best performance, static buffers may be copied to device
     // local (not necessarily host visible) memory via a staging (host visible)
     // buffer. Hence separate update-dynamic and upload-static operations.
-    QRhiBuffer *createBuffer(QRhiBuffer::Type type,
-                             QRhiBuffer::UsageFlags usage,
-                             int size);
+    QRhiBuffer *newBuffer(QRhiBuffer::Type type,
+                          QRhiBuffer::UsageFlags usage,
+                          int size);
 
     // To be used for depth-stencil when no access is needed afterwards.
     // Transient image, backed by lazily allocated memory (on Vulkan at least,
     // ideal for tiled GPUs). May also be a dummy internally depending on the
     // backend and the hints (OpenGL, where the winsys interface provides the
     // depth-stencil buffer via the window surface).
-    QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
-                                         const QSize &pixelSize,
-                                         int sampleCount = 1,
-                                         QRhiRenderBuffer::Hints hints = QRhiRenderBuffer::Hints());
+    QRhiRenderBuffer *newRenderBuffer(QRhiRenderBuffer::Type type,
+                                      const QSize &pixelSize,
+                                      int sampleCount = 1,
+                                      QRhiRenderBuffer::Hints hints = QRhiRenderBuffer::Hints());
 
-    QRhiTexture *createTexture(QRhiTexture::Format format,
-                               const QSize &pixelSize,
-                               QRhiTexture::Flags flags = QRhiTexture::Flags());
+    QRhiTexture *newTexture(QRhiTexture::Format format,
+                            const QSize &pixelSize,
+                            QRhiTexture::Flags flags = QRhiTexture::Flags());
 
-    QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
-                               QRhiSampler::Filter mipmapMode,
-                               QRhiSampler::AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w = QRhiSampler::ClampToEdge);
+    QRhiSampler *newSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
+                            QRhiSampler::Filter mipmapMode,
+                            QRhiSampler::AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w = QRhiSampler::ClampToEdge);
 
-    QRhiTextureRenderTarget *createTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
-                                                       QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
+    QRhiTextureRenderTarget *newTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
+                                                    QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
 
     /*
       Render to a QWindow (must be Vulkan/Metal/OpenGLSurface as appropriate):
@@ -900,7 +916,7 @@ public:
 
       Also works with a QVulkanWindow from startNextFrame(). Use the overload of build() in initSwapChainResources().
      */
-    QRhiSwapChain *createSwapChain();
+    QRhiSwapChain *newSwapChain();
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
 

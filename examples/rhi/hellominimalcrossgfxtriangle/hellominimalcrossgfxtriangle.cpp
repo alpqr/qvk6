@@ -147,7 +147,7 @@ protected:
     bool m_hasSwapChain = false;
     QRhiSwapChain *m_sc = nullptr;
     QRhiRenderBuffer *m_ds = nullptr;
-    QRhiRenderPass *m_rp = nullptr;
+    QRhiRenderPassDescriptor *m_rp = nullptr;
     QRhiBuffer *m_vbuf = nullptr;
     bool m_vbufReady = false;
     QRhiBuffer *m_ubuf = nullptr;
@@ -287,31 +287,31 @@ void Window::init()
 
     // now onto the backend-independent init
 
-    m_sc = m_r->createSwapChain();
+    m_sc = m_r->newSwapChain();
     // allow depth-stencil, although we do not actually enable depth test/write for the triangle
-    m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
-                                   QSize(), // we don't know the size yet, this is fine
-                                   1,
-                                   QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+    m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
+                                QSize(), // we don't know the size yet, this is fine
+                                1,
+                                QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
-    m_rp = m_sc->buildCompatibleRenderPass();
-    m_sc->setRenderPass(m_rp);
+    m_rp = m_sc->newCompatibleRenderPassDescriptor();
+    m_sc->setRenderPassDescriptor(m_rp);
 
-    m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
     m_ubuf->build();
 
-    m_srb = m_r->createShaderResourceBindings();
+    m_srb = m_r->newShaderResourceBindings();
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
     });
     m_srb->build();
 
-    m_ps = m_r->createGraphicsPipeline();
+    m_ps = m_r->newGraphicsPipeline();
 
     QRhiGraphicsPipeline::TargetBlend premulAlphaBlend;
     premulAlphaBlend.enable = true;
@@ -340,7 +340,7 @@ void Window::init()
 
     m_ps->setVertexInputLayout(inputLayout);
     m_ps->setShaderResourceBindings(m_srb);
-    m_ps->setRenderPass(m_rp);
+    m_ps->setRenderPassDescriptor(m_rp);
 
     m_ps->build();
 }

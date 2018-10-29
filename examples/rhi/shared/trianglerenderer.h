@@ -64,7 +64,7 @@ public:
     void setDepthWrite(bool enable) { m_depthWrite = enable; }
     void setColorAttCount(int count) { m_colorAttCount = count; }
     QRhiGraphicsPipeline *pipeline() const { return m_ps; }
-    void initResources(QRhiRenderPass *rp);
+    void initResources(QRhiRenderPassDescriptor *rp);
     void releaseResources();
     void resize(const QSize &pixelSize);
     void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);

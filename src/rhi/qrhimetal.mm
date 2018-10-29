@@ -732,7 +732,7 @@ void QMetalTextureRenderTarget::release()
 {
 }
 
-QRhiRenderPass *QMetalTextureRenderTarget::buildCompatibleRenderPass()
+QRhiRenderPass *QMetalTextureRenderTarget::newCompatibleRenderPass()
 {
     return new QMetalRenderPass(rhi);
 }

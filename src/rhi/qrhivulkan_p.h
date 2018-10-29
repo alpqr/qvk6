@@ -163,6 +163,8 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
     QSize sizeInPixels() const override;
     const QRhiRenderPass *renderPass() const override;
 
+    bool createRenderPass(VkRenderPass *rp);
+
     QVkBasicRenderTargetData d;
     VkImageView cubeFaceView[6];
     int lastActiveFrameSlot = -1;

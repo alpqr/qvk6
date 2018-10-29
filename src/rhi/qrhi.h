@@ -752,7 +752,7 @@ public:
 
     // To be called before build() with relevant parameters like depthStencil and sampleCount set.
     // (things like the window or the size of depthStencil are irrelevant here)
-    // Note setRenderPass(), that must still be called after (but before buildOrResize).
+    // Note setRenderPass(), that must still be called afterwards (but before buildOrResize).
     virtual QRhiRenderPass *buildCompatibleRenderPass() = 0;
 
     // As an exception to the typical build+release pattern, note that
@@ -760,7 +760,7 @@ public:
     // - buildOrResize. A swapchain is often able to, depending on the
     // underlying APIs, accomodate changed output sizes in a manner that is
     // more efficient than a full destroy - create. So use the former when a
-    // window is resized, never the latter.
+    // window is resized.
     virtual bool buildOrResize() = 0;
 
 protected:

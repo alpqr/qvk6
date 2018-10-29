@@ -2875,6 +2875,9 @@ bool QVkTextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
+    if (!m_renderPass)
+        qWarning("QVkTextureRenderTarget: No renderpass set. See buildCompatibleRenderPass() and setRenderPass().");
+
     d.rp = QRHI_RES(QVkRenderPass, m_renderPass);
     Q_ASSERT(d.rp && d.rp->rp);
 
@@ -3310,6 +3313,9 @@ bool QVkSwapChain::buildOrResize()
 
     if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
         return false;
+
+    if (!m_renderPass)
+        qWarning("QVkSwapChain: No renderpass set. See buildCompatibleRenderPass() and setRenderPass().");
 
     rtWrapper.d.rp = QRHI_RES(QVkRenderPass, m_renderPass);
     Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);

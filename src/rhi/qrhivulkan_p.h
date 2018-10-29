@@ -163,8 +163,6 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
     QSize sizeInPixels() const override;
     const QRhiRenderPass *renderPass() const override;
 
-    bool createRenderPass(VkRenderPass *rp);
-
     QVkBasicRenderTargetData d;
     VkImageView cubeFaceView[6];
     int lastActiveFrameSlot = -1;
@@ -375,7 +373,16 @@ public:
 
     VkFormat optimalDepthStencilFormat();
     VkSampleCountFlagBits effectiveSampleCount(int sampleCount);
-    bool createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat);
+    bool createDefaultRenderPass(VkRenderPass *rp,
+                                 bool hasDepthStencil,
+                                 VkSampleCountFlagBits sampleCount,
+                                 VkFormat colorFormat);
+    bool createOffscreenRenderPass(VkRenderPass *rp,
+                                   const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
+                                   bool preserveColor,
+                                   bool hasDepthStencil,
+                                   VkFormat dsFormat,
+                                   bool hasDepthTexture);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 

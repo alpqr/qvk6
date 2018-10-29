@@ -421,6 +421,42 @@ bool QRhiVulkan::allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, V
     }
 }
 
+static inline VkFormat toVkTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::RGBA8:
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    case QRhiTexture::BGRA8:
+        return VK_FORMAT_B8G8R8A8_UNORM;
+    case QRhiTexture::R8:
+        return VK_FORMAT_R8_UNORM;
+    case QRhiTexture::R16:
+        return VK_FORMAT_R16_UNORM;
+
+    case QRhiTexture::D16:
+        return VK_FORMAT_D16_UNORM;
+    case QRhiTexture::D32:
+        return VK_FORMAT_D32_SFLOAT;
+
+    default:
+        Q_UNREACHABLE();
+        return VK_FORMAT_R8G8B8A8_UNORM;
+    }
+}
+
+static inline bool isDepthTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::Format::D16:
+        Q_FALLTHROUGH();
+    case QRhiTexture::Format::D32:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 // Transient images ("render buffers") backed by lazily allocated memory are
 // managed manually without going through vk_mem_alloc since it does not offer
 // any support for such images. This should be ok since in practice there
@@ -642,6 +678,74 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
         rpInfo.attachmentCount += 1;
         subPassDesc.pResolveAttachments = &resolveRef;
     }
+
+    VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, rp);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create renderpass: %d", err);
+        return false;
+    }
+
+    return true;
+}
+
+bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
+                                           const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
+                                           bool preserveColor,
+                                           bool hasDepthStencil,
+                                           VkFormat dsFormat,
+                                           bool hasDepthTexture)
+{
+    QVarLengthArray<VkAttachmentDescription, 8> attDescs;
+    QVarLengthArray<VkAttachmentReference, 8> colorRefs;
+    const int colorAttCount = colorAttachments.count();
+
+    for (int i = 0; i < colorAttCount; ++i) {
+        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture);
+        VkAttachmentDescription attDesc;
+        memset(&attDesc, 0, sizeof(attDesc));
+        attDesc.format = toVkTextureFormat(texD->m_format);
+        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc.loadOp = preserveColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.initialLayout = preserveColor ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        attDescs.append(attDesc);
+
+        const VkAttachmentReference ref = { uint32_t(i), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        colorRefs.append(ref);
+    }
+
+    if (hasDepthStencil) {
+        VkAttachmentDescription attDesc;
+        memset(&attDesc, 0, sizeof(attDesc));
+        attDesc.format = dsFormat;
+        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc.storeOp = hasDepthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+        attDesc.stencilStoreOp = hasDepthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attDesc.finalLayout = hasDepthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+        attDescs.append(attDesc);
+    }
+
+    VkAttachmentReference dsRef = { uint32_t(colorAttCount), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+    VkSubpassDescription subPassDesc;
+    memset(&subPassDesc, 0, sizeof(subPassDesc));
+    subPassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subPassDesc.colorAttachmentCount = colorRefs.count();
+    subPassDesc.pColorAttachments = !colorRefs.isEmpty() ? colorRefs.constData() : nullptr;
+    subPassDesc.pDepthStencilAttachment = hasDepthStencil ? &dsRef : nullptr;
+
+    VkRenderPassCreateInfo rpInfo;
+    memset(&rpInfo, 0, sizeof(rpInfo));
+    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    rpInfo.attachmentCount = attDescs.count();
+    rpInfo.pAttachments = attDescs.constData();
+    rpInfo.subpassCount = 1;
+    rpInfo.pSubpasses = &subPassDesc;
 
     VkResult err = df->vkCreateRenderPass(dev, &rpInfo, nullptr, rp);
     if (err != VK_SUCCESS) {
@@ -1137,42 +1241,6 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QVK_FRAMES_IN_FLIGHT;
 
     return QRhi::FrameOpSuccess;
-}
-
-static inline VkFormat toVkTextureFormat(QRhiTexture::Format format)
-{
-    switch (format) {
-    case QRhiTexture::RGBA8:
-        return VK_FORMAT_R8G8B8A8_UNORM;
-    case QRhiTexture::BGRA8:
-        return VK_FORMAT_B8G8R8A8_UNORM;
-    case QRhiTexture::R8:
-        return VK_FORMAT_R8_UNORM;
-    case QRhiTexture::R16:
-        return VK_FORMAT_R16_UNORM;
-
-    case QRhiTexture::D16:
-        return VK_FORMAT_D16_UNORM;
-    case QRhiTexture::D32:
-        return VK_FORMAT_D32_SFLOAT;
-
-    default:
-        Q_UNREACHABLE();
-        return VK_FORMAT_R8G8B8A8_UNORM;
-    }
-}
-
-static inline bool isDepthTextureFormat(QRhiTexture::Format format)
-{
-    switch (format) {
-    case QRhiTexture::Format::D16:
-        Q_FALLTHROUGH();
-    case QRhiTexture::Format::D32:
-        return true;
-
-    default:
-        return false;
-    }
 }
 
 void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
@@ -2741,72 +2809,6 @@ void QVkTextureRenderTarget::release()
     rhiD->releaseQueue.append(e);
 }
 
-bool QVkTextureRenderTarget::createRenderPass(VkRenderPass *rp)
-{
-    const bool preserved = m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
-
-    QRHI_RES_RHI(QRhiVulkan);
-    QVarLengthArray<VkAttachmentDescription, 8> attDescs;
-    QVarLengthArray<VkAttachmentReference, 8> colorRefs;
-
-    for (int i = 0; i < d.colorAttCount; ++i) {
-        QRhiTexture *texture = m_desc.colorAttachments[i].texture;
-
-        VkAttachmentDescription attDesc;
-        memset(&attDesc, 0, sizeof(attDesc));
-        attDesc.format = toVkTextureFormat(texture->format());
-        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
-        attDesc.loadOp = preserved ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc.initialLayout = preserved ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        attDescs.append(attDesc);
-
-        const VkAttachmentReference ref = { uint32_t(i), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-        colorRefs.append(ref);
-    }
-
-    if (d.dsAttCount) {
-        VkAttachmentDescription attDesc;
-        memset(&attDesc, 0, sizeof(attDesc));
-        attDesc.format = m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format()) : rhiD->optimalDepthStencilFormat();
-        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
-        attDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.storeOp = m_desc.depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.stencilStoreOp = m_desc.depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc.finalLayout = m_desc.depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
-        attDescs.append(attDesc);
-    }
-
-    VkAttachmentReference dsRef = { uint32_t(d.colorAttCount), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
-    VkSubpassDescription subPassDesc;
-    memset(&subPassDesc, 0, sizeof(subPassDesc));
-    subPassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subPassDesc.colorAttachmentCount = colorRefs.count();
-    subPassDesc.pColorAttachments = !colorRefs.isEmpty() ? colorRefs.constData() : nullptr;
-    subPassDesc.pDepthStencilAttachment = d.dsAttCount ? &dsRef : nullptr;
-
-    VkRenderPassCreateInfo rpInfo;
-    memset(&rpInfo, 0, sizeof(rpInfo));
-    rpInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    rpInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
-    rpInfo.pAttachments = attDescs.constData();
-    rpInfo.subpassCount = 1;
-    rpInfo.pSubpasses = &subPassDesc;
-
-    VkResult err = rhiD->df->vkCreateRenderPass(rhiD->dev, &rpInfo, nullptr, rp);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to create renderpass: %d", err);
-        return false;
-    }
-
-    return true;
-}
-
 bool QVkTextureRenderTarget::build()
 {
     if (d.fb)
@@ -2866,8 +2868,15 @@ bool QVkTextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
-    if (!createRenderPass(&d.rp.rp))
+    if (!rhiD->createOffscreenRenderPass(&d.rp.rp,
+                                         m_desc.colorAttachments,
+                                         m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
+                                         d.dsAttCount > 0,
+                                         m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format()) : rhiD->optimalDepthStencilFormat(),
+                                         m_desc.depthTexture != nullptr))
+    {
         return false;
+    }
 
     VkFramebufferCreateInfo fbInfo;
     memset(&fbInfo, 0, sizeof(fbInfo));
@@ -3286,7 +3295,8 @@ bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, Surf
     if (!rhiD->recreateSwapChain(surface, requestedPixelSize_, flags, this))
         return false;
 
-    rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat);
+    if (!rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat))
+        return false;
 
     rtWrapper.d.rp.rp = rp;
     rtWrapper.d.pixelSize = effectivePixelSize;

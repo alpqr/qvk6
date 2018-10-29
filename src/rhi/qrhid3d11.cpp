@@ -408,8 +408,8 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     currentFrameSlot = swapChainD->currentFrame;
 
     swapChainD->rt.d.pixelSize = swapChainD->pixelSize;
-    swapChainD->rt.d.rp.rtv[0] = swapChainD->rtv[currentFrameSlot];
-    swapChainD->rt.d.rp.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
+    swapChainD->rt.d.rtv[0] = swapChainD->rtv[currentFrameSlot];
+    swapChainD->rt.d.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
 
     return QRhi::FrameOpSuccess;
 }
@@ -702,8 +702,6 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
         case QD3D11CommandBuffer::Command::SetRenderTarget:
         {
             QRhiRenderTarget *rt = cmd.args.setRenderTarget.rt;
-            const QD3D11RenderPass *rp = QRHI_RES(const QD3D11RenderPass, rt->renderPass());
-            Q_ASSERT(rp);
             // The new output cannot be bound as input from the previous frame,
             // otherwise the debug layer complains. Avoid this.
             const int nullsrvCount = qMax(contextState.vsLastActiveSrvBinding, contextState.fsLastActiveSrvBinding) + 1;
@@ -714,16 +712,15 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
             context->VSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
             context->PSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
             QD3D11BasicRenderTargetData *rtD = basicRtData(rt);
-            context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rp->rtv : nullptr, rp->dsv);
+            context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rtD->rtv : nullptr, rtD->dsv);
         }
             break;
         case QD3D11CommandBuffer::Command::Clear:
         {
-            const QD3D11RenderPass *rp = QRHI_RES(const QD3D11RenderPass, cmd.args.clear.rt->renderPass());
+            QD3D11BasicRenderTargetData *rtD = basicRtData(cmd.args.clear.rt);
             if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Color) {
-                QD3D11BasicRenderTargetData *rtD = basicRtData(cmd.args.clear.rt);
                 for (int i = 0; i < rtD->colorAttCount; ++i)
-                    context->ClearRenderTargetView(rp->rtv[i], cmd.args.clear.c);
+                    context->ClearRenderTargetView(rtD->rtv[i], cmd.args.clear.c);
             }
             uint ds = 0;
             if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Depth)
@@ -731,7 +728,7 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
             if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Stencil)
                 ds |= D3D11_CLEAR_STENCIL;
             if (ds)
-                context->ClearDepthStencilView(rp->dsv, ds, cmd.args.clear.d, cmd.args.clear.s);
+                context->ClearDepthStencilView(rtD->dsv, ds, cmd.args.clear.d, cmd.args.clear.s);
         }
             break;
         case QD3D11CommandBuffer::Command::Viewport:
@@ -1176,8 +1173,6 @@ bool QD3D11Sampler::build()
 QD3D11RenderPass::QD3D11RenderPass(QRhiImplementation *rhi)
     : QRhiRenderPass(rhi)
 {
-    for (int i = 0; i < MAX_COLOR_ATTACHMENTS; ++i)
-        rtv[i] = nullptr;
 }
 
 void QD3D11RenderPass::release()
@@ -1217,7 +1212,7 @@ QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi,
     : QRhiTextureRenderTarget(rhi, desc, flags),
       d(rhi)
 {
-    for (int i = 0; i < QD3D11RenderPass::MAX_COLOR_ATTACHMENTS; ++i)
+    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i)
         rtv[i] = nullptr;
 }
 
@@ -1232,7 +1227,7 @@ void QD3D11TextureRenderTarget::release()
         dsv = nullptr;
     }
 
-    for (int i = 0; i < QD3D11RenderPass::MAX_COLOR_ATTACHMENTS; ++i) {
+    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i) {
         if (rtv[i]) {
             rtv[i]->Release();
             rtv[i] = nullptr;
@@ -1301,10 +1296,10 @@ bool QD3D11TextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
-    for (int i = 0; i < QD3D11RenderPass::MAX_COLOR_ATTACHMENTS; ++i)
-        d.rp.rtv[i] = i < d.colorAttCount ? rtv[i] : nullptr;
+    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i)
+        d.rtv[i] = i < d.colorAttCount ? rtv[i] : nullptr;
 
-    d.rp.dsv = dsv;
+    d.dsv = dsv;
 
     return true;
 }

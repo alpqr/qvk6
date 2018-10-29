@@ -1,5 +1,4 @@
 make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)
-d3d: why duplicate rtv/dsv in rp?
 gl: offscreensurface ownership not taken (fix examples)
 figure out what's up with instance step rate
 mtl: buffer logic is borked
@@ -43,6 +42,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+d3d: why rtv/dsv in rp -> should be in rtD
 new "minimal" example
 cubemap face as target
 test mrt

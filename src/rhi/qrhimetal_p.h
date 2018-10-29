@@ -99,8 +99,6 @@ struct QMetalSampler : public QRhiSampler
     friend class QRhiMetal;
 };
 
-struct QMetalRenderPassData;
-
 struct QMetalRenderPass : public QRhiRenderPass
 {
     QMetalRenderPass(QRhiImplementation *rhi);

@@ -80,7 +80,8 @@ void Renderer::initResources()
 
 void Renderer::initSwapChainResources()
 {
-    m_sc->build(m_window); // this just wraps the window's swapchain
+    m_sc->setTarget(m_window); // note: very different from setWindow(m_window)
+    m_sc->buildOrResize(); // this just wraps the qvulkanwindow's swapchain
     m_triRenderer.initOutputDependentResources(m_sc->defaultRenderPass(), m_sc->effectiveSizeInPixels());
 }
 

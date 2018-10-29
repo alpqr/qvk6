@@ -479,6 +479,9 @@ public:
     Flags flags() const { return m_flags; }
     void setFlags(Flags f) { m_flags = f; }
 
+    // to be called before build() with description and flags set
+    virtual QRhiRenderPass *buildCompatibleRenderPass() = 0;
+
     // as usual, textures in desc must be built before calling build() on the rt
     virtual bool build() = 0;
 
@@ -710,6 +713,26 @@ public:
     };
     Q_DECLARE_FLAGS(SurfaceImportFlags, SurfaceImportFlag)
 
+    QWindow *window() const { return m_window; }
+    void setWindow(QWindow *window) { m_window = window; }
+
+    QSize requestedPixelSize() const { return m_requestedPixelSize; }
+    void setRequestedPixelSize(const QSize &size) { m_requestedPixelSize = size; }
+
+    SurfaceImportFlags flags() const { return m_flags; }
+    void setFlags(SurfaceImportFlags f) { m_flags = f; }
+
+    QRhiRenderBuffer *depthStencil() const { return m_depthStencil; }
+    void setDepthStencil(QRhiRenderBuffer *ds) { m_depthStencil = ds; }
+
+    int sampleCount() const { return m_sampleCount; }
+    void setSampleCount(int samples) { m_sampleCount = samples; }
+
+    // Alternatively, integrate with an existing swapchain, f.ex.
+    // QVulkanWindow. Other settings have no effect when this is set.
+    QObject *target() const { return m_target; }
+    void setTarget(QObject *obj) { m_target = obj; }
+
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
     virtual const QRhiRenderPass *defaultRenderPass() const = 0;
@@ -717,18 +740,21 @@ public:
     // Some backends use the requested size, others ignore it and get the actual
     // size on their own. Keep track of both - application logic will need the
     // requested size (to do their "if qwindow->size() * dpr != req.size then
-    // rebuild_swapchain" logic) and the actual size as well (for all graphics
+    // resize_swapchain" logic) and the actual size as well (for all graphics
     // calculations like viewport).
-    virtual QSize requestedSizeInPixels() const = 0;
     virtual QSize effectiveSizeInPixels() const = 0;
 
-    virtual bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-                       QRhiRenderBuffer *depthStencil, int sampleCount) = 0;
-
-    virtual bool build(QObject *target) = 0; // integrate with an existing swapchain, f.ex. QVulkanWindow
+    virtual QRhiRenderPass *buildCompatibleRenderPass() = 0;
+    virtual bool buildOrResize() = 0;
 
 protected:
     QRhiSwapChain(QRhiImplementation *rhi);
+    QWindow *m_window = nullptr;
+    QSize m_requestedPixelSize;
+    SurfaceImportFlags m_flags;
+    QRhiRenderBuffer *m_depthStencil = nullptr;
+    int m_sampleCount = 1;
+    QObject *m_target = nullptr;
     void *m_reserved;
 };
 

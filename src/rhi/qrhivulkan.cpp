@@ -764,9 +764,6 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
 
     df->vkDeviceWaitIdle(dev);
 
-    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
-    swapChainD->requestedPixelSize = pixelSize;
-
     if (!vkCreateSwapchainKHR) {
         vkCreateSwapchainKHR = reinterpret_cast<PFN_vkCreateSwapchainKHR>(f->vkGetDeviceProcAddr(dev, "vkCreateSwapchainKHR"));
         vkDestroySwapchainKHR = reinterpret_cast<PFN_vkDestroySwapchainKHR>(f->vkGetDeviceProcAddr(dev, "vkDestroySwapchainKHR"));
@@ -779,17 +776,19 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
         }
     }
 
+
     VkSurfaceCapabilitiesKHR surfaceCaps;
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDev, surface, &surfaceCaps);
     quint32 reqBufferCount = QVkSwapChain::DEFAULT_BUFFER_COUNT;
     if (surfaceCaps.maxImageCount)
         reqBufferCount = qBound(surfaceCaps.minImageCount, reqBufferCount, surfaceCaps.maxImageCount);
 
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
     VkExtent2D bufferSize = surfaceCaps.currentExtent;
     if (bufferSize.width == quint32(-1)) {
         Q_ASSERT(bufferSize.height == quint32(-1));
-        bufferSize.width = swapChainD->requestedPixelSize.width();
-        bufferSize.height = swapChainD->requestedPixelSize.height();
+        bufferSize.width = swapChainD->m_requestedPixelSize.width();
+        bufferSize.height = swapChainD->m_requestedPixelSize.height();
     }
 
     swapChainD->effectivePixelSize = QSize(bufferSize.width, bufferSize.height);
@@ -1061,7 +1060,7 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->cbWrapper.cb = w->currentCommandBuffer();
 
     swapChainD->rtWrapper.d.fb = w->currentFramebuffer();
-    swapChainD->requestedPixelSize = swapChainD->effectivePixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
+    swapChainD->m_requestedPixelSize = swapChainD->effectivePixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
 
     currentFrameSlot = w->currentFrame();
 
@@ -2809,6 +2808,25 @@ void QVkTextureRenderTarget::release()
     rhiD->releaseQueue.append(e);
 }
 
+QRhiRenderPass *QVkTextureRenderTarget::buildCompatibleRenderPass()
+{
+    QRHI_RES_RHI(QRhiVulkan);
+    QVkRenderPass *rp = new QVkRenderPass(rhi);
+    const VkFormat dsFormat = m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format())
+                                                  : rhiD->optimalDepthStencilFormat();
+    if (!rhiD->createOffscreenRenderPass(&rp->rp,
+                                         m_desc.colorAttachments,
+                                         m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
+                                         d.dsAttCount > 0,
+                                         dsFormat,
+                                         m_desc.depthTexture != nullptr))
+    {
+        delete rp;
+        return nullptr;
+    }
+    return rp;
+}
+
 bool QVkTextureRenderTarget::build()
 {
     if (d.fb)
@@ -3239,24 +3257,45 @@ const QRhiRenderPass *QVkSwapChain::defaultRenderPass() const
     return rtWrapper.renderPass();
 }
 
-QSize QVkSwapChain::requestedSizeInPixels() const
-{
-    return requestedPixelSize;
-}
-
 QSize QVkSwapChain::effectiveSizeInPixels() const
 {
     return effectivePixelSize;
 }
 
-bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, SurfaceImportFlags flags,
-                         QRhiRenderBuffer *depthStencil, int sampleCount_)
+QRhiRenderPass *QVkSwapChain::buildCompatibleRenderPass()
 {
+    QRHI_RES_RHI(QRhiVulkan);
+    QVkRenderPass *rp = new QVkRenderPass(rhi);
+    if (!rhiD->createDefaultRenderPass(&rp->rp, m_depthStencil != nullptr, sampleCount, colorFormat)) {
+        delete rp;
+        return nullptr;
+    }
+    return rp;
+}
+
+bool QVkSwapChain::buildOrResize()
+{
+    if (m_target) {
+        if (sc)
+            release();
+        QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
+        if (vkw) {
+            rtWrapper.d.rp.rp = vkw->defaultRenderPass();
+            m_requestedPixelSize = effectivePixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
+            rtWrapper.d.colorAttCount = 1;
+            rtWrapper.d.dsAttCount = 1;
+            rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
+            wrapWindow = vkw;
+            return true;
+        }
+        return false;
+    }
+
     // Can be called multiple times due to window resizes - that is not the
     // same as a simple release+build (as with other resources). Thus no
     // release() here. See recreateSwapChain() below.
 
-    VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(window);
+    VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(m_window);
     if (!surface) {
         qWarning("Failed to get surface for window");
         return false;
@@ -3286,24 +3325,24 @@ bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, Surf
         colorSpace = formats[0].colorSpace;
     }
 
-    sampleCount = rhiD->effectiveSampleCount(sampleCount_);
-    if (depthStencil && depthStencil->sampleCount() != sampleCount) {
+    sampleCount = rhiD->effectiveSampleCount(m_sampleCount);
+    if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {
         qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
-                 depthStencil->sampleCount(), sampleCount);
+                 m_depthStencil->sampleCount(), m_sampleCount);
     }
 
-    if (!rhiD->recreateSwapChain(surface, requestedPixelSize_, flags, this))
+    if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
         return false;
 
-    if (!rhiD->createDefaultRenderPass(&rp, depthStencil != nullptr, sampleCount, colorFormat))
+    if (!rhiD->createDefaultRenderPass(&rp, m_depthStencil != nullptr, sampleCount, colorFormat))
         return false;
 
     rtWrapper.d.rp.rp = rp;
     rtWrapper.d.pixelSize = effectivePixelSize;
     rtWrapper.d.colorAttCount = 1;
-    if (depthStencil) {
+    if (m_depthStencil) {
         rtWrapper.d.dsAttCount = 1;
-        ds = QRHI_RES(QVkRenderBuffer, depthStencil);
+        ds = QRHI_RES(QVkRenderBuffer, m_depthStencil);
     } else {
         rtWrapper.d.dsAttCount = 0;
         ds = nullptr;
@@ -3339,25 +3378,6 @@ bool QVkSwapChain::build(QWindow *window, const QSize &requestedPixelSize_, Surf
 
     wrapWindow = nullptr;
     return true;
-}
-
-bool QVkSwapChain::build(QObject *target)
-{
-    if (sc)
-        release();
-
-    QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(target);
-    if (vkw) {
-        rtWrapper.d.rp.rp = vkw->defaultRenderPass();
-        requestedPixelSize = effectivePixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
-        rtWrapper.d.colorAttCount = 1;
-        rtWrapper.d.dsAttCount = 1;
-        rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
-        wrapWindow = vkw;
-        return true;
-    }
-
-    return false;
 }
 
 QT_END_NAMESPACE

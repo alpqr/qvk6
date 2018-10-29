@@ -354,7 +354,12 @@ void Window::recreateSwapChain()
     }
     m_ds->build();
 
-    m_hasSwapChain = m_sc->build(this, outputSize, 0, m_ds, 1);
+    m_sc->setWindow(this);
+    m_sc->setRequestedPixelSize(outputSize);
+    m_sc->setDepthStencil(m_ds);
+
+    m_hasSwapChain = m_sc->buildOrResize();
+
     m_swapChainChanged = true;
 
     m_elapsedMs = 0;
@@ -423,7 +428,7 @@ void Window::render()
     // If the window got resized or got newly exposed, recreate the swapchain.
     // (the newly-exposed case is not actually required by some
     // platforms/backends, but f.ex. Vulkan on Windows seems to need it)
-    if (m_sc->requestedSizeInPixels() != size() * devicePixelRatio() || m_newlyExposed) {
+    if (m_sc->requestedPixelSize() != size() * devicePixelRatio() || m_newlyExposed) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;

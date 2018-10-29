@@ -1170,6 +1170,7 @@ bool QD3D11Sampler::build()
     return true;
 }
 
+// dummy, no Vulkan-style RenderPass+Framebuffer concept here
 QD3D11RenderPass::QD3D11RenderPass(QRhiImplementation *rhi)
     : QRhiRenderPass(rhi)
 {
@@ -1233,6 +1234,11 @@ void QD3D11TextureRenderTarget::release()
             rtv[i] = nullptr;
         }
     }
+}
+
+QRhiRenderPass *QD3D11TextureRenderTarget::buildCompatibleRenderPass()
+{
+    return new QD3D11RenderPass(rhi);
 }
 
 bool QD3D11TextureRenderTarget::build()
@@ -1821,29 +1827,26 @@ const QRhiRenderPass *QD3D11SwapChain::defaultRenderPass() const
     return rt.renderPass();
 }
 
-QSize QD3D11SwapChain::requestedSizeInPixels() const
-{
-    return pixelSize;
-}
-
 QSize QD3D11SwapChain::effectiveSizeInPixels() const
 {
     return pixelSize;
 }
 
-bool QD3D11SwapChain::build(QWindow *window_, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-                            QRhiRenderBuffer *depthStencil, int sampleCount)
+QRhiRenderPass *QD3D11SwapChain::buildCompatibleRenderPass()
+{
+    return new QD3D11RenderPass(rhi);
+}
+
+bool QD3D11SwapChain::buildOrResize()
 {
     // Can be called multiple times due to window resizes - that is not the
     // same as a simple release+build (as with other resources). Just need to
     // resize the buffers then.
 
-    Q_ASSERT(!swapChain || window == window_);
+    Q_ASSERT(!swapChain || window == m_window);
 
-    Q_UNUSED(sampleCount); // ### MSAA
-
-    window = window_;
-    pixelSize = requestedPixelSize;
+    window = m_window;
+    pixelSize = m_requestedPixelSize;
 
     QRHI_RES_RHI(QRhiD3D11);
 
@@ -1868,9 +1871,9 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &requestedPixelSize, S
         desc.BufferCount = BUFFER_COUNT;
         desc.Scaling = DXGI_SCALING_STRETCH;
         desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-        if (flags.testFlag(SurfaceHasPreMulAlpha))
+        if (m_flags.testFlag(SurfaceHasPreMulAlpha))
             desc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
-        else if (flags.testFlag(SurfaceHasNonPreMulAlpha))
+        else if (m_flags.testFlag(SurfaceHasNonPreMulAlpha))
             desc.AlphaMode = DXGI_ALPHA_MODE_STRAIGHT;
         desc.Flags = swapChainFlags;
 
@@ -1911,20 +1914,14 @@ bool QD3D11SwapChain::build(QWindow *window_, const QSize &requestedPixelSize, S
     }
 
     currentFrame = 0;
-    ds = depthStencil ? QRHI_RES(QD3D11RenderBuffer, depthStencil) : nullptr;
+    ds = m_depthStencil ? QRHI_RES(QD3D11RenderBuffer, m_depthStencil) : nullptr;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
     rtD->d.pixelSize = pixelSize;
     rtD->d.colorAttCount = 1;
-    rtD->d.dsAttCount = depthStencil ? 1 : 0;
+    rtD->d.dsAttCount = m_depthStencil ? 1 : 0;
 
     return true;
-}
-
-bool QD3D11SwapChain::build(QObject *target)
-{
-    Q_UNUSED(target);
-    return false;
 }
 
 QT_END_NAMESPACE

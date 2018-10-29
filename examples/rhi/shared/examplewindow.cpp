@@ -174,7 +174,13 @@ void ExampleWindow::recreateSwapChain()
 
     m_ds->build();
 
-    m_hasSwapChain = m_sc->build(this, outputSize, 0, m_ds, m_triRenderer.sampleCount());
+    m_sc->setWindow(this);
+    m_sc->setRequestedPixelSize(outputSize);
+    m_sc->setDepthStencil(m_ds);
+    m_sc->setSampleCount(m_triRenderer.sampleCount());
+
+    m_hasSwapChain = m_sc->buildOrResize();
+
     m_swapChainChanged = true;
 }
 
@@ -195,7 +201,7 @@ void ExampleWindow::render()
     if (!m_hasSwapChain || m_notExposed)
         return;
 
-    if (m_sc->requestedSizeInPixels() != size() * devicePixelRatio() || m_newlyExposed) {
+    if (m_sc->requestedPixelSize() != size() * devicePixelRatio() || m_newlyExposed) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;

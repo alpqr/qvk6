@@ -158,10 +158,13 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
 {
     QVkTextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
     void release() override;
+
     Type type() const override;
-    bool build() override;
     QSize sizeInPixels() const override;
     const QRhiRenderPass *renderPass() const override;
+
+    QRhiRenderPass *buildCompatibleRenderPass() override;
+    bool build() override;
 
     QVkBasicRenderTargetData d;
     VkImageView cubeFaceView[6];
@@ -236,6 +239,8 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
     uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
+
+    friend class QRhiVulkan;
 };
 
 struct QVkSwapChain : public QRhiSwapChain
@@ -246,19 +251,15 @@ struct QVkSwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
     const QRhiRenderPass *defaultRenderPass() const override;
-    QSize requestedSizeInPixels() const override;
     QSize effectiveSizeInPixels() const override;
 
-    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-               QRhiRenderBuffer *depthStencil, int sampleCount) override;
-
-    bool build(QObject *target) override;
+    QRhiRenderPass *buildCompatibleRenderPass() override;
+    bool buildOrResize() override;
 
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
 
     QVulkanWindow *wrapWindow = nullptr;
-    QSize requestedPixelSize;
     QSize effectivePixelSize;
     bool supportsReadback = false;
     VkSwapchainKHR sc = VK_NULL_HANDLE;
@@ -294,6 +295,8 @@ struct QVkSwapChain : public QRhiSwapChain
 
     quint32 currentImage = 0; // index in imageRes
     quint32 currentFrame = 0; // index in frameRes
+
+    friend class QRhiVulkan;
 };
 
 class QRhiVulkan : public QRhiImplementation

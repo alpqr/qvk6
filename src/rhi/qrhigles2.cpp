@@ -1225,6 +1225,7 @@ bool QGles2Sampler::build()
     return true;
 }
 
+// dummy, no Vulkan-style RenderPass+Framebuffer concept here
 QGles2RenderPass::QGles2RenderPass(QRhiImplementation *rhi)
     : QRhiRenderPass(rhi)
 {
@@ -1283,6 +1284,11 @@ void QGles2TextureRenderTarget::release()
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
+}
+
+QRhiRenderPass *QGles2TextureRenderTarget::buildCompatibleRenderPass()
+{
+    return new QGles2RenderPass(rhi);
 }
 
 bool QGles2TextureRenderTarget::build()
@@ -1544,36 +1550,25 @@ const QRhiRenderPass *QGles2SwapChain::defaultRenderPass() const
     return rt.renderPass();
 }
 
-QSize QGles2SwapChain::requestedSizeInPixels() const
-{
-    return pixelSize;
-}
-
 QSize QGles2SwapChain::effectiveSizeInPixels() const
 {
     return pixelSize;
 }
 
-bool QGles2SwapChain::build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-                            QRhiRenderBuffer *depthStencil, int sampleCount)
+QRhiRenderPass *QGles2SwapChain::buildCompatibleRenderPass()
 {
-    Q_UNUSED(flags);
-    Q_UNUSED(sampleCount);
-
-    surface = window;
-    pixelSize = requestedPixelSize;
-
-    rt.d.pixelSize = pixelSize;
-    rt.d.attCount = depthStencil ? 2 : 1;
-
-    return true;
+    return new QGles2RenderPass(rhi);
 }
 
-bool QGles2SwapChain::build(QObject *target)
+bool QGles2SwapChain::buildOrResize()
 {
-    // ### some day this could support QOpenGLWindow, OpenGLWidget, ...
-    Q_UNUSED(target);
-    return false;
+    surface = m_window;
+    pixelSize = m_requestedPixelSize;
+
+    rt.d.pixelSize = pixelSize;
+    rt.d.attCount = m_depthStencil ? 2 : 1;
+
+    return true;
 }
 
 QT_END_NAMESPACE

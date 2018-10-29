@@ -1,4 +1,6 @@
 make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)
+review swapchain param handling
+rename res pattern to new-build-release (from create-build-release)?
 figure out what's up with instance step rate
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers

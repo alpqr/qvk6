@@ -682,6 +682,8 @@ bool QMetalSampler::build()
     return true;
 }
 
+// dummy, no Vulkan-style RenderPass+Framebuffer concept here.
+// We do have MTLRenderPassDescriptor of course, but it will be created on the fly for each pass.
 QMetalRenderPass::QMetalRenderPass(QRhiImplementation *rhi)
     : QRhiRenderPass(rhi)
 {
@@ -728,6 +730,11 @@ QMetalTextureRenderTarget::QMetalTextureRenderTarget(QRhiImplementation *rhi,
 
 void QMetalTextureRenderTarget::release()
 {
+}
+
+QRhiRenderPass *QMetalTextureRenderTarget::buildCompatibleRenderPass()
+{
+    return new QMetalRenderPass(rhi);
 }
 
 bool QMetalTextureRenderTarget::build()

@@ -139,10 +139,13 @@ struct QGles2TextureRenderTarget : public QRhiTextureRenderTarget
 {
     QGles2TextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
     void release() override;
+
     Type type() const override;
-    bool build() override;
     QSize sizeInPixels() const override;
     const QRhiRenderPass *renderPass() const override;
+
+    QRhiRenderPass *buildCompatibleRenderPass() override;
+    bool build() override;
 
     QGles2BasicRenderTargetData d;
     GLuint framebuffer = 0;
@@ -292,13 +295,10 @@ struct QGles2SwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
     const QRhiRenderPass *defaultRenderPass() const override;
-    QSize requestedSizeInPixels() const override;
     QSize effectiveSizeInPixels() const override;
 
-    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-               QRhiRenderBuffer *depthStencil, int sampleCount) override;
-
-    bool build(QObject *target) override;
+    QRhiRenderPass *buildCompatibleRenderPass() override;
+    bool buildOrResize() override;
 
     QSurface *surface = nullptr;
     QSize pixelSize;

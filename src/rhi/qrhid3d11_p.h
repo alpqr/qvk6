@@ -140,10 +140,13 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
 {
     QD3D11TextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
     void release() override;
+
     Type type() const override;
-    bool build() override;
     QSize sizeInPixels() const override;
     const QRhiRenderPass *renderPass() const override;
+
+    QRhiRenderPass *buildCompatibleRenderPass() override;
+    bool build() override;
 
     QD3D11BasicRenderTargetData d;
     ID3D11RenderTargetView *rtv[QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS];
@@ -360,13 +363,10 @@ struct QD3D11SwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
     const QRhiRenderPass *defaultRenderPass() const override;
-    QSize requestedSizeInPixels() const override;
     QSize effectiveSizeInPixels() const override;
 
-    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-               QRhiRenderBuffer *depthStencil, int sampleCount) override;
-
-    bool build(QObject *target) override;
+    QRhiRenderPass *buildCompatibleRenderPass() override;
+    bool buildOrResize();
 
     QWindow *window = nullptr;
     QSize pixelSize;

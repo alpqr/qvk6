@@ -72,7 +72,7 @@ static QBakedShader getShader(const QString &name)
 
 static const QSize OFFSCREEN_SIZE(512, 512);
 
-void TriangleOnCubeRenderer::initResources()
+void TriangleOnCubeRenderer::initResources(QRhiRenderPass *rp)
 {
     m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
     m_vbuf->build();
@@ -105,37 +105,6 @@ void TriangleOnCubeRenderer::initResources()
     });
     m_srb->build();
 
-    if (DEPTH_TEXTURE) {
-        m_offscreenTriangle.setDepthWrite(true);
-        m_depthTex = m_r->createTexture(QRhiTexture::D32, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
-        m_depthTex->build();
-    }
-
-    QRhiTextureRenderTarget::Flags rtFlags = 0;
-    if (IMAGE_UNDER_OFFSCREEN_RENDERING)
-        rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
-
-    if (DEPTH_TEXTURE) {
-        m_rt = m_r->createTextureRenderTarget({ nullptr, m_depthTex }, rtFlags);
-    } else {
-        QRhiTextureRenderTargetDescription desc { m_tex };
-        if (MRT) {
-            m_offscreenTriangle.setColorAttCount(2);
-            desc.colorAttachments.append(m_tex2);
-        }
-        m_rt = m_r->createTextureRenderTarget(desc, rtFlags);
-    }
-
-    m_rt->build();
-
-    m_offscreenTriangle.setRhi(m_r);
-    m_offscreenTriangle.initResources();
-    m_offscreenTriangle.setScale(2);
-    // m_tex and the offscreen triangle are never multisample
-}
-
-void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
-{
     m_ps = m_r->createGraphicsPipeline();
 
     m_ps->setDepthTest(true);
@@ -172,16 +141,55 @@ void TriangleOnCubeRenderer::initOutputDependentResources(const QRhiRenderPass *
 
     m_ps->build();
 
+    if (DEPTH_TEXTURE) {
+        m_offscreenTriangle.setDepthWrite(true);
+        m_depthTex = m_r->createTexture(QRhiTexture::D32, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+        m_depthTex->build();
+    }
+
+    QRhiTextureRenderTarget::Flags rtFlags = 0;
+    if (IMAGE_UNDER_OFFSCREEN_RENDERING)
+        rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
+
+    if (DEPTH_TEXTURE) {
+        m_rt = m_r->createTextureRenderTarget({ nullptr, m_depthTex }, rtFlags);
+    } else {
+        QRhiTextureRenderTargetDescription desc { m_tex };
+        if (MRT) {
+            m_offscreenTriangle.setColorAttCount(2);
+            desc.colorAttachments.append(m_tex2);
+        }
+        m_rt = m_r->createTextureRenderTarget(desc, rtFlags);
+    }
+
+    m_rp = m_rt->buildCompatibleRenderPass();
+    m_rt->setRenderPass(m_rp);
+
+    m_rt->build();
+
+    m_offscreenTriangle.setRhi(m_r);
+    m_offscreenTriangle.initResources(m_rp);
+    m_offscreenTriangle.setScale(2);
+    // m_tex and the offscreen triangle are never multisample
+}
+
+void TriangleOnCubeRenderer::resize(const QSize &pixelSize)
+{
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
 
-    m_offscreenTriangle.initOutputDependentResources(m_rt->renderPass(), pixelSize);
+    m_offscreenTriangle.resize(pixelSize);
 }
 
 void TriangleOnCubeRenderer::releaseResources()
 {
     m_offscreenTriangle.releaseResources();
+
+    if (m_ps) {
+        m_ps->releaseAndDestroy();
+        m_ps = nullptr;
+    }
 
     if (m_srb) {
         m_srb->releaseAndDestroy();
@@ -191,6 +199,11 @@ void TriangleOnCubeRenderer::releaseResources()
     if (m_rt) {
         m_rt->releaseAndDestroy();
         m_rt = nullptr;
+    }
+
+    if (m_rp) {
+        m_rp->releaseAndDestroy();
+        m_rp = nullptr;
     }
 
     if (m_sampler) {
@@ -221,16 +234,6 @@ void TriangleOnCubeRenderer::releaseResources()
     if (m_vbuf) {
         m_vbuf->releaseAndDestroy();
         m_vbuf = nullptr;
-    }
-}
-
-void TriangleOnCubeRenderer::releaseOutputDependentResources()
-{
-    m_offscreenTriangle.releaseOutputDependentResources();
-
-    if (m_ps) {
-        m_ps->releaseAndDestroy();
-        m_ps = nullptr;
     }
 }
 

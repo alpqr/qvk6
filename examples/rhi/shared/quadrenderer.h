@@ -60,9 +60,10 @@ public:
     void setSampleCount(int samples) { m_sampleCount = samples; }
     int sampleCount() const { return m_sampleCount; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
-    void initResources();
+    void initResources(QRhiRenderPass *rp);
     void releaseResources();
-    void setPipeline(QRhiGraphicsPipeline *ps, const QSize &pixelSize);
+    void setPipeline(QRhiGraphicsPipeline *ps);
+    void resize(const QSize &pixelSize);
     void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
 

@@ -1202,11 +1202,6 @@ QSize QD3D11ReferenceRenderTarget::sizeInPixels() const
     return d.pixelSize;
 }
 
-const QRhiRenderPass *QD3D11ReferenceRenderTarget::renderPass() const
-{
-    return &d.rp;
-}
-
 QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi,
                                                      const QRhiTextureRenderTargetDescription &desc,
                                                      Flags flags)
@@ -1306,6 +1301,7 @@ bool QD3D11TextureRenderTarget::build()
         d.rtv[i] = i < d.colorAttCount ? rtv[i] : nullptr;
 
     d.dsv = dsv;
+    d.rp = QRHI_RES(QD3D11RenderPass, m_renderPass);
 
     return true;
 }
@@ -1318,11 +1314,6 @@ QRhiRenderTarget::Type QD3D11TextureRenderTarget::type() const
 QSize QD3D11TextureRenderTarget::sizeInPixels() const
 {
     return d.pixelSize;
-}
-
-const QRhiRenderPass *QD3D11TextureRenderTarget::renderPass() const
-{
-    return &d.rp;
 }
 
 QD3D11ShaderResourceBindings::QD3D11ShaderResourceBindings(QRhiImplementation *rhi)
@@ -1822,11 +1813,6 @@ QRhiRenderTarget *QD3D11SwapChain::currentFrameRenderTarget()
     return &rt;
 }
 
-const QRhiRenderPass *QD3D11SwapChain::defaultRenderPass() const
-{
-    return rt.renderPass();
-}
-
 QSize QD3D11SwapChain::effectiveSizeInPixels() const
 {
     return pixelSize;
@@ -1917,6 +1903,7 @@ bool QD3D11SwapChain::buildOrResize()
     ds = m_depthStencil ? QRHI_RES(QD3D11RenderBuffer, m_depthStencil) : nullptr;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
+    rtD->d.rp = QRHI_RES(QD3D11RenderPass, m_renderPass);
     rtD->d.pixelSize = pixelSize;
     rtD->d.colorAttCount = 1;
     rtD->d.dsAttCount = m_depthStencil ? 1 : 0;

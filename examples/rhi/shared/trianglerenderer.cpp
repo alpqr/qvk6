@@ -69,7 +69,7 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-void TriangleRenderer::initResources()
+void TriangleRenderer::initResources(QRhiRenderPass *rp)
 {
 #ifdef VBUF_IS_DYNAMIC
     m_vbuf = m_r->createBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, sizeof(vertexData));
@@ -87,13 +87,7 @@ void TriangleRenderer::initResources()
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
     });
     m_srb->build();
-}
 
-// ### the following limitation may be lifted later on, the ps won't need to be created here then
-// the ps depends on the renderpass -> so it is tied to the swapchain.
-// on the other hand, srb and buffers are referenced from the ps but can be reused.
-void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
-{
     m_ps = m_r->createGraphicsPipeline();
 
     QRhiGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
@@ -134,7 +128,10 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
     m_ps->setRenderPass(rp);
 
     m_ps->build();
+}
 
+void TriangleRenderer::resize(const QSize &pixelSize)
+{
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
@@ -142,6 +139,11 @@ void TriangleRenderer::initOutputDependentResources(const QRhiRenderPass *rp, co
 
 void TriangleRenderer::releaseResources()
 {
+    if (m_ps) {
+        m_ps->releaseAndDestroy();
+        m_ps = nullptr;
+    }
+
     if (m_srb) {
         m_srb->releaseAndDestroy();
         m_srb = nullptr;
@@ -155,14 +157,6 @@ void TriangleRenderer::releaseResources()
     if (m_vbuf) {
         m_vbuf->releaseAndDestroy();
         m_vbuf = nullptr;
-    }
-}
-
-void TriangleRenderer::releaseOutputDependentResources()
-{
-    if (m_ps) {
-        m_ps->releaseAndDestroy();
-        m_ps = nullptr;
     }
 }
 

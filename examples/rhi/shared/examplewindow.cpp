@@ -102,47 +102,64 @@ void ExampleWindow::init()
     if (!m_sc)
         return;
 
+    // allow depth-stencil, although we do not actually enable depth test/write for the triangle
+    m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
+                                   QSize(), // we don't know the size yet, this is fine
+                                   m_sampleCount,
+                                   QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+    m_sc->setWindow(this);
+    m_sc->setDepthStencil(m_ds);
+    m_sc->setSampleCount(m_sampleCount);
+    m_scrp = m_sc->buildCompatibleRenderPass();
+    m_sc->setRenderPass(m_scrp);
+
     m_triRenderer.setRhi(m_r);
     m_triRenderer.setSampleCount(m_sampleCount);
-    m_triRenderer.initResources();
+    m_triRenderer.initResources(m_scrp);
 
     if (!m_triangleOnly) {
         m_triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
 
         m_quadRenderer.setRhi(m_r);
         m_quadRenderer.setSampleCount(m_sampleCount);
-        m_quadRenderer.initResources();
+        m_quadRenderer.setPipeline(m_triRenderer.pipeline());
+        m_quadRenderer.initResources(m_scrp);
         m_quadRenderer.setTranslation(QVector3D(1.5f, -0.5f, 0));
 
         m_cubeRenderer.setRhi(m_r);
         m_cubeRenderer.setSampleCount(m_sampleCount);
-        m_cubeRenderer.initResources();
+        m_cubeRenderer.initResources(m_scrp);
         m_cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
     }
 
     if (!m_onScreenOnly) {
         m_liveTexCubeRenderer.setRhi(m_r);
         m_liveTexCubeRenderer.setSampleCount(m_sampleCount);
-        m_liveTexCubeRenderer.initResources();
+        m_liveTexCubeRenderer.initResources(m_scrp);
         m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
     }
 }
 
 void ExampleWindow::releaseResources()
 {
-    m_triRenderer.releaseOutputDependentResources();
     m_triRenderer.releaseResources();
 
     if (!m_triangleOnly) {
         m_quadRenderer.releaseResources();
-
-        m_cubeRenderer.releaseOutputDependentResources();
         m_cubeRenderer.releaseResources();
     }
 
-    if (!m_onScreenOnly) {
-        m_liveTexCubeRenderer.releaseOutputDependentResources();
+    if (!m_onScreenOnly)
         m_liveTexCubeRenderer.releaseResources();
+
+    if (m_scrp) {
+        m_scrp->releaseAndDestroy();
+        m_scrp = nullptr;
+    }
+
+    if (m_ds) {
+        m_ds->releaseAndDestroy();
+        m_ds = nullptr;
     }
 
     delete m_sc;
@@ -154,34 +171,14 @@ void ExampleWindow::releaseResources()
 
 void ExampleWindow::recreateSwapChain()
 {
-    if (!m_sc)
-        return;
-
     const QSize outputSize = size() * devicePixelRatio();
 
-    if (!m_ds) {
-        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
-                                       outputSize,
-                                       m_triRenderer.sampleCount(),
-                                       QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
-    } else {
-        m_ds->release();
-        m_ds->setPixelSize(outputSize);
-    }
+    m_ds->setPixelSize(outputSize);
+    m_ds->build(); // == m_ds->release(); m_ds->build();
 
-    if (!m_ds)
-        return;
-
-    m_ds->build();
-
-    m_sc->setWindow(this);
     m_sc->setRequestedPixelSize(outputSize);
-    m_sc->setDepthStencil(m_ds);
-    m_sc->setSampleCount(m_triRenderer.sampleCount());
-
     m_hasSwapChain = m_sc->buildOrResize();
-
-    m_swapChainChanged = true;
+    m_resizedSwapChain = true;
 }
 
 void ExampleWindow::releaseSwapChain()
@@ -189,10 +186,6 @@ void ExampleWindow::releaseSwapChain()
     if (m_hasSwapChain) {
         m_hasSwapChain = false;
         m_sc->release();
-    }
-    if (m_ds) {
-        m_ds->releaseAndDestroy();
-        m_ds = nullptr;
     }
 }
 
@@ -220,24 +213,15 @@ void ExampleWindow::render()
         return;
     }
 
-    if (m_swapChainChanged) {
-        m_swapChainChanged = false;
-        m_triRenderer.releaseOutputDependentResources();
-        if (!m_triangleOnly)
-            m_cubeRenderer.releaseOutputDependentResources();
-        if (!m_onScreenOnly)
-            m_liveTexCubeRenderer.releaseOutputDependentResources();
-    }
-
-    if (!m_triRenderer.isPipelineInitialized()) {
-        const QRhiRenderPass *rp = m_sc->defaultRenderPass();
-        m_triRenderer.initOutputDependentResources(rp, m_sc->effectiveSizeInPixels());
+    if (m_resizedSwapChain) {
+        m_resizedSwapChain = false;
+        m_triRenderer.resize(m_sc->effectiveSizeInPixels());
         if (!m_triangleOnly) {
-            m_quadRenderer.setPipeline(m_triRenderer.pipeline(), m_sc->effectiveSizeInPixels());
-            m_cubeRenderer.initOutputDependentResources(rp, m_sc->effectiveSizeInPixels());
+            m_quadRenderer.resize(m_sc->effectiveSizeInPixels());
+            m_cubeRenderer.resize(m_sc->effectiveSizeInPixels());
         }
         if (!m_onScreenOnly)
-            m_liveTexCubeRenderer.initOutputDependentResources(rp, m_sc->effectiveSizeInPixels());
+            m_liveTexCubeRenderer.resize(m_sc->effectiveSizeInPixels());
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();

@@ -132,7 +132,7 @@ public:
 protected:
     void init();
     void releaseResources();
-    void recreateSwapChain();
+    void resizeSwapChain();
     void releaseSwapChain();
     void render();
 
@@ -145,10 +145,9 @@ protected:
 
     QRhi *m_r = nullptr;
     bool m_hasSwapChain = false;
-    bool m_swapChainChanged = false;
     QRhiSwapChain *m_sc = nullptr;
     QRhiRenderBuffer *m_ds = nullptr;
-
+    QRhiRenderPass *m_rp = nullptr;
     QRhiBuffer *m_vbuf = nullptr;
     bool m_vbufReady = false;
     QRhiBuffer *m_ubuf = nullptr;
@@ -204,7 +203,7 @@ void Window::exposeEvent(QExposeEvent *)
     if (isExposed() && !m_running) {
         m_running = true;
         init();
-        recreateSwapChain();
+        resizeSwapChain();
         render();
     }
 
@@ -289,6 +288,15 @@ void Window::init()
     // now onto the backend-independent init
 
     m_sc = m_r->createSwapChain();
+    // allow depth-stencil, although we do not actually enable depth test/write for the triangle
+    m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
+                                   QSize(), // we don't know the size yet, this is fine
+                                   1,
+                                   QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+    m_sc->setWindow(this);
+    m_sc->setDepthStencil(m_ds);
+    m_rp = m_sc->buildCompatibleRenderPass();
+    m_sc->setRenderPass(m_rp);
 
     m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_vbuf->build();
@@ -302,68 +310,6 @@ void Window::init()
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
     });
     m_srb->build();
-}
-
-void Window::releaseResources()
-{
-    if (m_srb) {
-        m_srb->releaseAndDestroy();
-        m_srb = nullptr;
-    }
-
-    if (m_ubuf) {
-        m_ubuf->releaseAndDestroy();
-        m_ubuf = nullptr;
-    }
-
-    if (m_vbuf) {
-        m_vbuf->releaseAndDestroy();
-        m_vbuf = nullptr;
-    }
-
-    delete m_sc;
-    m_sc = nullptr;
-
-    delete m_r;
-    m_r = nullptr;
-
-#ifndef QT_NO_OPENGL
-    delete m_context;
-    m_context = nullptr;
-    delete m_fallbackSurface;
-    m_fallbackSurface = nullptr;
-#endif
-}
-
-void Window::recreateSwapChain()
-{
-    if (!m_sc)
-        return;
-
-    const QSize outputSize = size() * devicePixelRatio();
-
-    // allow depth-stencil, although we do not actually enable depth test/write for the triangle
-    if (!m_ds) {
-        m_ds = m_r->createRenderBuffer(QRhiRenderBuffer::DepthStencil,
-                                       outputSize,
-                                       1,
-                                       QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
-    } else {
-        m_ds->release();
-        m_ds->setPixelSize(outputSize);
-    }
-    m_ds->build();
-
-    m_sc->setWindow(this);
-    m_sc->setRequestedPixelSize(outputSize);
-    m_sc->setDepthStencil(m_ds);
-
-    m_hasSwapChain = m_sc->buildOrResize();
-
-    m_swapChainChanged = true;
-
-    m_elapsedMs = 0;
-    m_elapsedCount = 0;
 
     m_ps = m_r->createGraphicsPipeline();
 
@@ -394,9 +340,69 @@ void Window::recreateSwapChain()
 
     m_ps->setVertexInputLayout(inputLayout);
     m_ps->setShaderResourceBindings(m_srb);
-    m_ps->setRenderPass(m_sc->defaultRenderPass());
+    m_ps->setRenderPass(m_rp);
 
     m_ps->build();
+}
+
+void Window::releaseResources()
+{
+    if (m_ps) {
+        m_ps->releaseAndDestroy();
+        m_ps = nullptr;
+    }
+
+    if (m_rp) {
+        m_rp->releaseAndDestroy();
+        m_rp = nullptr;
+    }
+
+    if (m_srb) {
+        m_srb->releaseAndDestroy();
+        m_srb = nullptr;
+    }
+
+    if (m_ubuf) {
+        m_ubuf->releaseAndDestroy();
+        m_ubuf = nullptr;
+    }
+
+    if (m_vbuf) {
+        m_vbuf->releaseAndDestroy();
+        m_vbuf = nullptr;
+    }
+
+    if (m_ds) {
+        m_ds->releaseAndDestroy();
+        m_ds = nullptr;
+    }
+
+    delete m_sc;
+    m_sc = nullptr;
+
+    delete m_r;
+    m_r = nullptr;
+
+#ifndef QT_NO_OPENGL
+    delete m_context;
+    m_context = nullptr;
+    delete m_fallbackSurface;
+    m_fallbackSurface = nullptr;
+#endif
+}
+
+void Window::resizeSwapChain()
+{
+    const QSize outputSize = size() * devicePixelRatio();
+
+    m_ds->setPixelSize(outputSize);
+    m_ds->build(); // == m_ds->release(); m_ds->build();
+
+    m_sc->setRequestedPixelSize(outputSize);
+    m_hasSwapChain = m_sc->buildOrResize();
+
+    m_elapsedMs = 0;
+    m_elapsedCount = 0;
 
     const QSize outputSizeInPixels = m_sc->effectiveSizeInPixels();
     m_proj = m_r->clipSpaceCorrMatrix();
@@ -406,17 +412,9 @@ void Window::recreateSwapChain()
 
 void Window::releaseSwapChain()
 {
-    if (m_ps) {
-        m_ps->releaseAndDestroy();
-        m_ps = nullptr;
-    }
     if (m_hasSwapChain) {
         m_hasSwapChain = false;
         m_sc->release();
-    }
-    if (m_ds) {
-        m_ds->releaseAndDestroy();
-        m_ds = nullptr;
     }
 }
 
@@ -425,11 +423,11 @@ void Window::render()
     if (!m_hasSwapChain || m_notExposed)
         return;
 
-    // If the window got resized or got newly exposed, recreate the swapchain.
+    // If the window got resized or got newly exposed, resize the swapchain.
     // (the newly-exposed case is not actually required by some
     // platforms/backends, but f.ex. Vulkan on Windows seems to need it)
     if (m_sc->requestedPixelSize() != size() * devicePixelRatio() || m_newlyExposed) {
-        recreateSwapChain();
+        resizeSwapChain();
         if (!m_hasSwapChain)
             return;
         m_newlyExposed = false;
@@ -438,7 +436,7 @@ void Window::render()
     // Start a new frame. This is where we block when too far ahead of GPU/present.
     QRhi::FrameOpResult r = m_r->beginFrame(m_sc);
     if (r == QRhi::FrameOpSwapChainOutOfDate) {
-        recreateSwapChain();
+        resizeSwapChain();
         if (!m_hasSwapChain)
             return;
         r = m_r->beginFrame(m_sc);

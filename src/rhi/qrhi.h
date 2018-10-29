@@ -458,10 +458,13 @@ public:
 
     virtual Type type() const = 0;
     virtual QSize sizeInPixels() const = 0;
-    virtual const QRhiRenderPass *renderPass() const = 0;
+
+    QRhiRenderPass *renderPass() const { return m_renderPass; }
+    void setRenderPass(QRhiRenderPass *renderPass) { m_renderPass = renderPass; }
 
 protected:
     QRhiRenderTarget(QRhiImplementation *rhi);
+    QRhiRenderPass *m_renderPass = nullptr;
     void *m_reserved;
 };
 
@@ -479,7 +482,8 @@ public:
     Flags flags() const { return m_flags; }
     void setFlags(Flags f) { m_flags = f; }
 
-    // to be called before build() with description and flags set
+    // To be called before build() with description and flags set.
+    // Note setRenderPass() in the base class, that must still be called afterwards.
     virtual QRhiRenderPass *buildCompatibleRenderPass() = 0;
 
     // as usual, textures in desc must be built before calling build() on the rt
@@ -665,8 +669,8 @@ public:
     QRhiShaderResourceBindings *shaderResourceBindings() const { return m_shaderResourceBindings; }
     void setShaderResourceBindings(QRhiShaderResourceBindings *srb) { m_shaderResourceBindings = srb; }
 
-    const QRhiRenderPass *renderPass() const { return m_renderPass; }
-    void setRenderPass(const QRhiRenderPass *pass) { m_renderPass = pass; }
+    QRhiRenderPass *renderPass() const { return m_renderPass; }
+    void setRenderPass(QRhiRenderPass *pass) { m_renderPass = pass; }
 
     virtual bool build() = 0;
 
@@ -689,7 +693,7 @@ protected:
     QVector<QRhiGraphicsShaderStage> m_shaderStages;
     QRhiVertexInputLayout m_vertexInputLayout;
     QRhiShaderResourceBindings *m_shaderResourceBindings = nullptr; // must be built by the time ps' build() is called
-    const QRhiRenderPass *m_renderPass = nullptr;
+    QRhiRenderPass *m_renderPass = nullptr;
     void *m_reserved;
 };
 
@@ -728,6 +732,9 @@ public:
     int sampleCount() const { return m_sampleCount; }
     void setSampleCount(int samples) { m_sampleCount = samples; }
 
+    QRhiRenderPass *renderPass() const { return m_renderPass; }
+    void setRenderPass(QRhiRenderPass *renderPass) { m_renderPass = renderPass; }
+
     // Alternatively, integrate with an existing swapchain, f.ex.
     // QVulkanWindow. Other settings have no effect when this is set.
     QObject *target() const { return m_target; }
@@ -735,7 +742,6 @@ public:
 
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
-    virtual const QRhiRenderPass *defaultRenderPass() const = 0;
 
     // Some backends use the requested size, others ignore it and get the actual
     // size on their own. Keep track of both - application logic will need the
@@ -744,7 +750,17 @@ public:
     // calculations like viewport).
     virtual QSize effectiveSizeInPixels() const = 0;
 
+    // To be called before build() with relevant parameters like depthStencil and sampleCount set.
+    // (things like the window or the size of depthStencil are irrelevant here)
+    // Note setRenderPass(), that must still be called after (but before buildOrResize).
     virtual QRhiRenderPass *buildCompatibleRenderPass() = 0;
+
+    // As an exception to the typical build+release pattern, note that
+    // buildOrResize - buildOrResize is not the same as buildOrResize - release
+    // - buildOrResize. A swapchain is often able to, depending on the
+    // underlying APIs, accomodate changed output sizes in a manner that is
+    // more efficient than a full destroy - create. So use the former when a
+    // window is resized, never the latter.
     virtual bool buildOrResize() = 0;
 
 protected:
@@ -754,6 +770,7 @@ protected:
     SurfaceImportFlags m_flags;
     QRhiRenderBuffer *m_depthStencil = nullptr;
     int m_sampleCount = 1;
+    QRhiRenderPass *m_renderPass = nullptr;
     QObject *m_target = nullptr;
     void *m_reserved;
 };

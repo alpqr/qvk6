@@ -1257,11 +1257,6 @@ QSize QGles2ReferenceRenderTarget::sizeInPixels() const
     return d.pixelSize;
 }
 
-const QRhiRenderPass *QGles2ReferenceRenderTarget::renderPass() const
-{
-    return &d.rp;
-}
-
 QGles2TextureRenderTarget::QGles2TextureRenderTarget(QRhiImplementation *rhi,
                                                      const QRhiTextureRenderTargetDescription &desc,
                                                      Flags flags)
@@ -1317,6 +1312,8 @@ bool QGles2TextureRenderTarget::build()
     Q_ASSERT(texD->texture);
 
     rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
+
+    d.rp = QRHI_RES(QGles2RenderPass, m_renderPass);
     d.pixelSize = texD->pixelSize();
     d.attCount = 1;
 
@@ -1344,11 +1341,6 @@ QRhiRenderTarget::Type QGles2TextureRenderTarget::type() const
 QSize QGles2TextureRenderTarget::sizeInPixels() const
 {
     return d.pixelSize;
-}
-
-const QRhiRenderPass *QGles2TextureRenderTarget::renderPass() const
-{
-    return &d.rp;
 }
 
 QGles2ShaderResourceBindings::QGles2ShaderResourceBindings(QRhiImplementation *rhi)
@@ -1545,11 +1537,6 @@ QRhiRenderTarget *QGles2SwapChain::currentFrameRenderTarget()
     return &rt;
 }
 
-const QRhiRenderPass *QGles2SwapChain::defaultRenderPass() const
-{
-    return rt.renderPass();
-}
-
 QSize QGles2SwapChain::effectiveSizeInPixels() const
 {
     return pixelSize;
@@ -1565,6 +1552,7 @@ bool QGles2SwapChain::buildOrResize()
     surface = m_window;
     pixelSize = m_requestedPixelSize;
 
+    rt.d.rp = QRHI_RES(QGles2RenderPass, m_renderPass);
     rt.d.pixelSize = pixelSize;
     rt.d.attCount = m_depthStencil ? 2 : 1;
 

@@ -134,9 +134,9 @@ struct QVkRenderPass : public QRhiRenderPass
 
 struct QVkBasicRenderTargetData
 {
-    QVkBasicRenderTargetData(QRhiImplementation *rhi) : rp(rhi) { }
+    QVkBasicRenderTargetData(QRhiImplementation *) { }
     VkFramebuffer fb = VK_NULL_HANDLE;
-    QVkRenderPass rp;
+    QVkRenderPass *rp = nullptr;
     QSize pixelSize;
     int colorAttCount = 0;
     int dsAttCount = 0;
@@ -149,7 +149,6 @@ struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
     QVkBasicRenderTargetData d;
 };
@@ -161,7 +160,6 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
     QRhiRenderPass *buildCompatibleRenderPass() override;
     bool build() override;
@@ -250,7 +248,7 @@ struct QVkSwapChain : public QRhiSwapChain
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
-    const QRhiRenderPass *defaultRenderPass() const override;
+
     QSize effectiveSizeInPixels() const override;
 
     QRhiRenderPass *buildCompatibleRenderPass() override;
@@ -269,7 +267,6 @@ struct QVkSwapChain : public QRhiSwapChain
     QVkRenderBuffer *ds = nullptr;
     VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
-    VkRenderPass rp;
     QVkReferenceRenderTarget rtWrapper;
     QVkCommandBuffer cbWrapper;
 

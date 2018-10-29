@@ -65,7 +65,7 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-void TexturedCubeRenderer::initResources()
+void TexturedCubeRenderer::initResources(QRhiRenderPass *rp)
 {
     m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
     m_vbuf->build();
@@ -91,10 +91,7 @@ void TexturedCubeRenderer::initResources()
         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_tex, m_sampler)
     });
     m_srb->build();
-}
 
-void TexturedCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize)
-{
     m_ps = m_r->createGraphicsPipeline();
 
     m_ps->setDepthTest(true);
@@ -130,7 +127,10 @@ void TexturedCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp
     m_ps->setRenderPass(rp);
 
     m_ps->build();
+}
 
+void TexturedCubeRenderer::resize(const QSize &pixelSize)
+{
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
@@ -138,6 +138,11 @@ void TexturedCubeRenderer::initOutputDependentResources(const QRhiRenderPass *rp
 
 void TexturedCubeRenderer::releaseResources()
 {
+    if (m_ps) {
+        m_ps->releaseAndDestroy();
+        m_ps = nullptr;
+    }
+
     if (m_srb) {
         m_srb->releaseAndDestroy();
         m_srb = nullptr;
@@ -161,14 +166,6 @@ void TexturedCubeRenderer::releaseResources()
     if (m_vbuf) {
         m_vbuf->releaseAndDestroy();
         m_vbuf = nullptr;
-    }
-}
-
-void TexturedCubeRenderer::releaseOutputDependentResources()
-{
-    if (m_ps) {
-        m_ps->releaseAndDestroy();
-        m_ps = nullptr;
     }
 }
 

@@ -1,5 +1,3 @@
-make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)
-review swapchain param handling
 rename res pattern to new-build-release (from create-build-release)?
 figure out what's up with instance step rate
 mtl: buffer logic is borked
@@ -43,6 +41,8 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)
+review swapchain param handling
 gl: offscreensurface ownership not taken (fix examples)
 d3d: why rtv/dsv in rp -> should be in rtD
 new "minimal" example

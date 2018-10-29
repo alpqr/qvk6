@@ -117,9 +117,9 @@ struct QGles2RenderPass : public QRhiRenderPass
 
 struct QGles2BasicRenderTargetData
 {
-    QGles2BasicRenderTargetData(QRhiImplementation *rhi) : rp(rhi) { }
+    QGles2BasicRenderTargetData(QRhiImplementation *) { }
 
-    QGles2RenderPass rp;
+    QGles2RenderPass *rp = nullptr;
     QSize pixelSize;
     int attCount;
 };
@@ -130,7 +130,6 @@ struct QGles2ReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
     QGles2BasicRenderTargetData d;
 };
@@ -142,7 +141,6 @@ struct QGles2TextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
     QRhiRenderPass *buildCompatibleRenderPass() override;
     bool build() override;
@@ -294,7 +292,7 @@ struct QGles2SwapChain : public QRhiSwapChain
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
-    const QRhiRenderPass *defaultRenderPass() const override;
+
     QSize effectiveSizeInPixels() const override;
 
     QRhiRenderPass *buildCompatibleRenderPass() override;

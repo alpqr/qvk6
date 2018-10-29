@@ -63,12 +63,10 @@ public:
     void setScale(float f) { m_scale = f; }
     void setDepthWrite(bool enable) { m_depthWrite = enable; }
     void setColorAttCount(int count) { m_colorAttCount = count; }
-    bool isPipelineInitialized() const { return m_ps != nullptr; }
     QRhiGraphicsPipeline *pipeline() const { return m_ps; }
-    void initResources();
+    void initResources(QRhiRenderPass *rp);
     void releaseResources();
-    void initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize);
-    void releaseOutputDependentResources();
+    void resize(const QSize &pixelSize);
     void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
 

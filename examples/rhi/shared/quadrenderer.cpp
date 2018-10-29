@@ -70,7 +70,7 @@ static quint16 indexData[] =
     0, 1, 2, 0, 2, 3
 };
 
-void QuadRenderer::initResources()
+void QuadRenderer::initResources(QRhiRenderPass *)
 {
     m_vbuf = m_r->createBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
     m_vbuf->build();
@@ -89,10 +89,13 @@ void QuadRenderer::initResources()
     m_srb->build();
 }
 
-void QuadRenderer::setPipeline(QRhiGraphicsPipeline *ps, const QSize &pixelSize)
+void QuadRenderer::setPipeline(QRhiGraphicsPipeline *ps)
 {
     m_ps = ps;
+}
 
+void QuadRenderer::resize(const QSize &pixelSize)
+{
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);

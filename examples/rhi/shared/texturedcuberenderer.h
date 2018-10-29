@@ -59,11 +59,9 @@ public:
     void setRhi(QRhi *r) { m_r = r; }
     void setSampleCount(int samples) { m_sampleCount = samples; }
     void setTranslation(const QVector3D &v) { m_translation = v; }
-    bool isPipelineInitialized() const { return m_ps != nullptr; }
-    void initResources();
+    void initResources(QRhiRenderPass *rp);
     void releaseResources();
-    void initOutputDependentResources(const QRhiRenderPass *rp, const QSize &pixelSize);
-    void releaseOutputDependentResources();
+    void resize(const QSize &pixelSize);
     void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
     void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
 

@@ -73,7 +73,7 @@ void Renderer::initResources()
 
     m_triRenderer.setRhi(m_r);
     m_triRenderer.setSampleCount(SAMPLES);
-    m_triRenderer.initResources();
+    m_initPending = true;
 
     m_sc = m_r->createSwapChain();
 }
@@ -81,13 +81,18 @@ void Renderer::initResources()
 void Renderer::initSwapChainResources()
 {
     m_sc->setTarget(m_window); // note: very different from setWindow(m_window)
-    m_sc->buildOrResize(); // this just wraps the qvulkanwindow's swapchain
-    m_triRenderer.initOutputDependentResources(m_sc->defaultRenderPass(), m_sc->effectiveSizeInPixels());
+    m_sc->buildOrResize(); // this just wraps the qvulkanwindow's swapchain and other resources
+
+    if (m_initPending) {
+        m_initPending = false;
+        // had to defer init until we can query the imported renderpass
+        m_triRenderer.initResources(m_sc->renderPass());
+    }
+    m_triRenderer.resize(m_sc->effectiveSizeInPixels());
 }
 
 void Renderer::releaseSwapChainResources()
 {
-    m_triRenderer.releaseOutputDependentResources();
     m_sc->release(); // no-op, the real work is done by QVulkanWindow
 }
 

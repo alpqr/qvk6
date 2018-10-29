@@ -1018,11 +1018,6 @@ void QRhiVulkan::releaseSwapChainResources(QRhiSwapChain *swapChain)
         swapChainD->msaaImageMem = VK_NULL_HANDLE;
     }
 
-    if (swapChainD->rp) {
-        df->vkDestroyRenderPass(dev, swapChainD->rp, nullptr);
-        swapChainD->rp = VK_NULL_HANDLE;
-    }
-
     vkDestroySwapchainKHR(dev, swapChainD->sc, nullptr);
     swapChainD->sc = VK_NULL_HANDLE;
 }
@@ -1246,7 +1241,7 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
 {
     QVkTextureRenderTarget *rtD = QRHI_RES(QVkTextureRenderTarget, rt);
     rtD->lastActiveFrameSlot = currentFrameSlot;
-    QRHI_RES(QVkRenderPass, &rtD->d.rp)->lastActiveFrameSlot = currentFrameSlot;
+    rtD->d.rp->lastActiveFrameSlot = currentFrameSlot;
     // the renderpass will implicitly transition so no barrier needed here
     for (const QRhiTextureRenderTargetDescription::ColorAttachment &colorAttachment : qAsConst(rtD->m_desc.colorAttachments))
         QRHI_RES(QVkTexture, colorAttachment.texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1316,6 +1311,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
     switch (rt->type()) {
     case QRhiRenderTarget::RtRef:
         rtD = &QRHI_RES(QVkReferenceRenderTarget, rt)->d;
+        rtD->rp->lastActiveFrameSlot = currentFrameSlot;
         break;
     case QRhiRenderTarget::RtTexture:
     {
@@ -1335,7 +1331,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
     VkRenderPassBeginInfo rpBeginInfo;
     memset(&rpBeginInfo, 0, sizeof(rpBeginInfo));
     rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = rtD->rp.rp;
+    rpBeginInfo.renderPass = rtD->rp->rp;
     rpBeginInfo.framebuffer = rtD->fb;
     rpBeginInfo.renderArea.extent.width = rtD->pixelSize.width();
     rpBeginInfo.renderArea.extent.height = rtD->pixelSize.height();
@@ -2770,11 +2766,6 @@ QSize QVkReferenceRenderTarget::sizeInPixels() const
     return d.pixelSize;
 }
 
-const QRhiRenderPass *QVkReferenceRenderTarget::renderPass() const
-{
-    return &d.rp;
-}
-
 QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi,
                                                const QRhiTextureRenderTargetDescription &desc,
                                                Flags flags)
@@ -2789,8 +2780,6 @@ void QVkTextureRenderTarget::release()
 {
     if (!d.fb)
         return;
-
-    d.rp.release();
 
     QRhiVulkan::DeferredReleaseEntry e;
     e.type = QRhiVulkan::DeferredReleaseEntry::TextureRenderTarget;
@@ -2886,20 +2875,13 @@ bool QVkTextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
-    if (!rhiD->createOffscreenRenderPass(&d.rp.rp,
-                                         m_desc.colorAttachments,
-                                         m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
-                                         d.dsAttCount > 0,
-                                         m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format()) : rhiD->optimalDepthStencilFormat(),
-                                         m_desc.depthTexture != nullptr))
-    {
-        return false;
-    }
+    d.rp = QRHI_RES(QVkRenderPass, m_renderPass);
+    Q_ASSERT(d.rp && d.rp->rp);
 
     VkFramebufferCreateInfo fbInfo;
     memset(&fbInfo, 0, sizeof(fbInfo));
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    fbInfo.renderPass = d.rp.rp;
+    fbInfo.renderPass = d.rp->rp;
     fbInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
     fbInfo.pAttachments = views.constData();
     fbInfo.width = d.pixelSize.width();
@@ -2924,11 +2906,6 @@ QRhiRenderTarget::Type QVkTextureRenderTarget::type() const
 QSize QVkTextureRenderTarget::sizeInPixels() const
 {
     return d.pixelSize;
-}
-
-const QRhiRenderPass *QVkTextureRenderTarget::renderPass() const
-{
-    return &d.rp;
 }
 
 QVkShaderResourceBindings::QVkShaderResourceBindings(QRhiImplementation *rhi)
@@ -3235,8 +3212,11 @@ QVkSwapChain::QVkSwapChain(QRhiImplementation *rhi)
 
 void QVkSwapChain::release()
 {
-    if (wrapWindow)
+    if (wrapWindow) {
+        delete rtWrapper.d.rp;
+        rtWrapper.d.rp = nullptr;
         return;
+    }
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseSwapChainResources(this);
@@ -3250,11 +3230,6 @@ QRhiCommandBuffer *QVkSwapChain::currentFrameCommandBuffer()
 QRhiRenderTarget *QVkSwapChain::currentFrameRenderTarget()
 {
     return &rtWrapper;
-}
-
-const QRhiRenderPass *QVkSwapChain::defaultRenderPass() const
-{
-    return rtWrapper.renderPass();
 }
 
 QSize QVkSwapChain::effectiveSizeInPixels() const
@@ -3280,7 +3255,9 @@ bool QVkSwapChain::buildOrResize()
             release();
         QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
         if (vkw) {
-            rtWrapper.d.rp.rp = vkw->defaultRenderPass();
+            rtWrapper.d.rp = new QVkRenderPass(rhi);
+            rtWrapper.d.rp->rp = vkw->defaultRenderPass();
+            m_renderPass = rtWrapper.d.rp;
             m_requestedPixelSize = effectivePixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
             rtWrapper.d.colorAttCount = 1;
             rtWrapper.d.dsAttCount = 1;
@@ -3334,10 +3311,9 @@ bool QVkSwapChain::buildOrResize()
     if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
         return false;
 
-    if (!rhiD->createDefaultRenderPass(&rp, m_depthStencil != nullptr, sampleCount, colorFormat))
-        return false;
+    rtWrapper.d.rp = QRHI_RES(QVkRenderPass, m_renderPass);
+    Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);
 
-    rtWrapper.d.rp.rp = rp;
     rtWrapper.d.pixelSize = effectivePixelSize;
     rtWrapper.d.colorAttCount = 1;
     if (m_depthStencil) {
@@ -3363,7 +3339,7 @@ bool QVkSwapChain::buildOrResize()
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        fbInfo.renderPass = rtWrapper.d.rp.rp;
+        fbInfo.renderPass = rtWrapper.d.rp->rp;
         fbInfo.attachmentCount = rtWrapper.d.colorAttCount + rtWrapper.d.dsAttCount + rtWrapper.d.msaaAttCount;
         fbInfo.pAttachments = views;
         fbInfo.width = effectivePixelSize.width();

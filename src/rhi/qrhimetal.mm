@@ -684,12 +684,12 @@ bool QMetalSampler::build()
 
 // dummy, no Vulkan-style RenderPass+Framebuffer concept here.
 // We do have MTLRenderPassDescriptor of course, but it will be created on the fly for each pass.
-QMetalRenderPass::QMetalRenderPass(QRhiImplementation *rhi)
-    : QRhiRenderPass(rhi)
+QMetalRenderPassDescriptor::QMetalRenderPassDescriptor(QRhiImplementation *rhi)
+    : QRhiRenderPassDescriptor(rhi)
 {
 }
 
-void QMetalRenderPass::release()
+void QMetalRenderPassDescriptor::release()
 {
     // nothing to do here
 }
@@ -715,11 +715,6 @@ QSize QMetalReferenceRenderTarget::sizeInPixels() const
     return d.pixelSize;
 }
 
-const QRhiRenderPass *QMetalReferenceRenderTarget::renderPass() const
-{
-    return &d.rp;
-}
-
 QMetalTextureRenderTarget::QMetalTextureRenderTarget(QRhiImplementation *rhi,
                                                      const QRhiTextureRenderTargetDescription &desc,
                                                      Flags flags)
@@ -732,9 +727,9 @@ void QMetalTextureRenderTarget::release()
 {
 }
 
-QRhiRenderPass *QMetalTextureRenderTarget::newCompatibleRenderPass()
+QRhiRenderPassDescriptor *QMetalTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
-    return new QMetalRenderPass(rhi);
+    return new QMetalRenderPassDescriptor(rhi);
 }
 
 bool QMetalTextureRenderTarget::build()
@@ -750,11 +745,6 @@ QRhiRenderTarget::Type QMetalTextureRenderTarget::type() const
 QSize QMetalTextureRenderTarget::sizeInPixels() const
 {
     return d.pixelSize;
-}
-
-const QRhiRenderPass *QMetalTextureRenderTarget::renderPass() const
-{
-    return &d.rp;
 }
 
 QMetalShaderResourceBindings::QMetalShaderResourceBindings(QRhiImplementation *rhi)
@@ -1245,39 +1235,28 @@ QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
     return &rtWrapper;
 }
 
-const QRhiRenderPass *QMetalSwapChain::defaultRenderPass() const
-{
-    return rtWrapper.renderPass();
-}
-
-QSize QMetalSwapChain::requestedSizeInPixels() const
-{
-    return requestedPixelSize;
-}
-
 QSize QMetalSwapChain::effectiveSizeInPixels() const
 {
     return effectivePixelSize;
 }
 
-bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, SurfaceImportFlags flags,
-                            QRhiRenderBuffer *depthStencil, int sampleCount)
+QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
 {
-    Q_UNUSED(flags);
+    return new QMetalRenderPassDescriptor(rhi);
+}
 
-    Q_UNUSED(sampleCount); // ###
-
+bool QMetalSwapChain::buildOrResize()
+{
     if (d->layer)
         release();
 
-    if (window_->surfaceType() != QSurface::MetalSurface) {
+    Q_ASSERT(m_window);
+    if (m_window->surfaceType() != QSurface::MetalSurface) {
         qWarning("QMetalSwapChain only supports MetalSurface windows");
         return false;
     }
-    window = window_;
-    requestedPixelSize = requestedPixelSize_;
 
-    NSView *v = (NSView *) window->winId();
+    NSView *v = (NSView *) m_window->winId();
     d->layer = (CAMetalLayer *) [v layer];
     Q_ASSERT(d->layer);
 
@@ -1290,7 +1269,7 @@ bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, 
     d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
     currentFrame = 0;
 
-    ds = depthStencil ? QRHI_RES(QMetalRenderBuffer, depthStencil) : nullptr;
+    ds = m_depthStencil ? QRHI_RES(QMetalRenderBuffer, m_depthStencil) : nullptr;
 
     rtWrapper.d.pixelSize = effectivePixelSize;
     rtWrapper.d.attCount = 1;
@@ -1298,12 +1277,6 @@ bool QMetalSwapChain::build(QWindow *window_, const QSize &requestedPixelSize_, 
     qDebug("got CAMetalLayer, size %dx%d", effectivePixelSize.width(), effectivePixelSize.height());
 
     return true;
-}
-
-bool QMetalSwapChain::build(QObject *target)
-{
-    Q_UNUSED(target);
-    return false;
 }
 
 QT_END_NAMESPACE

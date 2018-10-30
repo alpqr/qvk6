@@ -99,9 +99,9 @@ struct QMetalSampler : public QRhiSampler
     friend class QRhiMetal;
 };
 
-struct QMetalRenderPass : public QRhiRenderPass
+struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
 {
-    QMetalRenderPass(QRhiImplementation *rhi);
+    QMetalRenderPassDescriptor(QRhiImplementation *rhi);
     void release() override;
 
     // there is no MTLRenderPassDescriptor here as one will be created for each pass in beginPass()
@@ -109,11 +109,10 @@ struct QMetalRenderPass : public QRhiRenderPass
 
 struct QMetalBasicRenderTargetData
 {
-    QMetalBasicRenderTargetData(QRhiImplementation *rhi) : rp(rhi) { }
+    QMetalBasicRenderTargetData(QRhiImplementation *) { }
 
-    QMetalRenderPass rp;
     QSize pixelSize;
-    int attCount;
+    int attCount = 0;
 };
 
 struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
@@ -122,7 +121,6 @@ struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
     QMetalBasicRenderTargetData d;
 };
@@ -134,9 +132,8 @@ struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
-    QRhiRenderPass *newCompatibleRenderPass() override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
     QMetalBasicRenderTargetData d;
@@ -208,21 +205,13 @@ struct QMetalSwapChain : public QRhiSwapChain
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
-    const QRhiRenderPass *defaultRenderPass() const override;
-    QSize requestedSizeInPixels() const override;
     QSize effectiveSizeInPixels() const override;
 
-    QRhiRenderPass *newCompatibleRenderPass() override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
 
-    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-               QRhiRenderBuffer *depthStencil, int sampleCount) override;
+    bool buildOrResize() override;
 
-    bool build(QObject *target) override;
-
-    QWindow *window = nullptr;
-    QSize requestedPixelSize;
     QSize effectivePixelSize;
-
     int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
     QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;

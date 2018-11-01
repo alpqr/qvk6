@@ -34,8 +34,8 @@ other shader types? (gs?)
 
 shadertools:
 version to qsb data stream
-hlsl version to qsb
-msl version to qsb (?)
+hlsl version config to qsb
+msl version config to qsb
 bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 

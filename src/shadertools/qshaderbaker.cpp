@@ -192,7 +192,7 @@ QBakedShader QShaderBaker::bake()
                 shader.shader = currentSpirvShader->translateToHLSL(req.second.version);
                 break;
             case QBakedShader::MslShader:
-                shader.shader = currentSpirvShader->translateToMSL();
+                shader.shader = currentSpirvShader->translateToMSL(req.second.version);
                 shader.entryPoint = QByteArrayLiteral("main0");
                 break;
             default:

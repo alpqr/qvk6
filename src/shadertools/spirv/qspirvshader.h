@@ -73,7 +73,7 @@ public:
 
     QByteArray translateToGLSL(int version = 120, GlslFlags flags = GlslFlags()) const;
     QByteArray translateToHLSL(int version = 50) const;
-    QByteArray translateToMSL() const;
+    QByteArray translateToMSL(int version = 12) const;
 
 private:
     Q_DISABLE_COPY(QSpirvShader)

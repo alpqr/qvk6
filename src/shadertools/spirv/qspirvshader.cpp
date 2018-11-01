@@ -424,10 +424,15 @@ QByteArray QSpirvShader::translateToHLSL(int version) const
     return QByteArray::fromStdString(hlsl);
 }
 
-QByteArray QSpirvShader::translateToMSL() const
+QByteArray QSpirvShader::translateToMSL(int version) const
 {
     if (!d->mslGen)
         d->mslGen = new spirv_cross::CompilerMSL(reinterpret_cast<const uint32_t *>(d->ir.constData()), d->ir.size() / 4);
+
+    spirv_cross::CompilerMSL::Options options;
+    options.msl_version = spirv_cross::CompilerMSL::Options::make_msl_version(version / 10, version % 10);
+    // leave platform set to macOS, it won't matter in practice (hopefully)
+    d->mslGen->set_msl_options(options);
 
     const std::string msl = d->mslGen->compile();
 

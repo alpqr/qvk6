@@ -88,7 +88,7 @@ void Renderer::initSwapChainResources()
         // had to defer init until we can query the imported renderpass
         m_triRenderer.initResources(m_sc->renderPassDescriptor());
     }
-    m_triRenderer.resize(m_sc->effectiveSizeInPixels());
+    m_triRenderer.resize(m_sc->effectivePixelSize());
 }
 
 void Renderer::releaseSwapChainResources()
@@ -116,7 +116,7 @@ void Renderer::startNextFrame()
     m_triRenderer.queueResourceUpdates(u);
 
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
-    m_triRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
+    m_triRenderer.queueDraw(cb, m_sc->effectivePixelSize());
     m_r->endPass(cb);
 
     m_r->endFrame(m_sc);

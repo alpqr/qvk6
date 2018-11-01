@@ -1537,7 +1537,7 @@ QRhiRenderTarget *QGles2SwapChain::currentFrameRenderTarget()
     return &rt;
 }
 
-QSize QGles2SwapChain::effectiveSizeInPixels() const
+QSize QGles2SwapChain::effectivePixelSize() const
 {
     return pixelSize;
 }

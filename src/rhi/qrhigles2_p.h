@@ -293,7 +293,7 @@ struct QGles2SwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
 
-    QSize effectiveSizeInPixels() const override;
+    QSize effectivePixelSize() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool buildOrResize() override;

@@ -791,8 +791,8 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
         bufferSize.height = swapChainD->m_requestedPixelSize.height();
     }
 
-    swapChainD->effectivePixelSize = QSize(bufferSize.width, bufferSize.height);
-    if (swapChainD->effectivePixelSize.isEmpty())
+    swapChainD->pixelSize = QSize(bufferSize.width, bufferSize.height);
+    if (swapChainD->pixelSize.isEmpty())
         return false;
 
     VkSurfaceTransformFlagBitsKHR preTransform =
@@ -878,7 +878,7 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
     VkImageView msaaViews[QVkSwapChain::MAX_BUFFER_COUNT];
     if (swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT) {
         if (!createTransientImage(swapChainD->colorFormat,
-                                  swapChainD->effectivePixelSize,
+                                  swapChainD->pixelSize,
                                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                                   VK_IMAGE_ASPECT_COLOR_BIT,
                                   swapChainD->sampleCount,
@@ -1055,7 +1055,7 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->cbWrapper.cb = w->currentCommandBuffer();
 
     swapChainD->rtWrapper.d.fb = w->currentFramebuffer();
-    swapChainD->m_requestedPixelSize = swapChainD->effectivePixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
+    swapChainD->m_requestedPixelSize = swapChainD->pixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
 
     currentFrameSlot = w->currentFrame();
 
@@ -3235,9 +3235,9 @@ QRhiRenderTarget *QVkSwapChain::currentFrameRenderTarget()
     return &rtWrapper;
 }
 
-QSize QVkSwapChain::effectiveSizeInPixels() const
+QSize QVkSwapChain::effectivePixelSize() const
 {
-    return effectivePixelSize;
+    return pixelSize;
 }
 
 QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
@@ -3261,7 +3261,7 @@ bool QVkSwapChain::buildOrResize()
             rtWrapper.d.rp = new QVkRenderPassDescriptor(rhi);
             rtWrapper.d.rp->rp = vkw->defaultRenderPass();
             m_renderPassDesc = rtWrapper.d.rp;
-            m_requestedPixelSize = effectivePixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
+            m_requestedPixelSize = pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
             rtWrapper.d.colorAttCount = 1;
             rtWrapper.d.dsAttCount = 1;
             rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
@@ -3320,7 +3320,7 @@ bool QVkSwapChain::buildOrResize()
     rtWrapper.d.rp = QRHI_RES(QVkRenderPassDescriptor, m_renderPassDesc);
     Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);
 
-    rtWrapper.d.pixelSize = effectivePixelSize;
+    rtWrapper.d.pixelSize = pixelSize;
     rtWrapper.d.colorAttCount = 1;
     if (m_depthStencil) {
         rtWrapper.d.dsAttCount = 1;
@@ -3348,8 +3348,8 @@ bool QVkSwapChain::buildOrResize()
         fbInfo.renderPass = rtWrapper.d.rp->rp;
         fbInfo.attachmentCount = rtWrapper.d.colorAttCount + rtWrapper.d.dsAttCount + rtWrapper.d.msaaAttCount;
         fbInfo.pAttachments = views;
-        fbInfo.width = effectivePixelSize.width();
-        fbInfo.height = effectivePixelSize.height();
+        fbInfo.width = pixelSize.width();
+        fbInfo.height = pixelSize.height();
         fbInfo.layers = 1;
         VkResult err = rhiD->df->vkCreateFramebuffer(rhiD->dev, &fbInfo, nullptr, &image.fb);
         if (err != VK_SUCCESS) {

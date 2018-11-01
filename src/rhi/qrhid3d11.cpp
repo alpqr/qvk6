@@ -1813,7 +1813,7 @@ QRhiRenderTarget *QD3D11SwapChain::currentFrameRenderTarget()
     return &rt;
 }
 
-QSize QD3D11SwapChain::effectiveSizeInPixels() const
+QSize QD3D11SwapChain::effectivePixelSize() const
 {
     return pixelSize;
 }

@@ -759,12 +759,14 @@ public:
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
 
-    // Some backends use the requested size, others ignore it and get the actual
-    // size on their own. Keep track of both - application logic will need the
-    // requested size (to do their "if qwindow->size() * dpr != req.size then
-    // resize_swapchain" logic) and the actual size as well (for all graphics
-    // calculations like viewport).
-    virtual QSize effectiveSizeInPixels() const = 0;
+    // Applications are expected to use requestedPixelSize() for logic like "if
+    // qwindow->size() * qwindow->dpr() != requestedPixelSize() then
+    // resize_swapchain", and effectivePixelSize() for all graphics
+    // calculations, like the viewport. On some platforms they may not be the
+    // same, e.g. some Vulkan implementations on Windows were observed to make
+    // the swapchain buffers' height off by one on high dpi screens, this is
+    // then reflected in the effective size.
+    virtual QSize effectivePixelSize() const = 0;
 
     // To be called before build() with relevant parameters like depthStencil and sampleCount set.
     // (things like the window or the size of depthStencil are irrelevant here)

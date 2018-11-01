@@ -360,7 +360,7 @@ struct QD3D11SwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
 
-    QSize effectiveSizeInPixels() const override;
+    QSize effectivePixelSize() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool buildOrResize();

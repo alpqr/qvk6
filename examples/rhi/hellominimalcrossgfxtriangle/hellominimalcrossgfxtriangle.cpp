@@ -404,7 +404,7 @@ void Window::resizeSwapChain()
     m_elapsedMs = 0;
     m_elapsedCount = 0;
 
-    const QSize outputSizeInPixels = m_sc->effectiveSizeInPixels();
+    const QSize outputSizeInPixels = m_sc->effectivePixelSize();
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, outputSizeInPixels.width() / (float) outputSizeInPixels.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
@@ -474,7 +474,7 @@ void Window::render()
     u->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
-    const QSize outputSizeInPixels = m_sc->effectiveSizeInPixels();
+    const QSize outputSizeInPixels = m_sc->effectivePixelSize();
 
     // Apply buffer/texture updates, clear, queue the renderpass begin (where applicable).
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);

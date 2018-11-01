@@ -213,15 +213,16 @@ void ExampleWindow::render()
         return;
     }
 
+    const QSize outputSize = m_sc->effectivePixelSize();
     if (m_resizedSwapChain) {
         m_resizedSwapChain = false;
-        m_triRenderer.resize(m_sc->effectiveSizeInPixels());
+        m_triRenderer.resize(outputSize);
         if (!m_triangleOnly) {
-            m_quadRenderer.resize(m_sc->effectiveSizeInPixels());
-            m_cubeRenderer.resize(m_sc->effectiveSizeInPixels());
+            m_quadRenderer.resize(outputSize);
+            m_cubeRenderer.resize(outputSize);
         }
         if (!m_onScreenOnly)
-            m_liveTexCubeRenderer.resize(m_sc->effectiveSizeInPixels());
+            m_liveTexCubeRenderer.resize(outputSize);
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
@@ -238,13 +239,13 @@ void ExampleWindow::render()
         m_liveTexCubeRenderer.queueResourceUpdates(u);
 
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
-    m_triRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
+    m_triRenderer.queueDraw(cb, outputSize);
     if (!m_triangleOnly) {
-        m_quadRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
-        m_cubeRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
+        m_quadRenderer.queueDraw(cb, outputSize);
+        m_cubeRenderer.queueDraw(cb, outputSize);
     }
     if (!m_onScreenOnly)
-        m_liveTexCubeRenderer.queueDraw(cb, m_sc->effectiveSizeInPixels());
+        m_liveTexCubeRenderer.queueDraw(cb, outputSize);
     m_r->endPass(cb);
 
     m_r->endFrame(m_sc);

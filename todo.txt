@@ -1,13 +1,13 @@
-figure out what's up with instance step rate
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
-mtl: shader lang. version
 mtl: textures
+what's up with instance step rate
 d3d: show something about adapter or such when starting up
 test cubemap
 test cubemap face as target
 mipmap gen (?)
+cbuffer alignment rule chaos - figure out what to recommend to users
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
@@ -40,6 +40,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+mtl: shader lang. version
 rename res pattern to new-build-release (from create-build-release)?
 make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)
 review swapchain param handling

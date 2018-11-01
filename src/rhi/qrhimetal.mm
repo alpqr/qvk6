@@ -170,7 +170,7 @@ void QRhiMetal::destroy()
 
 QVector<int> QRhiMetal::supportedSampleCounts() const
 {
-    return { 1 }; // ###
+    return { 1 };
 }
 
 QRhiSwapChain *QRhiMetal::createSwapChain()
@@ -1015,16 +1015,19 @@ static inline MTLCullMode toMetalCullMode(QRhiGraphicsPipeline::CullMode c)
 
 id<MTLLibrary> QRhiMetalData::compileMSLShaderSource(const QBakedShader &shader, QString *error, QByteArray *entryPoint)
 {
-    QBakedShader::Shader mslSource = shader.shader({ QBakedShader::MslShader });
+    QBakedShader::Shader mslSource = shader.shader({ QBakedShader::MslShader, 12 });
     if (mslSource.shader.isEmpty()) {
-        qWarning() << "No MetalSL code found in baked shader" << shader;
+        qWarning() << "No MSL 1.2 code found in baked shader" << shader;
         return nil;
     }
 
     NSString *src = [NSString stringWithUTF8String: mslSource.shader.constData()];
+    MTLCompileOptions *opts = [[MTLCompileOptions alloc] init];
+    opts.languageVersion = MTLLanguageVersion1_2;
     NSError *err = nil;
-    id<MTLLibrary> lib = [dev newLibraryWithSource: src options: nil error: &err];
-    // [src release]; ### WTF? why is this autoreleased?
+    id<MTLLibrary> lib = [dev newLibraryWithSource: src options: opts error: &err];
+    [opts release];
+    // src is autoreleased
 
     if (err) {
         const QString msg = QString::fromNSString(err.localizedDescription);
@@ -1078,12 +1081,12 @@ bool QMetalGraphicsPipeline::build()
         QByteArray entryPoint;
         id<MTLLibrary> lib = rhiD->d->compileMSLShaderSource(shaderStage.shader, &error, &entryPoint);
         if (!lib) {
-            qWarning("MetalSL shader compilation failed: %s", qPrintable(error));
+            qWarning("MSL shader compilation failed: %s", qPrintable(error));
             return false;
         }
         id<MTLFunction> func = rhiD->d->createMSLShaderFunction(lib, entryPoint);
         if (!func) {
-            qWarning("MetalSL function for entry point %s not found", entryPoint.constData());
+            qWarning("MSL function for entry point %s not found", entryPoint.constData());
             [lib release];
             return false;
         }

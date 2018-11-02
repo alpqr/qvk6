@@ -1240,7 +1240,7 @@ QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
 
 QSize QMetalSwapChain::effectivePixelSize() const
 {
-    return effectivePixelSize;
+    return pixelSize;
 }
 
 QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
@@ -1264,7 +1264,7 @@ bool QMetalSwapChain::buildOrResize()
     Q_ASSERT(d->layer);
 
     CGSize size = [d->layer drawableSize];
-    effectivePixelSize = QSize(size.width, size.height);
+    pixelSize = QSize(size.width, size.height);
 
     QRHI_RES_RHI(QRhiMetal);
     [d->layer setDevice: rhiD->d->dev];
@@ -1274,10 +1274,10 @@ bool QMetalSwapChain::buildOrResize()
 
     ds = m_depthStencil ? QRHI_RES(QMetalRenderBuffer, m_depthStencil) : nullptr;
 
-    rtWrapper.d.pixelSize = effectivePixelSize;
+    rtWrapper.d.pixelSize = pixelSize;
     rtWrapper.d.attCount = 1;
 
-    qDebug("got CAMetalLayer, size %dx%d", effectivePixelSize.width(), effectivePixelSize.height());
+    qDebug("got CAMetalLayer, size %dx%d", pixelSize.width(), pixelSize.height());
 
     return true;
 }

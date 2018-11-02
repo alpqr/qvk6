@@ -211,7 +211,7 @@ struct QMetalSwapChain : public QRhiSwapChain
 
     bool buildOrResize() override;
 
-    QSize effectivePixelSize;
+    QSize pixelSize;
     int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
     QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;

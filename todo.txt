@@ -23,8 +23,8 @@ gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)
 d3d: msaa (onscreen)
 d3d, gl, mtl: cache shader sources?
+advanced blend modes?
 resize to 0 width or height fails (vk)
-upgrade vkmemalloc
 gl: ubuf structs, arrays
 gl: target QOpenGLWindow ...
 msaa offscreen (msaa texture? renderbuffer?)
@@ -40,6 +40,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+upgrade vkmemalloc
 mtl: shader lang. version
 rename res pattern to new-build-release (from create-build-release)?
 make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)

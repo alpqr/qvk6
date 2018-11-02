@@ -729,7 +729,9 @@ void QMetalTextureRenderTarget::release()
 
 QRhiRenderPassDescriptor *QMetalTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
-    return new QMetalRenderPassDescriptor(rhi);
+    QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
+    rpD->hasDepthStencil = m_desc.depthStencilBuffer || m_desc.depthTexture;
+    return rpD;
 }
 
 bool QMetalTextureRenderTarget::build()
@@ -1134,16 +1136,20 @@ bool QMetalGraphicsPipeline::build()
         rpDesc.colorAttachments[i].writeMask = toMetalColorWriteMask(b.colorWrite);
     }
 
-    // ### can be set only when a depth-stencil buffer will actually be bound
-//    if (rhiD->d->dev.depth24Stencil8PixelFormatSupported) {
-//        rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
-//        rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
-//    } else {
-//        rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-//        rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-//    }
+    QMetalRenderPassDescriptor *rpD = QRHI_RES(QMetalRenderPassDescriptor, m_renderPassDesc);
+    if (rpD->hasDepthStencil) {
+        // Must only be set when a depth-stencil buffer will actually be bound,
+        // validation blows up otherwise.
+        if (rhiD->d->dev.depth24Stencil8PixelFormatSupported) {
+            rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
+            rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
+        } else {
+            rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+            rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
+        }
+    }
 
-    rpDesc.sampleCount = 1; // ###
+    rpDesc.sampleCount = 1;
 
     NSError *err = nil;
     d->ps = [rhiD->d->dev newRenderPipelineStateWithDescriptor: rpDesc error: &err];
@@ -1245,7 +1251,9 @@ QSize QMetalSwapChain::effectivePixelSize() const
 
 QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
 {
-    return new QMetalRenderPassDescriptor(rhi);
+    QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
+    rpD->hasDepthStencil = m_depthStencil != nullptr;
+    return rpD;
 }
 
 bool QMetalSwapChain::buildOrResize()
@@ -1275,7 +1283,8 @@ bool QMetalSwapChain::buildOrResize()
     ds = m_depthStencil ? QRHI_RES(QMetalRenderBuffer, m_depthStencil) : nullptr;
 
     rtWrapper.d.pixelSize = pixelSize;
-    rtWrapper.d.attCount = 1;
+    rtWrapper.d.colorAttCount = 1;
+    rtWrapper.d.dsAttCount = ds ? 1 : 0;
 
     qDebug("got CAMetalLayer, size %dx%d", pixelSize.width(), pixelSize.height());
 

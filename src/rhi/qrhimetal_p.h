@@ -105,6 +105,8 @@ struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
     void release() override;
 
     // there is no MTLRenderPassDescriptor here as one will be created for each pass in beginPass()
+
+    bool hasDepthStencil = false;
 };
 
 struct QMetalBasicRenderTargetData
@@ -112,7 +114,8 @@ struct QMetalBasicRenderTargetData
     QMetalBasicRenderTargetData(QRhiImplementation *) { }
 
     QSize pixelSize;
-    int attCount = 0;
+    int colorAttCount = 0;
+    int dsAttCount = 0;
 };
 
 struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget

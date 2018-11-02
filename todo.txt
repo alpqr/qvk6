@@ -1,7 +1,9 @@
+mtl: depth-stencil
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: textures
+mtl: mrt
 what's up with instance step rate
 d3d: show something about adapter or such when starting up
 test cubemap

@@ -2799,6 +2799,8 @@ void QVkTextureRenderTarget::release()
 
 QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
+    // not yet built so cannot rely on data computed in build()
+
     QRHI_RES_RHI(QRhiVulkan);
     QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
     const VkFormat dsFormat = m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format())
@@ -2806,7 +2808,7 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
     if (!rhiD->createOffscreenRenderPass(&rp->rp,
                                          m_desc.colorAttachments,
                                          m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
-                                         d.dsAttCount > 0,
+                                         m_desc.depthStencilBuffer || m_desc.depthTexture,
                                          dsFormat,
                                          m_desc.depthTexture != nullptr))
     {
@@ -3242,9 +3244,15 @@ QSize QVkSwapChain::effectivePixelSize() const
 
 QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
 {
+    // not yet built so cannot rely on data computed in buildOrResize()
+
     QRHI_RES_RHI(QRhiVulkan);
     QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
-    if (!rhiD->createDefaultRenderPass(&rp->rp, m_depthStencil != nullptr, sampleCount, colorFormat)) {
+    if (!rhiD->createDefaultRenderPass(&rp->rp,
+                                       m_depthStencil != nullptr,
+                                       rhiD->effectiveSampleCount(m_sampleCount),
+                                       colorFormat))
+    {
         delete rp;
         return nullptr;
     }

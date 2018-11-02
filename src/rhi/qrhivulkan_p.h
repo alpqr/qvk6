@@ -129,6 +129,7 @@ struct QVkRenderPassDescriptor : public QRhiRenderPassDescriptor
     void release() override;
 
     VkRenderPass rp = VK_NULL_HANDLE;
+    bool ownsRp = false;
     int lastActiveFrameSlot = -1;
 };
 
@@ -254,6 +255,8 @@ struct QVkSwapChain : public QRhiSwapChain
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool buildOrResize() override;
 
+    bool ensureSurface();
+
     static const int DEFAULT_BUFFER_COUNT = 2;
     static const int MAX_BUFFER_COUNT = 3;
 
@@ -262,6 +265,7 @@ struct QVkSwapChain : public QRhiSwapChain
     bool supportsReadback = false;
     VkSwapchainKHR sc = VK_NULL_HANDLE;
     int bufferCount = 0;
+    VkSurfaceKHR surface = VK_NULL_HANDLE;
     VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     QVkRenderBuffer *ds = nullptr;

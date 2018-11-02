@@ -71,23 +71,20 @@ void Renderer::initResources()
     params.gfxQueue = m_window->graphicsQueue();
     m_r = QRhi::create(QRhi::Vulkan, &params);
 
+    m_sc = m_r->newSwapChain();
+    m_sc->setTarget(m_window); // note: very different from setWindow(m_window)
+    m_scrp = m_sc->newCompatibleRenderPassDescriptor();
+    m_sc->setRenderPassDescriptor(m_scrp);
+
     m_triRenderer.setRhi(m_r);
     m_triRenderer.setSampleCount(SAMPLES);
-    m_initPending = true;
-
-    m_sc = m_r->newSwapChain();
+    m_triRenderer.initResources(m_scrp);
 }
 
 void Renderer::initSwapChainResources()
 {
-    m_sc->setTarget(m_window); // note: very different from setWindow(m_window)
     m_sc->buildOrResize(); // this just wraps the qvulkanwindow's swapchain and other resources
 
-    if (m_initPending) {
-        m_initPending = false;
-        // had to defer init until we can query the imported renderpass
-        m_triRenderer.initResources(m_sc->renderPassDescriptor());
-    }
     m_triRenderer.resize(m_sc->effectivePixelSize());
 }
 
@@ -102,6 +99,11 @@ void Renderer::releaseResources()
 
     delete m_sc;
     m_sc = nullptr;
+
+    if (m_scrp) {
+        m_scrp->releaseAndDestroy();
+        m_scrp = nullptr;
+    }
 
     delete m_r;
     m_r = nullptr;

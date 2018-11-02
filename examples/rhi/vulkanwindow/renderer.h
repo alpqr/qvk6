@@ -69,6 +69,6 @@ protected:
     QVulkanWindow *m_window;
     QRhi *m_r = nullptr;
     QRhiSwapChain *m_sc = nullptr;
-    bool m_initPending = false;
+    QRhiRenderPassDescriptor *m_scrp = nullptr;
     TriangleRenderer m_triRenderer;
 };

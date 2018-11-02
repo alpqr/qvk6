@@ -2733,6 +2733,11 @@ void QVkRenderPassDescriptor::release()
     if (!rp)
         return;
 
+    if (!ownsRp) {
+        rp = VK_NULL_HANDLE;
+        return;
+    }
+
     QRhiVulkan::DeferredReleaseEntry e;
     e.type = QRhiVulkan::DeferredReleaseEntry::RenderPass;
     e.lastActiveFrameSlot = lastActiveFrameSlot;
@@ -2815,6 +2820,8 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
         delete rp;
         return nullptr;
     }
+
+    rp->ownsRp = true;
     return rp;
 }
 
@@ -3217,11 +3224,8 @@ QVkSwapChain::QVkSwapChain(QRhiImplementation *rhi)
 
 void QVkSwapChain::release()
 {
-    if (wrapWindow) {
-        delete rtWrapper.d.rp;
-        rtWrapper.d.rp = nullptr;
+    if (wrapWindow)
         return;
-    }
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseSwapChainResources(this);
@@ -3246,44 +3250,38 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
 {
     // not yet built so cannot rely on data computed in buildOrResize()
 
+    if (m_target) {
+        QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
+        if (vkw) {
+            QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
+            rp->rp = vkw->defaultRenderPass();
+            rp->ownsRp = false;
+            return rp;
+        }
+        return nullptr;
+    }
+
+    if (!ensureSurface()) // make sure sampleCount and colorFormat reflect what was requested
+        return nullptr;
+
     QRHI_RES_RHI(QRhiVulkan);
     QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
     if (!rhiD->createDefaultRenderPass(&rp->rp,
                                        m_depthStencil != nullptr,
-                                       rhiD->effectiveSampleCount(m_sampleCount),
+                                       sampleCount,
                                        colorFormat))
     {
         delete rp;
         return nullptr;
     }
+
+    rp->ownsRp = true;
     return rp;
 }
 
-bool QVkSwapChain::buildOrResize()
+bool QVkSwapChain::ensureSurface()
 {
-    if (m_target) {
-        if (sc)
-            release();
-        QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
-        if (vkw) {
-            rtWrapper.d.rp = new QVkRenderPassDescriptor(rhi);
-            rtWrapper.d.rp->rp = vkw->defaultRenderPass();
-            m_renderPassDesc = rtWrapper.d.rp;
-            m_requestedPixelSize = pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
-            rtWrapper.d.colorAttCount = 1;
-            rtWrapper.d.dsAttCount = 1;
-            rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
-            wrapWindow = vkw;
-            return true;
-        }
-        return false;
-    }
-
-    // Can be called multiple times due to window resizes - that is not the
-    // same as a simple release+build (as with other resources). Thus no
-    // release() here. See recreateSwapChain() below.
-
-    VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(m_window);
+    surface = QVulkanInstance::surfaceForWindow(m_window);
     if (!surface) {
         qWarning("Failed to get surface for window");
         return false;
@@ -3314,11 +3312,42 @@ bool QVkSwapChain::buildOrResize()
     }
 
     sampleCount = rhiD->effectiveSampleCount(m_sampleCount);
+
+    return true;
+}
+
+bool QVkSwapChain::buildOrResize()
+{
+    if (m_target) {
+        if (sc)
+            release();
+        QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
+        if (vkw) {
+            rtWrapper.d.rp = QRHI_RES(QVkRenderPassDescriptor, m_renderPassDesc);
+            Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);
+            m_requestedPixelSize = pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
+            rtWrapper.d.colorAttCount = 1;
+            rtWrapper.d.dsAttCount = 1;
+            rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
+            wrapWindow = vkw;
+            return true;
+        }
+        return false;
+    }
+
+    // Can be called multiple times due to window resizes - that is not the
+    // same as a simple release+build (as with other resources). Thus no
+    // release() here. See recreateSwapChain() below.
+
+    if (!ensureSurface())
+        return false;
+
     if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {
         qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
                  m_depthStencil->sampleCount(), m_sampleCount);
     }
 
+    QRHI_RES_RHI(QRhiVulkan);
     if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
         return false;
 

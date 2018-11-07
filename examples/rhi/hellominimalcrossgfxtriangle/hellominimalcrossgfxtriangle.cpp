@@ -433,7 +433,10 @@ void Window::render()
         m_newlyExposed = false;
     }
 
-    // Start a new frame. This is where we block when too far ahead of GPU/present.
+    // Start a new frame. This is where we block when too far ahead of
+    // GPU/present, and that's what throttles the thread to the refresh rate.
+    // (except for OpenGL where it happens either in endFrame or somewhere else
+    // depending on the GL implementation)
     QRhi::FrameOpResult r = m_r->beginFrame(m_sc);
     if (r == QRhi::FrameOpSwapChainOutOfDate) {
         resizeSwapChain();
@@ -476,11 +479,11 @@ void Window::render()
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
     const QSize outputSizeInPixels = m_sc->effectivePixelSize();
 
-    // Apply buffer/texture updates, clear, queue the renderpass begin (where applicable).
+    // Apply buffer updates, clear, start the renderpass (where applicable).
     m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
 
     m_r->setGraphicsPipeline(cb, m_ps);
-    m_r->setViewport(cb, QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    m_r->setViewport(cb, { 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
     m_r->setVertexInput(cb, 0, { { m_vbuf, 0 } });
     m_r->draw(cb, 3);
 

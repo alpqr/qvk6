@@ -46,9 +46,9 @@
 QT_BEGIN_NAMESPACE
 
 /*
-    Metal backend. MRC. Double buffers and throttles to vsync. "Dynamic"
-    buffers are Shared (host visible) and duplicated (due to 2 frames in
-    flight), while "static" buffers are ###
+    Metal backend. Double buffers and throttles to vsync. "Dynamic" buffers are
+    Shared (host visible) and duplicated (due to 2 frames in flight), while
+    "static" buffers are Managed on macOS and Shared on iOS/tvOS.
 */
 
 #if __has_feature(objc_arc)
@@ -621,7 +621,9 @@ bool QMetalBuffer::build()
 
     const int roundedSize = m_usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(m_size, 256) : m_size;
 
-    MTLResourceOptions opts = MTLResourceStorageModeShared; // ### for now everything host visible and double buffered
+    // ### for now everything host visible and double buffered
+    // should instead use Managed on macOS for immutable/static
+    MTLResourceOptions opts = MTLResourceStorageModeShared;
 
     QRHI_RES_RHI(QRhiMetal);
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {

@@ -2912,7 +2912,7 @@ bool QVkTextureRenderTarget::build()
 
 QRhiRenderTarget::Type QVkTextureRenderTarget::type() const
 {
-    return RtTexture; // this is a QVkTextureRenderTarget, owns fb and rp
+    return RtTexture;
 }
 
 QSize QVkTextureRenderTarget::sizeInPixels() const

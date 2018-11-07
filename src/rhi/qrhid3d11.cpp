@@ -319,7 +319,7 @@ void QRhiD3D11::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
     QD3D11CommandBuffer::Command cmd;
     cmd.cmd = QD3D11CommandBuffer::Command::Viewport;
     cmd.args.viewport.x = viewport.r.x();
-    // d3d expects top-left, QRhiScissor is bottom-left
+    // d3d expects top-left, QRhiViewport is bottom-left
     cmd.args.viewport.y = cbD->currentTarget->sizeInPixels().height() - (viewport.r.y() + viewport.r.w() - 1);
     cmd.args.viewport.y = viewport.r.y();
     cmd.args.viewport.w = viewport.r.z();

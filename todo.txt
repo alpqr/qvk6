@@ -4,7 +4,6 @@ mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: textures
 mtl: mrt
-d3d: show something about adapter or such when starting up
 d3d: msaa (onscreen)
 mtl: msaa (onscreen)
 test cubemap
@@ -43,6 +42,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+d3d: very basic adapter selection
 what's up with instance step rate
 remove geometry shader from enum
 hlsl version config to qsb

@@ -452,7 +452,7 @@ public:
     ID3D11Device *dev = nullptr;
     ID3D11DeviceContext1 *context = nullptr;
     D3D_FEATURE_LEVEL featureLevel;
-    IDXGIFactory2 *dxgiFactory;
+    IDXGIFactory2 *dxgiFactory = nullptr;
 
     static const int FRAMES_IN_FLIGHT = QD3D11SwapChain::BUFFER_COUNT;
     int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1

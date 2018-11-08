@@ -101,11 +101,40 @@ void QRhiD3D11::create()
     if (debugLayer)
         flags |= D3D11_CREATE_DEVICE_DEBUG;
 
+    HRESULT hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgiFactory));
+    if (FAILED(hr)) {
+        qWarning("Failed to create DXGI factory: %s", qPrintable(comErrorMessage(hr)));
+        return;
+    }
+
     if (!importedDevice) {
+        IDXGIAdapter1 *adapterToUse = nullptr;
+        IDXGIAdapter1 *adapter;
+        int requestedAdapterIndex = -1;
+        if (qEnvironmentVariableIsSet("QT_D3D_ADAPTER_INDEX"))
+            requestedAdapterIndex = qEnvironmentVariableIntValue("QT_D3D_ADAPTER_INDEX");
+        for (int adapterIndex = 0; dxgiFactory->EnumAdapters1(adapterIndex, &adapter) != DXGI_ERROR_NOT_FOUND; ++adapterIndex) {
+            DXGI_ADAPTER_DESC1 desc;
+            adapter->GetDesc1(&desc);
+            const QString name = QString::fromUtf16((char16_t *) desc.Description);
+            qDebug("Adapter %d: '%s' (flags 0x%x)", adapterIndex, qPrintable(name), desc.Flags);
+            if (!adapterToUse && (requestedAdapterIndex < 0 || requestedAdapterIndex == adapterIndex)) {
+                adapterToUse = adapter;
+                qDebug("  using this adapter");
+            } else {
+                adapter->Release();
+            }
+        }
+        if (!adapterToUse) {
+            qWarning("No adapter");
+            return;
+        }
+
         ID3D11DeviceContext *ctx = nullptr;
-        HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags,
+        HRESULT hr = D3D11CreateDevice(adapterToUse, D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
                                        nullptr, 0, D3D11_SDK_VERSION,
                                        &dev, &featureLevel, &ctx);
+        adapterToUse->Release();
         if (FAILED(hr)) {
             qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
             return;
@@ -120,25 +149,23 @@ void QRhiD3D11::create()
         Q_ASSERT(dev && context);
         featureLevel = dev->GetFeatureLevel();
     }
-
-    HRESULT hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgiFactory));
-    if (FAILED(hr)) {
-        qWarning("Failed to create DXGI factory: %s", qPrintable(comErrorMessage(hr)));
-        return;
-    }
-
-    qDebug("D3D11");
 }
 
 void QRhiD3D11::destroy()
 {
     if (!importedDevice) {
-        if (context)
+        if (context) {
             context->Release();
-        context = nullptr;
-        if (dev)
+            context = nullptr;
+        }
+        if (dev) {
             dev->Release();
-        dev = nullptr;
+            dev = nullptr;
+        }
+    }
+    if (dxgiFactory) {
+        dxgiFactory->Release();
+        dxgiFactory = nullptr;
     }
 }
 

@@ -2160,8 +2160,6 @@ static inline VkShaderStageFlagBits toVkShaderStage(QRhiGraphicsShaderStage::Typ
         return VK_SHADER_STAGE_VERTEX_BIT;
     case QRhiGraphicsShaderStage::Fragment:
         return VK_SHADER_STAGE_FRAGMENT_BIT;
-    case QRhiGraphicsShaderStage::Geometry:
-        return VK_SHADER_STAGE_GEOMETRY_BIT;
     case QRhiGraphicsShaderStage::TessellationControl:
         return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
     case QRhiGraphicsShaderStage::TessellationEvaluation:
@@ -2400,8 +2398,6 @@ static inline VkShaderStageFlags toVkShaderStageFlags(QRhiShaderResourceBinding:
         s |= VK_SHADER_STAGE_VERTEX_BIT;
     if (stage.testFlag(QRhiShaderResourceBinding::FragmentStage))
         s |= VK_SHADER_STAGE_FRAGMENT_BIT;
-    if (stage.testFlag(QRhiShaderResourceBinding::GeometryStage))
-        s |= VK_SHADER_STAGE_GEOMETRY_BIT;
     if (stage.testFlag(QRhiShaderResourceBinding::TessellationControlStage))
         s |= VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
     if (stage.testFlag(QRhiShaderResourceBinding::TessellationEvaluationStage))

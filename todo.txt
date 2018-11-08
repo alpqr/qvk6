@@ -6,6 +6,8 @@ mtl: textures
 mtl: mrt
 what's up with instance step rate
 d3d: show something about adapter or such when starting up
+d3d: msaa (onscreen)
+mtl: msaa (onscreen)
 test cubemap
 test cubemap face as target
 mipmap gen (?)
@@ -17,28 +19,31 @@ tex/QImage formats
 anisotropic
 compressed textures
 adopt texture, buffer, ...
-more tex: 3d, array
+copyimage (color and ds, no resolve or transforms here)
+msaa offscreen (msaa texture? renderbuffer?)
+resolveimage (color and ds, only to resolve samples)
+d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 test FrameOpDeviceLost somehow
-mtl: msaa (onscreen)
 gl: more ubuf types
 gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)
-d3d: msaa (onscreen)
 d3d, gl, mtl: cache shader sources?
 advanced blend modes?
 resize to 0 width or height fails (vk)
 gl: ubuf structs, arrays
 gl: target QOpenGLWindow ...
-msaa offscreen (msaa texture? renderbuffer?)
-blitframebuffer?
 vk: subpasses?
-other shader types? (gs?)
+compute?
+tessellation?
+indirect draw?
+more tex: 3d, array?
 
 shadertools:
 bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+remove geometry shader from enum
 hlsl version config to qsb
 msl version config to qsb
 version to qsb data stream

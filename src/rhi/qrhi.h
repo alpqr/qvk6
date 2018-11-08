@@ -168,9 +168,9 @@ struct Q_RHI_EXPORT QRhiGraphicsShaderStage
     enum Type {
         Vertex,
         Fragment,
-        Geometry,
         TessellationControl, // Hull
         TessellationEvaluation // Domain
+        // yes, no geometry shaders (Metal does not have them)
     };
 
     QRhiGraphicsShaderStage() { }
@@ -194,9 +194,8 @@ struct Q_RHI_EXPORT QRhiShaderResourceBinding
     enum StageFlag {
         VertexStage = 1 << 0,
         FragmentStage = 1 << 1,
-        GeometryStage = 1 << 2,
-        TessellationControlStage = 1 << 3,
-        TessellationEvaluationStage = 1 << 4
+        TessellationControlStage = 1 << 2,
+        TessellationEvaluationStage = 1 << 3
     };
     Q_DECLARE_FLAGS(StageFlags, StageFlag)
 

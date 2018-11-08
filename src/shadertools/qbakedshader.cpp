@@ -40,6 +40,8 @@
 
 QT_BEGIN_NAMESPACE
 
+static const int QSB_VERSION = 1;
+
 QBakedShader::QBakedShader()
     : d(new QBakedShaderPrivate)
 {
@@ -134,6 +136,7 @@ QByteArray QBakedShader::serialized() const
     if (!buf.open(QIODevice::WriteOnly))
         return QByteArray();
 
+    ds << QSB_VERSION;
     ds << d->stage;
     ds << d->desc.toBinaryJson();
     ds << d->shaders.count();
@@ -164,6 +167,10 @@ QBakedShader QBakedShader::fromSerialized(const QByteArray &data)
     QBakedShaderPrivate *d = QBakedShaderPrivate::get(&bs);
     Q_ASSERT(d->ref.load() == 1); // must be detached
     int intVal;
+    ds >> intVal;
+    if (intVal != QSB_VERSION)
+        return QBakedShader();
+
     ds >> intVal;
     d->stage = ShaderStage(intVal);
     QByteArray descBin;

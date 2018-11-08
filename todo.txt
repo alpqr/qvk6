@@ -4,7 +4,6 @@ mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: textures
 mtl: mrt
-what's up with instance step rate
 d3d: show something about adapter or such when starting up
 d3d: msaa (onscreen)
 mtl: msaa (onscreen)
@@ -37,12 +36,14 @@ compute?
 tessellation?
 indirect draw?
 more tex: 3d, array?
+vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 
 shadertools:
 bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+what's up with instance step rate
 remove geometry shader from enum
 hlsl version config to qsb
 msl version config to qsb

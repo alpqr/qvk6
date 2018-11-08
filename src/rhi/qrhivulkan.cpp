@@ -3071,8 +3071,15 @@ bool QVkGraphicsPipeline::build()
         VkVertexInputBindingDescription bindingInfo = {
             uint32_t(i),
             binding.stride,
-            binding.classification == QRhiVertexInputLayout::Binding::PerVertex ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE
+            binding.classification == QRhiVertexInputLayout::Binding::PerVertex
+                ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE
         };
+        if (binding.classification == QRhiVertexInputLayout::Binding::PerInstance
+                && binding.instanceStepRate != 1)
+        {
+            // ### could be supported with VK_EXT_vertex_attribute_divisor (Vulkan 1.1)
+            qWarning("QRhiVulkan: Instance step rates other than 1 not currently supported");
+        }
         vertexBindings.append(bindingInfo);
     }
     QVarLengthArray<VkVertexInputAttributeDescription, 4> vertexAttributes;

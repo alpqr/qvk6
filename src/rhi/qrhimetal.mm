@@ -1073,7 +1073,7 @@ bool QMetalGraphicsPipeline::build()
         inputLayout.layouts[layoutIdx].stepFunction =
                 binding.classification == QRhiVertexInputLayout::Binding::PerInstance
                 ? MTLVertexStepFunctionPerInstance : MTLVertexStepFunctionPerVertex;
-        inputLayout.layouts[layoutIdx].stepRate = 1;
+        inputLayout.layouts[layoutIdx].stepRate = binding.instanceStepRate;
         inputLayout.layouts[layoutIdx].stride = binding.stride;
     }
 

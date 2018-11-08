@@ -126,11 +126,12 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
             PerInstance
         };
         Binding() { }
-        Binding(quint32 stride_, Classification cls = PerVertex)
-            : stride(stride_), classification(cls)
+        Binding(quint32 stride_, Classification cls = PerVertex, int stepRate = 1)
+            : stride(stride_), classification(cls), instanceStepRate(stepRate)
         { }
         quint32 stride; // must be a multiple of 4
         Classification classification;
+        int instanceStepRate;
     };
 
     struct Q_RHI_EXPORT Attribute {

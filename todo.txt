@@ -35,13 +35,13 @@ vk: subpasses?
 other shader types? (gs?)
 
 shadertools:
-version to qsb data stream
-hlsl version config to qsb
-msl version config to qsb
 bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+hlsl version config to qsb
+msl version config to qsb
+version to qsb data stream
 upgrade vkmemalloc
 mtl: shader lang. version
 rename res pattern to new-build-release (from create-build-release)?

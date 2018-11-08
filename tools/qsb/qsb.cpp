@@ -163,13 +163,17 @@ int main(int argc, char **argv)
     cmdLineParser.addPositionalArgument(QLatin1String("file"), QObject::tr("Vulkan GLSL source file to compile"), QObject::tr("file"));
     QCommandLineOption batchableOption({ "b", "batchable" }, QObject::tr("Also generates rewritten vertex shader for Qt Quick scene graph batching."));
     cmdLineParser.addOption(batchableOption);
-    QCommandLineOption versionsOption({ "n", "versions" },
-                                     QObject::tr("Comma separated list of GLSL versions to generate. Defaults to \"300 es,330\"."),
-                                     QObject::tr("versions"));
-    cmdLineParser.addOption(versionsOption);
-    QCommandLineOption hlslOption({ "l", "hlsl" }, QObject::tr("Generates HLSL source as well."));
+    QCommandLineOption glslOption({ "g", "glsl" },
+                                  QObject::tr("Comma separated list of GLSL versions to generate. (for example, \"100 es,120,330\")"),
+                                  QObject::tr("glsl"));
+    cmdLineParser.addOption(glslOption);
+    QCommandLineOption hlslOption({ "l", "hlsl" },
+                                  QObject::tr("Comma separated list of HLSL (Shader Model) versions to generate. F.ex. 50 is 5.0, 51 is 5.1."),
+                                  QObject::tr("hlsl"));
     cmdLineParser.addOption(hlslOption);
-    QCommandLineOption mslOption({ "m", "msl" }, QObject::tr("Generates Metal Shading Language source as well."));
+    QCommandLineOption mslOption({ "m", "msl" },
+                                  QObject::tr("Comma separated list of Metal Shading Language versions to generate. F.ex. 12 is 1.2, 20 is 2.0."),
+                                  QObject::tr("msl"));
     cmdLineParser.addOption(mslOption);
     QCommandLineOption outputOption({ "o", "output" },
                                      QObject::tr("Output file for the baked shader pack."),
@@ -209,11 +213,8 @@ int main(int argc, char **argv)
 
         QVector<QShaderBaker::GeneratedShader> genShaders;
         genShaders << qMakePair(QBakedShader::SpirvShader, QBakedShader::ShaderSourceVersion(100));
-        if (!cmdLineParser.isSet(versionsOption)) {
-            genShaders << qMakePair(QBakedShader::GlslShader, QBakedShader::ShaderSourceVersion(300, QBakedShader::ShaderSourceVersion::GlslEs));
-            genShaders << qMakePair(QBakedShader::GlslShader, QBakedShader::ShaderSourceVersion(330));
-        } else {
-            const QStringList versions = cmdLineParser.value(versionsOption).trimmed().split(',');
+        if (cmdLineParser.isSet(glslOption)) {
+            const QStringList versions = cmdLineParser.value(glslOption).trimmed().split(',');
             for (QString version : versions) {
                 QBakedShader::ShaderSourceVersion::Flags flags = 0;
                 if (version.endsWith(QStringLiteral(" es"))) {
@@ -231,10 +232,28 @@ int main(int argc, char **argv)
                     qWarning("Ignoring invalid GLSL version %s", qPrintable(version));
             }
         }
-        if (cmdLineParser.isSet(hlslOption))
-            genShaders << qMakePair(QBakedShader::HlslShader, QBakedShader::ShaderSourceVersion(50)); // Shader Model 5.0
-        if (cmdLineParser.isSet(mslOption))
-            genShaders << qMakePair(QBakedShader::MslShader, QBakedShader::ShaderSourceVersion(12)); // 1.2
+        if (cmdLineParser.isSet(hlslOption)) {
+            const QStringList versions = cmdLineParser.value(hlslOption).trimmed().split(',');
+            for (QString version : versions) {
+                bool ok = false;
+                int v = version.toInt(&ok);
+                if (ok)
+                    genShaders << qMakePair(QBakedShader::HlslShader, QBakedShader::ShaderSourceVersion(v));
+                else
+                    qWarning("Ignoring invalid HLSL (Shader Model) version %s", qPrintable(version));
+            }
+        }
+        if (cmdLineParser.isSet(mslOption)) {
+            const QStringList versions = cmdLineParser.value(mslOption).trimmed().split(',');
+            for (QString version : versions) {
+                bool ok = false;
+                int v = version.toInt(&ok);
+                if (ok)
+                    genShaders << qMakePair(QBakedShader::MslShader, QBakedShader::ShaderSourceVersion(v));
+                else
+                    qWarning("Ignoring invalid MSL version %s", qPrintable(version));
+            }
+        }
         baker.setGeneratedShaders(genShaders);
 
         QBakedShader bs = baker.bake();

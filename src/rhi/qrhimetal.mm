@@ -47,8 +47,9 @@ QT_BEGIN_NAMESPACE
 
 /*
     Metal backend. Double buffers and throttles to vsync. "Dynamic" buffers are
-    Shared (host visible) and duplicated (due to 2 frames in flight), while
-    "static" buffers are Managed on macOS and Shared on iOS/tvOS.
+    Shared (host visible) and duplicated (due to 2 frames in flight), "static"
+    are Managed on macOS and Shared on iOS/tvOS, and still duplicated.
+    "Immutable" is like "static" but with only one native buffer underneath.
 */
 
 #if __has_feature(objc_arc)
@@ -83,8 +84,9 @@ struct QRhiMetalData
 
 struct QMetalBufferData
 {
+    bool managed;
     id<MTLBuffer> buf[QMTL_FRAMES_IN_FLIGHT];
-    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingSharedModeUpdates[QMTL_FRAMES_IN_FLIGHT];
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingUpdates[QMTL_FRAMES_IN_FLIGHT];
 };
 
 struct QMetalCommandBufferData
@@ -252,7 +254,7 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             bufD->lastActiveFrameSlot = currentFrameSlot;
             executeBufferHostWritesForCurrentFrame(bufD);
-            id<MTLBuffer> mtlbuf = bufD->d->buf[currentFrameSlot]; // ###
+            id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
             if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage))
                 [frame.currentPassEncoder setVertexBuffer: mtlbuf offset: b.ubuf.offset atIndex: b.binding];
             if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage))
@@ -296,7 +298,7 @@ void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
     for (int i = 0; i < bindings.count(); ++i) {
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, bindings[i].first);
         executeBufferHostWritesForCurrentFrame(bufD);
-        id<MTLBuffer> mtlbuf = bufD->d->buf[currentFrameSlot]; // ###
+        id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
         [frame.currentPassEncoder setVertexBuffer: mtlbuf offset: bindings[i].second atIndex: firstVertexBinding + startBinding + i];
     }
 }
@@ -472,17 +474,17 @@ void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
-        //Q_ASSERT(u.buf->type == QRhiBuffer::Dynamic);
+        Q_ASSERT(bufD->m_type == QRhiBuffer::Dynamic);
         for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
-            bufD->d->pendingSharedModeUpdates[i].append(u);
+            bufD->d->pendingUpdates[i].append(u);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
-        //Q_ASSERT(u.buf->type != QRhiBuffer::Dynamic);
+        Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == bufD->m_size);
-        for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
-            bufD->d->pendingSharedModeUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
+        for (int i = 0, ie = bufD->m_type == QRhiBuffer::Immutable ? 1 : QMTL_FRAMES_IN_FLIGHT; i != ie; ++i)
+            bufD->d->pendingUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
@@ -494,15 +496,24 @@ void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 
 void QRhiMetal::executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD)
 {
-    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> &updates(bufD->d->pendingSharedModeUpdates[currentFrameSlot]);
+    const int idx = bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot;
+    QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> &updates(bufD->d->pendingUpdates[idx]);
     if (updates.isEmpty())
         return;
 
-    void *p = [bufD->d->buf[currentFrameSlot] contents];
+    void *p = [bufD->d->buf[idx] contents];
+    int changeBegin = -1;
+    int changeEnd = -1;
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : updates) {
         Q_ASSERT(bufD == QRHI_RES(QMetalBuffer, u.buf));
         memcpy(static_cast<char *>(p) + u.offset, u.data.constData(), u.data.size());
+        if (changeBegin == -1 || u.offset < changeBegin)
+            changeBegin = u.offset;
+        if (changeEnd == -1 || u.offset + u.data.size() > changeEnd)
+            changeEnd = u.offset + u.data.size();
     }
+    if (changeBegin >= 0 && bufD->d->managed)
+        [bufD->d->buf[idx] didModifyRange: NSMakeRange(changeBegin, changeEnd - changeBegin)];
 
     updates.clear();
 }
@@ -607,7 +618,7 @@ void QMetalBuffer::release()
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
         e.buffer.buffers[i] = d->buf[i];
         d->buf[i] = nil;
-        d->pendingSharedModeUpdates[i].clear();
+        d->pendingUpdates[i].clear();
     }
 
     QRHI_RES_RHI(QRhiMetal);
@@ -621,14 +632,23 @@ bool QMetalBuffer::build()
 
     const int roundedSize = m_usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(m_size, 256) : m_size;
 
-    // ### for now everything host visible and double buffered
-    // should instead use Managed on macOS for immutable/static
+    d->managed = false;
     MTLResourceOptions opts = MTLResourceStorageModeShared;
+#ifdef Q_OS_MACOS
+    if (m_type != Dynamic) {
+        opts = MTLResourceStorageModeManaged;
+        d->managed = true;
+    }
+#endif
 
     QRHI_RES_RHI(QRhiMetal);
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
-        d->buf[i] = [rhiD->d->dev newBufferWithLength: roundedSize options: opts];
-        d->pendingSharedModeUpdates[i].reserve(16);
+        // Immutable only has buf[0] and pendingUpdates[0] in use.
+        // Static and Dynamic use all.
+        if (i == 0 || m_type != Immutable) {
+            d->buf[i] = [rhiD->d->dev newBufferWithLength: roundedSize options: opts];
+            d->pendingUpdates[i].reserve(16);
+        }
     }
 
     lastActiveFrameSlot = -1;

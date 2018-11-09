@@ -1,5 +1,4 @@
 mtl: depth-stencil
-mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
 mtl: textures
@@ -42,6 +41,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+mtl: buffer logic is borked
 d3d: very basic adapter selection
 what's up with instance step rate
 remove geometry shader from enum

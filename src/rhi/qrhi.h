@@ -370,7 +370,7 @@ class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 public:
     enum Flag {
         RenderTarget = 1 << 0,
-        ChangesInfrequently = 1 << 1, // hint for backend not to keep staging resources around
+        ChangesFrequently = 1 << 1, // hint for backend to keep staging resources around
         CubeMap = 1 << 2,
         MipMapped = 1 << 3
     };

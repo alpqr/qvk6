@@ -8,18 +8,19 @@ d3d: msaa (onscreen)
 mtl: msaa (onscreen)
 test cubemap
 test cubemap face as target
-mipmap gen (?)
 cbuffer alignment rule chaos - figure out what to recommend to users
+compressed textures
+copyimage (color and ds, no resolve or transforms here)
+msaa offscreen (msaa texture? renderbuffer?)
+resolveimage (color and ds, only to resolve samples)
+threading options? secondary command lists?
+mipmap generation?
 figure sg out for minimizing viewport/scissor cmds
 d3d device loss
 more what-if-resource-rebuilt cases
 tex/QImage formats
 anisotropic
-compressed textures
 adopt texture, buffer, ...
-copyimage (color and ds, no resolve or transforms here)
-msaa offscreen (msaa texture? renderbuffer?)
-resolveimage (color and ds, only to resolve samples)
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 test FrameOpDeviceLost somehow
 gl: more ubuf types
@@ -29,7 +30,7 @@ d3d, gl, mtl: cache shader sources?
 advanced blend modes?
 resize to 0 width or height fails (vk)
 gl: ubuf structs, arrays
-gl: target QOpenGLWindow ...
+gl: target QOpenGLWindow/Widget?
 vk: subpasses?
 compute?
 tessellation?
@@ -42,6 +43,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+texture ChangesInfrequently -> ChangesFrequently
 mtl: depth-stencil
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers

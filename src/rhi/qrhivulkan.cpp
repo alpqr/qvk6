@@ -1681,7 +1681,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                                    copyInfos.count(), copyInfos.constData());
         utexD->lastActiveFrameSlot = currentFrameSlot;
         utexD->stagingFrameSlot = currentFrameSlot;
-        if (utexD->m_flags.testFlag(QRhiTexture::ChangesInfrequently))
+        if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently))
             pendingStagingReleaseTextures.insert(utexD);
 
         imageBarrier(cb, u.tex,

@@ -1,4 +1,5 @@
 mtl: should currentPassEncoder & co. be in the cb data instead?
+mtl: stagingBuffer should be per frame to be safe
 mtl: drop texture staging buf when !ChangesFrequently
 mtl: cubemaps
 mtl: depth tex

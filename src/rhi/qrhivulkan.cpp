@@ -1259,32 +1259,12 @@ void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureR
         QRHI_RES(QVkTexture, rtD->m_desc.depthTexture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 
-template<typename T>
-void destroyStagingBufferIfCompleted(QSet<T *> *resList, QRhiVulkan *rhiD)
-{
-    for (auto it = resList->begin(); it != resList->end(); ) {
-        T *res = *it;
-        if (res->stagingFrameSlot == rhiD->currentFrameSlot) {
-            vmaDestroyBuffer(toVmaAllocator(rhiD->allocator), res->stagingBuffer, toVmaAllocation(res->stagingAlloc));
-            res->stagingBuffer = VK_NULL_HANDLE;
-            res->stagingAlloc = nullptr;
-            res->stagingFrameSlot = -1;
-            it = resList->erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
-
 void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 {
     Q_ASSERT(!inFrame);
     inFrame = true;
 
     executeDeferredReleases();
-
-    destroyStagingBufferIfCompleted(&pendingStagingReleaseBuffers, this);
-    destroyStagingBufferIfCompleted(&pendingStagingReleaseTextures, this);
 
     QRHI_RES(QVkCommandBuffer, cb)->resetState();
 }
@@ -1545,7 +1525,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == bufD->m_size);
 
-        if (!bufD->stagingBuffer) {
+        if (!bufD->stagingBuffers[currentFrameSlot]) {
             VkBufferCreateInfo bufferInfo;
             memset(&bufferInfo, 0, sizeof(bufferInfo));
             bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1558,9 +1538,9 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
             VmaAllocation allocation;
             VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo,
-                                           &bufD->stagingBuffer, &allocation, nullptr);
+                                           &bufD->stagingBuffers[currentFrameSlot], &allocation, nullptr);
             if (err == VK_SUCCESS) {
-                bufD->stagingAlloc = allocation;
+                bufD->stagingAllocations[currentFrameSlot] = allocation;
             } else {
                 qWarning("Failed to create staging buffer of size %d: %d", bufD->m_size, err);
                 continue;
@@ -1568,7 +1548,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         }
 
         void *p = nullptr;
-        VmaAllocation a = toVmaAllocation(bufD->stagingAlloc);
+        VmaAllocation a = toVmaAllocation(bufD->stagingAllocations[currentFrameSlot]);
         VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map buffer: %d", err);
@@ -1582,12 +1562,20 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         memset(&copyInfo, 0, sizeof(copyInfo));
         copyInfo.size = bufD->m_size;
 
-        df->vkCmdCopyBuffer(cbD->cb, bufD->stagingBuffer, bufD->buffers[0], 1, &copyInfo);
+        df->vkCmdCopyBuffer(cbD->cb, bufD->stagingBuffers[currentFrameSlot], bufD->buffers[0], 1, &copyInfo);
         bufferBarrier(cb, u.buf);
         bufD->lastActiveFrameSlot = currentFrameSlot;
-        bufD->stagingFrameSlot = currentFrameSlot;
-        if (bufD->m_type == QRhiBuffer::Immutable)
-            pendingStagingReleaseBuffers.insert(bufD);
+
+        if (bufD->m_type == QRhiBuffer::Immutable) {
+            QRhiVulkan::DeferredReleaseEntry e;
+            e.type = QRhiVulkan::DeferredReleaseEntry::StagingBuffer;
+            e.lastActiveFrameSlot = currentFrameSlot;
+            e.stagingBuffer.stagingBuffer = bufD->stagingBuffers[currentFrameSlot];
+            e.stagingBuffer.stagingAllocation = bufD->stagingAllocations[currentFrameSlot];
+            bufD->stagingBuffers[currentFrameSlot] = VK_NULL_HANDLE;
+            bufD->stagingAllocations[currentFrameSlot] = nullptr;
+            releaseQueue.append(e);
+        }
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
@@ -1608,7 +1596,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             }
         }
 
-        if (!utexD->stagingBuffer) {
+        if (!utexD->stagingBuffers[currentFrameSlot]) {
             VkBufferCreateInfo bufferInfo;
             memset(&bufferInfo, 0, sizeof(bufferInfo));
             bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1620,18 +1608,19 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
             VmaAllocation allocation;
-            VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &utexD->stagingBuffer, &allocation, nullptr);
+            VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo,
+                                           &utexD->stagingBuffers[currentFrameSlot], &allocation, nullptr);
             if (err != VK_SUCCESS) {
                 qWarning("Failed to create image staging buffer of size %d: %d", int(stagingSize), err);
                 continue;
             }
-            utexD->stagingAlloc = allocation;
+            utexD->stagingAllocations[currentFrameSlot] = allocation;
         }
 
         QVarLengthArray<VkBufferImageCopy, 4> copyInfos;
         size_t curOfs = 0;
         void *mp = nullptr;
-        VmaAllocation a = toVmaAllocation(utexD->stagingAlloc);
+        VmaAllocation a = toVmaAllocation(utexD->stagingAllocations[currentFrameSlot]);
         VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &mp);
         if (err != VK_SUCCESS) {
             qWarning("Failed to map image data: %d", err);
@@ -1677,12 +1666,21 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             }
         }
 
-        df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffer, utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffers[currentFrameSlot],
+                                   utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                    copyInfos.count(), copyInfos.constData());
         utexD->lastActiveFrameSlot = currentFrameSlot;
-        utexD->stagingFrameSlot = currentFrameSlot;
-        if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently))
-            pendingStagingReleaseTextures.insert(utexD);
+
+        if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently)) {
+            QRhiVulkan::DeferredReleaseEntry e;
+            e.type = QRhiVulkan::DeferredReleaseEntry::StagingBuffer;
+            e.lastActiveFrameSlot = currentFrameSlot;
+            e.stagingBuffer.stagingBuffer = utexD->stagingBuffers[currentFrameSlot];
+            e.stagingBuffer.stagingAllocation = utexD->stagingAllocations[currentFrameSlot];
+            utexD->stagingBuffers[currentFrameSlot] = VK_NULL_HANDLE;
+            utexD->stagingAllocations[currentFrameSlot] = nullptr;
+            releaseQueue.append(e);
+        }
 
         imageBarrier(cb, u.tex,
                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -1742,9 +1740,10 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 }
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Buffer:
-                for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+                for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
                     vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.buffers[i], toVmaAllocation(e.buffer.allocations[i]));
-                vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.stagingBuffer, toVmaAllocation(e.buffer.stagingAlloc));
+                    vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.stagingBuffers[i], toVmaAllocation(e.buffer.stagingAllocations[i]));
+                }
                 break;
             case QRhiVulkan::DeferredReleaseEntry::RenderBuffer:
                 df->vkDestroyImageView(dev, e.renderBuffer.imageView, nullptr);
@@ -1754,7 +1753,8 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
             case QRhiVulkan::DeferredReleaseEntry::Texture:
                 df->vkDestroyImageView(dev, e.texture.imageView, nullptr);
                 vmaDestroyImage(toVmaAllocator(allocator), e.texture.image, toVmaAllocation(e.texture.allocation));
-                vmaDestroyBuffer(toVmaAllocator(allocator), e.texture.stagingBuffer, toVmaAllocation(e.texture.stagingAlloc));
+                for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+                    vmaDestroyBuffer(toVmaAllocator(allocator), e.texture.stagingBuffers[i], toVmaAllocation(e.texture.stagingAllocations[i]));
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Sampler:
                 df->vkDestroySampler(dev, e.sampler.sampler, nullptr);
@@ -1766,6 +1766,9 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 break;
             case QRhiVulkan::DeferredReleaseEntry::RenderPass:
                 df->vkDestroyRenderPass(dev, e.renderPass.rp, nullptr);
+                break;
+            case QRhiVulkan::DeferredReleaseEntry::StagingBuffer:
+                vmaDestroyBuffer(toVmaAllocator(allocator), e.stagingBuffer.stagingBuffer, toVmaAllocation(e.stagingBuffer.stagingAllocation));
                 break;
             default:
                 break;
@@ -2409,8 +2412,8 @@ QVkBuffer::QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int s
     : QRhiBuffer(rhi, type, usage, size)
 {
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        buffers[i] = VK_NULL_HANDLE;
-        allocations[i] = nullptr;
+        buffers[i] = stagingBuffers[i] = VK_NULL_HANDLE;
+        allocations[i] = stagingAllocations[i] = nullptr;
     }
 }
 
@@ -2428,25 +2431,21 @@ void QVkBuffer::release()
     e.type = QRhiVulkan::DeferredReleaseEntry::Buffer;
     e.lastActiveFrameSlot = lastActiveFrameSlot;
 
-    e.buffer.stagingBuffer = stagingBuffer;
-    e.buffer.stagingAlloc = stagingAlloc;
-
-    stagingBuffer = VK_NULL_HANDLE;
-    stagingAlloc = nullptr;
-
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         e.buffer.buffers[i] = buffers[i];
         e.buffer.allocations[i] = allocations[i];
+        e.buffer.stagingBuffers[i] = stagingBuffers[i];
+        e.buffer.stagingAllocations[i] = stagingAllocations[i];
 
         buffers[i] = VK_NULL_HANDLE;
         allocations[i] = nullptr;
+        stagingBuffers[i] = VK_NULL_HANDLE;
+        stagingAllocations[i] = nullptr;
         pendingDynamicUpdates[i].clear();
     }
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
-
-    rhiD->pendingStagingReleaseBuffers.remove(this);
 }
 
 bool QVkBuffer::build()
@@ -2556,6 +2555,10 @@ bool QVkRenderBuffer::build()
 QVkTexture::QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags)
     : QRhiTexture(rhi, format, pixelSize, flags)
 {
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        stagingBuffers[i] = VK_NULL_HANDLE;
+        stagingAllocations[i] = nullptr;
+    }
 }
 
 void QVkTexture::release()
@@ -2570,19 +2573,21 @@ void QVkTexture::release()
     e.texture.image = image;
     e.texture.imageView = imageView;
     e.texture.allocation = imageAlloc;
-    e.texture.stagingBuffer = stagingBuffer;
-    e.texture.stagingAlloc = stagingAlloc;
+
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        e.texture.stagingBuffers[i] = stagingBuffers[i];
+        e.texture.stagingAllocations[i] = stagingAllocations[i];
+
+        stagingBuffers[i] = VK_NULL_HANDLE;
+        stagingAllocations[i] = nullptr;
+    }
 
     image = VK_NULL_HANDLE;
     imageView = VK_NULL_HANDLE;
     imageAlloc = nullptr;
-    stagingBuffer = VK_NULL_HANDLE;
-    stagingAlloc = nullptr;
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
-
-    rhiD->pendingStagingReleaseTextures.remove(this);
 }
 
 bool QVkTexture::build()

@@ -69,10 +69,9 @@ struct QVkBuffer : public QRhiBuffer
     VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
     QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingDynamicUpdates[QVK_FRAMES_IN_FLIGHT];
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    QVkAlloc stagingAlloc = nullptr;
+    VkBuffer stagingBuffers[QVK_FRAMES_IN_FLIGHT];
+    QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
     int lastActiveFrameSlot = -1;
-    int stagingFrameSlot = -1;
     uint generation = 0;
     friend class QRhiVulkan;
 };
@@ -100,12 +99,11 @@ struct QVkTexture : public QRhiTexture
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     QVkAlloc imageAlloc = nullptr;
-    VkBuffer stagingBuffer = VK_NULL_HANDLE;
-    QVkAlloc stagingAlloc = nullptr;
+    VkBuffer stagingBuffers[QVK_FRAMES_IN_FLIGHT];
+    QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     uint mipLevelCount = 0;
     int lastActiveFrameSlot = -1;
-    int stagingFrameSlot = -1;
     uint generation = 0;
     friend class QRhiVulkan;
 };
@@ -465,7 +463,8 @@ public:
             Texture,
             Sampler,
             TextureRenderTarget,
-            RenderPass
+            RenderPass,
+            StagingBuffer
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -481,8 +480,8 @@ public:
             struct {
                 VkBuffer buffers[QVK_FRAMES_IN_FLIGHT];
                 QVkAlloc allocations[QVK_FRAMES_IN_FLIGHT];
-                VkBuffer stagingBuffer;
-                QVkAlloc stagingAlloc;
+                VkBuffer stagingBuffers[QVK_FRAMES_IN_FLIGHT];
+                QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
             } buffer;
             struct {
                 VkDeviceMemory memory;
@@ -493,8 +492,8 @@ public:
                 VkImage image;
                 VkImageView imageView;
                 QVkAlloc allocation;
-                VkBuffer stagingBuffer;
-                QVkAlloc stagingAlloc;
+                VkBuffer stagingBuffers[QVK_FRAMES_IN_FLIGHT];
+                QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
             } texture;
             struct {
                 VkSampler sampler;
@@ -506,12 +505,13 @@ public:
             struct {
                 VkRenderPass rp;
             } renderPass;
+            struct {
+                VkBuffer stagingBuffer;
+                QVkAlloc stagingAllocation;
+            } stagingBuffer;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
-
-    QSet<QVkBuffer *> pendingStagingReleaseBuffers;
-    QSet<QVkTexture *> pendingStagingReleaseTextures;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);

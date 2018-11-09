@@ -73,7 +73,8 @@ struct QRhiMetalData
         enum Type {
             Buffer,
             RenderBuffer,
-            Texture
+            Texture,
+            Sampler
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -87,6 +88,9 @@ struct QRhiMetalData
             struct {
                 id<MTLTexture> texture;
             } texture;
+            struct {
+                id<MTLSamplerState> samplerState;
+            } sampler;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
@@ -107,6 +111,11 @@ struct QMetalRenderBufferData
 struct QMetalTextureData
 {
     id<MTLTexture> tex = nil;
+};
+
+struct QMetalSamplerData
+{
+    id<MTLSamplerState> samplerState = nil;
 };
 
 struct QMetalCommandBufferData
@@ -217,6 +226,8 @@ bool QRhiMetal::isYUpInFramebuffer() const
 
 QMatrix4x4 QRhiMetal::clipSpaceCorrMatrix() const
 {
+    // ### ?
+
     return QMatrix4x4(); // identity
 }
 
@@ -282,8 +293,20 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
-            QRHI_RES(QMetalTexture, b.stex.tex)->lastActiveFrameSlot = currentFrameSlot;
-            QRHI_RES(QMetalSampler, b.stex.sampler)->lastActiveFrameSlot = currentFrameSlot;
+        {
+            QMetalTexture *tex = QRHI_RES(QMetalTexture, b.stex.tex);
+            tex->lastActiveFrameSlot = currentFrameSlot;
+            QMetalSampler *samp = QRHI_RES(QMetalSampler, b.stex.sampler);
+            samp->lastActiveFrameSlot = currentFrameSlot;
+            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
+                [frame.currentPassEncoder setVertexTexture: tex->d->tex atIndex: b.binding];
+                [frame.currentPassEncoder setVertexSamplerState: samp->d->samplerState atIndex: b.binding];
+            }
+            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
+                [frame.currentPassEncoder setFragmentTexture: tex->d->tex atIndex: b.binding];
+                [frame.currentPassEncoder setFragmentSamplerState: samp->d->samplerState atIndex: b.binding];
+            }
+        }
             break;
         default:
             Q_UNREACHABLE();
@@ -645,6 +668,9 @@ void QRhiMetal::executeDeferredReleases(bool forced)
             case QRhiMetalData::DeferredReleaseEntry::Texture:
                 [e.texture.texture release];
                 break;
+            case QRhiMetalData::DeferredReleaseEntry::Sampler:
+                [e.sampler.samplerState release];
+                break;
             default:
                 break;
             }
@@ -800,6 +826,29 @@ static inline QSize safeSize(const QSize &size)
     return size.isEmpty() ? QSize(16, 16) : size;
 }
 
+static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::RGBA8:
+        return MTLPixelFormatRGBA8Unorm;
+    case QRhiTexture::BGRA8:
+        return MTLPixelFormatBGRA8Unorm;
+    case QRhiTexture::R8:
+        return MTLPixelFormatR8Unorm;
+    case QRhiTexture::R16:
+        return MTLPixelFormatR16Unorm;
+
+    case QRhiTexture::D16:
+        return MTLPixelFormatDepth16Unorm;
+    case QRhiTexture::D32:
+        return MTLPixelFormatDepth32Float;
+
+    default:
+        Q_UNREACHABLE();
+        return MTLPixelFormatRGBA8Unorm;
+    }
+}
+
 bool QMetalTexture::build()
 {
     if (d->tex)
@@ -810,7 +859,7 @@ bool QMetalTexture::build()
     QRHI_RES_RHI(QRhiMetal);
     MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
     desc.textureType = MTLTextureType2D;
-    desc.pixelFormat = MTLPixelFormatRGBA8Unorm; // ###
+    desc.pixelFormat = toMetalTextureFormat(m_format);
     desc.width = size.width();
     desc.height = size.height();
     desc.resourceOptions = MTLResourceStorageModePrivate;
@@ -827,16 +876,96 @@ bool QMetalTexture::build()
 
 QMetalSampler::QMetalSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
                              AddressMode u, AddressMode v, AddressMode w)
-    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v, w)
+    : QRhiSampler(rhi, magFilter, minFilter, mipmapMode, u, v, w),
+      d(new QMetalSamplerData)
 {
+}
+
+QMetalSampler::~QMetalSampler()
+{
+    delete d;
 }
 
 void QMetalSampler::release()
 {
+    if (!d->samplerState)
+        return;
+
+    QRhiMetalData::DeferredReleaseEntry e;
+    e.type = QRhiMetalData::DeferredReleaseEntry::Sampler;
+    e.lastActiveFrameSlot = lastActiveFrameSlot;
+
+    e.sampler.samplerState = d->samplerState;
+    d->samplerState = nil;
+
+    QRHI_RES_RHI(QRhiMetal);
+    rhiD->d->releaseQueue.append(e);
+}
+
+static inline MTLSamplerMinMagFilter toMetalFilter(QRhiSampler::Filter f)
+{
+    switch (f) {
+    case QRhiSampler::Nearest:
+        return MTLSamplerMinMagFilterNearest;
+    case QRhiSampler::Linear:
+        return MTLSamplerMinMagFilterLinear;
+    default:
+        Q_UNREACHABLE();
+        return MTLSamplerMinMagFilterNearest;
+    }
+}
+
+static inline MTLSamplerMipFilter toMetalMipmapMode(QRhiSampler::Filter f)
+{
+    switch (f) {
+    case QRhiSampler::None:
+        return MTLSamplerMipFilterNotMipmapped;
+    case QRhiSampler::Nearest:
+        return MTLSamplerMipFilterNearest;
+    case QRhiSampler::Linear:
+        return MTLSamplerMipFilterLinear;
+    default:
+        Q_UNREACHABLE();
+        return MTLSamplerMipFilterNotMipmapped;
+    }
+}
+
+static inline MTLSamplerAddressMode toMetalAddressMode(QRhiSampler::AddressMode m)
+{
+    switch (m) {
+    case QRhiSampler::Repeat:
+        return MTLSamplerAddressModeRepeat;
+    case QRhiSampler::ClampToEdge:
+        return MTLSamplerAddressModeClampToEdge;
+    case QRhiSampler::Border:
+        return MTLSamplerAddressModeClampToBorderColor;
+    case QRhiSampler::Mirror:
+        return MTLSamplerAddressModeMirrorRepeat;
+    case QRhiSampler::MirrorOnce:
+        return MTLSamplerAddressModeMirrorClampToEdge;
+    default:
+        Q_UNREACHABLE();
+        return MTLSamplerAddressModeClampToEdge;
+    }
 }
 
 bool QMetalSampler::build()
 {
+    if (d->samplerState)
+        release();
+
+    MTLSamplerDescriptor *desc = [[MTLSamplerDescriptor alloc] init];
+    desc.minFilter = toMetalFilter(m_minFilter);
+    desc.magFilter = toMetalFilter(m_magFilter);
+    desc.mipFilter = toMetalMipmapMode(m_mipmapMode);
+    desc.sAddressMode = toMetalAddressMode(m_addressU);
+    desc.tAddressMode = toMetalAddressMode(m_addressV);
+    desc.rAddressMode = toMetalAddressMode(m_addressW);
+
+    QRHI_RES_RHI(QRhiMetal);
+    d->samplerState = [rhiD->d->dev newSamplerStateWithDescriptor: desc];
+    [desc release];
+
     lastActiveFrameSlot = -1;
     generation += 1;
     return true;

@@ -97,13 +97,17 @@ struct QMetalTexture : public QRhiTexture
     friend class QRhiMetal;
 };
 
+struct QMetalSamplerData;
+
 struct QMetalSampler : public QRhiSampler
 {
     QMetalSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
                   AddressMode u, AddressMode v, AddressMode w);
+    ~QMetalSampler();
     void release() override;
     bool build() override;
 
+    QMetalSamplerData *d;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;

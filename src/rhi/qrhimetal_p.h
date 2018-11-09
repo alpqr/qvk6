@@ -92,6 +92,7 @@ struct QMetalTexture : public QRhiTexture
     bool build() override;
 
     QMetalTextureData *d;
+    int mipLevelCount = 0;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;
@@ -307,7 +308,7 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases(bool forced = false);
-    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
 
     bool importedDevice = false;

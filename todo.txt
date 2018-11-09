@@ -1,5 +1,5 @@
 mtl: should currentPassEncoder & co. be in the cb data instead?
-mtl: mipmap upload
+mtl: drop texture staging buf when !ChangesFrequently
 mtl: cubemaps
 mtl: depth tex
 mtl: mrt, cubemap faces
@@ -44,6 +44,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+mtl: mipmap upload
 mtl: indexed draw
 mtl: basic texture
 texture ChangesInfrequently -> ChangesFrequently

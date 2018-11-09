@@ -38,6 +38,7 @@
 #include <QGuiApplication>
 #include <QWindow>
 #include <QElapsedTimer>
+#include <qmath.h>
 #include <QBakedShader>
 #include <AppKit/AppKit.h>
 #include <Metal/Metal.h>
@@ -87,6 +88,7 @@ struct QRhiMetalData
             } renderbuffer;
             struct {
                 id<MTLTexture> texture;
+                id<MTLBuffer> stagingBuffer;
             } texture;
             struct {
                 id<MTLSamplerState> samplerState;
@@ -111,6 +113,7 @@ struct QMetalRenderBufferData
 struct QMetalTextureData
 {
     id<MTLTexture> tex = nil;
+    id<MTLBuffer> stagingBuf = nil;
 };
 
 struct QMetalSamplerData
@@ -541,8 +544,9 @@ MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthSte
     return rp;
 }
 
-void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
+void QRhiMetal::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
@@ -560,9 +564,66 @@ void QRhiMetal::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             bufD->d->pendingUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
     }
 
+    id<MTLBlitCommandEncoder> blitEnc = nil;
+    if (!ud->textureUploads.isEmpty())
+        blitEnc = [cbD->d->cb blitCommandEncoder];
+
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        // ###
+        if (u.desc.layers.isEmpty() || u.desc.layers[0].mipImages.isEmpty())
+            continue;
+
+        QMetalTexture *utexD = QRHI_RES(QMetalTexture, u.tex);
+        qsizetype stagingSize = 0;
+        const int texbufAlign = 256; // probably not needed
+
+        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            Q_ASSERT(layerDesc.mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
+            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
+                if (imageSizeBytes > 0)
+                    stagingSize += aligned(imageSizeBytes, texbufAlign);
+            }
+        }
+
+        if (!utexD->d->stagingBuf)
+            utexD->d->stagingBuf = [d->dev newBufferWithLength: stagingSize options: MTLResourceStorageModeShared];
+
+        void *mp = [utexD->d->stagingBuf contents];
+
+        qsizetype curOfs = 0;
+        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
+            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
+                if (imageSizeBytes > 0) {
+                    memcpy(reinterpret_cast<char *>(mp) + curOfs, mipDesc.image.constBits(), imageSizeBytes);
+                    [blitEnc copyFromBuffer: utexD->d->stagingBuf
+                                             sourceOffset: curOfs
+                                             sourceBytesPerRow: mipDesc.image.bytesPerLine()
+                                             sourceBytesPerImage: 0
+                                             sourceSize: MTLSizeMake(mipDesc.image.width(), mipDesc.image.height(), 1)
+                                             toTexture: utexD->d->tex
+                                             destinationSlice: layer
+                                             destinationLevel: level
+                                             destinationOrigin: MTLOriginMake(0, 0, 0)
+                                             options: MTLBlitOptionNone];
+                    curOfs += aligned(imageSizeBytes, texbufAlign);
+                }
+            }
+        }
+
+        utexD->lastActiveFrameSlot = currentFrameSlot;
+
+        if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently)) {
+            // ###
+        }
     }
+
+    if (blitEnc)
+        [blitEnc endEncoding];
 
     ud->free();
 }
@@ -600,7 +661,7 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
     Q_ASSERT(!inPass);
 
     if (resourceUpdates)
-        commitResourceUpdates(resourceUpdates);
+        commitResourceUpdates(cb, resourceUpdates);
 
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QMetalSwapChainData::FrameData &frame(currentFrameSwapChain->d->frame[currentFrameSlot]);
@@ -667,6 +728,7 @@ void QRhiMetal::executeDeferredReleases(bool forced)
                 break;
             case QRhiMetalData::DeferredReleaseEntry::Texture:
                 [e.texture.texture release];
+                [e.texture.stagingBuffer release];
                 break;
             case QRhiMetalData::DeferredReleaseEntry::Sampler:
                 [e.sampler.samplerState release];
@@ -815,7 +877,10 @@ void QMetalTexture::release()
     e.lastActiveFrameSlot = lastActiveFrameSlot;
 
     e.texture.texture = d->tex;
+    e.texture.stagingBuffer = d->stagingBuf;
+
     d->tex = nil;
+    d->stagingBuf = nil;
 
     QRHI_RES_RHI(QRhiMetal);
     rhiD->d->releaseQueue.append(e);
@@ -855,6 +920,9 @@ bool QMetalTexture::build()
         release();
 
     const QSize size = safeSize(m_pixelSize);
+    const bool hasMipMaps = m_flags.testFlag(MipMapped);
+
+    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
 
     QRHI_RES_RHI(QRhiMetal);
     MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
@@ -862,6 +930,7 @@ bool QMetalTexture::build()
     desc.pixelFormat = toMetalTextureFormat(m_format);
     desc.width = size.width();
     desc.height = size.height();
+    desc.mipmapLevelCount = mipLevelCount;
     desc.resourceOptions = MTLResourceStorageModePrivate;
     desc.storageMode = MTLStorageModePrivate;
     desc.usage = MTLTextureUsageShaderRead;

@@ -2616,7 +2616,7 @@ bool QVkTexture::build()
     imageInfo.extent.width = size.width();
     imageInfo.extent.height = size.height();
     imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = hasMipMaps ? ceil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    imageInfo.mipLevels = mipLevelCount;
     imageInfo.arrayLayers = isCube ? 6 : 1;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;

@@ -197,6 +197,9 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
+    QRhiBuffer *currentIndexBuffer;
+    quint32 currentIndexOffset;
+    QRhi::IndexFormat currentIndexFormat;
 
     void resetState() {
         currentSwapChain = nullptr;
@@ -205,6 +208,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
         currentPipelineGeneration = 0;
         currentSrb = nullptr;
         currentSrbGeneration = 0;
+        currentIndexBuffer = nullptr;
     }
 };
 

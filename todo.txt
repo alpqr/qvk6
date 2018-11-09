@@ -1,3 +1,4 @@
+mtl: should currentPassEncoder & co. be in the cb data instead?
 mtl: mipmap upload
 mtl: cubemaps
 mtl: depth tex

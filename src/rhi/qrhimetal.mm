@@ -312,15 +312,28 @@ void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
     Q_ASSERT(inPass);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QMetalSwapChainData::FrameData &frame(cbD->currentSwapChain->d->frame[currentFrameSlot]);
+
     // same binding space for vertex and constant buffers - work it around
     const int firstVertexBinding = QRHI_RES(QMetalShaderResourceBindings, cbD->currentSrb)->maxBinding + 1;
-    // ### batch
+
+    // ### should batch
     for (int i = 0; i < bindings.count(); ++i) {
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, bindings[i].first);
         executeBufferHostWritesForCurrentFrame(bufD);
         bufD->lastActiveFrameSlot = currentFrameSlot;
         id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
         [frame.currentPassEncoder setVertexBuffer: mtlbuf offset: bindings[i].second atIndex: firstVertexBinding + startBinding + i];
+    }
+
+    if (indexBuf) {
+        QMetalBuffer *ibufD = QRHI_RES(QMetalBuffer, indexBuf);
+        executeBufferHostWritesForCurrentFrame(ibufD);
+        ibufD->lastActiveFrameSlot = currentFrameSlot;
+        cbD->currentIndexBuffer = indexBuf;
+        cbD->currentIndexOffset = indexOffset;
+        cbD->currentIndexFormat = indexFormat;
+    } else {
+        cbD->currentIndexBuffer = nullptr;
     }
 }
 
@@ -402,11 +415,24 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 {
     Q_ASSERT(inPass);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+    if (!cbD->currentIndexBuffer)
+        return;
+
+    const quint32 indexOffset = cbD->currentIndexOffset + firstIndex * (cbD->currentIndexFormat == QRhi::IndexUInt16 ? 2 : 4);
+    Q_ASSERT(indexOffset == aligned(indexOffset, 4));
+
+    QMetalBuffer *ibufD = QRHI_RES(QMetalBuffer, cbD->currentIndexBuffer);
+    id<MTLBuffer> mtlbuf = ibufD->d->buf[ibufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
     QMetalSwapChainData::FrameData &frame(cbD->currentSwapChain->d->frame[currentFrameSlot]);
-    //ibufD->lastActiveFrameSlot = currentFrameSlot;
-//    [frame.currentPassEncoder drawIndexedPrimitives:
-//        QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->d->primitiveType
-//      indexCount: indexCount indexType: type indexBuffer: buf indexBufferOffset: vertexOffset
+
+    [frame.currentPassEncoder drawIndexedPrimitives: QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->d->primitiveType
+      indexCount: indexCount
+      indexType: cbD->currentIndexFormat == QRhi::IndexUInt16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
+      indexBuffer: mtlbuf
+      indexBufferOffset: indexOffset
+      instanceCount: instanceCount
+      baseVertex: vertexOffset
+      baseInstance: firstInstance];
 }
 
 QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
@@ -453,7 +479,7 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
     [frame.cb presentDrawable: swapChainD->d->curDrawable];
 
     __block dispatch_semaphore_t sem = swapChainD->d->sem;
-    [frame.cb addCompletedHandler: ^(id<MTLCommandBuffer> cb) {
+    [frame.cb addCompletedHandler: ^(id<MTLCommandBuffer>) {
         dispatch_semaphore_signal(sem);
     }];
 

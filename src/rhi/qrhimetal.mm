@@ -120,7 +120,7 @@ struct QMetalSwapChainData
 {
     CAMetalLayer *layer = nullptr;
     id<CAMetalDrawable> curDrawable;
-    dispatch_semaphore_t sem;
+    dispatch_semaphore_t sem = nullptr;
     struct FrameData {
         id<MTLCommandBuffer> cb;
         id<MTLRenderCommandEncoder> currentPassEncoder;
@@ -1305,12 +1305,11 @@ QMetalSwapChain::~QMetalSwapChain()
 
 void QMetalSwapChain::release()
 {
-    if (!d->layer)
-        return;
-
     d->layer = nullptr;
-
-    dispatch_release(d->sem);
+    if (d->sem) {
+        dispatch_release(d->sem);
+        d->sem = nullptr;
+    }
 }
 
 QRhiCommandBuffer *QMetalSwapChain::currentFrameCommandBuffer()
@@ -1337,8 +1336,7 @@ QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
 
 bool QMetalSwapChain::buildOrResize()
 {
-    if (d->layer)
-        release();
+    // no release(), this is intentional
 
     Q_ASSERT(m_window);
     if (m_window->surfaceType() != QSurface::MetalSurface) {
@@ -1356,7 +1354,9 @@ bool QMetalSwapChain::buildOrResize()
     QRHI_RES_RHI(QRhiMetal);
     [d->layer setDevice: rhiD->d->dev];
 
-    d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
+    if (!d->sem)
+        d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
+
     currentFrame = 0;
 
     ds = m_depthStencil ? QRHI_RES(QMetalRenderBuffer, m_depthStencil) : nullptr;

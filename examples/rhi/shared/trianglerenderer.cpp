@@ -176,7 +176,7 @@ void TriangleRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpd
     if (!m_vbufReady) {
         m_vbufReady = true;
 #ifdef VBUF_IS_DYNAMIC
-        resourceUpdates->updateDynamicBuffer(m_vbuf, 0, m_vbuf->size, vertexData);
+        resourceUpdates->updateDynamicBuffer(m_vbuf, 0, m_vbuf->size(), vertexData);
 #else
         resourceUpdates->uploadStaticBuffer(m_vbuf, vertexData);
 #endif

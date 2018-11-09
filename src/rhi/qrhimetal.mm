@@ -70,6 +70,7 @@ struct QRhiMetalData
     struct DeferredReleaseEntry {
         enum Type {
             Buffer,
+            RenderBuffer
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -77,6 +78,9 @@ struct QRhiMetalData
             struct {
                 id<MTLBuffer> buffers[QMTL_FRAMES_IN_FLIGHT];
             } buffer;
+            struct {
+                id<MTLTexture> texture;
+            } renderbuffer;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
@@ -87,6 +91,11 @@ struct QMetalBufferData
     bool managed;
     id<MTLBuffer> buf[QMTL_FRAMES_IN_FLIGHT];
     QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> pendingUpdates[QMTL_FRAMES_IN_FLIGHT];
+};
+
+struct QMetalRenderBufferData
+{
+    id<MTLTexture> tex = nil;
 };
 
 struct QMetalCommandBufferData
@@ -298,6 +307,7 @@ void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
     for (int i = 0; i < bindings.count(); ++i) {
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, bindings[i].first);
         executeBufferHostWritesForCurrentFrame(bufD);
+        bufD->lastActiveFrameSlot = currentFrameSlot;
         id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
         [frame.currentPassEncoder setVertexBuffer: mtlbuf offset: bindings[i].second atIndex: firstVertexBinding + startBinding + i];
     }
@@ -382,6 +392,7 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     Q_ASSERT(inPass);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QMetalSwapChainData::FrameData &frame(cbD->currentSwapChain->d->frame[currentFrameSlot]);
+    //ibufD->lastActiveFrameSlot = currentFrameSlot;
 //    [frame.currentPassEncoder drawIndexedPrimitives:
 //        QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->d->primitiveType
 //      indexCount: indexCount indexType: type indexBuffer: buf indexBufferOffset: vertexOffset
@@ -407,6 +418,8 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
 
     currentFrameSwapChain = swapChainD;
     currentFrameSlot = swapChainD->currentFrame;
+    if (swapChainD->ds)
+        swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
 
     QMetalSwapChainData::FrameData &frame(swapChainD->d->frame[currentFrameSlot]);
     frame.cb = [d->cmdQueue commandBufferWithUnretainedReferences];
@@ -538,6 +551,10 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
         rtD = &QRHI_RES(QMetalReferenceRenderTarget, rt)->d;
         frame.currentPassRpDesc = d->createDefaultRenderPass(false, colorClearValue, depthStencilClearValue);
         frame.currentPassRpDesc.colorAttachments[0].texture = currentFrameSwapChain->d->curDrawable.texture;
+        if (currentFrameSwapChain->ds) {
+            frame.currentPassRpDesc.depthAttachment.texture = currentFrameSwapChain->ds->d->tex;
+            frame.currentPassRpDesc.stencilAttachment.texture = currentFrameSwapChain->ds->d->tex;
+        }
         break;
     case QRhiRenderTarget::RtTexture:
     {
@@ -584,6 +601,9 @@ void QRhiMetal::executeDeferredReleases(bool forced)
             case QRhiMetalData::DeferredReleaseEntry::Buffer:
                 for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
                     [e.buffer.buffers[i] release];
+                break;
+            case QRhiMetalData::DeferredReleaseEntry::RenderBuffer:
+                [e.renderbuffer.texture release];
                 break;
             default:
                 break;
@@ -658,16 +678,53 @@ bool QMetalBuffer::build()
 
 QMetalRenderBuffer::QMetalRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
                                        int sampleCount, QRhiRenderBuffer::Hints hints)
-    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints)
+    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints),
+      d(new QMetalRenderBufferData)
 {
+}
+
+QMetalRenderBuffer::~QMetalRenderBuffer()
+{
+    delete d;
 }
 
 void QMetalRenderBuffer::release()
 {
+    if (!d->tex)
+        return;
+
+    QRhiMetalData::DeferredReleaseEntry e;
+    e.type = QRhiMetalData::DeferredReleaseEntry::RenderBuffer;
+    e.lastActiveFrameSlot = lastActiveFrameSlot;
+
+    e.renderbuffer.texture = d->tex;
+    d->tex = nil;
+
+    QRHI_RES_RHI(QRhiMetal);
+    rhiD->d->releaseQueue.append(e);
 }
 
 bool QMetalRenderBuffer::build()
 {
+    if (d->tex)
+        release();
+
+    QRHI_RES_RHI(QRhiMetal);
+    MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
+    desc.textureType = MTLTextureType2D;
+    desc.pixelFormat = rhiD->d->dev.depth24Stencil8PixelFormatSupported
+            ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
+    desc.width = m_pixelSize.width();
+    desc.height = m_pixelSize.height();
+    desc.resourceOptions = MTLResourceStorageModePrivate;
+    desc.storageMode = MTLStorageModePrivate;
+    desc.usage = MTLTextureUsageRenderTarget;
+
+    d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
+    [desc release];
+
+    lastActiveFrameSlot = -1;
+    generation += 1;
     return true;
 }
 

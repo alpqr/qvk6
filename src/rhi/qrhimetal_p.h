@@ -66,13 +66,19 @@ struct QMetalBuffer : public QRhiBuffer
     friend class QRhiMetal;
 };
 
+struct QMetalRenderBufferData;
+
 struct QMetalRenderBuffer : public QRhiRenderBuffer
 {
     QMetalRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
                        int sampleCount, QRhiRenderBuffer::Hints hints);
+    ~QMetalRenderBuffer();
     void release() override;
     bool build() override;
 
+    QMetalRenderBufferData *d;
+    uint generation = 0;
+    int lastActiveFrameSlot = -1;
     friend class QRhiMetal;
 };
 

@@ -1,9 +1,9 @@
-mtl: indexed draw
-mtl: batch better in setVertexBuffers
-mtl: textures
-mtl: texture rt
+mtl: mipmap upload
+mtl: cubemaps
 mtl: depth tex
-mtl: mrt
+mtl: mrt, cubemap faces
+mtl: texture rt
+mtl: batch better in setVertexBuffers
 d3d: msaa (onscreen)
 mtl: msaa (onscreen)
 test cubemap
@@ -43,6 +43,8 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+mtl: indexed draw
+mtl: basic texture
 texture ChangesInfrequently -> ChangesFrequently
 mtl: depth-stencil
 mtl: buffer logic is borked

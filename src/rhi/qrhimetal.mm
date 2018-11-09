@@ -50,6 +50,8 @@ QT_BEGIN_NAMESPACE
     Shared (host visible) and duplicated (due to 2 frames in flight), "static"
     are Managed on macOS and Shared on iOS/tvOS, and still duplicated.
     "Immutable" is like "static" but with only one native buffer underneath.
+    Textures are Private (device local) and a host visible staging buffer is
+    used to upload data to them.
 */
 
 #if __has_feature(objc_arc)
@@ -70,7 +72,8 @@ struct QRhiMetalData
     struct DeferredReleaseEntry {
         enum Type {
             Buffer,
-            RenderBuffer
+            RenderBuffer,
+            Texture
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -81,6 +84,9 @@ struct QRhiMetalData
             struct {
                 id<MTLTexture> texture;
             } renderbuffer;
+            struct {
+                id<MTLTexture> texture;
+            } texture;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
@@ -94,6 +100,11 @@ struct QMetalBufferData
 };
 
 struct QMetalRenderBufferData
+{
+    id<MTLTexture> tex = nil;
+};
+
+struct QMetalTextureData
 {
     id<MTLTexture> tex = nil;
 };
@@ -605,6 +616,9 @@ void QRhiMetal::executeDeferredReleases(bool forced)
             case QRhiMetalData::DeferredReleaseEntry::RenderBuffer:
                 [e.renderbuffer.texture release];
                 break;
+            case QRhiMetalData::DeferredReleaseEntry::Texture:
+                [e.texture.texture release];
+                break;
             default:
                 break;
             }
@@ -729,16 +743,57 @@ bool QMetalRenderBuffer::build()
 }
 
 QMetalTexture::QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, flags)
+    : QRhiTexture(rhi, format, pixelSize, flags),
+      d(new QMetalTextureData)
 {
+}
+
+QMetalTexture::~QMetalTexture()
+{
+    delete d;
 }
 
 void QMetalTexture::release()
 {
+    if (!d->tex)
+        return;
+
+    QRhiMetalData::DeferredReleaseEntry e;
+    e.type = QRhiMetalData::DeferredReleaseEntry::Texture;
+    e.lastActiveFrameSlot = lastActiveFrameSlot;
+
+    e.texture.texture = d->tex;
+    d->tex = nil;
+
+    QRHI_RES_RHI(QRhiMetal);
+    rhiD->d->releaseQueue.append(e);
+}
+
+static inline QSize safeSize(const QSize &size)
+{
+    return size.isEmpty() ? QSize(16, 16) : size;
 }
 
 bool QMetalTexture::build()
 {
+    if (d->tex)
+        release();
+
+    const QSize size = safeSize(m_pixelSize);
+
+    QRHI_RES_RHI(QRhiMetal);
+    MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
+    desc.textureType = MTLTextureType2D;
+    desc.pixelFormat = MTLPixelFormatRGBA8Unorm; // ###
+    desc.width = size.width();
+    desc.height = size.height();
+    desc.resourceOptions = MTLResourceStorageModePrivate;
+    desc.storageMode = MTLStorageModePrivate;
+    desc.usage = MTLTextureUsageShaderRead;
+
+    d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
+    [desc release];
+
     lastActiveFrameSlot = -1;
     generation += 1;
     return true;

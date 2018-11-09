@@ -82,12 +82,16 @@ struct QMetalRenderBuffer : public QRhiRenderBuffer
     friend class QRhiMetal;
 };
 
+struct QMetalTextureData;
+
 struct QMetalTexture : public QRhiTexture
 {
     QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
+    ~QMetalTexture();
     void release() override;
     bool build() override;
 
+    QMetalTextureData *d;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;

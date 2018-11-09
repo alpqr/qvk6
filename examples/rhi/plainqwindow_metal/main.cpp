@@ -67,9 +67,8 @@ void MetalWindow::init()
     QRhiMetalInitParams params;
     m_r = QRhi::create(QRhi::Metal, &params);
 
-    // ### the backend is incomplete so do only the triangle for now
+    // ###
     setOnScreenOnly(true);
-    setTriangleOnly(true);
 
     ExampleWindow::init();
 }

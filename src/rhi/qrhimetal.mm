@@ -75,7 +75,8 @@ struct QRhiMetalData
             Buffer,
             RenderBuffer,
             Texture,
-            Sampler
+            Sampler,
+            StagingBuffer
         };
         Type type;
         int lastActiveFrameSlot; // -1 if not used otherwise 0..FRAMES_IN_FLIGHT-1
@@ -93,6 +94,9 @@ struct QRhiMetalData
             struct {
                 id<MTLSamplerState> samplerState;
             } sampler;
+            struct {
+                id<MTLBuffer> buffer;
+            } stagingBuffer;
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
@@ -485,6 +489,9 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
         swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
 
     QMetalSwapChainData::FrameData &frame(swapChainD->d->frame[currentFrameSlot]);
+    // Do not let the command buffer mess with the refcount of objects. We do
+    // have a proper render loop and will manage lifetimes similarly to other
+    // backends (Vulkan).
     frame.cb = [d->cmdQueue commandBufferWithUnretainedReferences];
     swapChainD->cbWrapper.d->cb = frame.cb;
     swapChainD->cbWrapper.resetState();
@@ -618,7 +625,12 @@ void QRhiMetal::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateB
         utexD->lastActiveFrameSlot = currentFrameSlot;
 
         if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently)) {
-            // ###
+            QRhiMetalData::DeferredReleaseEntry e;
+            e.type = QRhiMetalData::DeferredReleaseEntry::StagingBuffer;
+            e.lastActiveFrameSlot = currentFrameSlot;
+            e.stagingBuffer.buffer = utexD->d->stagingBuf[currentFrameSlot];
+            utexD->d->stagingBuf[currentFrameSlot] = nil;
+            d->releaseQueue.append(e);
         }
     }
 
@@ -733,6 +745,9 @@ void QRhiMetal::executeDeferredReleases(bool forced)
                 break;
             case QRhiMetalData::DeferredReleaseEntry::Sampler:
                 [e.sampler.samplerState release];
+                break;
+            case QRhiMetalData::DeferredReleaseEntry::StagingBuffer:
+                [e.stagingBuffer.buffer release];
                 break;
             default:
                 break;

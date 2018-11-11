@@ -1,5 +1,4 @@
 mtl: should currentPassEncoder & co. be in the cb data instead?
-mtl: drop texture staging buf when !ChangesFrequently
 mtl: cubemaps
 mtl: depth tex
 mtl: mrt, cubemap faces
@@ -44,6 +43,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+mtl: drop texture staging buf when !ChangesFrequently
 mtl: stagingBuffer should be per frame to be safe
 vk: per frame staging buffers
 mtl: mipmap upload

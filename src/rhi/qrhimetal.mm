@@ -88,7 +88,7 @@ struct QRhiMetalData
             } renderbuffer;
             struct {
                 id<MTLTexture> texture;
-                id<MTLBuffer> stagingBuffer;
+                id<MTLBuffer> stagingBuffers[QMTL_FRAMES_IN_FLIGHT];
             } texture;
             struct {
                 id<MTLSamplerState> samplerState;
@@ -113,7 +113,7 @@ struct QMetalRenderBufferData
 struct QMetalTextureData
 {
     id<MTLTexture> tex = nil;
-    id<MTLBuffer> stagingBuf = nil;
+    id<MTLBuffer> stagingBuf[QMTL_FRAMES_IN_FLIGHT];
 };
 
 struct QMetalSamplerData
@@ -587,10 +587,10 @@ void QRhiMetal::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateB
             }
         }
 
-        if (!utexD->d->stagingBuf)
-            utexD->d->stagingBuf = [d->dev newBufferWithLength: stagingSize options: MTLResourceStorageModeShared];
+        if (!utexD->d->stagingBuf[currentFrameSlot])
+            utexD->d->stagingBuf[currentFrameSlot] = [d->dev newBufferWithLength: stagingSize options: MTLResourceStorageModeShared];
 
-        void *mp = [utexD->d->stagingBuf contents];
+        void *mp = [utexD->d->stagingBuf[currentFrameSlot] contents];
 
         qsizetype curOfs = 0;
         for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
@@ -600,7 +600,7 @@ void QRhiMetal::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateB
                 const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
                 if (imageSizeBytes > 0) {
                     memcpy(reinterpret_cast<char *>(mp) + curOfs, mipDesc.image.constBits(), imageSizeBytes);
-                    [blitEnc copyFromBuffer: utexD->d->stagingBuf
+                    [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
                                              sourceOffset: curOfs
                                              sourceBytesPerRow: mipDesc.image.bytesPerLine()
                                              sourceBytesPerImage: 0
@@ -728,7 +728,8 @@ void QRhiMetal::executeDeferredReleases(bool forced)
                 break;
             case QRhiMetalData::DeferredReleaseEntry::Texture:
                 [e.texture.texture release];
-                [e.texture.stagingBuffer release];
+                for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+                    [e.texture.stagingBuffers[i] release];
                 break;
             case QRhiMetalData::DeferredReleaseEntry::Sampler:
                 [e.sampler.samplerState release];
@@ -860,6 +861,8 @@ QMetalTexture::QMetalTexture(QRhiImplementation *rhi, Format format, const QSize
     : QRhiTexture(rhi, format, pixelSize, flags),
       d(new QMetalTextureData)
 {
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+        d->stagingBuf[i] = nil;
 }
 
 QMetalTexture::~QMetalTexture()
@@ -877,10 +880,12 @@ void QMetalTexture::release()
     e.lastActiveFrameSlot = lastActiveFrameSlot;
 
     e.texture.texture = d->tex;
-    e.texture.stagingBuffer = d->stagingBuf;
-
     d->tex = nil;
-    d->stagingBuf = nil;
+
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+        e.texture.stagingBuffers[i] = d->stagingBuf[i];
+        d->stagingBuf[i] = nil;
+    }
 
     QRHI_RES_RHI(QRhiMetal);
     rhiD->d->releaseQueue.append(e);

@@ -312,6 +312,8 @@ public:
     UsageFlags usage() const { return m_usage; }
     void setUsage(UsageFlags u) { m_usage = u; }
 
+    // no restrictions here, up to the backend to round up if needed (that
+    // won't be visible in the user-provided size reported here)
     int size() const { return m_size; }
     void setSize(int sz) { m_size = sz; }
 
@@ -321,7 +323,7 @@ protected:
     QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_);
     Type m_type;
     UsageFlags m_usage;
-    int m_size; // no restrictions here, up to the backend to round up if needed
+    int m_size;
     void *m_reserved;
 };
 
@@ -964,6 +966,7 @@ public:
     void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
               quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0);
 
+    // final offset (indexOffset + firstIndex * n) must be 4 byte aligned with some backends
     void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                      quint32 instanceCount = 1, quint32 firstIndex = 0,
                      qint32 vertexOffset = 0, quint32 firstInstance = 0);

@@ -1,5 +1,4 @@
 mtl: should currentPassEncoder & co. be in the cb data instead?
-mtl: stagingBuffer should be per frame to be safe
 mtl: drop texture staging buf when !ChangesFrequently
 mtl: cubemaps
 mtl: depth tex
@@ -11,6 +10,7 @@ mtl: msaa (onscreen)
 test cubemap
 test cubemap face as target
 cbuffer alignment rule chaos - figure out what to recommend to users
+resource import/export, what's the co-op story?
 compressed textures
 copyimage (color and ds, no resolve or transforms here)
 msaa offscreen (msaa texture? renderbuffer?)
@@ -22,7 +22,6 @@ d3d device loss
 more what-if-resource-rebuilt cases
 tex/QImage formats
 anisotropic
-adopt texture, buffer, ...
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 test FrameOpDeviceLost somehow
 gl: more ubuf types
@@ -45,6 +44,8 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+mtl: stagingBuffer should be per frame to be safe
+vk: per frame staging buffers
 mtl: mipmap upload
 mtl: indexed draw
 mtl: basic texture

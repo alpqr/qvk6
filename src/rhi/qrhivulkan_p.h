@@ -131,9 +131,8 @@ struct QVkRenderPassDescriptor : public QRhiRenderPassDescriptor
     int lastActiveFrameSlot = -1;
 };
 
-struct QVkBasicRenderTargetData
+struct QVkRenderTargetData
 {
-    QVkBasicRenderTargetData(QRhiImplementation *) { }
     VkFramebuffer fb = VK_NULL_HANDLE;
     QVkRenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
@@ -149,7 +148,7 @@ struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
     Type type() const override;
     QSize sizeInPixels() const override;
 
-    QVkBasicRenderTargetData d;
+    QVkRenderTargetData d;
 };
 
 struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
@@ -163,7 +162,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
-    QVkBasicRenderTargetData d;
+    QVkRenderTargetData d;
     VkImageView cubeFaceView[6];
     int lastActiveFrameSlot = -1;
     friend class QRhiVulkan;

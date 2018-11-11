@@ -124,28 +124,24 @@ struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
     bool hasDepthStencil = false;
 };
 
-struct QMetalBasicRenderTargetData
-{
-    QMetalBasicRenderTargetData(QRhiImplementation *) { }
-
-    QSize pixelSize;
-    int colorAttCount = 0;
-    int dsAttCount = 0;
-};
+struct QMetalRenderTargetData;
 
 struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
 {
     QMetalReferenceRenderTarget(QRhiImplementation *rhi);
+    ~QMetalReferenceRenderTarget();
     void release() override;
+
     Type type() const override;
     QSize sizeInPixels() const override;
 
-    QMetalBasicRenderTargetData d;
+    QMetalRenderTargetData *d;
 };
 
 struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
 {
     QMetalTextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
+    ~QMetalTextureRenderTarget();
     void release() override;
 
     Type type() const override;
@@ -154,7 +150,7 @@ struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
-    QMetalBasicRenderTargetData d;
+    QMetalRenderTargetData *d;
     friend class QRhiMetal;
 };
 
@@ -196,7 +192,6 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
 
     QMetalCommandBufferData *d = nullptr;
 
-    QMetalSwapChain *currentSwapChain;
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
@@ -206,15 +201,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     quint32 currentIndexOffset;
     QRhi::IndexFormat currentIndexFormat;
 
-    void resetState() {
-        currentSwapChain = nullptr;
-        currentTarget = nullptr;
-        currentPipeline = nullptr;
-        currentPipelineGeneration = 0;
-        currentSrb = nullptr;
-        currentSrbGeneration = 0;
-        currentIndexBuffer = nullptr;
-    }
+    void resetState();
 };
 
 struct QMetalSwapChainData;
@@ -313,7 +300,6 @@ public:
 
     bool importedDevice = false;
     bool inFrame = false;
-    QMetalSwapChain *currentFrameSwapChain = nullptr;
     int currentFrameSlot = 0;
     int finishedFrameCount = 0;
     bool inPass = false;

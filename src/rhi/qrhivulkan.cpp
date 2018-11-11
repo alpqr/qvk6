@@ -1287,7 +1287,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
     if (resourceUpdates)
         commitResourceUpdates(cb, resourceUpdates);
 
-    QVkBasicRenderTargetData *rtD = nullptr;
+    QVkRenderTargetData *rtD = nullptr;
     switch (rt->type()) {
     case QRhiRenderTarget::RtRef:
         rtD = &QRHI_RES(QVkReferenceRenderTarget, rt)->d;
@@ -2752,8 +2752,7 @@ void QVkRenderPassDescriptor::release()
 }
 
 QVkReferenceRenderTarget::QVkReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiReferenceRenderTarget(rhi),
-      d(rhi)
+    : QRhiReferenceRenderTarget(rhi)
 {
 }
 
@@ -2775,8 +2774,7 @@ QSize QVkReferenceRenderTarget::sizeInPixels() const
 QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi,
                                                const QRhiTextureRenderTargetDescription &desc,
                                                Flags flags)
-    : QRhiTextureRenderTarget(rhi, desc, flags),
-      d(rhi)
+    : QRhiTextureRenderTarget(rhi, desc, flags)
 {
     for (int i = 0; i < 6; ++i)
         cubeFaceView[i] = VK_NULL_HANDLE;

@@ -75,6 +75,8 @@ public:
     QByteArray translateToHLSL(int version = 50) const;
     QByteArray translateToMSL(int version = 12) const;
 
+    QString translationErrorMessage() const;
+
 private:
     Q_DISABLE_COPY(QSpirvShader)
     QSpirvShaderPrivate *d = nullptr;

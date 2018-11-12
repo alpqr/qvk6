@@ -41,7 +41,6 @@
 
 #include <SPIRV/SPVRemapper.h>
 
-#define SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS
 #include <spirv_glsl.hpp>
 #include <spirv_hlsl.hpp>
 #include <spirv_msl.hpp>
@@ -70,6 +69,7 @@ struct QSpirvShaderPrivate
     spirv_cross::CompilerHLSL *hlslGen = nullptr;
     spirv_cross::CompilerMSL *mslGen = nullptr;
 
+    QString spirvCrossErrorMsg;
     QString remapErrorMsg;
 };
 
@@ -380,63 +380,89 @@ QByteArray QSpirvShader::strippedSpirvBinary(StripFlags flags, QString *errorMes
 
 QByteArray QSpirvShader::translateToGLSL(int version, GlslFlags flags) const
 {
-    // create a new instance every time since option handling seem to be problematic
-    // (won't pick up new options on the second and subsequent compile())
-    d->createGLSLCompiler();
+    d->spirvCrossErrorMsg.clear();
 
-    spirv_cross::CompilerGLSL::Options options;
-    options.version = version;
-    options.es = flags.testFlag(GlslEs);
-    options.vertex.fixup_clipspace = flags.testFlag(FixClipSpace);
-    options.fragment.default_float_precision = flags.testFlag(FragDefaultMediump)
-            ? spirv_cross::CompilerGLSL::Options::Mediump
-            : spirv_cross::CompilerGLSL::Options::Highp;
-    d->glslGen->set_common_options(options);
+    try {
+        // create a new instance every time since option handling seem to be problematic
+        // (won't pick up new options on the second and subsequent compile())
+        d->createGLSLCompiler();
 
-    const std::string glsl = d->glslGen->compile();
+        spirv_cross::CompilerGLSL::Options options;
+        options.version = version;
+        options.es = flags.testFlag(GlslEs);
+        options.vertex.fixup_clipspace = flags.testFlag(FixClipSpace);
+        options.fragment.default_float_precision = flags.testFlag(FragDefaultMediump)
+                ? spirv_cross::CompilerGLSL::Options::Mediump
+                : spirv_cross::CompilerGLSL::Options::Highp;
+        d->glslGen->set_common_options(options);
 
-    QByteArray src = QByteArray::fromStdString(glsl);
+        const std::string glsl = d->glslGen->compile();
 
-    // Fix it up by adding #extension GL_ARB_separate_shader_objects : require
-    // as well in order to make Mesa and perhaps others happy.
-    const QByteArray searchStr = QByteArrayLiteral("#extension GL_ARB_shading_language_420pack : require\n#endif\n");
-    int pos = src.indexOf(searchStr);
-    if (pos >= 0) {
-        src.insert(pos + searchStr.count(), QByteArrayLiteral("#ifdef GL_ARB_separate_shader_objects\n"
-                                                              "#extension GL_ARB_separate_shader_objects : require\n"
-                                                              "#endif\n"));
+        QByteArray src = QByteArray::fromStdString(glsl);
+
+        // Fix it up by adding #extension GL_ARB_separate_shader_objects : require
+        // as well in order to make Mesa and perhaps others happy.
+        const QByteArray searchStr = QByteArrayLiteral("#extension GL_ARB_shading_language_420pack : require\n#endif\n");
+        int pos = src.indexOf(searchStr);
+        if (pos >= 0) {
+            src.insert(pos + searchStr.count(), QByteArrayLiteral("#ifdef GL_ARB_separate_shader_objects\n"
+                                                                  "#extension GL_ARB_separate_shader_objects : require\n"
+                                                                  "#endif\n"));
+        }
+
+        return src;
+    } catch (const std::runtime_error &e) {
+        d->spirvCrossErrorMsg = QString::fromUtf8(e.what());
+        return QByteArray();
     }
-
-    return src;
 }
 
 QByteArray QSpirvShader::translateToHLSL(int version) const
 {
-    if (!d->hlslGen)
-        d->hlslGen = new spirv_cross::CompilerHLSL(reinterpret_cast<const uint32_t *>(d->ir.constData()), d->ir.size() / 4);
+    d->spirvCrossErrorMsg.clear();
 
-    spirv_cross::CompilerHLSL::Options options;
-    options.shader_model = version;
-    d->hlslGen->set_hlsl_options(options);
+    try {
+        if (!d->hlslGen)
+            d->hlslGen = new spirv_cross::CompilerHLSL(reinterpret_cast<const uint32_t *>(d->ir.constData()), d->ir.size() / 4);
 
-    const std::string hlsl = d->hlslGen->compile();
+        spirv_cross::CompilerHLSL::Options options;
+        options.shader_model = version;
+        d->hlslGen->set_hlsl_options(options);
 
-    return QByteArray::fromStdString(hlsl);
+        const std::string hlsl = d->hlslGen->compile();
+
+        return QByteArray::fromStdString(hlsl);
+    } catch (const std::runtime_error &e) {
+        d->spirvCrossErrorMsg = QString::fromUtf8(e.what());
+        return QByteArray();
+    }
 }
 
 QByteArray QSpirvShader::translateToMSL(int version) const
 {
-    if (!d->mslGen)
-        d->mslGen = new spirv_cross::CompilerMSL(reinterpret_cast<const uint32_t *>(d->ir.constData()), d->ir.size() / 4);
+    d->spirvCrossErrorMsg.clear();
 
-    spirv_cross::CompilerMSL::Options options;
-    options.msl_version = spirv_cross::CompilerMSL::Options::make_msl_version(version / 10, version % 10);
-    // leave platform set to macOS, it won't matter in practice (hopefully)
-    d->mslGen->set_msl_options(options);
+    try {
+        if (!d->mslGen)
+            d->mslGen = new spirv_cross::CompilerMSL(reinterpret_cast<const uint32_t *>(d->ir.constData()), d->ir.size() / 4);
 
-    const std::string msl = d->mslGen->compile();
+        spirv_cross::CompilerMSL::Options options;
+        options.msl_version = spirv_cross::CompilerMSL::Options::make_msl_version(version / 10, version % 10);
+        // leave platform set to macOS, it won't matter in practice (hopefully)
+        d->mslGen->set_msl_options(options);
 
-    return QByteArray::fromStdString(msl);
+        const std::string msl = d->mslGen->compile();
+
+        return QByteArray::fromStdString(msl);
+    } catch (const std::runtime_error &e) {
+        d->spirvCrossErrorMsg = QString::fromUtf8(e.what());
+        return QByteArray();
+    }
+}
+
+QString QSpirvShader::translationErrorMessage() const
+{
+    return d->spirvCrossErrorMsg;
 }
 
 QT_END_NAMESPACE

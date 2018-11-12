@@ -7,7 +7,6 @@ d3d: msaa (onscreen)
 mtl: msaa (onscreen)
 test cubemap
 test cubemap face as target
-spirv-cross error reporting (neither exceptions nor print&abort is ideal)
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 resource import/export, what's the co-op story?
 rhi without a window? fully offscreen?
@@ -45,6 +44,7 @@ bytecode (fxc/dxc) for d3d?
 bytecode for metal?
 
 +++ done
+spirv-cross error reporting (must enable exceptions and catch all in shadertools, no other way)
 mtl: should currentPassEncoder & co. be in the cb data instead?
 mtl: drop texture staging buf when !ChangesFrequently
 mtl: stagingBuffer should be per frame to be safe

@@ -258,7 +258,7 @@ int main(int argc, char **argv)
 
         QBakedShader bs = baker.bake();
         if (!bs.isValid()) {
-            qWarning("%s", qPrintable(baker.errorMessage()));
+            qWarning("Shader baking failed: %s", qPrintable(baker.errorMessage()));
             return 1;
         }
 

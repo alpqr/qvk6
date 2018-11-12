@@ -1,13 +1,15 @@
 TARGET = qtspirv-cross
 
+# Exceptions must be enabled since that is the only sane way to get errors reported.
+# They will not propagate outside of the shadertools module though so should be safe enough.
+
 CONFIG += \
     static \
     hide_symbols \
-    exceptions_off rtti_off warn_off
+    warn_off \
+    exceptions
 
 load(qt_helper_lib)
-
-DEFINES += SPIRV_CROSS_EXCEPTIONS_TO_ASSERTIONS
 
 SPIRVCROSS_PATH=$$PWD/../3rdparty/SPIRV-Cross
 

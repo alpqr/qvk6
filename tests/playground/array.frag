@@ -12,6 +12,9 @@ struct Light {
     vec3 color;
     float intensity;
     float specularExp;
+    // two dummies so that it stays translatable to HLSL with packoffset in the top-level block
+    float __dummy0;
+    float __dummy1;
 };
 
 layout(std140, binding = 1) uniform buf {

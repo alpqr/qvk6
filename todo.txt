@@ -7,8 +7,11 @@ d3d: msaa (onscreen)
 mtl: msaa (onscreen)
 test cubemap
 test cubemap face as target
-cbuffer alignment rule chaos - figure out what to recommend to users
+spirv-cross error reporting (neither exceptions nor print&abort is ideal)
+cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 resource import/export, what's the co-op story?
+rhi without a window? fully offscreen?
+copy-only passes for kicking off transfers early? (copy/transfer queue?)
 compressed textures
 copyimage (color and ds, no resolve or transforms here)
 msaa offscreen (msaa texture? renderbuffer?)
@@ -16,12 +19,12 @@ resolveimage (color and ds, only to resolve samples)
 threading options? secondary command lists?
 mipmap generation?
 figure sg out for minimizing viewport/scissor cmds
-d3d device loss
+vk: test FrameOpDeviceLost somehow
+d3d device loss?
 more what-if-resource-rebuilt cases
 tex/QImage formats
 anisotropic
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
-test FrameOpDeviceLost somehow
 gl: more ubuf types
 gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)

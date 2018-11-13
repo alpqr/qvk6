@@ -2,7 +2,7 @@ mtl: cubemaps
 mtl: depth tex
 mtl: mrt, cubemap faces
 mtl: texture rt
-mtl: batch better in setVertexBuffers
+mtl: cbuffers, textures, samplers set should be batched too
 d3d: msaa (onscreen)
 mtl: msaa (onscreen)
 test cubemap
@@ -42,8 +42,10 @@ vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 shadertools:
 bytecode (fxc/dxc) for d3d?
 bytecode for metal?
+hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: batch better in setVertexBuffers
 spirv-cross error reporting (must enable exceptions and catch all in shadertools, no other way)
 mtl: should currentPassEncoder & co. be in the cb data instead?
 mtl: drop texture staging buf when !ChangesFrequently

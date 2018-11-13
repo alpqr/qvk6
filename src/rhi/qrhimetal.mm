@@ -350,16 +350,29 @@ void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
     Q_ASSERT(inPass);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
 
-    // same binding space for vertex and constant buffers - work it around
-    const int firstVertexBinding = QRHI_RES(QMetalShaderResourceBindings, cbD->currentSrb)->maxBinding + 1;
-
-    // ### should batch
+    QRhiBatchedBindings<id<MTLBuffer> > buffers;
+    QRhiBatchedBindings<NSUInteger> offsets;
     for (int i = 0; i < bindings.count(); ++i) {
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, bindings[i].first);
         executeBufferHostWritesForCurrentFrame(bufD);
         bufD->lastActiveFrameSlot = currentFrameSlot;
         id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
-        [cbD->d->currentPassEncoder setVertexBuffer: mtlbuf offset: bindings[i].second atIndex: firstVertexBinding + startBinding + i];
+        buffers.feed(startBinding + i, mtlbuf);
+        offsets.feed(startBinding + i, bindings[i].second);
+    }
+    buffers.finish();
+    offsets.finish();
+
+    // same binding space for vertex and constant buffers - work it around
+    const int firstVertexBinding = QRHI_RES(QMetalShaderResourceBindings, cbD->currentSrb)->maxBinding + 1;
+
+    for (int i = 0, ie = buffers.batches.count(); i != ie; ++i) {
+        const auto &bufferBatch(buffers.batches[i]);
+        const auto &offsetBatch(offsets.batches[i]);
+        [cbD->d->currentPassEncoder setVertexBuffers:
+            bufferBatch.resources.constData()
+          offsets: offsetBatch.resources.constData()
+          withRange: NSMakeRange(firstVertexBinding + bufferBatch.startBinding, bufferBatch.resources.count())];
     }
 
     if (indexBuf) {

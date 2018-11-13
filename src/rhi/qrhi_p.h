@@ -170,6 +170,45 @@ Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate, Q_MOVABL
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::StaticBufferUpload, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE);
 
+template<typename T>
+struct QRhiBatchedBindings
+{
+    void feed(int binding, T resource) { // binding must be strictly increasing
+        if (curBinding == -1 || binding > curBinding + 1) {
+            finish();
+            curBatch.startBinding = binding;
+            curBatch.resources.clear();
+            curBatch.resources.append(resource);
+        } else {
+            Q_ASSERT(binding == curBinding + 1);
+            curBatch.resources.append(resource);
+        }
+        curBinding = binding;
+    }
+
+    void finish() {
+        if (!curBatch.resources.isEmpty())
+            batches.append(curBatch);
+    }
+
+    void clear() {
+        batches.clear();
+        curBatch.resources.clear();
+        curBinding = -1;
+    }
+
+    struct Batch {
+        uint startBinding;
+        QVarLengthArray<T, 4> resources;
+    };
+
+    QVarLengthArray<Batch, 4> batches; // sorted by startBinding
+
+private:
+    Batch curBatch;
+    int curBinding = -1;
+};
+
 QT_END_NAMESPACE
 
 #endif

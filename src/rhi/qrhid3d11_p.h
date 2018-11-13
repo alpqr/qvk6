@@ -152,45 +152,6 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     friend class QRhiD3D11;
 };
 
-template<typename T>
-struct QD3D11BatchedBindings
-{
-    void feed(int binding, T resource) { // binding must be strictly increasing
-        if (curBinding == -1 || binding > curBinding + 1) {
-            finish();
-            curBatch.startBinding = binding;
-            curBatch.resources.clear();
-            curBatch.resources.append(resource);
-        } else {
-            Q_ASSERT(binding == curBinding + 1);
-            curBatch.resources.append(resource);
-        }
-        curBinding = binding;
-    }
-
-    void finish() {
-        if (!curBatch.resources.isEmpty())
-            batches.append(curBatch);
-    }
-
-    void clear() {
-        batches.clear();
-        curBatch.resources.clear();
-        curBinding = -1;
-    }
-
-    struct Batch {
-        uint startBinding;
-        QVarLengthArray<T, 4> resources;
-    };
-
-    QVarLengthArray<Batch, 4> batches; // sorted by startBinding
-
-private:
-    Batch curBatch;
-    int curBinding = -1;
-};
-
 struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
 {
     QD3D11ShaderResourceBindings(QRhiImplementation *rhi);
@@ -217,19 +178,19 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     };
     QVector<BoundResourceData> boundResourceData;
 
-    QD3D11BatchedBindings<ID3D11Buffer *> vsubufs;
-    QD3D11BatchedBindings<UINT> vsubufoffsets;
-    QD3D11BatchedBindings<UINT> vsubufsizes;
+    QRhiBatchedBindings<ID3D11Buffer *> vsubufs;
+    QRhiBatchedBindings<UINT> vsubufoffsets;
+    QRhiBatchedBindings<UINT> vsubufsizes;
 
-    QD3D11BatchedBindings<ID3D11Buffer *> fsubufs;
-    QD3D11BatchedBindings<UINT> fsubufoffsets;
-    QD3D11BatchedBindings<UINT> fsubufsizes;
+    QRhiBatchedBindings<ID3D11Buffer *> fsubufs;
+    QRhiBatchedBindings<UINT> fsubufoffsets;
+    QRhiBatchedBindings<UINT> fsubufsizes;
 
-    QD3D11BatchedBindings<ID3D11SamplerState *> vssamplers;
-    QD3D11BatchedBindings<ID3D11ShaderResourceView *> vsshaderresources;
+    QRhiBatchedBindings<ID3D11SamplerState *> vssamplers;
+    QRhiBatchedBindings<ID3D11ShaderResourceView *> vsshaderresources;
 
-    QD3D11BatchedBindings<ID3D11SamplerState *> fssamplers;
-    QD3D11BatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
+    QRhiBatchedBindings<ID3D11SamplerState *> fssamplers;
+    QRhiBatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
 
     friend class QRhiD3D11;
 };

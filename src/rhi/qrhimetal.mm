@@ -1474,7 +1474,22 @@ bool QMetalGraphicsPipeline::build()
     }
 
     MTLRenderPipelineDescriptor *rpDesc = [[MTLRenderPipelineDescriptor alloc] init];
+
     rpDesc.vertexDescriptor = inputLayout;
+
+    if (@available(macOS 10.13, iOS 11.0, *)) {
+        // Everything is immutable because we can guarantee that "neither the
+        // CPU nor the GPU will modify a buffer's contents between the time the
+        // buffer is set in a function's argument table and the time its
+        // associated command buffer completes execution" (as that's the point
+        // of our Vulkan-style buffer juggling in the first place).
+        const int vertexBufferCount = firstVertexBinding + m_vertexInputLayout.bindings.count(); // cbuf + vbuf
+        const int fragmentBufferCount = firstVertexBinding; // cbuf
+        for (int i = 0; i < vertexBufferCount; ++i)
+            rpDesc.vertexBuffers[i].mutability = MTLMutabilityImmutable;
+        for (int i = 0; i < fragmentBufferCount; ++i)
+            rpDesc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
+    }
 
     for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(m_shaderStages)) {
         QString error;
@@ -1506,15 +1521,6 @@ bool QMetalGraphicsPipeline::build()
             [lib release];
             break;
         }
-    }
-
-    int vertexBufferCount = 0; // ###
-    int fragmentBufferCount = 0;
-    if (@available(macOS 10.13, iOS 11.0, *)) {
-        for (int i = 0; i < vertexBufferCount; ++i)
-            rpDesc.vertexBuffers[i].mutability = MTLMutabilityImmutable;
-        for (int i = 0; i < fragmentBufferCount; ++i)
-            rpDesc.fragmentBuffers[i].mutability = MTLMutabilityImmutable;
     }
 
     rpDesc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;

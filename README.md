@@ -1,11 +1,11 @@
 Experiments for a Rendering Hardware Interface abstraction for Qt 6 (QtRhi)
 ===================================================================
 
-The API and its backends (Vulkan, OpenGL (ES) 2.0, Direct3D 11) are reasonably complete
-in the sense that it should be possible to bring up a Qt Quick renderer on top of them
-(using Vulkan-style GLSL as the "common" shading language - translation seems to work
-pretty well for now, even to HLSL). Next up is a Metal backend and some cleanup.
-
+The API and its backends (Vulkan, OpenGL (ES) 2.0, Direct3D 11, Metal) are
+reasonably complete in the sense that it should be possible to bring up a Qt
+Quick renderer on top of them (using Vulkan-style GLSL as the "common" shading
+language - translation seems to work pretty well for now, including to HLSL and
+MSL).
 
 Experiments for more modern graphics shader management in future Qt (QtShaderTools)
 ===================================================================
@@ -30,3 +30,20 @@ Alternatively,
 
 The latter is what the RHI uses, and expects applications to provide QBakedShader packs.
 The public API is seen solid already. The plan forward is to add a few enhancements, for instance to allow including DXBC or DXIL as well in the shader packs (by invoking fxc or dxc from qsb).
+
+In action
+=========
+
+Screenshots from the test application demonstrating basic drawing, pipeline
+state (blending, depth), indexed drawing, texturing, and rendering into a
+texture. All using the same code and the same two sets of vertex and fragment
+shaders, with the only difference being in the QWindow setup.
+
+![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_d3d.png)
+![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_gl.png)
+![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_vk.png)
+![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_mtl.png)
+
+Additionally, check
+https://git.qt.io/laagocs/qtrhi/raw/master/examples/rhi/hellominimalcrossgfxtriangle/hellominimalcrossgfxtriangle.cpp
+for a single-source, cross-API example of drawing a triangle.

@@ -59,6 +59,10 @@ QT_BEGIN_NAMESPACE
 #error ARC not supported
 #endif
 
+// Note: we expect everything here pass the Metal API validation when running
+// in Debug mode in XCode. Some of the issues that break validation are not
+// obvious and not visible when running outside XCode.
+
 struct QRhiMetalData
 {
     id<MTLDevice> dev;
@@ -142,6 +146,7 @@ struct QMetalRenderTargetData
     struct {
         id<MTLTexture> colorTex[QMetalRenderPassDescriptor::MAX_COLOR_ATTACHMENTS];
         id<MTLTexture> dsTex = nil;
+        bool hasStencil = false;
     } fb;
 };
 
@@ -513,6 +518,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
 
     swapChainD->rtWrapper.d->fb.colorTex[0] = swapChainD->d->curDrawable.texture;
     swapChainD->rtWrapper.d->fb.dsTex = swapChainD->ds ? swapChainD->ds->d->tex : nil;
+    swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
 
     executeDeferredReleases();
 
@@ -719,7 +725,7 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
     if (rtD->dsAttCount) {
         Q_ASSERT(rtD->fb.dsTex);
         cbD->d->currentPassRpDesc.depthAttachment.texture = rtD->fb.dsTex;
-        cbD->d->currentPassRpDesc.stencilAttachment.texture = rtD->fb.dsTex;
+        cbD->d->currentPassRpDesc.stencilAttachment.texture = rtD->fb.hasStencil ? rtD->fb.dsTex : nil;
     }
 
     cbD->d->currentPassEncoder = [cbD->d->cb renderCommandEncoderWithDescriptor: cbD->d->currentPassRpDesc];
@@ -1141,6 +1147,7 @@ void QMetalTextureRenderTarget::release()
 QRhiRenderPassDescriptor *QMetalTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
     QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
+    rpD->colorAttachmentCount = m_desc.colorAttachments.count();
     rpD->hasDepthStencil = m_desc.depthStencilBuffer || m_desc.depthTexture;
 
     for (int i = 0, ie = m_desc.colorAttachments.count(); i != ie; ++i)
@@ -1163,6 +1170,7 @@ bool QMetalTextureRenderTarget::build()
     d->colorAttCount = m_desc.colorAttachments.count();
     for (int i = 0; i < d->colorAttCount; ++i) {
         QRhiTexture *texture = m_desc.colorAttachments[i].texture;
+        Q_ASSERT(texture);
         QMetalTexture *texD = QRHI_RES(QMetalTexture, texture);
         d->fb.colorTex[i] = texD->d->tex;
         if (i == 0)
@@ -1172,10 +1180,12 @@ bool QMetalTextureRenderTarget::build()
     if (hasDepthStencil) {
         if (m_desc.depthTexture) {
             d->fb.dsTex = QRHI_RES(QMetalTexture, m_desc.depthTexture)->d->tex;
+            d->fb.hasStencil = false;
             if (d->colorAttCount == 0)
                 d->pixelSize = m_desc.depthTexture->pixelSize();
         } else {
             d->fb.dsTex = QRHI_RES(QMetalRenderBuffer, m_desc.depthStencilBuffer)->d->tex;
+            d->fb.hasStencil = true;
             if (d->colorAttCount == 0)
                 d->pixelSize = m_desc.depthStencilBuffer->pixelSize();
         }
@@ -1575,29 +1585,33 @@ bool QMetalGraphicsPipeline::build()
 
     QMetalRenderPassDescriptor *rpD = QRHI_RES(QMetalRenderPassDescriptor, m_renderPassDesc);
 
-    // defaults when no targetBlends are provided
-    rpDesc.colorAttachments[0].pixelFormat = MTLPixelFormat(rpD->colorFormat[0]);
-    rpDesc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
-    rpDesc.colorAttachments[0].blendingEnabled = false;
+    if (rpD->colorAttachmentCount) {
+        // defaults when no targetBlends are provided
+        rpDesc.colorAttachments[0].pixelFormat = MTLPixelFormat(rpD->colorFormat[0]);
+        rpDesc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
+        rpDesc.colorAttachments[0].blendingEnabled = false;
 
-    for (int i = 0, ie = m_targetBlends.count(); i != ie; ++i) {
-        const QRhiGraphicsPipeline::TargetBlend &b(m_targetBlends[i]);
-        rpDesc.colorAttachments[i].pixelFormat = MTLPixelFormat(rpD->colorFormat[i]);
-        rpDesc.colorAttachments[i].blendingEnabled = b.enable;
-        rpDesc.colorAttachments[i].sourceRGBBlendFactor = toMetalBlendFactor(b.srcColor);
-        rpDesc.colorAttachments[i].destinationRGBBlendFactor = toMetalBlendFactor(b.dstColor);
-        rpDesc.colorAttachments[i].rgbBlendOperation = toMetalBlendOp(b.opColor);
-        rpDesc.colorAttachments[i].sourceAlphaBlendFactor = toMetalBlendFactor(b.srcAlpha);
-        rpDesc.colorAttachments[i].destinationAlphaBlendFactor = toMetalBlendFactor(b.dstAlpha);
-        rpDesc.colorAttachments[i].alphaBlendOperation = toMetalBlendOp(b.opAlpha);
-        rpDesc.colorAttachments[i].writeMask = toMetalColorWriteMask(b.colorWrite);
+        for (int i = 0, ie = m_targetBlends.count(); i != ie; ++i) {
+            const QRhiGraphicsPipeline::TargetBlend &b(m_targetBlends[i]);
+            rpDesc.colorAttachments[i].pixelFormat = MTLPixelFormat(rpD->colorFormat[i]);
+            rpDesc.colorAttachments[i].blendingEnabled = b.enable;
+            rpDesc.colorAttachments[i].sourceRGBBlendFactor = toMetalBlendFactor(b.srcColor);
+            rpDesc.colorAttachments[i].destinationRGBBlendFactor = toMetalBlendFactor(b.dstColor);
+            rpDesc.colorAttachments[i].rgbBlendOperation = toMetalBlendOp(b.opColor);
+            rpDesc.colorAttachments[i].sourceAlphaBlendFactor = toMetalBlendFactor(b.srcAlpha);
+            rpDesc.colorAttachments[i].destinationAlphaBlendFactor = toMetalBlendFactor(b.dstAlpha);
+            rpDesc.colorAttachments[i].alphaBlendOperation = toMetalBlendOp(b.opAlpha);
+            rpDesc.colorAttachments[i].writeMask = toMetalColorWriteMask(b.colorWrite);
+        }
     }
 
     if (rpD->hasDepthStencil) {
         // Must only be set when a depth-stencil buffer will actually be bound,
         // validation blows up otherwise.
-        rpDesc.depthAttachmentPixelFormat = MTLPixelFormat(rpD->dsFormat);
-        rpDesc.stencilAttachmentPixelFormat = MTLPixelFormat(rpD->dsFormat);
+        MTLPixelFormat fmt = MTLPixelFormat(rpD->dsFormat);
+        rpDesc.depthAttachmentPixelFormat = fmt;
+        if (fmt != MTLPixelFormatDepth16Unorm && fmt != MTLPixelFormatDepth32Float)
+            rpDesc.stencilAttachmentPixelFormat = fmt;
     }
 
     rpDesc.sampleCount = 1;
@@ -1715,6 +1729,7 @@ QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
 {
     QRHI_RES_RHI(QRhiMetal);
     QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
+    rpD->colorAttachmentCount = 1;
     rpD->hasDepthStencil = m_depthStencil != nullptr;
 
     rpD->colorFormat[0] = MTLPixelFormatBGRA8Unorm;

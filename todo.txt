@@ -1,4 +1,5 @@
-mtl: depth tex
+preservecolor applies to which att.?
+vk, d3d: verify no-color-just-depth again
 mtl: cubemaps
 mtl: targeting cubemap faces
 mtl: cbuffers, textures, samplers set should be batched too
@@ -44,6 +45,7 @@ bytecode for metal?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: depth tex
 mtl: mrt
 mtl: texture rt
 mtl: batch better in setVertexBuffers

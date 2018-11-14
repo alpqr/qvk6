@@ -152,7 +152,9 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
         rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
 
     if (DEPTH_TEXTURE) {
-        m_rt = m_r->newTextureRenderTarget({ nullptr, m_depthTex }, rtFlags);
+        QRhiTextureRenderTargetDescription desc;
+        desc.depthTexture = m_depthTex;
+        m_rt = m_r->newTextureRenderTarget(desc, rtFlags);
     } else {
         QRhiTextureRenderTargetDescription desc { m_tex };
         if (MRT) {

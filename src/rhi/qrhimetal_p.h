@@ -123,6 +123,7 @@ struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
 
     // but the things needed for the render pipeline descriptor have to be provided
     static const int MAX_COLOR_ATTACHMENTS = 8;
+    int colorAttachmentCount = 0;
     bool hasDepthStencil = false;
     int colorFormat[MAX_COLOR_ATTACHMENTS];
     int dsFormat;

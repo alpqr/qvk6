@@ -11,19 +11,19 @@ HEADERS += \
     $$PWD/qbakedshader.h \
     $$PWD/qbakedshader_p.h \
     $$PWD/qshaderbaker.h \
-    $$PWD/spirv/qspirvshader.h \
-    $$PWD/spirv/qspirvcompiler.h \
-    $$PWD/spirv/qshaderbatchablerewriter_p.h
+    $$PWD/qspirvshader.h \
+    $$PWD/qspirvcompiler.h \
+    $$PWD/qshaderbatchablerewriter_p.h
 
 SOURCES += \
     $$PWD/qshaderdescription.cpp \
     $$PWD/qbakedshader.cpp \
     $$PWD/qshaderbaker.cpp \
-    $$PWD/spirv/qspirvshader.cpp \
-    $$PWD/spirv/qspirvcompiler.cpp \
-    $$PWD/spirv/qshaderbatchablerewriter.cpp
+    $$PWD/qspirvshader.cpp \
+    $$PWD/qspirvcompiler.cpp \
+    $$PWD/qshaderbatchablerewriter.cpp
 
-INCLUDEPATH += $$PWD $$PWD/../3rdparty/SPIRV-Cross $$PWD/../3rdparty/glslang
+INCLUDEPATH += $$PWD/../3rdparty/SPIRV-Cross $$PWD/../3rdparty/glslang
 
 # Exceptions must be enabled since that is the only sane way to get errors reported from SPIRV-Cross.
 # They will not propagate outside of this module though so should be safe enough.

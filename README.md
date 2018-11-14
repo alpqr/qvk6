@@ -1,13 +1,15 @@
 ![](https://git.qt.io/laagocs/qtrhi/raw/master/rhi2.png)
 
-Experiments for a Rendering Hardware Interface abstraction for Qt 6 (QtRhi)
-===================================================================
+Experiments for a Rendering Hardware Interface abstraction for future Qt (QtRhi)
+========================================================================
 
 The API and its backends (Vulkan, OpenGL (ES) 2.0, Direct3D 11, Metal) are
 reasonably complete in the sense that it should be possible to bring up a Qt
 Quick renderer on top of them (using Vulkan-style GLSL as the "common" shading
 language - translation seems to work pretty well for now, including to HLSL and
-MSL).
+MSL). Other than that this is highly experimental with a long todo list, and the
+API will change in arbitrary ways. It nonetheless shows what a possible future
+direction for the Qt graphics stack could be.
 
 Experiments for more modern graphics shader management in future Qt (QtShaderTools)
 ===================================================================
@@ -31,7 +33,6 @@ Alternatively,
 4. Use QBakedShader to load and access those at run time.
 
 The latter is what the RHI uses, and expects applications to provide QBakedShader packs.
-The public API is seen solid already. The plan forward is to add a few enhancements, for instance to allow including DXBC or DXIL as well in the shader packs (by invoking fxc or dxc from qsb).
 
 In action
 =========

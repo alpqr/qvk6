@@ -501,7 +501,8 @@ public:
     void setFlags(Flags f) { m_flags = f; }
 
     // To be called before build() with description and flags set.
-    // Note setRenderPassDescriptor() in the base class, that must still be called afterwards.
+    // Textures in desc must already be built.
+    // Note setRenderPassDescriptor() in the base class, that must still be called afterwards (but before build()).
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
 
     // as usual, textures in desc must be built before calling build() on the rt
@@ -771,8 +772,8 @@ public:
     virtual QSize effectivePixelSize() const = 0;
 
     // To be called before build() with relevant parameters like depthStencil and sampleCount set.
-    // (things like the window or the size of depthStencil are irrelevant here)
-    // Note setRenderPassDescriptor(), that must still be called afterwards (but before buildOrResize).
+    // As an exception to the common rules, m_depthStencil is not required to be built yet.
+    // Note setRenderPassDescriptor(), that must still be called afterwards (but before buildOrResize()).
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
 
     // As the name suggests, this is slightly different from the typical

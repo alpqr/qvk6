@@ -1,7 +1,7 @@
-mtl: cubemaps
+mtl: mrt
 mtl: depth tex
-mtl: mrt, cubemap faces
-mtl: texture rt
+mtl: cubemaps
+mtl: targeting cubemap faces
 mtl: cbuffers, textures, samplers set should be batched too
 d3d: msaa (onscreen)
 mtl: msaa (onscreen)
@@ -45,6 +45,7 @@ bytecode for metal?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: texture rt
 mtl: batch better in setVertexBuffers
 spirv-cross error reporting (must enable exceptions and catch all in shadertools, no other way)
 mtl: should currentPassEncoder & co. be in the cb data instead?

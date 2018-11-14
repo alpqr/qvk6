@@ -121,7 +121,10 @@ struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
 
     // there is no MTLRenderPassDescriptor here as one will be created for each pass in beginPass()
 
+    // but the things needed for the render pipeline descriptor have to be provided
     bool hasDepthStencil = false;
+    int colorFormat;
+    int dsFormat;
 };
 
 struct QMetalRenderTargetData;

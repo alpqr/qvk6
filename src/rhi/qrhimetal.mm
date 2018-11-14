@@ -111,11 +111,13 @@ struct QMetalBufferData
 
 struct QMetalRenderBufferData
 {
+    MTLPixelFormat format;
     id<MTLTexture> tex = nil;
 };
 
 struct QMetalTextureData
 {
+    MTLPixelFormat format;
     id<MTLTexture> tex = nil;
     id<MTLBuffer> stagingBuf[QMTL_FRAMES_IN_FLIGHT];
 };
@@ -863,11 +865,16 @@ bool QMetalRenderBuffer::build()
     if (d->tex)
         release();
 
+    if (m_type != DepthStencil)
+        return false;
+
     QRHI_RES_RHI(QRhiMetal);
+    d->format = rhiD->d->dev.depth24Stencil8PixelFormatSupported
+            ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
+
     MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
     desc.textureType = MTLTextureType2D;
-    desc.pixelFormat = rhiD->d->dev.depth24Stencil8PixelFormatSupported
-            ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
+    desc.pixelFormat = d->format;
     desc.width = m_pixelSize.width();
     desc.height = m_pixelSize.height();
     desc.resourceOptions = MTLResourceStorageModePrivate;
@@ -952,18 +959,21 @@ bool QMetalTexture::build()
     const QSize size = safeSize(m_pixelSize);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
+    d->format = toMetalTextureFormat(m_format);
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
 
     QRHI_RES_RHI(QRhiMetal);
     MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
     desc.textureType = MTLTextureType2D;
-    desc.pixelFormat = toMetalTextureFormat(m_format);
+    desc.pixelFormat = d->format;
     desc.width = size.width();
     desc.height = size.height();
     desc.mipmapLevelCount = mipLevelCount;
     desc.resourceOptions = MTLResourceStorageModePrivate;
     desc.storageMode = MTLStorageModePrivate;
     desc.usage = MTLTextureUsageShaderRead;
+    if (m_flags.testFlag(RenderTarget))
+        desc.usage |= MTLTextureUsageRenderTarget;
 
     d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
     [desc release];
@@ -1123,17 +1133,57 @@ QMetalTextureRenderTarget::~QMetalTextureRenderTarget()
 
 void QMetalTextureRenderTarget::release()
 {
+    // nothing to do here
 }
 
 QRhiRenderPassDescriptor *QMetalTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
     QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
     rpD->hasDepthStencil = m_desc.depthStencilBuffer || m_desc.depthTexture;
+
+    // ### mrt
+    rpD->colorFormat = QRHI_RES(QMetalTexture, m_desc.colorAttachments[0].texture)->d->format;
+
+    if (m_desc.depthTexture)
+        rpD->dsFormat = QRHI_RES(QMetalTexture, m_desc.depthTexture)->d->format;
+    else if (m_desc.depthStencilBuffer)
+        rpD->dsFormat = QRHI_RES(QMetalRenderBuffer, m_desc.depthStencilBuffer)->d->format;
+
     return rpD;
 }
 
 bool QMetalTextureRenderTarget::build()
 {
+    Q_ASSERT(!m_desc.colorAttachments.isEmpty() || m_desc.depthTexture);
+    Q_ASSERT(!m_desc.depthStencilBuffer || !m_desc.depthTexture);
+    const bool hasDepthStencil = m_desc.depthStencilBuffer || m_desc.depthTexture;
+
+    d->colorAttCount = m_desc.colorAttachments.count();
+    for (int i = 0; i < d->colorAttCount; ++i) {
+        QRhiTexture *texture = m_desc.colorAttachments[i].texture;
+        QMetalTexture *texD = QRHI_RES(QMetalTexture, texture);
+        d->fb.colorTex = texD->d->tex;
+        // ### mrt
+
+        if (i == 0)
+            d->pixelSize = texD->pixelSize();
+    }
+
+    if (hasDepthStencil) {
+        if (m_desc.depthTexture) {
+            d->fb.dsTex = QRHI_RES(QMetalTexture, m_desc.depthTexture)->d->tex;
+            if (d->colorAttCount == 0)
+                d->pixelSize = m_desc.depthTexture->pixelSize();
+        } else {
+            d->fb.dsTex = QRHI_RES(QMetalRenderBuffer, m_desc.depthStencilBuffer)->d->tex;
+            if (d->colorAttCount == 0)
+                d->pixelSize = m_desc.depthStencilBuffer->pixelSize();
+        }
+        d->dsAttCount = 1;
+    } else {
+        d->dsAttCount = 0;
+    }
+
     return true;
 }
 
@@ -1523,13 +1573,15 @@ bool QMetalGraphicsPipeline::build()
         }
     }
 
-    rpDesc.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
+    QMetalRenderPassDescriptor *rpD = QRHI_RES(QMetalRenderPassDescriptor, m_renderPassDesc);
+
+    rpDesc.colorAttachments[0].pixelFormat = MTLPixelFormat(rpD->colorFormat);
     rpDesc.colorAttachments[0].writeMask = MTLColorWriteMaskAll;
     rpDesc.colorAttachments[0].blendingEnabled = false;
 
     for (int i = 0, ie = m_targetBlends.count(); i != ie; ++i) {
         const QRhiGraphicsPipeline::TargetBlend &b(m_targetBlends[i]);
-        rpDesc.colorAttachments[i].pixelFormat = MTLPixelFormatBGRA8Unorm;
+        rpDesc.colorAttachments[i].pixelFormat = MTLPixelFormat(rpD->colorFormat);
         rpDesc.colorAttachments[i].blendingEnabled = b.enable;
         rpDesc.colorAttachments[i].sourceRGBBlendFactor = toMetalBlendFactor(b.srcColor);
         rpDesc.colorAttachments[i].destinationRGBBlendFactor = toMetalBlendFactor(b.dstColor);
@@ -1540,17 +1592,11 @@ bool QMetalGraphicsPipeline::build()
         rpDesc.colorAttachments[i].writeMask = toMetalColorWriteMask(b.colorWrite);
     }
 
-    QMetalRenderPassDescriptor *rpD = QRHI_RES(QMetalRenderPassDescriptor, m_renderPassDesc);
     if (rpD->hasDepthStencil) {
         // Must only be set when a depth-stencil buffer will actually be bound,
         // validation blows up otherwise.
-        if (rhiD->d->dev.depth24Stencil8PixelFormatSupported) {
-            rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
-            rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth24Unorm_Stencil8;
-        } else {
-            rpDesc.depthAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-            rpDesc.stencilAttachmentPixelFormat = MTLPixelFormatDepth32Float_Stencil8;
-        }
+        rpDesc.depthAttachmentPixelFormat = MTLPixelFormat(rpD->dsFormat);
+        rpDesc.stencilAttachmentPixelFormat = MTLPixelFormat(rpD->dsFormat);
     }
 
     rpDesc.sampleCount = 1;
@@ -1666,8 +1712,16 @@ QSize QMetalSwapChain::effectivePixelSize() const
 
 QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
 {
+    QRHI_RES_RHI(QRhiMetal);
     QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
     rpD->hasDepthStencil = m_depthStencil != nullptr;
+
+    rpD->colorFormat = MTLPixelFormatBGRA8Unorm;
+
+    // m_depthStencil may not be built yet so cannot rely on computed fields in it
+    rpD->dsFormat = rhiD->d->dev.depth24Stencil8PixelFormatSupported
+            ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
+
     return rpD;
 }
 

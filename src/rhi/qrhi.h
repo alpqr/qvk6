@@ -801,6 +801,12 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
 class Q_RHI_EXPORT QRhiResourceUpdateBatch // sort of a command buffer for copy type of operations
 {
 public:
+    enum TexturePrepareFlag {
+        TextureRead = 1 << 0,
+        TextureWrite = 1 << 1
+    };
+    Q_DECLARE_FLAGS(TexturePrepareFlags, TexturePrepareFlag)
+
     ~QRhiResourceUpdateBatch();
     // Puts the batch back to the pool without any processing.
     void release();
@@ -812,6 +818,10 @@ public:
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
     void uploadTexture(QRhiTexture *tex, const QImage &image);
 
+    // This is not normally needed, textures that have an upload or are used
+    // with a TextureRenderTarget will be fine without it. May be more relevant later.
+    void prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags);
+
 private:
     QRhiResourceUpdateBatch(QRhiImplementation *rhi);
     Q_DISABLE_COPY(QRhiResourceUpdateBatch)
@@ -819,6 +829,8 @@ private:
     friend struct QRhiResourceUpdateBatchPrivate;
     friend class QRhi;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiResourceUpdateBatch::TexturePrepareFlags)
 
 struct Q_RHI_EXPORT QRhiInitParams
 {

@@ -153,9 +153,20 @@ struct QRhiResourceUpdateBatchPrivate
         QRhiTextureUploadDescription desc;
     };
 
+    struct TexturePrepare {
+        TexturePrepare() { }
+        TexturePrepare(QRhiTexture *tex_, QRhiResourceUpdateBatch::TexturePrepareFlags flags_)
+            : tex(tex_), flags(flags_)
+        { }
+
+        QRhiTexture *tex = nullptr;
+        QRhiResourceUpdateBatch::TexturePrepareFlags flags;
+    };
+
     QVector<DynamicBufferUpdate> dynamicBufferUpdates;
     QVector<StaticBufferUpload> staticBufferUploads;
     QVector<TextureUpload> textureUploads;
+    QVector<TexturePrepare> texturePrepares;
 
     QRhiResourceUpdateBatch *q = nullptr;
     QRhiImplementation *rhi = nullptr;
@@ -169,6 +180,7 @@ struct QRhiResourceUpdateBatchPrivate
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::StaticBufferUpload, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TexturePrepare, Q_MOVABLE_TYPE);
 
 template<typename T>
 struct QRhiBatchedBindings

@@ -1305,6 +1305,9 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
         break;
     }
 
+    // No copies or image layout transitions allowed after this point (up until
+    // endPass) as we are going to begin the renderpass.
+
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     cbD->currentTarget = rt;
 
@@ -1686,6 +1689,18 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                      VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::TexturePrepare &u : ud->texturePrepares) {
+        if (u.flags.testFlag(QRhiResourceUpdateBatch::TextureRead)) {
+            QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
+            if (utexD->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
+                imageBarrier(cb, u.tex,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            }
+        }
     }
 
     ud->free();

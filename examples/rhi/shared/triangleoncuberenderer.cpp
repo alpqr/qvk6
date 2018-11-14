@@ -254,6 +254,11 @@ void TriangleOnCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resou
     mvp.scale(0.5f);
     mvp.rotate(m_rotation, 1, 0, 0);
     resourceUpdates->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
+
+    if (DEPTH_TEXTURE) {
+        // m_tex is basically undefined here, be nice and transition the layout properly at least
+        resourceUpdates->prepareTextureForUse(m_tex, QRhiResourceUpdateBatch::TextureRead);
+    }
 }
 
 void TriangleOnCubeRenderer::queueOffscreenPass(QRhiCommandBuffer *cb)

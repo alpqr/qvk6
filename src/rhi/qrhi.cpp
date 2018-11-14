@@ -275,6 +275,11 @@ void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &imag
     uploadTexture(tex, {{{{{ image }}}}});
 }
 
+void QRhiResourceUpdateBatch::prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags)
+{
+    d->texturePrepares.append({ tex, flags });
+}
+
 QRhiResourceUpdateBatch *QRhi::nextResourceUpdateBatch()
 {
     auto nextFreeBatch = [this]() -> QRhiResourceUpdateBatch * {
@@ -311,6 +316,7 @@ void QRhiResourceUpdateBatchPrivate::free()
     dynamicBufferUpdates.clear();
     staticBufferUploads.clear();
     textureUploads.clear();
+    texturePrepares.clear();
 
     rhi->resUpdPoolMap.clearBit(poolIndex);
     poolIndex = -1;

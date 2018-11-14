@@ -710,8 +710,10 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
         QMetalTextureRenderTarget *rtTex = QRHI_RES(QMetalTextureRenderTarget, rt);
         rtD = rtTex->d;
         cbD->d->currentPassRpDesc = d->createDefaultRenderPass(false, colorClearValue, depthStencilClearValue);
-        if (rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents))
-            cbD->d->currentPassRpDesc.colorAttachments[0].loadAction = MTLLoadActionLoad;
+        if (rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents)) {
+            for (int i = 0; i < rtD->colorAttCount; ++i)
+                cbD->d->currentPassRpDesc.colorAttachments[i].loadAction = MTLLoadActionLoad;
+        }
     }
         break;
     default:

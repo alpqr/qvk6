@@ -56,8 +56,8 @@
 const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
 const bool UPLOAD_UNDERLAY_ON_EVERY_FRAME = false;
 
-const bool DEPTH_TEXTURE = false; // offscreen pass uses a depth texture (verify with renderdoc etc.)
-const bool MRT = false; // two textures, the second is just cleared as the shader does not write anything (vk valid.layer may warn but for testing that's ok)
+const bool DEPTH_TEXTURE = false; // offscreen pass uses a depth texture (verify with renderdoc etc., ignore valid.layer about ps slot 0)
+const bool MRT = false; // two textures, the second is just cleared as the shader does not write anything (valid.layer may warn but for testing that's ok)
 
 #include "cube.h"
 

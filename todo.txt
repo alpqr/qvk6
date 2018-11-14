@@ -1,4 +1,3 @@
-preservecolor applies to which att.?
 vk, d3d: verify no-color-just-depth again
 mtl: cubemaps
 mtl: targeting cubemap faces
@@ -45,6 +44,7 @@ bytecode for metal?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+preservecolor applies to which att. (all -> fix mtl)
 mtl: depth tex
 mtl: mrt
 mtl: texture rt

@@ -1,3 +1,5 @@
+![](https://git.qt.io/laagocs/qtrhi/raw/master/rhi2.png)
+
 Experiments for a Rendering Hardware Interface abstraction for Qt 6 (QtRhi)
 ===================================================================
 

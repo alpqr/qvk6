@@ -122,8 +122,9 @@ struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
     // there is no MTLRenderPassDescriptor here as one will be created for each pass in beginPass()
 
     // but the things needed for the render pipeline descriptor have to be provided
+    static const int MAX_COLOR_ATTACHMENTS = 8;
     bool hasDepthStencil = false;
-    int colorFormat;
+    int colorFormat[MAX_COLOR_ATTACHMENTS];
     int dsFormat;
 };
 

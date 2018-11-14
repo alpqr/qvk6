@@ -1,4 +1,3 @@
-mtl: mrt
 mtl: depth tex
 mtl: cubemaps
 mtl: targeting cubemap faces
@@ -45,6 +44,7 @@ bytecode for metal?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: mrt
 mtl: texture rt
 mtl: batch better in setVertexBuffers
 spirv-cross error reporting (must enable exceptions and catch all in shadertools, no other way)

@@ -60,8 +60,9 @@ public:
         SpirvShader = 0,
         GlslShader,
         HlslShader,
-        DxShader,
-        MslShader
+        DxbcShader, // fxc
+        MslShader,
+        DxilShader // dxc
     };
 
     struct ShaderSourceVersion {

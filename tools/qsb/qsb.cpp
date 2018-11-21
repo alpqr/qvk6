@@ -89,10 +89,12 @@ static QString sourceStr(QBakedShader::ShaderSource source)
         return QStringLiteral("GLSL");
     case QBakedShader::HlslShader:
         return QStringLiteral("HLSL");
-    case QBakedShader::DxShader:
-        return QStringLiteral("DXBC/DXIL");
+    case QBakedShader::DxbcShader:
+        return QStringLiteral("DXBC");
     case QBakedShader::MslShader:
         return QStringLiteral("MSL");
+    case QBakedShader::DxilShader:
+        return QStringLiteral("DXIL");
     default:
         Q_UNREACHABLE();
     }
@@ -142,7 +144,10 @@ static void dump(const QBakedShader &bs)
         ts << "Contents:\n";
         switch (s[i].source) {
         case QBakedShader::SpirvShader:
-        case QBakedShader::DxShader:
+            Q_FALLTHROUGH();
+        case QBakedShader::DxbcShader:
+            Q_FALLTHROUGH();
+        case QBakedShader::DxilShader:
             ts << "Binary of " << shader.shader.size() << " bytes\n\n";
             break;
         default:

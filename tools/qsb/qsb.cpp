@@ -68,7 +68,7 @@ static bool runProcess(const QString &cmd, QByteArray *output, QByteArray *error
     QProcess p;
     p.start(cmd);
     if (!p.waitForFinished()) {
-        qWarning("%s failed to finish");
+        qWarning("Failed to run %s", qPrintable(cmd));
         return false;
     }
 
@@ -123,6 +123,8 @@ static QString sourceStr(QBakedShader::ShaderSource source)
         return QStringLiteral("MSL");
     case QBakedShader::DxilShader:
         return QStringLiteral("DXIL");
+    case QBakedShader::MetalLibShader:
+        return QStringLiteral("metallib");
     default:
         Q_UNREACHABLE();
     }
@@ -176,6 +178,8 @@ static void dump(const QBakedShader &bs)
         case QBakedShader::DxbcShader:
             Q_FALLTHROUGH();
         case QBakedShader::DxilShader:
+            Q_FALLTHROUGH();
+        case QBakedShader::MetalLibShader:
             ts << "Binary of " << shader.shader.size() << " bytes\n\n";
             break;
         default:
@@ -250,6 +254,9 @@ int main(int argc, char **argv)
     cmdLineParser.addOption(outputOption);
     QCommandLineOption fxcOption({ "c", "fxc" }, QObject::tr("In combination with --hlsl invokes fxc to store DXBC instead of HLSL."));
     cmdLineParser.addOption(fxcOption);
+    QCommandLineOption mtllibOption({ "t", "mtllib" },
+                                    QObject::tr("In combination with --msl builds a Metal library with xcrun metal(lib) and stores that instead of the source."));
+    cmdLineParser.addOption(mtllibOption);
     QCommandLineOption dumpOption({ "d", "dump" }, QObject::tr("Switches to dump mode. Input file is expected to be a baked shader pack."));
     cmdLineParser.addOption(dumpOption);
 
@@ -291,10 +298,10 @@ int main(int argc, char **argv)
             const QStringList versions = cmdLineParser.value(glslOption).trimmed().split(',');
             for (QString version : versions) {
                 QBakedShader::ShaderSourceVersion::Flags flags = 0;
-                if (version.endsWith(QStringLiteral(" es"))) {
+                if (version.endsWith(QLatin1String(" es"))) {
                     version = version.left(version.count() - 3);
                     flags |= QBakedShader::ShaderSourceVersion::GlslEs;
-                } else if (version.endsWith(QStringLiteral("es"))) {
+                } else if (version.endsWith(QLatin1String("es"))) {
                     version = version.left(version.count() - 2);
                     flags |= QBakedShader::ShaderSourceVersion::GlslEs;
                 }
@@ -372,12 +379,13 @@ int main(int argc, char **argv)
                     QByteArray errorOutput;
                     bool success = runProcess(cmd, &output, &errorOutput);
                     if (!success) {
-                        qDebug("%s\n%s",
-                               qPrintable(output.constData()),
-                               qPrintable(errorOutput.constData()));
+                        if (!output.isEmpty() || !errorOutput.isEmpty()) {
+                            qDebug("%s\n%s",
+                                   qPrintable(output.constData()),
+                                   qPrintable(errorOutput.constData()));
+                        }
                         return 1;
                     }
-                    f.remove();
                     f.setFileName(tmpOut);
                     if (!f.open(QIODevice::ReadOnly)) {
                         qWarning("Failed to open fxc output %s", qPrintable(tmpOut));
@@ -385,12 +393,85 @@ int main(int argc, char **argv)
                     }
                     const QByteArray bytecode = f.readAll();
                     f.close();
-                    f.remove();
 
                     QBakedShader::ShaderKey dxbcKey = k;
                     dxbcKey.source = QBakedShader::DxbcShader;
                     QBakedShader::Shader dxbcShader(bytecode, s.entryPoint);
                     bs.setShader(dxbcKey, dxbcShader);
+                    bs.removeShader(k);
+                }
+            }
+        }
+
+        if (cmdLineParser.isSet(mtllibOption)) {
+            QTemporaryDir tempDir;
+            if (!tempDir.isValid()) {
+                qWarning("Failed to create temporary directory");
+                return 1;
+            }
+            auto skeys = bs.availableShaders();
+            for (QBakedShader::ShaderKey &k : skeys) {
+                if (k.source == QBakedShader::MslShader) {
+                    QBakedShader::Shader s = bs.shader(k);
+
+                    const QString tmpIn = tempDir.path() + QLatin1String("/qsb_msl_temp");
+                    const QString tmpInterm = tempDir.path() + QLatin1String("/qsb_msl_temp_air");
+                    const QString tmpOut = tempDir.path() + QLatin1String("/qsb_msl_temp_out");
+                    QFile f(tmpIn);
+                    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                        qWarning("Failed to create temporary file");
+                        return 1;
+                    }
+                    f.write(s.shader);
+                    f.close();
+
+                    const QByteArray inFileName = QDir::toNativeSeparators(tmpIn).toUtf8();
+                    const QByteArray tempIntermediateFileName = QDir::toNativeSeparators(tmpInterm).toUtf8();
+                    QString cmd = QString::asprintf("xcrun -sdk macosx metal %s -o %s",
+                                                    inFileName.constData(),
+                                                    tempIntermediateFileName.constData());
+                    QByteArray output;
+                    QByteArray errorOutput;
+                    bool success = runProcess(cmd, &output, &errorOutput);
+                    if (!success) {
+                        if (!output.isEmpty() || !errorOutput.isEmpty()) {
+                            qDebug("%s\n%s",
+                                   qPrintable(output.constData()),
+                                   qPrintable(errorOutput.constData()));
+                        }
+                        return 1;
+                    }
+                    f.remove();
+
+                    const QByteArray tempOutFileName = QDir::toNativeSeparators(tmpOut).toUtf8();
+                    cmd = QString::asprintf("xcrun -sdk macosx metallib %s -o %s",
+                                            tempIntermediateFileName.constData(),
+                                            tempOutFileName.constData());
+                    output.clear();
+                    errorOutput.clear();
+                    success = runProcess(cmd, &output, &errorOutput);
+                    if (!success) {
+                        if (!output.isEmpty() || !errorOutput.isEmpty()) {
+                            qDebug("%s\n%s",
+                                   qPrintable(output.constData()),
+                                   qPrintable(errorOutput.constData()));
+                        }
+                        return 1;
+                    }
+
+                    f.setFileName(tmpOut);
+                    if (!f.open(QIODevice::ReadOnly)) {
+                        qWarning("Failed to open xcrun metallib output %s", qPrintable(tmpOut));
+                        return 1;
+                    }
+                    const QByteArray bytecode = f.readAll();
+                    f.close();
+                    f.remove();
+
+                    QBakedShader::ShaderKey mtlKey = k;
+                    mtlKey.source = QBakedShader::MetalLibShader;
+                    QBakedShader::Shader mtlShader(bytecode, s.entryPoint);
+                    bs.setShader(mtlKey, mtlShader);
                     bs.removeShader(k);
                 }
             }

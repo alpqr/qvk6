@@ -62,7 +62,8 @@ public:
         HlslShader,
         DxbcShader, // fxc
         MslShader,
-        DxilShader // dxc
+        DxilShader, // dxc
+        MetalLibShader // xcrun metal + xcrun metallib
     };
 
     struct ShaderSourceVersion {

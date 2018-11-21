@@ -1479,8 +1479,10 @@ id<MTLLibrary> QRhiMetalData::createMetalLib(const QBakedShader &shader, QString
 {
     QBakedShader::Shader mtllib = shader.shader({ QBakedShader::MetalLibShader, 12 });
     if (!mtllib.shader.isEmpty()) {
-        dispatch_data_t data = dispatch_data_create(mtllib.shader.constData(), mtllib.shader.size(),
-                                                    dispatch_get_global_queue(0, 0), ^{ });
+        dispatch_data_t data = dispatch_data_create(mtllib.shader.constData(),
+                                                    mtllib.shader.size(),
+                                                    dispatch_get_global_queue(0, 0),
+                                                    DISPATCH_DATA_DESTRUCTOR_DEFAULT);
         NSError *err = nil;
         id<MTLLibrary> lib = [dev newLibraryWithData: data error: &err];
         dispatch_release(data);

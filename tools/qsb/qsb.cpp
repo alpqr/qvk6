@@ -254,7 +254,7 @@ int main(int argc, char **argv)
     cmdLineParser.addOption(outputOption);
     QCommandLineOption fxcOption({ "c", "fxc" }, QObject::tr("In combination with --hlsl invokes fxc to store DXBC instead of HLSL."));
     cmdLineParser.addOption(fxcOption);
-    QCommandLineOption mtllibOption({ "t", "mtllib" },
+    QCommandLineOption mtllibOption({ "t", "metallib" },
                                     QObject::tr("In combination with --msl builds a Metal library with xcrun metal(lib) and stores that instead of the source."));
     cmdLineParser.addOption(mtllibOption);
     QCommandLineOption dumpOption({ "d", "dump" }, QObject::tr("Switches to dump mode. Input file is expected to be a baked shader pack."));
@@ -414,7 +414,7 @@ int main(int argc, char **argv)
                 if (k.source == QBakedShader::MslShader) {
                     QBakedShader::Shader s = bs.shader(k);
 
-                    const QString tmpIn = tempDir.path() + QLatin1String("/qsb_msl_temp");
+                    const QString tmpIn = tempDir.path() + QLatin1String("/qsb_msl_temp.metal");
                     const QString tmpInterm = tempDir.path() + QLatin1String("/qsb_msl_temp_air");
                     const QString tmpOut = tempDir.path() + QLatin1String("/qsb_msl_temp_out");
                     QFile f(tmpIn);
@@ -441,7 +441,6 @@ int main(int argc, char **argv)
                         }
                         return 1;
                     }
-                    f.remove();
 
                     const QByteArray tempOutFileName = QDir::toNativeSeparators(tmpOut).toUtf8();
                     cmd = QString::asprintf("xcrun -sdk macosx metallib %s -o %s",
@@ -466,7 +465,6 @@ int main(int argc, char **argv)
                     }
                     const QByteArray bytecode = f.readAll();
                     f.close();
-                    f.remove();
 
                     QBakedShader::ShaderKey mtlKey = k;
                     mtlKey.source = QBakedShader::MetalLibShader;

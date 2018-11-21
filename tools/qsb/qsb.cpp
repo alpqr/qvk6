@@ -125,8 +125,6 @@ static QString sourceStr(QBakedShader::ShaderSource source)
         return QStringLiteral("DXIL");
     case QBakedShader::MetalLibShader:
         return QStringLiteral("metallib");
-    case QBakedShader::OpenGLProgramBinary:
-        return QStringLiteral("glProgramBinary");
     default:
         Q_UNREACHABLE();
     }
@@ -182,8 +180,6 @@ static void dump(const QBakedShader &bs)
         case QBakedShader::DxilShader:
             Q_FALLTHROUGH();
         case QBakedShader::MetalLibShader:
-            Q_FALLTHROUGH();
-        case QBakedShader::OpenGLProgramBinary:
             ts << "Binary of " << shader.shader.size() << " bytes\n\n";
             break;
         default:

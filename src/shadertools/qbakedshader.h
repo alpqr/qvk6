@@ -63,8 +63,7 @@ public:
         DxbcShader, // fxc
         MslShader,
         DxilShader, // dxc
-        MetalLibShader, // xcrun metal + xcrun metallib
-        OpenGLProgramBinary // stage must be vertex, use version for format
+        MetalLibShader // xcrun metal + xcrun metallib
     };
 
     struct ShaderSourceVersion {

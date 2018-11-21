@@ -1401,18 +1401,6 @@ bool QGles2GraphicsPipeline::build()
         if (!isVertex && !isFragment)
             continue;
 
-        if (isVertex) {
-            bool gotProgramBinary = false;
-            for (const QBakedShader::ShaderKey &skey : shaderStage.shader.availableShaders()) {
-                if (skey.source == QBakedShader::OpenGLProgramBinary) {
-                    // ###
-                    //gotProgramBinary = true;
-                }
-            }
-            if (gotProgramBinary)
-                break;
-        }
-
         GLuint shader = rhiD->f->glCreateShader(isVertex ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER);
         QBakedShader::ShaderSourceVersion ver;
         if (rhiD->ctx->isOpenGLES())

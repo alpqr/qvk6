@@ -26,7 +26,6 @@ gl: more ubuf types
 gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)
 d3d, gl, mtl: cache shader sources?
-gl: program binary load support
 advanced blend modes?
 resize to 0 width or height fails (vk)
 gl: ubuf structs, arrays
@@ -39,13 +38,11 @@ more tex: 3d, array?
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 
 shadertools:
-qsb management (merge, delete)? -> could then do a tool to save gl program binaries on target and then merge them to a qsb on the host
-dxc for d3d in addition to fxc?
+bytecode (fxc/dxc) for d3d?
+bytecode for metal?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
-bytecode (fxc) for d3d
-bytecode for metal
 vk: im.layout transition missing when no upload, no render to (or is the case invalid?)
 vk, d3d: verify no-color-just-depth again
 preservecolor applies to which att. (all -> fix mtl)

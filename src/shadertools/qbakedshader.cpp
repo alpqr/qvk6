@@ -128,6 +128,16 @@ void QBakedShader::setShader(const ShaderKey &key, const Shader &shader)
     d->shaders[key] = shader;
 }
 
+void QBakedShader::removeShader(const ShaderKey &key)
+{
+    auto it = d->shaders.find(key);
+    if (it == d->shaders.end())
+        return;
+
+    detach();
+    d->shaders.erase(it);
+}
+
 QByteArray QBakedShader::serialized() const
 {
     QBuffer buf;

@@ -1600,6 +1600,10 @@ static inline D3D11_BLEND_OP toD3DBlendOp(QRhiGraphicsPipeline::BlendOp op)
 
 static QByteArray compileHlslShaderSource(const QBakedShader &shader, QString *error)
 {
+    QBakedShader::Shader dxbc = shader.shader({ QBakedShader::DxbcShader, 50 });
+    if (!dxbc.shader.isEmpty())
+        return dxbc.shader;
+
     QBakedShader::Shader hlslSource = shader.shader({ QBakedShader::HlslShader, 50 });
     if (hlslSource.shader.isEmpty()) {
         qWarning() << "No HLSL (shader model 5.0) code found in baked shader" << shader;

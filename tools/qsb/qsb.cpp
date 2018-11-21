@@ -30,6 +30,8 @@
 #include <QtCore/qcommandlineparser.h>
 #include <QtCore/qtextstream.h>
 #include <QtCore/qfile.h>
+#include <QtCore/qdir.h>
+#include <QtCore/qprocess.h>
 #include <QtCore/qdebug.h>
 #include <QtShaderTools/qshaderbaker.h>
 
@@ -58,6 +60,31 @@ static QByteArray readFile(const QString &filename, bool text = false)
         return QByteArray();
     }
     return f.readAll();
+}
+
+static bool runProcess(const QString &cmd, QByteArray *output, QByteArray *errorOutput)
+{
+    QProcess p;
+    p.start(cmd);
+    if (!p.waitForFinished()) {
+        qWarning("%s failed to finish");
+        return false;
+    }
+
+    if (p.exitStatus() == QProcess::CrashExit) {
+        qWarning("%s crashed", qPrintable(cmd));
+        return false;
+    }
+
+    *output = p.readAllStandardOutput();
+    *errorOutput = p.readAllStandardError();
+
+    if (p.exitCode() != 0) {
+        qWarning("%s returned non-zero error code %d", qPrintable(cmd), p.exitCode());
+        return false;
+    }
+
+    return true;
 }
 
 static QString stageStr(QBakedShader::ShaderStage stage)
@@ -158,6 +185,42 @@ static void dump(const QBakedShader &bs)
     }
 }
 
+static QByteArray fxcProfile(const QBakedShader &bs, const QBakedShader::ShaderKey &k)
+{
+    QByteArray t;
+
+    switch (bs.stage()) {
+    case QBakedShader::VertexStage:
+        t += QByteArrayLiteral("vs_");
+        break;
+    case QBakedShader::TessControlStage:
+        t += QByteArrayLiteral("hs_");
+        break;
+    case QBakedShader::TessEvaluationStage:
+        t += QByteArrayLiteral("ds_");
+        break;
+    case QBakedShader::GeometryStage:
+        t += QByteArrayLiteral("gs_");
+        break;
+    case QBakedShader::FragmentStage:
+        t += QByteArrayLiteral("ps_");
+        break;
+    case QBakedShader::ComputeStage:
+        t += QByteArrayLiteral("cs_");
+        break;
+    default:
+        break;
+    }
+
+    const int major = k.sourceVersion.version / 10;
+    const int minor = k.sourceVersion.version % 10;
+    t += QByteArray::number(major);
+    t += '_';
+    t += QByteArray::number(minor);
+
+    return t;
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -184,6 +247,8 @@ int main(int argc, char **argv)
                                      QObject::tr("Output file for the baked shader pack."),
                                      QObject::tr("output"));
     cmdLineParser.addOption(outputOption);
+    QCommandLineOption fxcOption({ "c", "fxc" }, QObject::tr("In combination with --hlsl invokes fxc to store DXBC instead of HLSL."));
+    cmdLineParser.addOption(fxcOption);
     QCommandLineOption dumpOption({ "d", "dump" }, QObject::tr("Switches to dump mode. Input file is expected to be a baked shader pack."));
     cmdLineParser.addOption(dumpOption);
 
@@ -214,10 +279,13 @@ int main(int argc, char **argv)
         variants << QBakedShader::NormalShader;
         if (cmdLineParser.isSet(batchableOption))
             variants << QBakedShader::BatchableVertexShader;
+
         baker.setGeneratedShaderVariants(variants);
 
         QVector<QShaderBaker::GeneratedShader> genShaders;
+
         genShaders << qMakePair(QBakedShader::SpirvShader, QBakedShader::ShaderSourceVersion(100));
+
         if (cmdLineParser.isSet(glslOption)) {
             const QStringList versions = cmdLineParser.value(glslOption).trimmed().split(',');
             for (QString version : versions) {
@@ -237,6 +305,7 @@ int main(int argc, char **argv)
                     qWarning("Ignoring invalid GLSL version %s", qPrintable(version));
             }
         }
+
         if (cmdLineParser.isSet(hlslOption)) {
             const QStringList versions = cmdLineParser.value(hlslOption).trimmed().split(',');
             for (QString version : versions) {
@@ -248,6 +317,7 @@ int main(int argc, char **argv)
                     qWarning("Ignoring invalid HLSL (Shader Model) version %s", qPrintable(version));
             }
         }
+
         if (cmdLineParser.isSet(mslOption)) {
             const QStringList versions = cmdLineParser.value(mslOption).trimmed().split(',');
             for (QString version : versions) {
@@ -259,12 +329,64 @@ int main(int argc, char **argv)
                     qWarning("Ignoring invalid MSL version %s", qPrintable(version));
             }
         }
+
         baker.setGeneratedShaders(genShaders);
 
         QBakedShader bs = baker.bake();
         if (!bs.isValid()) {
             qWarning("Shader baking failed: %s", qPrintable(baker.errorMessage()));
             return 1;
+        }
+
+        if (cmdLineParser.isSet(fxcOption)) {
+            auto skeys = bs.availableShaders();
+            for (QBakedShader::ShaderKey &k : skeys) {
+                if (k.source == QBakedShader::HlslShader) {
+                    QBakedShader::Shader s = bs.shader(k);
+                    // fxc refuses to read files created with QTemporaryFile, no idea why, life is too short
+                    const QString tmpOut = QLatin1String("qsb_hlsl_temp_out");
+                    QFile f(QLatin1String("qsb_hlsl_temp"));
+                    if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                        qWarning("Failed to create temporary file");
+                        return 1;
+                    }
+                    f.write(s.shader);
+                    f.close();
+
+                    const QByteArray tempOutFileName = QDir::toNativeSeparators(tmpOut).toUtf8();
+                    const QByteArray inFileName = QDir::toNativeSeparators(f.fileName()).toUtf8();
+                    const QByteArray typeArg = fxcProfile(bs, k);
+                    const QString cmd = QString::asprintf("fxc /nologo /E %s /T %s /Fo %s %s",
+                                                          s.entryPoint.constData(),
+                                                          typeArg.constData(),
+                                                          tempOutFileName.constData(),
+                                                          inFileName.constData());
+                    QByteArray output;
+                    QByteArray errorOutput;
+                    bool success = runProcess(cmd, &output, &errorOutput);
+                    if (!success) {
+                        qDebug("%s\n%s",
+                               qPrintable(output.constData()),
+                               qPrintable(errorOutput.constData()));
+                        return 1;
+                    }
+                    f.remove();
+                    f.setFileName(tmpOut);
+                    if (!f.open(QIODevice::ReadOnly)) {
+                        qWarning("Failed to open fxc output %s", qPrintable(tmpOut));
+                        return 1;
+                    }
+                    const QByteArray bytecode = f.readAll();
+                    f.close();
+                    f.remove();
+
+                    QBakedShader::ShaderKey dxbcKey = k;
+                    dxbcKey.source = QBakedShader::DxbcShader;
+                    QBakedShader::Shader dxbcShader(bytecode, s.entryPoint);
+                    bs.setShader(dxbcKey, dxbcShader);
+                    bs.removeShader(k);
+                }
+            }
         }
 
         if (cmdLineParser.isSet(outputOption))

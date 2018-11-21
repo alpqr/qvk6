@@ -127,6 +127,7 @@ public:
     QList<ShaderKey> availableShaders() const;
     Shader shader(const ShaderKey &key) const;
     void setShader(const ShaderKey &key, const Shader &shader);
+    void removeShader(const ShaderKey &key);
 
     QByteArray serialized() const;
     static QBakedShader fromSerialized(const QByteArray &data);

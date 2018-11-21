@@ -31,6 +31,7 @@
 #include <QtCore/qtextstream.h>
 #include <QtCore/qfile.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qtemporarydir.h>
 #include <QtCore/qprocess.h>
 #include <QtCore/qdebug.h>
 #include <QtShaderTools/qshaderbaker.h>
@@ -339,13 +340,19 @@ int main(int argc, char **argv)
         }
 
         if (cmdLineParser.isSet(fxcOption)) {
+            QTemporaryDir tempDir;
+            if (!tempDir.isValid()) {
+                qWarning("Failed to create temporary directory");
+                return 1;
+            }
             auto skeys = bs.availableShaders();
             for (QBakedShader::ShaderKey &k : skeys) {
                 if (k.source == QBakedShader::HlslShader) {
                     QBakedShader::Shader s = bs.shader(k);
-                    // fxc refuses to read files created with QTemporaryFile, no idea why, life is too short
-                    const QString tmpOut = QLatin1String("qsb_hlsl_temp_out");
-                    QFile f(QLatin1String("qsb_hlsl_temp"));
+
+                    const QString tmpIn = tempDir.path() + QLatin1String("/qsb_hlsl_temp");
+                    const QString tmpOut = tempDir.path() + QLatin1String("/qsb_hlsl_temp_out");
+                    QFile f(tmpIn);
                     if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) {
                         qWarning("Failed to create temporary file");
                         return 1;
@@ -354,7 +361,7 @@ int main(int argc, char **argv)
                     f.close();
 
                     const QByteArray tempOutFileName = QDir::toNativeSeparators(tmpOut).toUtf8();
-                    const QByteArray inFileName = QDir::toNativeSeparators(f.fileName()).toUtf8();
+                    const QByteArray inFileName = QDir::toNativeSeparators(tmpIn).toUtf8();
                     const QByteArray typeArg = fxcProfile(bs, k);
                     const QString cmd = QString::asprintf("fxc /nologo /E %s /T %s /Fo %s %s",
                                                           s.entryPoint.constData(),

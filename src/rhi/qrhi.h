@@ -262,7 +262,9 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
         struct Q_RHI_EXPORT MipLevel {
             MipLevel() { }
             MipLevel(const QImage &image_) : image(image_) { }
+            MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
             QImage image;
+            QByteArray compressedData;
         };
         Layer() { }
         Layer(const QVector<MipLevel> &mipImages_) : mipImages(mipImages_) { }
@@ -760,7 +762,8 @@ class Q_RHI_EXPORT QRhiSwapChain : public QRhiResource
 public:
     enum SurfaceImportFlag {
         SurfaceHasPreMulAlpha = 1 << 0,
-        SurfaceHasNonPreMulAlpha = 1 << 1
+        SurfaceHasNonPreMulAlpha = 1 << 1,
+        sRGB = 1 << 2
     };
     Q_DECLARE_FLAGS(SurfaceImportFlags, SurfaceImportFlag)
 
@@ -844,7 +847,7 @@ public:
     void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
-    void uploadTexture(QRhiTexture *tex, const QImage &image);
+    void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut
 
     // This is not normally needed, textures that have an upload or are used
     // with a TextureRenderTarget will be fine without it. May be more relevant later.
@@ -1027,6 +1030,11 @@ public:
     // matrices regardless of the backend. (by passing this_matrix * mvp,
     // instead of just mvp, to their vertex shaders)
     QMatrix4x4 clipSpaceCorrMatrix() const;
+
+    // This is not isTextureFormatSupported: the result does not guarantee
+    // runtime availability, it only helps determining the guaranteed hopeless
+    // cases based on a static list from the backends.
+    bool canTextureFormatBeSupported(QRhiTexture::Format format) const;
 
 protected:
     QRhi();

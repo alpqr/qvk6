@@ -1880,6 +1880,12 @@ QMatrix4x4 QRhiVulkan::clipSpaceCorrMatrix() const
     return m;
 }
 
+bool QRhiVulkan::canTextureFormatBeSupported(QRhiTexture::Format format) const
+{
+    Q_UNUSED(format);
+    return true;
+}
+
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
                                                  int sampleCount, QRhiRenderBuffer::Hints hints)
 {

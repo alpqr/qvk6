@@ -115,6 +115,7 @@ public:
     virtual int ubufAlignment() const = 0;
     virtual bool isYUpInFramebuffer() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
+    virtual bool canTextureFormatBeSupported(QRhiTexture::Format format) const = 0;
 
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;

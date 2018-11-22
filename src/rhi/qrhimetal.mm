@@ -254,6 +254,14 @@ QMatrix4x4 QRhiMetal::clipSpaceCorrMatrix() const
     return QMatrix4x4(); // identity
 }
 
+bool QRhiMetal::canTextureFormatBeSupported(QRhiTexture::Format format) const
+{
+    if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
+        return false;
+
+    return true;
+}
+
 QRhiRenderBuffer *QRhiMetal::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
                                                 int sampleCount, QRhiRenderBuffer::Hints hints)
 {

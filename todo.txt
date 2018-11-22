@@ -1,3 +1,6 @@
+vk: compressed textures (etc2, astc, bc)
+gl, mtl: compressed textures
+vk, mtl, gl: srgb (tex, swapchain buf)
 mtl: cubemaps
 mtl: targeting cubemap faces
 mtl: cbuffers, textures, samplers set should be batched too
@@ -8,7 +11,6 @@ cbuffer alignment rules - some things fail to translate (to hlsl e.g. with struc
 resource import/export, what's the co-op story?
 rhi without a window? fully offscreen?
 copy-only passes for kicking off transfers early? (copy/transfer queue?)
-compressed textures
 copyimage (color and ds, no resolve or transforms here)
 msaa offscreen (msaa texture? renderbuffer?)
 resolveimage (color and ds, only to resolve samples)
@@ -18,12 +20,13 @@ figure sg out for minimizing viewport/scissor cmds
 vk: test FrameOpDeviceLost somehow
 d3d device loss?
 more what-if-resource-rebuilt cases
-tex/QImage formats
 anisotropic
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 gl: more ubuf types
 gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)
+gl: tex formats
+more QImage->tex formats
 d3d, gl, mtl: cache shader sources?
 advanced blend modes?
 resize to 0 width or height fails (vk)
@@ -41,6 +44,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: srgb support (texture, swapchain buf)
+d3d: support for compressed textures (bc)
 d3d: msaa (onscreen)
 bytecode for metal
 bytecode (fxc) for d3d

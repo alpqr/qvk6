@@ -228,6 +228,14 @@ QMatrix4x4 QRhiD3D11::clipSpaceCorrMatrix() const
     return m;
 }
 
+bool QRhiD3D11::canTextureFormatBeSupported(QRhiTexture::Format format) const
+{
+    if (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ASTC_12x12)
+        return false;
+
+    return true;
+}
+
 QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
                                                 int sampleCount, QRhiRenderBuffer::Hints hints)
 {
@@ -487,6 +495,47 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+static inline bool isCompressedFormat(QRhiTexture::Format format)
+{
+    return format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7;
+}
+
+static void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
+                                 quint32 *bpl, quint32 *alignedHeight)
+{
+    quint32 blockSize = 0;
+    switch (format) {
+    case QRhiTexture::BC1:
+        blockSize = 8;
+        break;
+    case QRhiTexture::BC2:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC3:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC4:
+        blockSize = 8;
+        break;
+    case QRhiTexture::BC5:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC6H:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC7:
+        blockSize = 16;
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+    if (bpl)
+        *bpl = qMax<quint32>(1, (size.width() + 3) / 4) * blockSize;
+    if (alignedHeight)
+        *alignedHeight = qMax<quint32>(1, (size.height() + 3) / 4);
+}
+
 void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
@@ -522,7 +571,15 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
                 UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
-                context->UpdateSubresource(texD->tex, subres, nullptr, mipDesc.image.constBits(), mipDesc.image.bytesPerLine(), 0);
+                if (!mipDesc.image.isNull()) {
+                    context->UpdateSubresource(texD->tex, subres, nullptr,
+                                               mipDesc.image.constBits(), mipDesc.image.bytesPerLine(), 0);
+                } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(texD->m_format)) {
+                    quint32 bpl = 0;
+                    compressedFormatInfo(texD->m_format, texD->m_pixelSize, &bpl, nullptr);
+                    context->UpdateSubresource(texD->tex, subres, nullptr,
+                                               mipDesc.compressedData.constData(), bpl, 0);
+                }
             }
         }
     }
@@ -1005,13 +1062,14 @@ void QD3D11Texture::release()
     tex = nullptr;
 }
 
-static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format)
+static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
 {
+    const bool srgb = flags.testFlag(QRhiTexture::sRGB);
     switch (format) {
     case QRhiTexture::RGBA8:
-        return DXGI_FORMAT_R8G8B8A8_UNORM;
+        return srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
     case QRhiTexture::BGRA8:
-        return DXGI_FORMAT_B8G8R8A8_UNORM;
+        return srgb ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_B8G8R8A8_UNORM;
     case QRhiTexture::R8:
         return DXGI_FORMAT_R8_UNORM;
     case QRhiTexture::R16:
@@ -1021,6 +1079,59 @@ static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format)
         return DXGI_FORMAT_R16_TYPELESS;
     case QRhiTexture::D32:
         return DXGI_FORMAT_R32_TYPELESS;
+
+    case QRhiTexture::BC1:
+        return srgb ? DXGI_FORMAT_BC1_UNORM_SRGB : DXGI_FORMAT_BC1_UNORM;
+    case QRhiTexture::BC2:
+        return srgb ? DXGI_FORMAT_BC2_UNORM_SRGB : DXGI_FORMAT_BC2_UNORM;
+    case QRhiTexture::BC3:
+        return srgb ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_BC3_UNORM;
+    case QRhiTexture::BC4:
+        return DXGI_FORMAT_BC4_UNORM;
+    case QRhiTexture::BC5:
+        return DXGI_FORMAT_BC5_UNORM;
+    case QRhiTexture::BC6H:
+        return DXGI_FORMAT_BC6H_UF16;
+    case QRhiTexture::BC7:
+        return srgb ? DXGI_FORMAT_BC7_UNORM_SRGB : DXGI_FORMAT_BC7_UNORM;
+
+    case QRhiTexture::ETC2_RGB8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ETC2_RGB8A1:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ETC2_RGBA8:
+        qWarning("QRhiD3D11 does not support ETC2 textures");
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    case QRhiTexture::ASTC_4x4:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_5x4:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_5x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_6x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_6x6:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_8x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_8x6:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_8x8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x6:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x10:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_12x10:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_12x12:
+        qWarning("QRhiD3D11 does not support ASTC textures");
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
 
     default:
         Q_UNREACHABLE();
@@ -1098,7 +1209,7 @@ bool QD3D11Texture::build()
     desc.Height = size.height();
     desc.MipLevels = mipLevelCount;
     desc.ArraySize = isCube ? 6 : 1;;
-    desc.Format = toD3DTextureFormat(m_format);
+    desc.Format = toD3DTextureFormat(m_format, m_flags);
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = bindFlags;
@@ -1306,7 +1417,7 @@ bool QD3D11TextureRenderTarget::build()
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
         memset(&rtvDesc, 0, sizeof(rtvDesc));
-        rtvDesc.Format = toD3DTextureFormat(texD->format());
+        rtvDesc.Format = toD3DTextureFormat(texD->format(), texD->flags());
         if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
             rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
             rtvDesc.Texture2DArray.FirstArraySlice = m_desc.colorAttachments[i].layer;
@@ -1916,7 +2027,11 @@ bool QD3D11SwapChain::newColorBuffer(const QSize &size, DXGI_FORMAT format, DXGI
         return false;
     }
 
-    hr = rhiD->dev->CreateRenderTargetView(*tex, nullptr, rtv);
+    D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+    memset(&rtvDesc, 0, sizeof(rtvDesc));
+    rtvDesc.Format = format;
+    rtvDesc.ViewDimension = sampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS : D3D11_RTV_DIMENSION_TEXTURE2D;
+    hr = rhiD->dev->CreateRenderTargetView(*tex, &rtvDesc, rtv);
     if (FAILED(hr)) {
         qWarning("Failed to create color buffer rtv: %s", qPrintable(comErrorMessage(hr)));
         (*tex)->Release();
@@ -1937,7 +2052,11 @@ bool QD3D11SwapChain::buildOrResize()
 
     window = m_window;
     pixelSize = m_requestedPixelSize;
+
     colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    const DXGI_FORMAT srgbAdjustedFormat = m_flags.testFlag(sRGB) ?
+                DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+
     const UINT swapChainFlags = 0;
 
     QRHI_RES_RHI(QRhiD3D11);
@@ -1986,13 +2105,17 @@ bool QD3D11SwapChain::buildOrResize()
             qWarning("Failed to query swapchain buffer %d: %s", i, qPrintable(comErrorMessage(hr)));
             return false;
         }
-        hr = rhiD->dev->CreateRenderTargetView(tex[i], nullptr, &rtv[i]);
+        D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+        memset(&rtvDesc, 0, sizeof(rtvDesc));
+        rtvDesc.Format = srgbAdjustedFormat;
+        rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+        hr = rhiD->dev->CreateRenderTargetView(tex[i], &rtvDesc, &rtv[i]);
         if (FAILED(hr)) {
             qWarning("Failed to create rtv for swapchain buffer %d: %s", i, qPrintable(comErrorMessage(hr)));
             return false;
         }
         if (sampleDesc.Count > 1) {
-            if (!newColorBuffer(pixelSize, colorFormat, sampleDesc, &msaaTex[i], &msaaRtv[i]))
+            if (!newColorBuffer(pixelSize, srgbAdjustedFormat, sampleDesc, &msaaTex[i], &msaaRtv[i]))
                 return false;
         }
     }

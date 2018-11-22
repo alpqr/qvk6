@@ -50,6 +50,8 @@
 
 #include "examplewindow.h"
 
+//#define USE_SRGB_SWAPCHAIN
+
 void ExampleWindow::exposeEvent(QExposeEvent *)
 {
     // You never know how Vulkan behaves today - at some point it started
@@ -112,6 +114,9 @@ void ExampleWindow::init()
     m_sc->setSampleCount(m_sampleCount);
     m_scrp = m_sc->newCompatibleRenderPassDescriptor();
     m_sc->setRenderPassDescriptor(m_scrp);
+#ifdef USE_SRGB_SWAPCHAIN
+    m_sc->setFlags(QRhiSwapChain::sRGB);
+#endif
 
     m_triRenderer.setRhi(m_r);
     m_triRenderer.setSampleCount(m_sampleCount);

@@ -374,7 +374,8 @@ public:
         RenderTarget = 1 << 0,
         ChangesFrequently = 1 << 1, // hint for backend to keep staging resources around
         CubeMap = 1 << 2,
-        MipMapped = 1 << 3
+        MipMapped = 1 << 3,
+        sRGB = 1 << 4
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -385,7 +386,34 @@ public:
         R16,
 
         D16,
-        D32
+        D32,
+
+        BC1,
+        BC2,
+        BC3,
+        BC4,
+        BC5,
+        BC6H,
+        BC7,
+
+        ETC2_RGB8,
+        ETC2_RGB8A1,
+        ETC2_RGBA8,
+
+        ASTC_4x4,
+        ASTC_5x4,
+        ASTC_5x5,
+        ASTC_6x5,
+        ASTC_6x6,
+        ASTC_8x5,
+        ASTC_8x6,
+        ASTC_8x8,
+        ASTC_10x5,
+        ASTC_10x6,
+        ASTC_10x8,
+        ASTC_10x10,
+        ASTC_12x10,
+        ASTC_12x12
     };
 
     Format format() const { return m_format; }

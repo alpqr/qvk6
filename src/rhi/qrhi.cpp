@@ -350,9 +350,9 @@ QMatrix4x4 QRhi::clipSpaceCorrMatrix() const
     return d->clipSpaceCorrMatrix();
 }
 
-bool QRhi::canTextureFormatBeSupported(QRhiTexture::Format format) const
+bool QRhi::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const
 {
-    return d->canTextureFormatBeSupported(format);
+    return d->isTextureFormatSupported(format, flags);
 }
 
 QRhiGraphicsPipeline *QRhi::newGraphicsPipeline()

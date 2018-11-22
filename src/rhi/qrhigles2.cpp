@@ -178,8 +178,10 @@ QMatrix4x4 QRhiGles2::clipSpaceCorrMatrix() const
     return QMatrix4x4(); // identity
 }
 
-bool QRhiGles2::canTextureFormatBeSupported(QRhiTexture::Format format) const
+bool QRhiGles2::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const
 {
+    Q_UNUSED(flags);
+
     if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
         return false;
 

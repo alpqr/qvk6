@@ -439,6 +439,57 @@ static inline VkFormat toVkTextureFormat(QRhiTexture::Format format, QRhiTexture
     case QRhiTexture::D32:
         return VK_FORMAT_D32_SFLOAT;
 
+    case QRhiTexture::BC1:
+        return srgb ? VK_FORMAT_BC1_RGB_SRGB_BLOCK : VK_FORMAT_BC1_RGB_UNORM_BLOCK;
+    case QRhiTexture::BC2:
+        return srgb ? VK_FORMAT_BC2_SRGB_BLOCK : VK_FORMAT_BC2_UNORM_BLOCK;
+    case QRhiTexture::BC3:
+        return srgb ? VK_FORMAT_BC3_SRGB_BLOCK : VK_FORMAT_BC3_UNORM_BLOCK;
+    case QRhiTexture::BC4:
+        return VK_FORMAT_BC4_UNORM_BLOCK;
+    case QRhiTexture::BC5:
+        return VK_FORMAT_BC5_UNORM_BLOCK;
+    case QRhiTexture::BC6H:
+        return VK_FORMAT_BC6H_UFLOAT_BLOCK;
+    case QRhiTexture::BC7:
+        return srgb ? VK_FORMAT_BC7_SRGB_BLOCK : VK_FORMAT_BC7_UNORM_BLOCK;
+
+    case QRhiTexture::ETC2_RGB8:
+        return srgb ? VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK : VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+    case QRhiTexture::ETC2_RGB8A1:
+        return srgb ? VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK : VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK;
+    case QRhiTexture::ETC2_RGBA8:
+        return srgb ? VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK : VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK;
+
+    case QRhiTexture::ASTC_4x4:
+        return srgb ? VK_FORMAT_ASTC_4x4_SRGB_BLOCK : VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+    case QRhiTexture::ASTC_5x4:
+        return srgb ? VK_FORMAT_ASTC_5x4_SRGB_BLOCK : VK_FORMAT_ASTC_5x4_UNORM_BLOCK;
+    case QRhiTexture::ASTC_5x5:
+        return srgb ? VK_FORMAT_ASTC_5x5_SRGB_BLOCK : VK_FORMAT_ASTC_5x5_UNORM_BLOCK;
+    case QRhiTexture::ASTC_6x5:
+        return srgb ? VK_FORMAT_ASTC_6x5_SRGB_BLOCK : VK_FORMAT_ASTC_6x5_UNORM_BLOCK;
+    case QRhiTexture::ASTC_6x6:
+        return srgb ? VK_FORMAT_ASTC_6x6_SRGB_BLOCK : VK_FORMAT_ASTC_6x6_UNORM_BLOCK;
+    case QRhiTexture::ASTC_8x5:
+        return srgb ? VK_FORMAT_ASTC_8x5_SRGB_BLOCK : VK_FORMAT_ASTC_8x5_UNORM_BLOCK;
+    case QRhiTexture::ASTC_8x6:
+        return srgb ? VK_FORMAT_ASTC_8x6_SRGB_BLOCK : VK_FORMAT_ASTC_8x6_UNORM_BLOCK;
+    case QRhiTexture::ASTC_8x8:
+        return srgb ? VK_FORMAT_ASTC_8x8_SRGB_BLOCK : VK_FORMAT_ASTC_8x8_UNORM_BLOCK;
+    case QRhiTexture::ASTC_10x5:
+        return srgb ? VK_FORMAT_ASTC_10x5_SRGB_BLOCK : VK_FORMAT_ASTC_10x5_UNORM_BLOCK;
+    case QRhiTexture::ASTC_10x6:
+        return srgb ? VK_FORMAT_ASTC_10x6_SRGB_BLOCK : VK_FORMAT_ASTC_10x6_UNORM_BLOCK;
+    case QRhiTexture::ASTC_10x8:
+        return srgb ? VK_FORMAT_ASTC_10x8_SRGB_BLOCK : VK_FORMAT_ASTC_10x8_UNORM_BLOCK;
+    case QRhiTexture::ASTC_10x10:
+        return srgb ? VK_FORMAT_ASTC_10x10_SRGB_BLOCK : VK_FORMAT_ASTC_10x10_UNORM_BLOCK;
+    case QRhiTexture::ASTC_12x10:
+        return srgb ? VK_FORMAT_ASTC_12x10_SRGB_BLOCK : VK_FORMAT_ASTC_12x10_UNORM_BLOCK;
+    case QRhiTexture::ASTC_12x12:
+        return srgb ? VK_FORMAT_ASTC_12x12_SRGB_BLOCK : VK_FORMAT_ASTC_12x12_UNORM_BLOCK;
+
     default:
         Q_UNREACHABLE();
         return VK_FORMAT_R8G8B8A8_UNORM;
@@ -1881,10 +1932,33 @@ QMatrix4x4 QRhiVulkan::clipSpaceCorrMatrix() const
     return m;
 }
 
-bool QRhiVulkan::canTextureFormatBeSupported(QRhiTexture::Format format) const
+bool QRhiVulkan::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const
 {
-    Q_UNUSED(format);
-    return true;
+    VkPhysicalDeviceFeatures features;
+    f->vkGetPhysicalDeviceFeatures(physDev, &features);
+
+    // Note that with some SDKs the validation layer gives an odd warning about
+    // BC not being supported, even when our check here succeeds. Not much we
+    // can do about that.
+    if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7) {
+        if (!features.textureCompressionBC)
+            return false;
+    }
+
+    if (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ETC2_RGBA8) {
+        if (!features.textureCompressionETC2)
+            return false;
+    }
+
+    if (format >= QRhiTexture::ASTC_4x4 && format <= QRhiTexture::ASTC_12x12) {
+        if (!features.textureCompressionASTC_LDR)
+            return false;
+    }
+
+    VkFormat vkformat = toVkTextureFormat(format, flags);
+    VkFormatProperties props;
+    f->vkGetPhysicalDeviceFormatProperties(physDev, vkformat, &props);
+    return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
 }
 
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -2623,7 +2697,7 @@ bool QVkTexture::build()
     rhiD->f->vkGetPhysicalDeviceFormatProperties(rhiD->physDev, vkformat, &props);
     const bool canSampleOptimal = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
     if (!canSampleOptimal) {
-        qWarning("Texture sampling not supported?!");
+        qWarning("Texture sampling with optimal tiling for format %d not supported", vkformat);
         return false;
     }
 

@@ -254,8 +254,10 @@ QMatrix4x4 QRhiMetal::clipSpaceCorrMatrix() const
     return QMatrix4x4(); // identity
 }
 
-bool QRhiMetal::canTextureFormatBeSupported(QRhiTexture::Format format) const
+bool QRhiMetal::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const
 {
+    Q_UNUSED(flags);
+
     if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
         return false;
 

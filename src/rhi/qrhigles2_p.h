@@ -365,7 +365,7 @@ public:
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
-    bool canTextureFormatBeSupported(QRhiTexture::Format format) const override;
+    bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
 
     void ensureContext(QSurface *surface = nullptr);
     void create();

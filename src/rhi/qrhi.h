@@ -261,6 +261,7 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
     struct Q_RHI_EXPORT Layer {
         struct Q_RHI_EXPORT MipLevel {
             MipLevel() { }
+            // either a QImage or compressed data (not both)
             MipLevel(const QImage &image_) : image(image_) { }
             MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
             QImage image;
@@ -949,10 +950,10 @@ public:
                                                     QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
 
     /*
-      Render to a QWindow (must be Vulkan/Metal/OpenGLSurface as appropriate):
+      Rendering to a QWindow (must be Vulkan/Metal/OpenGLSurface as appropriate):
         Create a swapchain.
-        Call build() on the swapchain whenever the size is different than before.
-        Call release() on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
+        Call buildOrResize() on the swapchain whenever the size is different than before.
+        Call release() on the swapchain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
         Then on every frame:
            beginFrame(sc);
            updates = nextResourceUpdateBatch();
@@ -961,8 +962,6 @@ public:
            ...
            endPass(sc->currentFrameCommandBuffer());
            endFrame(sc); // this queues the Present, begin/endFrame manages double buffering internally
-
-      Also works with a QVulkanWindow from startNextFrame(). Use the overload of build() in initSwapChainResources().
      */
     QRhiSwapChain *newSwapChain();
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
@@ -977,8 +976,8 @@ public:
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
-                   const QRhiColorClearValue &colorClearValue,
-                   const QRhiDepthStencilClearValue &depthStencilClearValue,
+                   const QRhiColorClearValue &colorClearValue, // ignored when rt has PreserveColorContents
+                   const QRhiDepthStencilClearValue &depthStencilClearValue, // ignored when no ds attachment
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiCommandBuffer *cb);
 
@@ -1031,10 +1030,7 @@ public:
     // instead of just mvp, to their vertex shaders)
     QMatrix4x4 clipSpaceCorrMatrix() const;
 
-    // This is not isTextureFormatSupported: the result does not guarantee
-    // runtime availability, it only helps determining the guaranteed hopeless
-    // cases based on a static list from the backends.
-    bool canTextureFormatBeSupported(QRhiTexture::Format format) const;
+    bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags = QRhiTexture::Flags()) const;
 
 protected:
     QRhi();

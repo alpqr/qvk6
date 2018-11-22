@@ -155,7 +155,7 @@ static QByteArrayList loadBC1(const QString &filename, QSize *size)
 
 void Window::customInit()
 {
-    if (!m_r->canTextureFormatBeSupported(QRhiTexture::BC1))
+    if (!m_r->isTextureFormatSupported(QRhiTexture::BC1))
         qFatal("This backend does not support BC1");
 
     d.vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));

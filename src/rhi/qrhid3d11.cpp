@@ -228,8 +228,10 @@ QMatrix4x4 QRhiD3D11::clipSpaceCorrMatrix() const
     return m;
 }
 
-bool QRhiD3D11::canTextureFormatBeSupported(QRhiTexture::Format format) const
+bool QRhiD3D11::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const
 {
+    Q_UNUSED(flags);
+
     if (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ASTC_12x12)
         return false;
 

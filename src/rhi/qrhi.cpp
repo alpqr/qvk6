@@ -335,8 +335,8 @@ int QRhi::mipLevelsForSize(const QSize &size) const
 
 QSize QRhi::sizeForMipLevel(int mipLevel, const QSize &baseLevelSize) const
 {
-    const int w = qFloor(double(qMax(1, baseLevelSize.width() >> mipLevel)));
-    const int h = qFloor(double(qMax(1, baseLevelSize.height() >> mipLevel)));
+    const int w = qFloor(float(qMax(1, baseLevelSize.width() >> mipLevel)));
+    const int h = qFloor(float(qMax(1, baseLevelSize.height() >> mipLevel)));
     return QSize(w, h);
 }
 

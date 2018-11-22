@@ -575,8 +575,10 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                     context->UpdateSubresource(texD->tex, subres, nullptr,
                                                mipDesc.image.constBits(), mipDesc.image.bytesPerLine(), 0);
                 } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(texD->m_format)) {
+                    const int w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
+                    const int h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
                     quint32 bpl = 0;
-                    compressedFormatInfo(texD->m_format, texD->m_pixelSize, &bpl, nullptr);
+                    compressedFormatInfo(texD->m_format, QSize(w, h), &bpl, nullptr);
                     context->UpdateSubresource(texD->tex, subres, nullptr,
                                                mipDesc.compressedData.constData(), bpl, 0);
                 }

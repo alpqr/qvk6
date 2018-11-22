@@ -1199,7 +1199,7 @@ bool QGles2Texture::build()
             rhiD->f->glBindTexture(targetBase + layer, texture);
             for (int level = 0; level != mipLevelCount; ++level) {
                 rhiD->f->glTexImage2D(targetBase + layer, level, glintformat,
-                                      qFloor(double(qMax(1, size.width() >> level))), qFloor(double(qMax(1, size.height() >> level))),
+                                      qFloor(float(qMax(1, size.width() >> level))), qFloor(float(qMax(1, size.height() >> level))),
                                       0, glformat, gltype, nullptr);
             }
         }

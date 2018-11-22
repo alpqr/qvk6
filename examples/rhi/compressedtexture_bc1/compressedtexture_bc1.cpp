@@ -167,12 +167,13 @@ void Window::customInit()
 
     QSize size;
     int mipCount = 0;
-    d.compressedData = loadBC1(QLatin1String(":/qt.dds"), &size, &mipCount);
+    d.compressedData = loadBC1(QLatin1String(":/qt256_bc1_9mips.dds"), &size, &mipCount);
+    qDebug() << d.compressedData.count() << size << mipCount << m_r->mipLevelsForSize(size);
 
-    d.tex = m_r->newTexture(QRhiTexture::BC1, size, 0);
+    d.tex = m_r->newTexture(QRhiTexture::BC1, size, QRhiTexture::MipMapped);
     d.tex->build();
 
-    d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+    d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     d.sampler->build();
 
@@ -264,9 +265,13 @@ void Window::customRender()
         u->updateDynamicBuffer(d.ubuf, 64, 4, &flip);
     }
     if (!d.compressedData.isEmpty()) {
-        QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData[0]);
         QRhiTextureUploadDescription desc;
-        desc.layers.append({ { image } });
+        QRhiTextureUploadDescription::Layer layer;
+        for (int i = 0; i < d.compressedData.count(); ++i) {
+            QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData[i]);
+            layer.mipImages.append(image);
+        }
+        desc.layers.append(layer);
         u->uploadTexture(d.tex, desc);
         d.compressedData.clear();
     }

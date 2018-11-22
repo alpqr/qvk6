@@ -69,6 +69,8 @@ void D3D11Window::init()
     params.importExistingDevice = false;
     m_r = QRhi::create(QRhi::D3D11, &params);
 
+    //setSampleCount(4); // enable 4x MSAA (except for the render-to-texture pass)
+
     ExampleWindow::init();
 }
 

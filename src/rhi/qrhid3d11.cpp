@@ -171,7 +171,26 @@ void QRhiD3D11::destroy()
 
 QVector<int> QRhiD3D11::supportedSampleCounts() const
 {
-    return { 1 };
+    return { 1, 2, 4, 8 };
+}
+
+DXGI_SAMPLE_DESC QRhiD3D11::effectiveSampleCount(int sampleCount) const
+{
+    DXGI_SAMPLE_DESC desc;
+    desc.Count = 1;
+    desc.Quality = 0;
+
+    // Stay compatible with QSurfaceFormat and friends where samples == 0 means the same as 1.
+    int s = qBound(1, sampleCount, 64);
+
+    if (!supportedSampleCounts().contains(s)) {
+        qWarning("Attempted to set unsupported sample count %d", sampleCount);
+        return desc;
+    }
+
+    desc.Count = s;
+    desc.Quality = s > 1 ? D3D11_STANDARD_MULTISAMPLE_PATTERN : 0;
+    return desc;
 }
 
 QRhiSwapChain *QRhiD3D11::createSwapChain()
@@ -435,7 +454,8 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     currentFrameSlot = swapChainD->currentFrame;
 
     swapChainD->rt.d.pixelSize = swapChainD->pixelSize;
-    swapChainD->rt.d.rtv[0] = swapChainD->rtv[currentFrameSlot];
+    swapChainD->rt.d.rtv[0] = swapChainD->sampleDesc.Count > 1 ?
+                swapChainD->msaaRtv[currentFrameSlot] : swapChainD->rtv[currentFrameSlot];
     swapChainD->rt.d.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
 
     return QRhi::FrameOpSuccess;
@@ -448,6 +468,12 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
     executeCommandBuffer(&swapChainD->cb);
+
+    if (swapChainD->sampleDesc.Count > 1) {
+        context->ResolveSubresource(swapChainD->tex[currentFrameSlot], 0,
+                                    swapChainD->msaaTex[currentFrameSlot], 0,
+                                    swapChainD->colorFormat);
+    }
 
     const UINT swapInterval = 1;
     const UINT presentFlags = 0;
@@ -937,7 +963,7 @@ bool QD3D11RenderBuffer::build()
         desc.MipLevels = 1;
         desc.ArraySize = 1;
         desc.Format = dsFormat;
-        desc.SampleDesc.Count = 1;
+        desc.SampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
         desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
         HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
@@ -948,7 +974,7 @@ bool QD3D11RenderBuffer::build()
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
         memset(&dsvDesc, 0, sizeof(dsvDesc));
         dsvDesc.Format = dsFormat;
-        dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+        dsvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
         hr = rhiD->dev->CreateDepthStencilView(tex, &dsvDesc, &dsv);
         if (FAILED(hr)) {
             qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
@@ -1670,7 +1696,7 @@ bool QD3D11GraphicsPipeline::build()
     rastDesc.CullMode = toD3DCullMode(m_cullMode);
     rastDesc.FrontCounterClockwise = m_frontFace == CCW;
     rastDesc.ScissorEnable = m_flags.testFlag(UsesScissor);
-    //rastDesc.MultisampleEnable;
+    rastDesc.MultisampleEnable = rhiD->effectiveSampleCount(m_sampleCount).Count > 1;
     HRESULT hr = rhiD->dev->CreateRasterizerState(&rastDesc, &rastState);
     if (FAILED(hr)) {
         qWarning("Failed to create rasterizer state: %s", qPrintable(comErrorMessage(hr)));
@@ -1811,14 +1837,13 @@ QD3D11SwapChain::QD3D11SwapChain(QRhiImplementation *rhi)
     for (int i = 0; i < BUFFER_COUNT; ++i) {
         tex[i] = nullptr;
         rtv[i] = nullptr;
+        msaaTex[i] = nullptr;
+        msaaRtv[i] = nullptr;
     }
 }
 
-void QD3D11SwapChain::release()
+void QD3D11SwapChain::releaseBuffers()
 {
-    if (!swapChain)
-        return;
-
     for (int i = 0; i < BUFFER_COUNT; ++i) {
         if (rtv[i]) {
             rtv[i]->Release();
@@ -1828,7 +1853,23 @@ void QD3D11SwapChain::release()
             tex[i]->Release();
             tex[i] = nullptr;
         }
+        if (msaaRtv[i]) {
+            msaaRtv[i]->Release();
+            msaaRtv[i] = nullptr;
+        }
+        if (msaaTex[i]) {
+            msaaTex[i]->Release();
+            msaaTex[i] = nullptr;
+        }
     }
+}
+
+void QD3D11SwapChain::release()
+{
+    if (!swapChain)
+        return;
+
+    releaseBuffers();
 
     swapChain->Release();
     swapChain = nullptr;
@@ -1854,6 +1895,38 @@ QRhiRenderPassDescriptor *QD3D11SwapChain::newCompatibleRenderPassDescriptor()
     return new QD3D11RenderPassDescriptor(rhi);
 }
 
+bool QD3D11SwapChain::newColorBuffer(const QSize &size, DXGI_FORMAT format, DXGI_SAMPLE_DESC sampleDesc,
+                                     ID3D11Texture2D **tex, ID3D11RenderTargetView **rtv) const
+{
+    D3D11_TEXTURE2D_DESC desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.Width = size.width();
+    desc.Height = size.height();
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = format;
+    desc.SampleDesc = sampleDesc;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+    desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+
+    QRHI_RES_RHI(QRhiD3D11);
+    HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, tex);
+    if (FAILED(hr)) {
+        qWarning("Failed to create color buffer texture: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
+    hr = rhiD->dev->CreateRenderTargetView(*tex, nullptr, rtv);
+    if (FAILED(hr)) {
+        qWarning("Failed to create color buffer rtv: %s", qPrintable(comErrorMessage(hr)));
+        (*tex)->Release();
+        *tex = nullptr;
+        return false;
+    }
+
+    return true;
+}
+
 bool QD3D11SwapChain::buildOrResize()
 {
     // Can be called multiple times due to window resizes - that is not the
@@ -1864,14 +1937,13 @@ bool QD3D11SwapChain::buildOrResize()
 
     window = m_window;
     pixelSize = m_requestedPixelSize;
-
-    QRHI_RES_RHI(QRhiD3D11);
-
-    const DXGI_FORMAT colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     const UINT swapChainFlags = 0;
 
+    QRHI_RES_RHI(QRhiD3D11);
     if (!swapChain) {
         HWND hwnd = reinterpret_cast<HWND>(window->winId());
+        sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
 
         // We use FLIP_DISCARD which implies a buffer count of 2 (as opposed to the
         // old DISCARD with back buffer count == 1). This makes no difference for
@@ -1900,16 +1972,7 @@ bool QD3D11SwapChain::buildOrResize()
             return false;
         }
     } else {
-        for (int i = 0; i < BUFFER_COUNT; ++i) {
-            if (rtv[i]) {
-                rtv[i]->Release();
-                rtv[i] = nullptr;
-            }
-            if (tex[i]) {
-                tex[i]->Release();
-                tex[i] = nullptr;
-            }
-        }
+        releaseBuffers();
         HRESULT hr = swapChain->ResizeBuffers(2, pixelSize.width(), pixelSize.height(), colorFormat, swapChainFlags);
         if (FAILED(hr)) {
             qWarning("Failed to resize D3D11 swapchain: %s", qPrintable(comErrorMessage(hr)));
@@ -1927,6 +1990,10 @@ bool QD3D11SwapChain::buildOrResize()
         if (FAILED(hr)) {
             qWarning("Failed to create rtv for swapchain buffer %d: %s", i, qPrintable(comErrorMessage(hr)));
             return false;
+        }
+        if (sampleDesc.Count > 1) {
+            if (!newColorBuffer(pixelSize, colorFormat, sampleDesc, &msaaTex[i], &msaaRtv[i]))
+                return false;
         }
     }
 

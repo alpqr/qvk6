@@ -1,7 +1,6 @@
 mtl: cubemaps
 mtl: targeting cubemap faces
 mtl: cbuffers, textures, samplers set should be batched too
-d3d: msaa (onscreen)
 mtl: msaa (onscreen)
 test cubemap
 test cubemap face as target
@@ -38,11 +37,13 @@ more tex: 3d, array?
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 
 shadertools:
-bytecode (fxc/dxc) for d3d?
-bytecode for metal?
+dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: msaa (onscreen)
+bytecode for metal
+bytecode (fxc) for d3d
 vk: im.layout transition missing when no upload, no render to (or is the case invalid?)
 vk, d3d: verify no-color-just-depth again
 preservecolor applies to which att. (all -> fix mtl)

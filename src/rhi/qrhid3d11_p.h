@@ -326,14 +326,22 @@ struct QD3D11SwapChain : public QRhiSwapChain
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool buildOrResize();
 
+    void releaseBuffers();
+    bool newColorBuffer(const QSize &size, DXGI_FORMAT format, DXGI_SAMPLE_DESC sampleDesc,
+                        ID3D11Texture2D **tex, ID3D11RenderTargetView **rtv) const;
+
     QWindow *window = nullptr;
     QSize pixelSize;
     QD3D11ReferenceRenderTarget rt;
     QD3D11CommandBuffer cb;
+    DXGI_FORMAT colorFormat;
     IDXGISwapChain1 *swapChain = nullptr;
     static const int BUFFER_COUNT = 2;
     ID3D11Texture2D *tex[BUFFER_COUNT];
     ID3D11RenderTargetView *rtv[BUFFER_COUNT];
+    ID3D11Texture2D *msaaTex[BUFFER_COUNT];
+    ID3D11RenderTargetView *msaaRtv[BUFFER_COUNT];
+    DXGI_SAMPLE_DESC sampleDesc;
     int currentFrame = 0;
     QD3D11RenderBuffer *ds = nullptr;
 };
@@ -407,6 +415,7 @@ public:
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD);
+    DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;
 
     bool debugLayer = false;
     bool importedDevice = false;

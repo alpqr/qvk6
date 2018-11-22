@@ -421,15 +421,16 @@ bool QRhiVulkan::allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, V
     }
 }
 
-static inline VkFormat toVkTextureFormat(QRhiTexture::Format format)
+static inline VkFormat toVkTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
 {
+    const bool srgb = flags.testFlag(QRhiTexture::sRGB);
     switch (format) {
     case QRhiTexture::RGBA8:
-        return VK_FORMAT_R8G8B8A8_UNORM;
+        return srgb ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
     case QRhiTexture::BGRA8:
-        return VK_FORMAT_B8G8R8A8_UNORM;
+        return srgb ? VK_FORMAT_B8G8R8A8_SRGB : VK_FORMAT_B8G8R8A8_UNORM;
     case QRhiTexture::R8:
-        return VK_FORMAT_R8_UNORM;
+        return srgb ? VK_FORMAT_R8_SRGB : VK_FORMAT_R8_UNORM;
     case QRhiTexture::R16:
         return VK_FORMAT_R16_UNORM;
 
@@ -703,7 +704,7 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture);
         VkAttachmentDescription attDesc;
         memset(&attDesc, 0, sizeof(attDesc));
-        attDesc.format = toVkTextureFormat(texD->m_format);
+        attDesc.format = toVkTextureFormat(texD->m_format, texD->m_flags);
         attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
         attDesc.loadOp = preserveColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
         attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2617,7 +2618,7 @@ bool QVkTexture::build()
         release();
 
     QRHI_RES_RHI(QRhiVulkan);
-    VkFormat vkformat = toVkTextureFormat(m_format);
+    VkFormat vkformat = toVkTextureFormat(m_format, m_flags);
     VkFormatProperties props;
     rhiD->f->vkGetPhysicalDeviceFormatProperties(rhiD->physDev, vkformat, &props);
     const bool canSampleOptimal = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
@@ -2828,7 +2829,7 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
 
     QRHI_RES_RHI(QRhiVulkan);
     QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
-    const VkFormat dsFormat = m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format())
+    const VkFormat dsFormat = m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format(), m_desc.depthTexture->flags())
                                                   : rhiD->optimalDepthStencilFormat();
     if (!rhiD->createOffscreenRenderPass(&rp->rp,
                                          m_desc.colorAttachments,
@@ -2870,7 +2871,7 @@ bool QVkTextureRenderTarget::build()
                 viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
                 viewInfo.image = texD->image;
                 viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-                viewInfo.format = toVkTextureFormat(texD->format());
+                viewInfo.format = toVkTextureFormat(texD->format(), texD->flags());
                 viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
                 viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
                 viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
@@ -3336,6 +3337,17 @@ bool QVkSwapChain::ensureSurface()
     if (!formats.isEmpty() && formats[0].format != VK_FORMAT_UNDEFINED) {
         colorFormat = formats[0].format;
         colorSpace = formats[0].colorSpace;
+    }
+
+    // When sRGB is requested just try a hardcoded format for now.
+    if (m_flags.testFlag(sRGB)) {
+        const VkFormat reqFmt = VK_FORMAT_B8G8R8A8_SRGB;
+        auto r = std::find_if(formats.cbegin(), formats.cend(),
+                              [reqFmt](const VkSurfaceFormatKHR &sfmt) { return sfmt.format == reqFmt; });
+        if (r != formats.cend()) {
+            colorFormat = r->format;
+            colorSpace = r->colorSpace;
+        }
     }
 
     sampleCount = rhiD->effectiveSampleCount(m_sampleCount);

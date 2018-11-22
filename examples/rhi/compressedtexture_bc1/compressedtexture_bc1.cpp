@@ -106,7 +106,7 @@ static quint32 bc1size(const QSize &size)
     return bytesPerLine * ySize;
 }
 
-static QByteArrayList loadBC1(const QString &filename, QSize *size, int *mipLevelCount)
+static QByteArrayList loadBC1(const QString &filename, QSize *size)
 {
     QFile f(filename);
     if (!f.open(QIODevice::ReadOnly)) {
@@ -147,8 +147,8 @@ static QByteArrayList loadBC1(const QString &filename, QSize *size, int *mipLeve
         sz.setHeight(qMax(1, sz.height() / 2));
     }
 
-    *size = QSize(header.width, header.height);
-    *mipLevelCount = header.mipMapCount;
+    if (size)
+        *size = QSize(header.width, header.height);
 
     return data;
 }
@@ -165,12 +165,11 @@ void Window::customInit()
     d.ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
     d.ubuf->build();
 
-    QSize size;
-    int mipCount = 0;
-    d.compressedData = loadBC1(QLatin1String(":/qt256_bc1_9mips.dds"), &size, &mipCount);
-    qDebug() << d.compressedData.count() << size << mipCount << m_r->mipLevelsForSize(size);
+    QSize imageSize;
+    d.compressedData = loadBC1(QLatin1String(":/qt256_bc1_9mips.dds"), &imageSize);
+    qDebug() << d.compressedData.count() << imageSize << m_r->mipLevelsForSize(imageSize);
 
-    d.tex = m_r->newTexture(QRhiTexture::BC1, size, QRhiTexture::MipMapped);
+    d.tex = m_r->newTexture(QRhiTexture::BC1, imageSize, QRhiTexture::MipMapped);
     d.tex->build();
 
     d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,

@@ -1,6 +1,6 @@
 vk: compressed textures (etc2, astc, bc)
 gl, mtl: compressed textures
-vk, mtl, gl: srgb (tex, swapchain buf)
+gl, mtl: srgb (tex, swapchain buf)
 mtl: cubemaps
 mtl: targeting cubemap faces
 mtl: cbuffers, textures, samplers set should be batched too
@@ -44,6 +44,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: srgb (tex, swapchain buf)
 d3d: srgb support (texture, swapchain buf)
 d3d: support for compressed textures (bc)
 d3d: msaa (onscreen)

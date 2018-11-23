@@ -156,6 +156,7 @@ static inline VmaAllocator toVmaAllocator(QVkAllocator a)
 }
 
 QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
+    : ofr(this)
 {
     QRhiVulkanInitParams *vkparams = static_cast<QRhiVulkanInitParams *>(params);
     inst = vkparams->inst;
@@ -328,6 +329,16 @@ void QRhiVulkan::destroy()
     df->vkDeviceWaitIdle(dev);
 
     executeDeferredReleases(true);
+
+    if (ofr.cmdFence) {
+        df->vkDestroyFence(dev, ofr.cmdFence, nullptr);
+        ofr.cmdFence = VK_NULL_HANDLE;
+    }
+
+    if (ofr.cbWrapper.cb) {
+        df->vkFreeCommandBuffers(dev, cmdPool, 1, &ofr.cbWrapper.cb);
+        ofr.cbWrapper.cb = VK_NULL_HANDLE;
+    }
 
     if (pipelineCache) {
         df->vkDestroyPipelineCache(dev, pipelineCache, nullptr);
@@ -1285,6 +1296,105 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     frame.imageAcquired = false;
 
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QVK_FRAMES_IN_FLIGHT;
+
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    if (ofr.cbWrapper.cb) {
+        df->vkFreeCommandBuffers(dev, cmdPool, 1, &ofr.cbWrapper.cb);
+        ofr.cbWrapper.cb = VK_NULL_HANDLE;
+    }
+
+    VkCommandBufferAllocateInfo cmdBufInfo;
+    memset(&cmdBufInfo, 0, sizeof(cmdBufInfo));
+    cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdBufInfo.commandPool = cmdPool;
+    cmdBufInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdBufInfo.commandBufferCount = 1;
+
+    VkResult err = df->vkAllocateCommandBuffers(dev, &cmdBufInfo, &ofr.cbWrapper.cb);
+    if (err != VK_SUCCESS) {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to allocate offscreen frame command buffer: %d", err);
+        return QRhi::FrameOpError;
+    }
+
+    VkCommandBufferBeginInfo cmdBufBeginInfo;
+    memset(&cmdBufBeginInfo, 0, sizeof(cmdBufBeginInfo));
+    cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    err = df->vkBeginCommandBuffer(ofr.cbWrapper.cb, &cmdBufBeginInfo);
+    if (err != VK_SUCCESS) {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to begin offscreen frame command buffer: %d", err);
+        return QRhi::FrameOpError;
+    }
+
+    // Switch to the next slot manually. Swapchains do not know about this
+    // which is good. So for example a - unusual but possible - onscreen,
+    // onscreen, offscreen, onscreen, onscreen, onscreen sequence of
+    // begin/endFrame leads to 0, 1, 0, 0, 1, 0. This works because the
+    // offscreen frame is synchronous in the sense that we wait for execution
+    // to complete in endFrame, and so no resources used in that frame are busy
+    // anymore in the next frame.
+    currentFrameSlot = (currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
+
+    prepareNewFrame(&ofr.cbWrapper);
+
+    *cb = &ofr.cbWrapper;
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::endAndWaitOffscreenFrame()
+{
+    finishFrame();
+
+    VkResult err = df->vkEndCommandBuffer(ofr.cbWrapper.cb);
+    if (err != VK_SUCCESS) {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to end offscreen frame command buffer: %d", err);
+        return QRhi::FrameOpError;
+    }
+
+    if (!ofr.cmdFence) {
+        VkFenceCreateInfo fenceInfo;
+        memset(&fenceInfo, 0, sizeof(fenceInfo));
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        err = df->vkCreateFence(dev, &fenceInfo, nullptr, &ofr.cmdFence);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create command buffer fence: %d", err);
+            return QRhi::FrameOpError;
+        }
+    }
+
+    VkSubmitInfo submitInfo;
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &ofr.cbWrapper.cb;
+    VkPipelineStageFlags psf = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    submitInfo.pWaitDstStageMask = &psf;
+
+    err = df->vkQueueSubmit(gfxQueue, 1, &submitInfo, ofr.cmdFence);
+    if (err == VK_SUCCESS) {
+        // wait for completion
+        df->vkWaitForFences(dev, 1, &ofr.cmdFence, VK_TRUE, UINT64_MAX);
+        df->vkResetFences(dev, 1, &ofr.cmdFence);
+    } else {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to submit to graphics queue: %d", err);
+        return QRhi::FrameOpError;
+    }
 
     return QRhi::FrameOpSuccess;
 }

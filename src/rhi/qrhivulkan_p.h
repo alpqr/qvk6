@@ -392,6 +392,8 @@ public:
     QRhi::FrameOpResult endWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
+    QRhi::FrameOpResult endAndWaitOffscreenFrame();
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void finishFrame();
     void commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
@@ -453,6 +455,12 @@ public:
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
+
+    struct OffscreenFrame {
+        OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
+        QVkCommandBuffer cbWrapper;
+        VkFence cmdFence = VK_NULL_HANDLE;
+    } ofr;
 
     struct DeferredReleaseEntry {
         enum Type {

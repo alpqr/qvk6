@@ -325,6 +325,8 @@ public:
     QRhiSwapChain *createSwapChain() override;
     QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
+    QRhi::FrameOpResult endAndWaitOffscreenFrame() override;
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
@@ -392,8 +394,6 @@ public:
     QRhi::FrameOpResult endWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
-    QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
-    QRhi::FrameOpResult endAndWaitOffscreenFrame();
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void finishFrame();
     void commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);

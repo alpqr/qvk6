@@ -967,6 +967,22 @@ public:
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
+    /*
+      Rendering without a swapchain is possible as well. This is synchronous in
+      the sense that end will wait for completion of the submitted commands.
+      The typical use case is to use it in completely offscreen applications,
+      e.g. to generate image sequences by rendering and reading back without
+      ever showing a window.
+          QRhiCommandBuffer *cb; // not owned
+          beginOffscreenFrame(&cb);
+          // ... the usual, set up a QRhiTextureRenderTarget, beginPass-endPass, etc.
+          endAndWaitOffscreenFrame();
+          // unlike a normal begin-end, the commands, including any readbacks
+          // have completed at this point
+     */
+    FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
+    FrameOpResult endAndWaitOffscreenFrame();
+
     // Returns an instance to which updates can be queued. Batch instances are
     // pooled and never owned by the application. An instance is returned to
     // the pool after a beginPass() processes it or when it is "canceled" by

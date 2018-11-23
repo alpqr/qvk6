@@ -83,6 +83,8 @@ public:
     virtual QRhiSwapChain *createSwapChain() = 0;
     virtual QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) = 0;
     virtual QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) = 0;
+    virtual QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) = 0;
+    virtual QRhi::FrameOpResult endAndWaitOffscreenFrame() = 0;
 
     virtual void beginPass(QRhiRenderTarget *rt,
                            QRhiCommandBuffer *cb,

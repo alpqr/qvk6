@@ -399,6 +399,17 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+QRhi::FrameOpResult QRhiGles2::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    Q_UNUSED(cb);
+    return QRhi::FrameOpError;
+}
+
+QRhi::FrameOpResult QRhiGles2::endAndWaitOffscreenFrame()
+{
+    return QRhi::FrameOpError;
+}
+
 void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);

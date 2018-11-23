@@ -497,6 +497,17 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+QRhi::FrameOpResult QRhiD3D11::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    Q_UNUSED(cb);
+    return QRhi::FrameOpError;
+}
+
+QRhi::FrameOpResult QRhiD3D11::endAndWaitOffscreenFrame()
+{
+    return QRhi::FrameOpError;
+}
+
 static inline bool isCompressedFormat(QRhiTexture::Format format)
 {
     return format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7;

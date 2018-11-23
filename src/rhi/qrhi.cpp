@@ -415,6 +415,16 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
     return d->endFrame(swapChain);
 }
 
+QRhi::FrameOpResult QRhi::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    return d->beginOffscreenFrame(cb);
+}
+
+QRhi::FrameOpResult QRhi::endAndWaitOffscreenFrame()
+{
+    return d->endAndWaitOffscreenFrame();
+}
+
 void QRhi::beginPass(QRhiRenderTarget *rt,
                      QRhiCommandBuffer *cb,
                      const QRhiColorClearValue &colorClearValue,

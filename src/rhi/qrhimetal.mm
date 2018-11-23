@@ -557,6 +557,17 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+QRhi::FrameOpResult QRhiMetal::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    Q_UNUSED(cb);
+    return QRhi::FrameOpError;
+}
+
+QRhi::FrameOpResult QRhiMetal::endAndWaitOffscreenFrame()
+{
+    return QRhi::FrameOpError;
+}
+
 MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthStencil,
                                                                 const QRhiColorClearValue &colorClearValue,
                                                                 const QRhiDepthStencilClearValue &depthStencilClearValue)

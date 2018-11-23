@@ -3,6 +3,8 @@ gl, mtl: compressed textures
 gl, mtl: srgb (tex, swapchain buf)
 rhi without a window, fully offscreen
 readbacks
+multi window? (multi swapchain) -> trouble
+vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cubemaps
 mtl: targeting cubemap faces
 mtl: cbuffers, textures, samplers set should be batched too

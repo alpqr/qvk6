@@ -1,4 +1,3 @@
-vk: compressed textures (etc2, astc, bc)
 gl, mtl: compressed textures
 gl, mtl: srgb (tex, swapchain buf)
 rhi without a window, fully offscreen
@@ -30,6 +29,7 @@ gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)
 gl: tex formats
 more QImage->tex formats
+vk compressed tex: could it consume a complete ktx without any memcpys?
 d3d, gl, mtl: cache shader sources?
 advanced blend modes?
 resize to 0 width or height fails (vk)
@@ -47,6 +47,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: compressed textures (etc2, astc, bc)
 vk: srgb (tex, swapchain buf)
 d3d: srgb support (texture, swapchain buf)
 d3d: support for compressed textures (bc)

@@ -1645,7 +1645,8 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             Q_ASSERT(layerDesc.mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
+                const qsizetype imageSizeBytes = mipDesc.image.isNull() ?
+                            mipDesc.compressedData.size() : mipDesc.image.sizeInBytes();
                 if (imageSizeBytes > 0)
                     stagingSize += aligned(imageSizeBytes, texbufAlign);
             }
@@ -1685,21 +1686,37 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
-                if (imageSizeBytes > 0) {
-                    VkBufferImageCopy copyInfo;
-                    memset(&copyInfo, 0, sizeof(copyInfo));
-                    copyInfo.bufferOffset = curOfs;
-                    copyInfo.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                    copyInfo.imageSubresource.mipLevel = level;
-                    copyInfo.imageSubresource.baseArrayLayer = layer;
-                    copyInfo.imageSubresource.layerCount = 1;
-                    copyInfo.imageExtent.width = mipDesc.image.width();
-                    copyInfo.imageExtent.height = mipDesc.image.height();
-                    copyInfo.imageExtent.depth = 1;
-                    copyInfos.append(copyInfo);
+                qsizetype imageSizeBytes = 0;
+                const void *src = nullptr;
+                VkBufferImageCopy copyInfo;
+                memset(&copyInfo, 0, sizeof(copyInfo));
+                copyInfo.bufferOffset = curOfs;
+                copyInfo.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                copyInfo.imageSubresource.mipLevel = level;
+                copyInfo.imageSubresource.baseArrayLayer = layer;
+                copyInfo.imageSubresource.layerCount = 1;
+                copyInfo.imageExtent.depth = 1;
 
-                    memcpy(reinterpret_cast<char *>(mp) + curOfs, mipDesc.image.constBits(), imageSizeBytes);
+                if (!mipDesc.image.isNull()) {
+                    imageSizeBytes = mipDesc.image.sizeInBytes();
+                    if (imageSizeBytes > 0) {
+                        src = mipDesc.image.constBits();
+                        copyInfo.imageExtent.width = mipDesc.image.width();
+                        copyInfo.imageExtent.height = mipDesc.image.height();
+                        copyInfos.append(copyInfo);
+                    }
+                } else {
+                    imageSizeBytes = mipDesc.compressedData.size();
+                    if (imageSizeBytes > 0) {
+                        src = mipDesc.compressedData.constData();
+                        copyInfo.imageExtent.width = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
+                        copyInfo.imageExtent.height = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
+                        copyInfos.append(copyInfo);
+                    }
+                }
+
+                if (imageSizeBytes > 0) {
+                    memcpy(reinterpret_cast<char *>(mp) + curOfs, src, imageSizeBytes);
                     curOfs += aligned(imageSizeBytes, texbufAlign);
                 }
             }

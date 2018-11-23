@@ -2315,6 +2315,12 @@ void QRhiVulkan::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     df->vkCmdDrawIndexed(QRHI_RES(QVkCommandBuffer, cb)->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
+void QRhiVulkan::readback(QRhiCommandBuffer *cb, QRhiReadback *rb)
+{
+    Q_UNUSED(cb);
+    Q_UNUSED(rb);
+}
+
 static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage)
 {
     int u = 0;

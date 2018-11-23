@@ -366,6 +366,12 @@ void QRhiGles2::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     cbD->commands.append(cmd);
 }
 
+void QRhiGles2::readback(QRhiCommandBuffer *cb, QRhiReadback *rb)
+{
+    Q_UNUSED(cb);
+    Q_UNUSED(rb);
+}
+
 QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
 {
     Q_ASSERT(!inFrame);

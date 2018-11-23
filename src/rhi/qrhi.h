@@ -280,6 +280,13 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer::MipLevel, Q_MOVABLE_TYPE
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
+struct Q_RHI_EXPORT QRhiReadback
+{
+    // ###
+};
+
+Q_DECLARE_TYPEINFO(QRhiReadback, Q_MOVABLE_TYPE);
+
 class Q_RHI_EXPORT QRhiResource
 {
 public:
@@ -976,9 +983,9 @@ public:
           QRhiCommandBuffer *cb; // not owned
           beginOffscreenFrame(&cb);
           // ... the usual, set up a QRhiTextureRenderTarget, beginPass-endPass, etc.
+          readback(cb, someTexture, rb);
           endAndWaitOffscreenFrame();
-          // unlike a normal begin-end, the commands, including any readbacks
-          // have completed at this point
+          // the results are available in rb
      */
     FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
     FrameOpResult endAndWaitOffscreenFrame();
@@ -1029,6 +1036,9 @@ public:
     void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                      quint32 instanceCount = 1, quint32 firstIndex = 0,
                      qint32 vertexOffset = 0, quint32 firstInstance = 0);
+
+    // Must only be called outside a begin-endPass section.
+    void readback(QRhiCommandBuffer *cb, QRhiReadback *rb);
 
     QVector<int> supportedSampleCounts() const;
 

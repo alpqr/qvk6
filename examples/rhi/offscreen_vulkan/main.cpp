@@ -94,9 +94,12 @@ int main(int argc, char **argv)
     rt->setRenderPassDescriptor(rp);
     rt->build();
 
-    QRhiCommandBuffer *cb;
-    if (r->beginOffscreenFrame(&cb) == QRhi::FrameOpSuccess) {
-        qDebug("Generating offscreen frame");
+    for (int frame = 0; frame < 20; ++frame) {
+        QRhiCommandBuffer *cb;
+        if (r->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess)
+            break;
+
+        qDebug("Generating offscreen frame %d", frame);
         r->beginPass(rt, cb, { 0, 1, 0, 1 }, { 1, 0 }, nullptr);
         r->endPass(cb);
 

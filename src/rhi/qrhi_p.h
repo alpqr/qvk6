@@ -113,7 +113,7 @@ public:
                              quint32 instanceCount, quint32 firstIndex,
                              qint32 vertexOffset, quint32 firstInstance) = 0;
 
-    virtual void readback(QRhiCommandBuffer *cb, QRhiReadback *rb) = 0;
+    virtual void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) = 0;
 
     virtual QVector<int> supportedSampleCounts() const = 0;
     virtual int ubufAlignment() const = 0;

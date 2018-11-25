@@ -103,8 +103,15 @@ int main(int argc, char **argv)
         r->beginPass(rt, cb, { 0, 1, 0, 1 }, { 1, 0 }, nullptr);
         r->endPass(cb);
 
+        QRhiReadbackDescription rb(tex);
+        QRhiReadbackResult rbResult;
+        r->readback(cb, rb, &rbResult);
+
         qDebug("Submit and wait");
         r->endAndWaitOffscreenFrame();
+
+        // here it's simple, no need to bother with the completed callback of rbResult
+        qDebug() << rbResult.data.size();
     }
 
     rt->releaseAndDestroy();

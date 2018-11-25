@@ -453,10 +453,11 @@ void QRhiD3D11::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     cbD->commands.append(cmd);
 }
 
-void QRhiD3D11::readback(QRhiCommandBuffer *cb, QRhiReadback *rb)
+void QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
     Q_UNUSED(cb);
     Q_UNUSED(rb);
+    Q_UNUSED(result);
 }
 
 QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)

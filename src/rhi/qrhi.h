@@ -45,6 +45,7 @@
 #include <QVector>
 #include <QImage>
 #include <QtShaderTools/QBakedShader>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 
@@ -280,12 +281,22 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer::MipLevel, Q_MOVABLE_TYPE
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiReadback
+struct Q_RHI_EXPORT QRhiReadbackDescription
 {
-    // ###
+    QRhiReadbackDescription() { }
+    QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { }
+    QRhiTexture *texture = nullptr;
+    int layer = 0;
+    int level = 0;
 };
 
-Q_DECLARE_TYPEINFO(QRhiReadback, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);
+
+struct Q_RHI_EXPORT QRhiReadbackResult
+{
+    std::function<void()> completed = nullptr;
+    QByteArray data;
+}; // non-movable due to the std::function
 
 class Q_RHI_EXPORT QRhiResource
 {
@@ -980,12 +991,13 @@ public:
       The typical use case is to use it in completely offscreen applications,
       e.g. to generate image sequences by rendering and reading back without
       ever showing a window.
+          QRhiReadbackResult rbResult;
           QRhiCommandBuffer *cb; // not owned
           beginOffscreenFrame(&cb);
           // ... the usual, set up a QRhiTextureRenderTarget, beginPass-endPass, etc.
-          readback(cb, someTexture, rb);
+          readback(cb, rb, &rbResult);
           endAndWaitOffscreenFrame();
-          // the results are available in rb
+          // image data available in rbResult
      */
     FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
     FrameOpResult endAndWaitOffscreenFrame();
@@ -1037,8 +1049,8 @@ public:
                      quint32 instanceCount = 1, quint32 firstIndex = 0,
                      qint32 vertexOffset = 0, quint32 firstInstance = 0);
 
-    // Must only be called outside a begin-endPass section.
-    void readback(QRhiCommandBuffer *cb, QRhiReadback *rb);
+    // Cannot be mixed with beginPass-endPass.
+    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     QVector<int> supportedSampleCounts() const;
 

@@ -496,10 +496,11 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
       baseInstance: firstInstance];
 }
 
-void QRhiMetal::readback(QRhiCommandBuffer *cb, QRhiReadback *rb)
+void QRhiMetal::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
     Q_UNUSED(cb);
     Q_UNUSED(rb);
+    Q_UNUSED(result);
 }
 
 QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)

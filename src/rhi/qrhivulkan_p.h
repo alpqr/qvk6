@@ -356,7 +356,7 @@ public:
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
 
-    void readback(QRhiCommandBuffer *cb, QRhiReadback *rb) override;
+    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
 
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
@@ -403,6 +403,7 @@ public:
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void deactivateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void executeDeferredReleases(bool forced = false);
+    void finishActiveReadbacks(bool forced = false);
 
     void bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf);
     void imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
@@ -415,7 +416,6 @@ public:
     // in case they changed in the meantime.
     void updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx = -1);
 
-    QRhi *q;
     QVulkanInstance *inst = nullptr;
     QWindow *maybeWindow = nullptr;
     bool importedDevPoolQueue = false;
@@ -463,6 +463,13 @@ public:
         QVkCommandBuffer cbWrapper;
         VkFence cmdFence = VK_NULL_HANDLE;
     } ofr;
+
+    struct ActiveReadback {
+        int activeFrameSlot = -1;
+        QRhiReadbackDescription desc;
+        QRhiReadbackResult *result;
+    };
+    QVector<ActiveReadback> activeReadbacks;
 
     struct DeferredReleaseEntry {
         enum Type {
@@ -526,6 +533,7 @@ public:
 
 Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiVulkan::DeferredReleaseEntry, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiVulkan::ActiveReadback, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

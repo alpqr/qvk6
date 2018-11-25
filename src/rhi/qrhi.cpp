@@ -487,9 +487,9 @@ void QRhi::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     d->drawIndexed(cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void QRhi::readback(QRhiCommandBuffer *cb, QRhiReadback *rb)
+void QRhi::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
-    d->readback(cb, rb);
+    d->readback(cb, rb, result);
 }
 
 QVector<int> QRhi::supportedSampleCounts() const

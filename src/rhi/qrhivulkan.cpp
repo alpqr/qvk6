@@ -1384,17 +1384,21 @@ QRhi::FrameOpResult QRhiVulkan::endAndWaitOffscreenFrame()
     submitInfo.pWaitDstStageMask = &psf;
 
     err = df->vkQueueSubmit(gfxQueue, 1, &submitInfo, ofr.cmdFence);
-    if (err == VK_SUCCESS) {
-        // wait for completion
-        df->vkWaitForFences(dev, 1, &ofr.cmdFence, VK_TRUE, UINT64_MAX);
-        df->vkResetFences(dev, 1, &ofr.cmdFence);
-    } else {
+    if (err != VK_SUCCESS) {
         if (checkDeviceLost(err))
             return QRhi::FrameOpDeviceLost;
         else
             qWarning("Failed to submit to graphics queue: %d", err);
         return QRhi::FrameOpError;
     }
+
+    // wait for completion
+    df->vkWaitForFences(dev, 1, &ofr.cmdFence, VK_TRUE, UINT64_MAX);
+    df->vkResetFences(dev, 1, &ofr.cmdFence);
+
+    // Here we know that executing the host-side reads for this (or any
+    // previous) frame is safe since we waited for completion above.
+    finishActiveReadbacks(true);
 
     return QRhi::FrameOpSuccess;
 }
@@ -1425,6 +1429,15 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
 {
     Q_ASSERT(!inFrame);
     inFrame = true;
+
+    // Now is the time to do things for frame N-F, where N is the current one,
+    // F is QVK_FRAMES_IN_FLIGHT, because only here it is guaranteed that that
+    // frame has completed on the GPU (due to the fence wait in beginFrame). To
+    // decide if something is safe to handle now a simple "lastActiveFrameSlot
+    // == currentFrameSlot" is sufficient (remember that e.g. with F==2
+    // currentFrameSlot goes 0, 1, 0, 1, 0, ...)
+
+    finishActiveReadbacks();
 
     executeDeferredReleases();
 
@@ -1972,6 +1985,27 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
     }
 }
 
+void QRhiVulkan::finishActiveReadbacks(bool forced)
+{
+    QVarLengthArray<std::function<void()>, 4> completedCallbacks;
+
+    for (int i = activeReadbacks.count() - 1; i >= 0; --i) {
+        const QRhiVulkan::ActiveReadback &aRb(activeReadbacks[i]);
+        if (forced || currentFrameSlot == aRb.activeFrameSlot || aRb.activeFrameSlot < 0) {
+            // map and memcpy
+            // destroy temp buffer
+
+            if (aRb.result->completed)
+                completedCallbacks.append(aRb.result->completed);
+
+            activeReadbacks.removeAt(i);
+        }
+    }
+
+    for (auto f : completedCallbacks)
+        f();
+}
+
 static struct {
     VkSampleCountFlagBits mask;
     int count;
@@ -2315,10 +2349,20 @@ void QRhiVulkan::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     df->vkCmdDrawIndexed(QRHI_RES(QVkCommandBuffer, cb)->cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void QRhiVulkan::readback(QRhiCommandBuffer *cb, QRhiReadback *rb)
+void QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
     Q_UNUSED(cb);
-    Q_UNUSED(rb);
+
+    Q_ASSERT(inFrame && !inPass);
+
+    // create a host visible buffer
+    // add a vkCmdCopyImageToBuffer
+
+    ActiveReadback aRb;
+    aRb.activeFrameSlot = currentFrameSlot;
+    aRb.desc = rb;
+    aRb.result = result;
+    activeReadbacks.append(aRb);
 }
 
 static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage)

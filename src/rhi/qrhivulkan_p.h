@@ -325,6 +325,10 @@ public:
     QRhiSwapChain *createSwapChain() override;
     QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
+    QRhi::FrameOpResult endOffscreenFrame() override;
+    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
+    QRhi::FrameOpResult finish() override;
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
@@ -390,15 +394,19 @@ public:
 
     QRhi::FrameOpResult beginWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endWrapperFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult startCommandBuffer(VkCommandBuffer *cb);
+    QRhi::FrameOpResult endAndSubmitCommandBuffer(VkCommandBuffer cb, VkFence cmdFence,
+                                                  VkSemaphore *waitSem, VkSemaphore *signalSem);
     QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
-    void finishFrame();
+    void prepareFrameEnd();
     void commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD);
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void deactivateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void executeDeferredReleases(bool forced = false);
+    void finishActiveReadbacks(bool forced = false);
 
     void bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf);
     void imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
@@ -411,7 +419,6 @@ public:
     // in case they changed in the meantime.
     void updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx = -1);
 
-    QRhi *q;
     QVulkanInstance *inst = nullptr;
     QWindow *maybeWindow = nullptr;
     bool importedDevPoolQueue = false;
@@ -453,6 +460,24 @@ public:
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
+    QVkSwapChain *currentSwapChain = nullptr;
+
+    struct OffscreenFrame {
+        OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
+        bool active = false;
+        QVkCommandBuffer cbWrapper;
+        VkFence cmdFence = VK_NULL_HANDLE;
+    } ofr;
+
+    struct ActiveReadback {
+        int activeFrameSlot = -1;
+        QRhiReadbackDescription desc;
+        QRhiReadbackResult *result;
+        VkBuffer buf;
+        QVkAlloc bufAlloc;
+        int bufSize;
+    };
+    QVector<ActiveReadback> activeReadbacks;
 
     struct DeferredReleaseEntry {
         enum Type {
@@ -516,6 +541,7 @@ public:
 
 Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiVulkan::DeferredReleaseEntry, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiVulkan::ActiveReadback, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

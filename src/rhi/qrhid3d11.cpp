@@ -497,6 +497,35 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+QRhi::FrameOpResult QRhiD3D11::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    Q_UNUSED(cb);
+    return QRhi::FrameOpError;
+}
+
+QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
+{
+    return QRhi::FrameOpError;
+}
+
+bool QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    Q_UNUSED(cb);
+    Q_UNUSED(rb);
+    Q_UNUSED(result);
+
+    Q_ASSERT(inFrame && !inPass);
+
+    return false;
+}
+
+QRhi::FrameOpResult QRhiD3D11::finish()
+{
+    Q_ASSERT(!inPass);
+
+    return QRhi::FrameOpSuccess;
+}
+
 static inline bool isCompressedFormat(QRhiTexture::Format format)
 {
     return format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7;

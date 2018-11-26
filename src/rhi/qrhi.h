@@ -45,6 +45,7 @@
 #include <QVector>
 #include <QImage>
 #include <QtShaderTools/QBakedShader>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 
@@ -280,6 +281,23 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer::MipLevel, Q_MOVABLE_TYPE
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
+struct Q_RHI_EXPORT QRhiReadbackDescription
+{
+    QRhiReadbackDescription() { }
+    QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { }
+    QRhiTexture *texture = nullptr;
+    int layer = 0;
+    int level = 0;
+};
+
+Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);
+
+struct Q_RHI_EXPORT QRhiReadbackResult
+{
+    std::function<void()> completed = nullptr;
+    QByteArray data;
+}; // non-movable due to the std::function
+
 class Q_RHI_EXPORT QRhiResource
 {
 public:
@@ -378,7 +396,8 @@ public:
         ChangesFrequently = 1 << 1, // hint for backend to keep staging resources around
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
-        sRGB = 1 << 4
+        sRGB = 1 << 4,
+        ReadBack = 1 << 5
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -966,6 +985,37 @@ public:
     QRhiSwapChain *newSwapChain();
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
+
+    /*
+      Rendering without a swapchain is possible as well. The typical use case
+      is to use it in completely offscreen applications, e.g. to generate image
+      sequences by rendering and reading back without ever showing a window.
+      Usage in on-screen applications (so beginFrame, endFrame,
+      beginOffscreenFrame, endOffscreenFrame, beginFrame, ...) is possible too but
+      it does break parallelism so should be done only infrequently.
+          QRhiReadbackResult rbResult;
+          QRhiCommandBuffer *cb; // not owned
+          beginOffscreenFrame(&cb);
+          // ... the usual, set up a QRhiTextureRenderTarget, beginPass-endPass, etc.
+          readback(cb, rb, &rbResult);
+          endOffscreenFrame();
+          // image data available in rbResult
+     */
+    FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
+    FrameOpResult endOffscreenFrame();
+
+    // Cannot be inside a pass.
+    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
+
+    // Waits for any work on the graphics queue (where applicable) to complete,
+    // then forcibly executes all deferred operations, like completing
+    // readbacks and resource releases. This should _not_ be used in practice,
+    // except in infrequent special cases, like when the results of a readback
+    // are needed right away. Can be called inside and outside of a frame, but
+    // not inside a pass. Inside a frame it implies submitting any work on the
+    // command buffer. Unnecessary in combination with begin/endOffscreenFrame
+    // because ending an offscreen frame implies waiting for completion.
+    QRhi::FrameOpResult finish();
 
     // Returns an instance to which updates can be queued. Batch instances are
     // pooled and never owned by the application. An instance is returned to

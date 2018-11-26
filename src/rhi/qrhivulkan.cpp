@@ -156,6 +156,7 @@ static inline VmaAllocator toVmaAllocator(QVkAllocator a)
 }
 
 QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
+    : ofr(this)
 {
     QRhiVulkanInitParams *vkparams = static_cast<QRhiVulkanInitParams *>(params);
     inst = vkparams->inst;
@@ -328,6 +329,16 @@ void QRhiVulkan::destroy()
     df->vkDeviceWaitIdle(dev);
 
     executeDeferredReleases(true);
+
+    if (ofr.cmdFence) {
+        df->vkDestroyFence(dev, ofr.cmdFence, nullptr);
+        ofr.cmdFence = VK_NULL_HANDLE;
+    }
+
+    if (ofr.cbWrapper.cb) {
+        df->vkFreeCommandBuffers(dev, cmdPool, 1, &ofr.cbWrapper.cb);
+        ofr.cbWrapper.cb = VK_NULL_HANDLE;
+    }
 
     if (pipelineCache) {
         df->vkDestroyPipelineCache(dev, pipelineCache, nullptr);
@@ -1110,6 +1121,7 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->m_requestedPixelSize = swapChainD->pixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
 
     currentFrameSlot = w->currentFrame();
+    currentSwapChain = swapChainD;
 
     prepareNewFrame(&swapChainD->cbWrapper);
 
@@ -1120,7 +1132,88 @@ QRhi::FrameOpResult QRhiVulkan::endWrapperFrame(QRhiSwapChain *swapChain)
 {
     Q_UNUSED(swapChain);
 
-    finishFrame();
+    prepareFrameEnd();
+    currentSwapChain = nullptr;
+
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::startCommandBuffer(VkCommandBuffer *cb)
+{
+    if (*cb) {
+        df->vkFreeCommandBuffers(dev, cmdPool, 1, cb);
+        *cb = VK_NULL_HANDLE;
+    }
+
+    VkCommandBufferAllocateInfo cmdBufInfo;
+    memset(&cmdBufInfo, 0, sizeof(cmdBufInfo));
+    cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdBufInfo.commandPool = cmdPool;
+    cmdBufInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    cmdBufInfo.commandBufferCount = 1;
+
+    VkResult err = df->vkAllocateCommandBuffers(dev, &cmdBufInfo, cb);
+    if (err != VK_SUCCESS) {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to allocate frame command buffer: %d", err);
+        return QRhi::FrameOpError;
+    }
+
+    VkCommandBufferBeginInfo cmdBufBeginInfo;
+    memset(&cmdBufBeginInfo, 0, sizeof(cmdBufBeginInfo));
+    cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+    err = df->vkBeginCommandBuffer(*cb, &cmdBufBeginInfo);
+    if (err != VK_SUCCESS) {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to begin frame command buffer: %d", err);
+        return QRhi::FrameOpError;
+    }
+
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::endAndSubmitCommandBuffer(VkCommandBuffer cb, VkFence cmdFence,
+                                                          VkSemaphore *waitSem, VkSemaphore *signalSem)
+{
+    VkResult err = df->vkEndCommandBuffer(cb);
+    if (err != VK_SUCCESS) {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to end frame command buffer: %d", err);
+        return QRhi::FrameOpError;
+    }
+
+    VkSubmitInfo submitInfo;
+    memset(&submitInfo, 0, sizeof(submitInfo));
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &cb;
+    if (waitSem) {
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSem;
+    }
+    if (signalSem) {
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signalSem;
+    }
+    VkPipelineStageFlags psf = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    submitInfo.pWaitDstStageMask = &psf;
+
+    err = df->vkQueueSubmit(gfxQueue, 1, &submitInfo, cmdFence);
+    if (err != VK_SUCCESS) {
+        if (checkDeviceLost(err))
+            return QRhi::FrameOpDeviceLost;
+        else
+            qWarning("Failed to submit to graphics queue: %d", err);
+        return QRhi::FrameOpError;
+    }
+
     return QRhi::FrameOpSuccess;
 }
 
@@ -1165,45 +1258,16 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
     }
 
     // build new draw command buffer
-    if (image.cmdBuf) {
-        df->vkFreeCommandBuffers(dev, cmdPool, 1, &image.cmdBuf);
-        image.cmdBuf = VK_NULL_HANDLE;
-    }
-
-    VkCommandBufferAllocateInfo cmdBufInfo;
-    memset(&cmdBufInfo, 0, sizeof(cmdBufInfo));
-    cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    cmdBufInfo.commandPool = cmdPool;
-    cmdBufInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    cmdBufInfo.commandBufferCount = 1;
-
-    VkResult err = df->vkAllocateCommandBuffers(dev, &cmdBufInfo, &image.cmdBuf);
-    if (err != VK_SUCCESS) {
-        if (checkDeviceLost(err))
-            return QRhi::FrameOpDeviceLost;
-        else
-            qWarning("Failed to allocate frame command buffer: %d", err);
-        return QRhi::FrameOpError;
-    }
-
-    VkCommandBufferBeginInfo cmdBufBeginInfo;
-    memset(&cmdBufBeginInfo, 0, sizeof(cmdBufBeginInfo));
-    cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-    err = df->vkBeginCommandBuffer(image.cmdBuf, &cmdBufBeginInfo);
-    if (err != VK_SUCCESS) {
-        if (checkDeviceLost(err))
-            return QRhi::FrameOpDeviceLost;
-        else
-            qWarning("Failed to begin frame command buffer: %d", err);
-        return QRhi::FrameOpError;
-    }
+    QRhi::FrameOpResult cbres = startCommandBuffer(&image.cmdBuf);
+    if (cbres != QRhi::FrameOpSuccess)
+        return cbres;
 
     swapChainD->cbWrapper.cb = image.cmdBuf;
 
     swapChainD->rtWrapper.d.fb = image.fb;
 
     currentFrameSlot = swapChainD->currentFrame;
+    currentSwapChain = swapChainD;
     if (swapChainD->ds)
         swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
 
@@ -1216,50 +1280,24 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 {
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
 
-    finishFrame();
+    prepareFrameEnd();
 
     QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
     QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
 
-    VkResult err = df->vkEndCommandBuffer(image.cmdBuf);
-    if (err != VK_SUCCESS) {
-        if (checkDeviceLost(err))
-            return QRhi::FrameOpDeviceLost;
-        else
-            qWarning("Failed to end frame command buffer: %d", err);
-        return QRhi::FrameOpError;
-    }
-
-    // submit draw calls
-    VkSubmitInfo submitInfo;
-    memset(&submitInfo, 0, sizeof(submitInfo));
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &image.cmdBuf;
-    if (frame.imageSemWaitable) {
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = &frame.imageSem;
-    }
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = &frame.drawSem;
-
-    VkPipelineStageFlags psf = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    submitInfo.pWaitDstStageMask = &psf;
-
+    // stop recording and submit to the queue
     Q_ASSERT(!image.cmdFenceWaitable);
+    QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(image.cmdBuf,
+                                                              image.cmdFence,
+                                                              frame.imageSemWaitable ? &frame.imageSem : nullptr,
+                                                              &frame.drawSem);
+    if (submitres != QRhi::FrameOpSuccess)
+        return submitres;
 
-    err = df->vkQueueSubmit(gfxQueue, 1, &submitInfo, image.cmdFence);
-    if (err == VK_SUCCESS) {
-        frame.imageSemWaitable = false;
-        image.cmdFenceWaitable = true;
-    } else {
-        if (checkDeviceLost(err))
-            return QRhi::FrameOpDeviceLost;
-        else
-            qWarning("Failed to submit to graphics queue: %d", err);
-        return QRhi::FrameOpError;
-    }
+    frame.imageSemWaitable = false;
+    image.cmdFenceWaitable = true;
 
+    // add the Present to the queue
     VkPresentInfoKHR presInfo;
     memset(&presInfo, 0, sizeof(presInfo));
     presInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1269,7 +1307,7 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     presInfo.waitSemaphoreCount = 1;
     presInfo.pWaitSemaphores = &frame.drawSem; // gfxQueueFamilyIdx == presQueueFamilyIdx ? &frame.drawSem : &frame.presTransSem;
 
-    err = vkQueuePresentKHR(gfxQueue, &presInfo);
+    VkResult err = vkQueuePresentKHR(gfxQueue, &presInfo);
     if (err != VK_SUCCESS) {
         if (err == VK_ERROR_OUT_OF_DATE_KHR) {
             return QRhi::FrameOpSwapChainOutOfDate;
@@ -1285,6 +1323,164 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     frame.imageAcquired = false;
 
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QVK_FRAMES_IN_FLIGHT;
+
+    currentSwapChain = nullptr;
+
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    QRhi::FrameOpResult cbres = startCommandBuffer(&ofr.cbWrapper.cb);
+    if (cbres != QRhi::FrameOpSuccess)
+        return cbres;
+
+    // Switch to the next slot manually. Swapchains do not know about this
+    // which is good. So for example a - unusual but possible - onscreen,
+    // onscreen, offscreen, onscreen, onscreen, onscreen sequence of
+    // begin/endFrame leads to 0, 1, 0, 0, 1, 0. This works because the
+    // offscreen frame is synchronous in the sense that we wait for execution
+    // to complete in endFrame, and so no resources used in that frame are busy
+    // anymore in the next frame.
+    currentFrameSlot = (currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
+
+    prepareNewFrame(&ofr.cbWrapper);
+    ofr.active = true;
+
+    *cb = &ofr.cbWrapper;
+    return QRhi::FrameOpSuccess;
+}
+
+QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
+{
+    ofr.active = false;
+    prepareFrameEnd();
+
+    if (!ofr.cmdFence) {
+        VkFenceCreateInfo fenceInfo;
+        memset(&fenceInfo, 0, sizeof(fenceInfo));
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        VkResult err = df->vkCreateFence(dev, &fenceInfo, nullptr, &ofr.cmdFence);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create command buffer fence: %d", err);
+            return QRhi::FrameOpError;
+        }
+    }
+
+    QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(ofr.cbWrapper.cb, ofr.cmdFence, nullptr, nullptr);
+    if (submitres != QRhi::FrameOpSuccess)
+        return submitres;
+
+    // wait for completion
+    df->vkWaitForFences(dev, 1, &ofr.cmdFence, VK_TRUE, UINT64_MAX);
+    df->vkResetFences(dev, 1, &ofr.cmdFence);
+
+    // Here we know that executing the host-side reads for this (or any
+    // previous) frame is safe since we waited for completion above.
+    finishActiveReadbacks(true);
+
+    return QRhi::FrameOpSuccess;
+}
+
+bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    Q_ASSERT(inFrame && !inPass);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
+
+    ActiveReadback aRb;
+    aRb.activeFrameSlot = currentFrameSlot;
+    aRb.desc = rb;
+    aRb.result = result;
+
+    QVkTexture *tex = QRHI_RES(QVkTexture, aRb.desc.texture);
+    // ###
+    aRb.bufSize = tex->m_pixelSize.width() * tex->m_pixelSize.height() * 4;
+
+    // Create a host visible buffer.
+    VkBufferCreateInfo bufferInfo;
+    memset(&bufferInfo, 0, sizeof(bufferInfo));
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = aRb.bufSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+    VmaAllocationCreateInfo allocInfo;
+    memset(&allocInfo, 0, sizeof(allocInfo));
+    allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+    VmaAllocation allocation;
+    VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &aRb.buf, &allocation, nullptr);
+    if (err == VK_SUCCESS) {
+        aRb.bufAlloc = allocation;
+    } else {
+        qWarning("Failed to create readback buffer of size %d: %d", aRb.bufSize, err);
+        return false;
+    }
+
+    // Copy from the (optimal and not host visible) image into the buffer.
+    VkBufferImageCopy copyDesc;
+    memset(&copyDesc, 0, sizeof(copyDesc));
+    copyDesc.bufferOffset = 0;
+    copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // ### no depth for now
+    copyDesc.imageSubresource.mipLevel = aRb.desc.level;
+    copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
+    copyDesc.imageSubresource.layerCount = 1;
+    copyDesc.imageExtent.width = tex->m_pixelSize.width();
+    copyDesc.imageExtent.height = tex->m_pixelSize.height();
+    copyDesc.imageExtent.depth = 1;
+
+    // assume the image was written
+    imageBarrier(cb, tex,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    df->vkCmdCopyImageToBuffer(cbD->cb, tex->image, tex->layout, aRb.buf, 1, &copyDesc);
+
+    // behave as if the image was used for shader read
+    imageBarrier(cb, tex,
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+    activeReadbacks.append(aRb);
+    return true;
+}
+
+QRhi::FrameOpResult QRhiVulkan::finish()
+{
+    Q_ASSERT(!inPass);
+
+    QVkSwapChain *swapChainD = nullptr;
+    if (inFrame) {
+        // There is either a swapchain or an offscreen frame on-going.
+        // End command recording and submit what we have.
+        VkCommandBuffer cb;
+        if (ofr.active) {
+            Q_ASSERT(!currentSwapChain);
+            cb = ofr.cbWrapper.cb;
+        } else {
+            Q_ASSERT(currentSwapChain);
+            swapChainD = currentSwapChain;
+            cb = swapChainD->imageRes[swapChainD->currentImage].cmdBuf;
+        }
+        QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(cb, VK_NULL_HANDLE, nullptr, nullptr);
+        if (submitres != QRhi::FrameOpSuccess)
+            return submitres;
+    }
+
+    df->vkQueueWaitIdle(gfxQueue);
+
+    if (inFrame) {
+        // Allocate and begin recording on a new command buffer.
+        if (ofr.active)
+            startCommandBuffer(&ofr.cbWrapper.cb);
+        else
+            startCommandBuffer(&swapChainD->imageRes[swapChainD->currentImage].cmdBuf);
+    }
+
+    executeDeferredReleases(true);
+
+    finishActiveReadbacks(true);
 
     return QRhi::FrameOpSuccess;
 }
@@ -1316,12 +1512,21 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
     Q_ASSERT(!inFrame);
     inFrame = true;
 
+    // Now is the time to do things for frame N-F, where N is the current one,
+    // F is QVK_FRAMES_IN_FLIGHT, because only here it is guaranteed that that
+    // frame has completed on the GPU (due to the fence wait in beginFrame). To
+    // decide if something is safe to handle now a simple "lastActiveFrameSlot
+    // == currentFrameSlot" is sufficient (remember that e.g. with F==2
+    // currentFrameSlot goes 0, 1, 0, 1, 0, ...)
+
     executeDeferredReleases();
 
     QRHI_RES(QVkCommandBuffer, cb)->resetState();
+
+    finishActiveReadbacks(); // last, in case the readback-completed callback issues rhi calls
 }
 
-void QRhiVulkan::finishFrame()
+void QRhiVulkan::prepareFrameEnd()
 {
     Q_ASSERT(inFrame);
     inFrame = false;
@@ -1860,6 +2065,37 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
             releaseQueue.removeAt(i);
         }
     }
+}
+
+void QRhiVulkan::finishActiveReadbacks(bool forced)
+{
+    QVarLengthArray<std::function<void()>, 4> completedCallbacks;
+
+    for (int i = activeReadbacks.count() - 1; i >= 0; --i) {
+        const QRhiVulkan::ActiveReadback &aRb(activeReadbacks[i]);
+        if (forced || currentFrameSlot == aRb.activeFrameSlot || aRb.activeFrameSlot < 0) {
+            aRb.result->data.resize(aRb.bufSize);
+            void *p = nullptr;
+            VmaAllocation a = toVmaAllocation(aRb.bufAlloc);
+            VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
+            if (err != VK_SUCCESS) {
+                qWarning("Failed to map readback buffer: %d", err);
+                continue;
+            }
+            memcpy(aRb.result->data.data(), p, aRb.bufSize);
+            vmaUnmapMemory(toVmaAllocator(allocator), a);
+
+            vmaDestroyBuffer(toVmaAllocator(allocator), aRb.buf, a);
+
+            if (aRb.result->completed)
+                completedCallbacks.append(aRb.result->completed);
+
+            activeReadbacks.removeAt(i);
+        }
+    }
+
+    for (auto f : completedCallbacks)
+        f();
 }
 
 static struct {
@@ -2747,6 +2983,8 @@ bool QVkTexture::build()
         else
             imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
+    if (m_flags.testFlag(QRhiTexture::ReadBack))
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     VmaAllocationCreateInfo allocInfo;
     memset(&allocInfo, 0, sizeof(allocInfo));

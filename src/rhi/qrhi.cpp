@@ -415,6 +415,26 @@ QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
     return d->endFrame(swapChain);
 }
 
+QRhi::FrameOpResult QRhi::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    return d->beginOffscreenFrame(cb);
+}
+
+QRhi::FrameOpResult QRhi::endOffscreenFrame()
+{
+    return d->endOffscreenFrame();
+}
+
+bool QRhi::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    return d->readback(cb, rb, result);
+}
+
+QRhi::FrameOpResult QRhi::finish()
+{
+    return d->finish();
+}
+
 void QRhi::beginPass(QRhiRenderTarget *rt,
                      QRhiCommandBuffer *cb,
                      const QRhiColorClearValue &colorClearValue,

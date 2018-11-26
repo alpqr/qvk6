@@ -399,6 +399,35 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+QRhi::FrameOpResult QRhiGles2::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    Q_UNUSED(cb);
+    return QRhi::FrameOpError;
+}
+
+QRhi::FrameOpResult QRhiGles2::endOffscreenFrame()
+{
+    return QRhi::FrameOpError;
+}
+
+bool QRhiGles2::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    Q_UNUSED(cb);
+    Q_UNUSED(rb);
+    Q_UNUSED(result);
+
+    Q_ASSERT(inFrame && !inPass);
+
+    return false;
+}
+
+QRhi::FrameOpResult QRhiGles2::finish()
+{
+    Q_ASSERT(!inPass);
+
+    return QRhi::FrameOpSuccess;
+}
+
 void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);

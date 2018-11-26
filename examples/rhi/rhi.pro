@@ -8,7 +8,8 @@ SUBDIRS += \
 qtConfig(vulkan) {
     SUBDIRS += \
         vulkanwindow \
-        plainqwindow_vulkan
+        plainqwindow_vulkan \
+        offscreen_vulkan
 }
 
 win32 {

@@ -557,6 +557,35 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
+QRhi::FrameOpResult QRhiMetal::beginOffscreenFrame(QRhiCommandBuffer **cb)
+{
+    Q_UNUSED(cb);
+    return QRhi::FrameOpError;
+}
+
+QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
+{
+    return QRhi::FrameOpError;
+}
+
+bool QRhiMetal::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    Q_UNUSED(cb);
+    Q_UNUSED(rb);
+    Q_UNUSED(result);
+
+    Q_ASSERT(inFrame && !inPass);
+
+    return false;
+}
+
+QRhi::FrameOpResult QRhiMetal::finish()
+{
+    Q_ASSERT(!inPass);
+
+    return QRhi::FrameOpSuccess;
+}
+
 MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthStencil,
                                                                 const QRhiColorClearValue &colorClearValue,
                                                                 const QRhiDepthStencilClearValue &depthStencilClearValue)

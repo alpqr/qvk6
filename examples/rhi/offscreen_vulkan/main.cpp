@@ -51,8 +51,25 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QFileInfo>
+#include <QFile>
 #include <QLoggingCategory>
+#include <QBakedShader>
 #include <QRhiVulkanInitParams>
+
+static float vertexData[] = { // Y up (note m_proj), CCW
+     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
+    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
+     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,
+};
+
+static QBakedShader getShader(const QString &name)
+{
+    QFile f(name);
+    if (f.open(QIODevice::ReadOnly))
+        return QBakedShader::fromSerialized(f.readAll());
+
+    return QBakedShader();
+}
 
 int main(int argc, char **argv)
 {
@@ -96,13 +113,83 @@ int main(int argc, char **argv)
     rt->setRenderPassDescriptor(rp);
     rt->build();
 
+    QMatrix4x4 proj = r->clipSpaceCorrMatrix();
+    proj.perspective(45.0f, 1280 / 720.f, 0.01f, 1000.0f);
+    proj.translate(0, 0, -4);
+
+    QRhiBuffer *vbuf = r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    vbuf->build();
+
+    QRhiBuffer *ubuf = r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    ubuf->build();
+
+    QRhiShaderResourceBindings *srb = r->newShaderResourceBindings();
+    srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, ubuf)
+    });
+    srb->build();
+
+    QRhiGraphicsPipeline *ps = r->newGraphicsPipeline();
+
+    QRhiGraphicsPipeline::TargetBlend premulAlphaBlend;
+    premulAlphaBlend.enable = true;
+    ps->setTargetBlends({ premulAlphaBlend });
+
+    const QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
+    if (!vs.isValid())
+        qFatal("Failed to load shader pack (vertex)");
+    const QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
+    if (!fs.isValid())
+        qFatal("Failed to load shader pack (fragment)");
+
+    ps->setShaderStages({
+        { QRhiGraphicsShaderStage::Vertex, vs },
+        { QRhiGraphicsShaderStage::Fragment, fs }
+    });
+
+    QRhiVertexInputLayout inputLayout;
+    inputLayout.bindings = {
+        { 5 * sizeof(float) }
+    };
+    inputLayout.attributes = {
+        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
+    };
+
+    ps->setVertexInputLayout(inputLayout);
+    ps->setShaderResourceBindings(srb);
+    ps->setRenderPassDescriptor(rp);
+    ps->build();
+
     for (int frame = 0; frame < 20; ++frame) {
         QRhiCommandBuffer *cb;
         if (r->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess)
             break;
 
         qDebug("Generating offscreen frame %d", frame);
-        r->beginPass(rt, cb, { 0, 1, 0, 1 }, { 1, 0 }, nullptr);
+        QRhiResourceUpdateBatch *u = r->nextResourceUpdateBatch();
+        if (frame == 0)
+            u->uploadStaticBuffer(vbuf, vertexData);
+
+        static float rotation = 0.0f;
+        QMatrix4x4 mvp = proj;
+        mvp.rotate(rotation, 0, 1, 0);
+        u->updateDynamicBuffer(ubuf, 0, 64, mvp.constData());
+        rotation += 5.0f;
+        static float opacity = 1.0f;
+        static int opacityDir= 1;
+        u->updateDynamicBuffer(ubuf, 64, 4, &opacity);
+        opacity += opacityDir * 0.005f;
+        if (opacity < 0.0f || opacity > 1.0f) {
+            opacityDir *= -1;
+            opacity = qBound(0.0f, opacity, 1.0f);
+        }
+
+        r->beginPass(rt, cb, { 0, 1, 0, 1 }, { 1, 0 }, u);
+        r->setGraphicsPipeline(cb, ps);
+        r->setViewport(cb, { 0, 0, 1280, 720 });
+        r->setVertexInput(cb, 0, { { vbuf, 0 } });
+        r->draw(cb, 3);
         r->endPass(cb);
 
         QRhiReadbackDescription rb(tex);
@@ -126,6 +213,11 @@ int main(int argc, char **argv)
             qWarning("Readback failed!");
         }
     }
+
+    ps->releaseAndDestroy();
+    srb->releaseAndDestroy();
+    ubuf->releaseAndDestroy();
+    vbuf->releaseAndDestroy();
 
     rt->releaseAndDestroy();
     rp->releaseAndDestroy();

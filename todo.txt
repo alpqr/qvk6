@@ -1,4 +1,4 @@
-vk: readback
+vk: readback size/formats
 mtl, d3d, gl: rhi without a window
 mtl, d3d, gl: implement finish()
 mtl, d3d, gl: readback
@@ -51,6 +51,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: readback
 vk: implement finish()
 some wait-gpu stuff for waiting for readback results inside a begin-endFrame f.ex.
 readback api

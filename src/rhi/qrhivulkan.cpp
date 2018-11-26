@@ -1382,20 +1382,68 @@ QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
     return QRhi::FrameOpSuccess;
 }
 
-void QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
-    Q_UNUSED(cb);
-
     Q_ASSERT(inFrame && !inPass);
-
-    // create a host visible buffer
-    // add a vkCmdCopyImageToBuffer
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
 
     ActiveReadback aRb;
     aRb.activeFrameSlot = currentFrameSlot;
     aRb.desc = rb;
     aRb.result = result;
+
+    QVkTexture *tex = QRHI_RES(QVkTexture, aRb.desc.texture);
+    // ###
+    aRb.bufSize = tex->m_pixelSize.width() * tex->m_pixelSize.height() * 4;
+
+    // Create a host visible buffer.
+    VkBufferCreateInfo bufferInfo;
+    memset(&bufferInfo, 0, sizeof(bufferInfo));
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = aRb.bufSize;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+    VmaAllocationCreateInfo allocInfo;
+    memset(&allocInfo, 0, sizeof(allocInfo));
+    allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+    VmaAllocation allocation;
+    VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &aRb.buf, &allocation, nullptr);
+    if (err == VK_SUCCESS) {
+        aRb.bufAlloc = allocation;
+    } else {
+        qWarning("Failed to create readback buffer of size %d: %d", aRb.bufSize, err);
+        return false;
+    }
+
+    // Copy from the (optimal and not host visible) image into the buffer.
+    VkBufferImageCopy copyDesc;
+    memset(&copyDesc, 0, sizeof(copyDesc));
+    copyDesc.bufferOffset = 0;
+    copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // ### no depth for now
+    copyDesc.imageSubresource.mipLevel = aRb.desc.level;
+    copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
+    copyDesc.imageSubresource.layerCount = 1;
+    copyDesc.imageExtent.width = tex->m_pixelSize.width();
+    copyDesc.imageExtent.height = tex->m_pixelSize.height();
+    copyDesc.imageExtent.depth = 1;
+
+    // assume the image was written
+    imageBarrier(cb, tex,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+    df->vkCmdCopyImageToBuffer(cbD->cb, tex->image, tex->layout, aRb.buf, 1, &copyDesc);
+
+    // behave as if the image was used for shader read
+    imageBarrier(cb, tex,
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
     activeReadbacks.append(aRb);
+    return true;
 }
 
 QRhi::FrameOpResult QRhiVulkan::finish()
@@ -2026,8 +2074,18 @@ void QRhiVulkan::finishActiveReadbacks(bool forced)
     for (int i = activeReadbacks.count() - 1; i >= 0; --i) {
         const QRhiVulkan::ActiveReadback &aRb(activeReadbacks[i]);
         if (forced || currentFrameSlot == aRb.activeFrameSlot || aRb.activeFrameSlot < 0) {
-            // map and memcpy
-            // destroy temp buffer
+            aRb.result->data.resize(aRb.bufSize);
+            void *p = nullptr;
+            VmaAllocation a = toVmaAllocation(aRb.bufAlloc);
+            VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &p);
+            if (err != VK_SUCCESS) {
+                qWarning("Failed to map readback buffer: %d", err);
+                continue;
+            }
+            memcpy(aRb.result->data.data(), p, aRb.bufSize);
+            vmaUnmapMemory(toVmaAllocator(allocator), a);
+
+            vmaDestroyBuffer(toVmaAllocator(allocator), aRb.buf, a);
 
             if (aRb.result->completed)
                 completedCallbacks.append(aRb.result->completed);
@@ -2925,6 +2983,8 @@ bool QVkTexture::build()
         else
             imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
+    if (m_flags.testFlag(QRhiTexture::ReadBack))
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     VmaAllocationCreateInfo allocInfo;
     memset(&allocInfo, 0, sizeof(allocInfo));

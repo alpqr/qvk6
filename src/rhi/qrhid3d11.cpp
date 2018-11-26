@@ -508,13 +508,15 @@ QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
     return QRhi::FrameOpError;
 }
 
-void QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+bool QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
     Q_UNUSED(cb);
     Q_UNUSED(rb);
     Q_UNUSED(result);
 
     Q_ASSERT(inFrame && !inPass);
+
+    return false;
 }
 
 QRhi::FrameOpResult QRhiD3D11::finish()

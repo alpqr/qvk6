@@ -396,7 +396,8 @@ public:
         ChangesFrequently = 1 << 1, // hint for backend to keep staging resources around
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
-        sRGB = 1 << 4
+        sRGB = 1 << 4,
+        ReadBack = 1 << 5
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -1004,7 +1005,7 @@ public:
     FrameOpResult endOffscreenFrame();
 
     // Cannot be inside a pass.
-    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
+    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     // Waits for any work on the graphics queue (where applicable) to complete,
     // then forcibly executes all deferred operations, like completing

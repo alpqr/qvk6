@@ -1,13 +1,9 @@
-gl, mtl: compressed textures
-gl, mtl: srgb (tex, swapchain buf)
-rhi without a window, fully offscreen
-readback api
-some wait-gpu stuff for waiting for readback results inside a begin-endFrame f.ex.
-vk: implement finish()
 vk: readback
 mtl, d3d, gl: rhi without a window
 mtl, d3d, gl: implement finish()
 mtl, d3d, gl: readback
+gl, mtl: compressed textures
+gl, mtl: srgb (tex, swapchain buf)
 multi window? (multi swapchain) -> trouble
 vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cubemaps
@@ -36,6 +32,8 @@ gl: tex size stuff (npot etc.)
 gl: tex formats
 more QImage->tex formats
 vk compressed tex: could it consume a complete ktx without any memcpys?
+multi-buffer (region) readback?
+depth readback?
 d3d, gl, mtl: cache shader sources?
 advanced blend modes?
 resize to 0 width or height fails (vk)
@@ -53,6 +51,10 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: implement finish()
+some wait-gpu stuff for waiting for readback results inside a begin-endFrame f.ex.
+readback api
+rhi without a window, fully offscreen
 vk: compressed textures (etc2, astc, bc)
 vk: srgb (tex, swapchain buf)
 d3d: srgb support (texture, swapchain buf)

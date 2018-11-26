@@ -49,6 +49,8 @@
 ****************************************************************************/
 
 #include <QGuiApplication>
+#include <QImage>
+#include <QFileInfo>
 #include <QLoggingCategory>
 #include <QRhiVulkanInitParams>
 
@@ -87,7 +89,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    QRhiTexture *tex = r->newTexture(QRhiTexture::RGBA8, QSize(1280, 720), QRhiTexture::RenderTarget);
+    QRhiTexture *tex = r->newTexture(QRhiTexture::RGBA8, QSize(1280, 720), QRhiTexture::RenderTarget | QRhiTexture::ReadBack);
     tex->build();
     QRhiTextureRenderTarget *rt = r->newTextureRenderTarget({ tex });
     QRhiRenderPassDescriptor *rp = rt->newCompatibleRenderPassDescriptor();
@@ -105,6 +107,7 @@ int main(int argc, char **argv)
 
         QRhiReadbackDescription rb(tex);
         QRhiReadbackResult rbResult;
+        rbResult.completed = [frame] { qDebug("  - readback %d completed", frame); };
         r->readback(cb, rb, &rbResult);
 
         qDebug("Submit and wait");
@@ -112,7 +115,16 @@ int main(int argc, char **argv)
 
         // No finish() or waiting for the completed callback is needed here
         // since the endOffscreenFrame() implies a wait for completion.
-        qDebug() << rbResult.data.size();
+        if (!rbResult.data.isEmpty()) {
+            const uchar *p = reinterpret_cast<const uchar *>(rbResult.data.constData());
+            QImage image(p, 1280, 720, QImage::Format_RGBA8888);
+            QString fn = QString::asprintf("frame%d.png", frame);
+            fn = QFileInfo(fn).absoluteFilePath();
+            qDebug("Saving into %s", qPrintable(fn));
+            image.save(fn);
+        } else {
+            qWarning("Readback failed!");
+        }
     }
 
     rt->releaseAndDestroy();

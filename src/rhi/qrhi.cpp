@@ -425,9 +425,9 @@ QRhi::FrameOpResult QRhi::endOffscreenFrame()
     return d->endOffscreenFrame();
 }
 
-void QRhi::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+bool QRhi::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
-    d->readback(cb, rb, result);
+    return d->readback(cb, rb, result);
 }
 
 QRhi::FrameOpResult QRhi::finish()

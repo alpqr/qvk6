@@ -327,7 +327,7 @@ public:
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
     QRhi::FrameOpResult endOffscreenFrame() override;
-    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
+    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
     QRhi::FrameOpResult finish() override;
 
     void beginPass(QRhiRenderTarget *rt,
@@ -473,6 +473,9 @@ public:
         int activeFrameSlot = -1;
         QRhiReadbackDescription desc;
         QRhiReadbackResult *result;
+        VkBuffer buf;
+        QVkAlloc bufAlloc;
+        int bufSize;
     };
     QVector<ActiveReadback> activeReadbacks;
 

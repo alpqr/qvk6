@@ -568,13 +568,15 @@ QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
     return QRhi::FrameOpError;
 }
 
-void QRhiMetal::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+bool QRhiMetal::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
     Q_UNUSED(cb);
     Q_UNUSED(rb);
     Q_UNUSED(result);
 
     Q_ASSERT(inFrame && !inPass);
+
+    return false;
 }
 
 QRhi::FrameOpResult QRhiMetal::finish()

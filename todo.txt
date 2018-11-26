@@ -1,8 +1,13 @@
 gl, mtl: compressed textures
 gl, mtl: srgb (tex, swapchain buf)
 rhi without a window, fully offscreen
-readbacks
-some wait-gpu stuff for waiting for readback results inside a begin-endFrame f.ex.?
+readback api
+some wait-gpu stuff for waiting for readback results inside a begin-endFrame f.ex.
+vk: implement finish()
+vk: readback
+mtl, d3d, gl: rhi without a window
+mtl, d3d, gl: implement finish()
+mtl, d3d, gl: readback
 multi window? (multi swapchain) -> trouble
 vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cubemaps

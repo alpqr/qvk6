@@ -496,13 +496,6 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
       baseInstance: firstInstance];
 }
 
-void QRhiMetal::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    Q_UNUSED(cb);
-    Q_UNUSED(rb);
-    Q_UNUSED(result);
-}
-
 QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
 {
     Q_ASSERT(!inFrame);
@@ -570,9 +563,25 @@ QRhi::FrameOpResult QRhiMetal::beginOffscreenFrame(QRhiCommandBuffer **cb)
     return QRhi::FrameOpError;
 }
 
-QRhi::FrameOpResult QRhiMetal::endAndWaitOffscreenFrame()
+QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
 {
     return QRhi::FrameOpError;
+}
+
+void QRhiMetal::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    Q_UNUSED(cb);
+    Q_UNUSED(rb);
+    Q_UNUSED(result);
+
+    Q_ASSERT(inFrame && !inPass);
+}
+
+QRhi::FrameOpResult QRhiMetal::finish()
+{
+    Q_ASSERT(!inPass);
+
+    return QRhi::FrameOpSuccess;
 }
 
 MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthStencil,

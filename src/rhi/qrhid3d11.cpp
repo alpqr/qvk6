@@ -453,13 +453,6 @@ void QRhiD3D11::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     cbD->commands.append(cmd);
 }
 
-void QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    Q_UNUSED(cb);
-    Q_UNUSED(rb);
-    Q_UNUSED(result);
-}
-
 QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
 {
     Q_ASSERT(!inFrame);
@@ -510,9 +503,25 @@ QRhi::FrameOpResult QRhiD3D11::beginOffscreenFrame(QRhiCommandBuffer **cb)
     return QRhi::FrameOpError;
 }
 
-QRhi::FrameOpResult QRhiD3D11::endAndWaitOffscreenFrame()
+QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
 {
     return QRhi::FrameOpError;
+}
+
+void QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    Q_UNUSED(cb);
+    Q_UNUSED(rb);
+    Q_UNUSED(result);
+
+    Q_ASSERT(inFrame && !inPass);
+}
+
+QRhi::FrameOpResult QRhiD3D11::finish()
+{
+    Q_ASSERT(!inPass);
+
+    return QRhi::FrameOpSuccess;
 }
 
 static inline bool isCompressedFormat(QRhiTexture::Format format)

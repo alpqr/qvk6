@@ -326,7 +326,9 @@ public:
     QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
-    QRhi::FrameOpResult endAndWaitOffscreenFrame() override;
+    QRhi::FrameOpResult endOffscreenFrame() override;
+    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
+    QRhi::FrameOpResult finish() override;
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
@@ -355,8 +357,6 @@ public:
     void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
-
-    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
 
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
@@ -394,10 +394,13 @@ public:
 
     QRhi::FrameOpResult beginWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endWrapperFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult startCommandBuffer(VkCommandBuffer *cb);
+    QRhi::FrameOpResult endAndSubmitCommandBuffer(VkCommandBuffer cb, VkFence cmdFence,
+                                                  VkSemaphore *waitSem, VkSemaphore *signalSem);
     QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
-    void finishFrame();
+    void prepareFrameEnd();
     void commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD);
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
@@ -457,9 +460,11 @@ public:
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
+    QVkSwapChain *currentSwapChain = nullptr;
 
     struct OffscreenFrame {
         OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
+        bool active = false;
         QVkCommandBuffer cbWrapper;
         VkFence cmdFence = VK_NULL_HANDLE;
     } ofr;

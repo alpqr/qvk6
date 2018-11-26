@@ -986,21 +986,35 @@ public:
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
     /*
-      Rendering without a swapchain is possible as well. This is synchronous in
-      the sense that end will wait for completion of the submitted commands.
-      The typical use case is to use it in completely offscreen applications,
-      e.g. to generate image sequences by rendering and reading back without
-      ever showing a window.
+      Rendering without a swapchain is possible as well. The typical use case
+      is to use it in completely offscreen applications, e.g. to generate image
+      sequences by rendering and reading back without ever showing a window.
+      Usage in on-screen applications (so beginFrame, endFrame,
+      beginOffscreenFrame, endOffscreenFrame, beginFrame, ...) is possible too but
+      it does break parallelism so should be done only infrequently.
           QRhiReadbackResult rbResult;
           QRhiCommandBuffer *cb; // not owned
           beginOffscreenFrame(&cb);
           // ... the usual, set up a QRhiTextureRenderTarget, beginPass-endPass, etc.
           readback(cb, rb, &rbResult);
-          endAndWaitOffscreenFrame();
+          endOffscreenFrame();
           // image data available in rbResult
      */
     FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
-    FrameOpResult endAndWaitOffscreenFrame();
+    FrameOpResult endOffscreenFrame();
+
+    // Cannot be inside a pass.
+    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
+
+    // Waits for any work on the graphics queue (where applicable) to complete,
+    // then forcibly executes all deferred operations, like completing
+    // readbacks and resource releases. This should _not_ be used in practice,
+    // except in infrequent special cases, like when the results of a readback
+    // are needed right away. Can be called inside and outside of a frame, but
+    // not inside a pass. Inside a frame it implies submitting any work on the
+    // command buffer. Unnecessary in combination with begin/endOffscreenFrame
+    // because ending an offscreen frame implies waiting for completion.
+    QRhi::FrameOpResult finish();
 
     // Returns an instance to which updates can be queued. Batch instances are
     // pooled and never owned by the application. An instance is returned to
@@ -1048,9 +1062,6 @@ public:
     void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                      quint32 instanceCount = 1, quint32 firstIndex = 0,
                      qint32 vertexOffset = 0, quint32 firstInstance = 0);
-
-    // Cannot be mixed with beginPass-endPass.
-    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     QVector<int> supportedSampleCounts() const;
 

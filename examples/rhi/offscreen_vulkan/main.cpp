@@ -108,9 +108,10 @@ int main(int argc, char **argv)
         r->readback(cb, rb, &rbResult);
 
         qDebug("Submit and wait");
-        r->endAndWaitOffscreenFrame();
+        r->endOffscreenFrame();
 
-        // here it's simple, no need to bother with the completed callback of rbResult
+        // No finish() or waiting for the completed callback is needed here
+        // since the endOffscreenFrame() implies a wait for completion.
         qDebug() << rbResult.data.size();
     }
 

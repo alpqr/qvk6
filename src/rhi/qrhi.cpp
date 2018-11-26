@@ -420,9 +420,19 @@ QRhi::FrameOpResult QRhi::beginOffscreenFrame(QRhiCommandBuffer **cb)
     return d->beginOffscreenFrame(cb);
 }
 
-QRhi::FrameOpResult QRhi::endAndWaitOffscreenFrame()
+QRhi::FrameOpResult QRhi::endOffscreenFrame()
 {
-    return d->endAndWaitOffscreenFrame();
+    return d->endOffscreenFrame();
+}
+
+void QRhi::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    d->readback(cb, rb, result);
+}
+
+QRhi::FrameOpResult QRhi::finish()
+{
+    return d->finish();
 }
 
 void QRhi::beginPass(QRhiRenderTarget *rt,
@@ -485,11 +495,6 @@ void QRhi::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                        qint32 vertexOffset, quint32 firstInstance)
 {
     d->drawIndexed(cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-}
-
-void QRhi::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    d->readback(cb, rb, result);
 }
 
 QVector<int> QRhi::supportedSampleCounts() const

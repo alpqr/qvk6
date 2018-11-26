@@ -264,7 +264,9 @@ public:
     QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
-    QRhi::FrameOpResult endAndWaitOffscreenFrame() override;
+    QRhi::FrameOpResult endOffscreenFrame() override;
+    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
+    QRhi::FrameOpResult finish() override;
 
     void beginPass(QRhiRenderTarget *rt,
                    QRhiCommandBuffer *cb,
@@ -293,8 +295,6 @@ public:
     void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
-
-    void readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
 
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;

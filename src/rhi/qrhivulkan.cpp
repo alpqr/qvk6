@@ -1448,6 +1448,10 @@ bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &
     QVkSwapChain *swapChainD = nullptr;
     if (texD) {
         aRb.pixelSize = texD->m_pixelSize;
+        if (rb.level > 0) {
+            aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> rb.level))));
+            aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> rb.level))));
+        }
         aRb.format = texD->m_format;
     } else {
         Q_ASSERT(currentSwapChain);

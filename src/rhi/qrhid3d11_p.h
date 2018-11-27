@@ -219,6 +219,9 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QD3D11CommandBuffer(QRhiImplementation *rhi);
     void release() override;
 
+    // Technically it's not like we really need to queue up the commands, but
+    // have it this way since it helps keeping things concise and may become
+    // essential if "command buffers" become application creatable some day.
     struct Command {
         enum Cmd {
             SetRenderTarget,
@@ -231,7 +234,8 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             StencilRef,
             BlendConstants,
             Draw,
-            DrawIndexed
+            DrawIndexed,
+            ReadPixels
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
@@ -293,6 +297,16 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
                 qint32 vertexOffset;
                 quint32 firstInstance;
             } drawIndexed;
+            struct {
+                ID3D11Resource *src;
+                QRhiTexture::Format format;
+                DXGI_FORMAT dxgiFormat;
+                int w;
+                int h;
+                quint32 byteSize;
+                UINT subres;
+                QRhiReadbackResult *result;
+            } readPixels;
         } args;
     };
 
@@ -303,8 +317,11 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
 
-    void resetState() {
+    void resetCommands() {
         commands.clear();
+    }
+    void resetState() {
+        resetCommands();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
@@ -420,6 +437,7 @@ public:
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD);
+    void readPixels(const QD3D11CommandBuffer::Command &cmd);
     DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;
 
     bool debugLayer = false;

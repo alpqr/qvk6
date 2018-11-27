@@ -460,6 +460,7 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     inFrame = true;
 
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
+    contextState.currentSwapChain = swapChainD;
     swapChainD->cb.resetState();
 
     swapChainD->rt.d.pixelSize = swapChainD->pixelSize;
@@ -492,6 +493,7 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QD3D11SwapChain::BUFFER_COUNT;
 
+    contextState.currentSwapChain = nullptr;
     ++finishedFrameCount;
     return QRhi::FrameOpSuccess;
 }
@@ -515,27 +517,191 @@ QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
     ofr.active = false;
 
     executeCommandBuffer(&ofr.cbWrapper);
-    context->Flush();
 
     ++finishedFrameCount;
     return QRhi::FrameOpSuccess;;
 }
 
+static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
+{
+    const bool srgb = flags.testFlag(QRhiTexture::sRGB);
+    switch (format) {
+    case QRhiTexture::RGBA8:
+        return srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
+    case QRhiTexture::BGRA8:
+        return srgb ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_B8G8R8A8_UNORM;
+    case QRhiTexture::R8:
+        return DXGI_FORMAT_R8_UNORM;
+    case QRhiTexture::R16:
+        return DXGI_FORMAT_R16_UNORM;
+
+    case QRhiTexture::D16:
+        return DXGI_FORMAT_R16_TYPELESS;
+    case QRhiTexture::D32:
+        return DXGI_FORMAT_R32_TYPELESS;
+
+    case QRhiTexture::BC1:
+        return srgb ? DXGI_FORMAT_BC1_UNORM_SRGB : DXGI_FORMAT_BC1_UNORM;
+    case QRhiTexture::BC2:
+        return srgb ? DXGI_FORMAT_BC2_UNORM_SRGB : DXGI_FORMAT_BC2_UNORM;
+    case QRhiTexture::BC3:
+        return srgb ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_BC3_UNORM;
+    case QRhiTexture::BC4:
+        return DXGI_FORMAT_BC4_UNORM;
+    case QRhiTexture::BC5:
+        return DXGI_FORMAT_BC5_UNORM;
+    case QRhiTexture::BC6H:
+        return DXGI_FORMAT_BC6H_UF16;
+    case QRhiTexture::BC7:
+        return srgb ? DXGI_FORMAT_BC7_UNORM_SRGB : DXGI_FORMAT_BC7_UNORM;
+
+    case QRhiTexture::ETC2_RGB8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ETC2_RGB8A1:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ETC2_RGBA8:
+        qWarning("QRhiD3D11 does not support ETC2 textures");
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    case QRhiTexture::ASTC_4x4:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_5x4:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_5x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_6x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_6x6:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_8x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_8x6:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_8x8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x5:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x6:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_10x10:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_12x10:
+        Q_FALLTHROUGH();
+    case QRhiTexture::ASTC_12x12:
+        qWarning("QRhiD3D11 does not support ASTC textures");
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+
+    default:
+        Q_UNREACHABLE();
+        return DXGI_FORMAT_R8G8B8A8_UNORM;
+    }
+}
+
+static inline QRhiTexture::Format colorTextureFormatFromDxgiFormat(DXGI_FORMAT format, QRhiTexture::Flags *flags)
+{
+    switch (format) {
+    case DXGI_FORMAT_R8G8B8A8_UNORM:
+        return QRhiTexture::RGBA8;
+    case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+        if (flags)
+            (*flags) |= QRhiTexture::sRGB;
+        return QRhiTexture::RGBA8;
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+        return QRhiTexture::BGRA8;
+    case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+        if (flags)
+            (*flags) |= QRhiTexture::sRGB;
+        return QRhiTexture::BGRA8;
+    case DXGI_FORMAT_R8_UNORM:
+        return QRhiTexture::R8;
+    case DXGI_FORMAT_R16_UNORM:
+        return QRhiTexture::R16;
+    default: // this cannot assert, must warn and return unknown
+        qWarning("DXGI_FORMAT %d is not a recognized uncompressed color format", format);
+        break;
+    }
+    return QRhiTexture::UnknownFormat;
+}
+
+static inline bool isDepthTextureFormat(QRhiTexture::Format format)
+{
+    switch (format) {
+    case QRhiTexture::Format::D16:
+        Q_FALLTHROUGH();
+    case QRhiTexture::Format::D32:
+        return true;
+
+    default:
+        return false;
+    }
+}
+
 bool QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
-    Q_UNUSED(cb);
-    Q_UNUSED(rb);
-    Q_UNUSED(result);
-
     Q_ASSERT(inFrame && !inPass);
 
-    return false;
+    ID3D11Resource *src;
+    DXGI_FORMAT dxgiFormat;
+    QSize pixelSize;
+    QRhiTexture::Format format;
+    UINT subres = 0;
+    QD3D11Texture *texD = QRHI_RES(QD3D11Texture, rb.texture);
+    QD3D11SwapChain *swapChainD = nullptr;
+    if (texD) {
+        src = texD->tex;
+        dxgiFormat = toD3DTextureFormat(texD->m_format, texD->m_flags);
+        pixelSize = texD->m_pixelSize;
+        if (rb.level > 0) {
+            pixelSize.setWidth(qFloor(float(qMax(1, pixelSize.width() >> rb.level))));
+            pixelSize.setHeight(qFloor(float(qMax(1, pixelSize.height() >> rb.level))));
+        }
+        format = texD->m_format;
+        subres = D3D11CalcSubresource(rb.level, rb.layer, texD->mipLevelCount);
+    } else {
+        Q_ASSERT(contextState.currentSwapChain);
+        swapChainD = QRHI_RES(QD3D11SwapChain, contextState.currentSwapChain);
+        src = swapChainD->tex[swapChainD->currentFrame];
+        dxgiFormat = swapChainD->colorFormat;
+        pixelSize = swapChainD->pixelSize;
+        format = colorTextureFormatFromDxgiFormat(dxgiFormat, nullptr);
+        if (format == QRhiTexture::UnknownFormat)
+            return false;
+    }
+    quint32 bufSize = 0;
+    textureFormatInfo(format, pixelSize, nullptr, &bufSize);
+
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::ReadPixels;
+    cmd.args.readPixels.src = src;
+    cmd.args.readPixels.dxgiFormat = dxgiFormat;
+    cmd.args.readPixels.format = format;
+    cmd.args.readPixels.w = pixelSize.width();
+    cmd.args.readPixels.h = pixelSize.height();
+    cmd.args.readPixels.byteSize = bufSize;
+    cmd.args.readPixels.subres = subres;
+    cmd.args.readPixels.result = result;
+    cbD->commands.append(cmd);
+
+    return true;
 }
 
 QRhi::FrameOpResult QRhiD3D11::finish()
 {
     Q_ASSERT(!inPass);
-    context->Flush();
+    if (inFrame) {
+        if (ofr.active) {
+            Q_ASSERT(!contextState.currentSwapChain);
+            executeCommandBuffer(&ofr.cbWrapper);
+            ofr.cbWrapper.resetCommands();
+        } else {
+            Q_ASSERT(contextState.currentSwapChain);
+            executeCommandBuffer(&contextState.currentSwapChain->cb);
+            contextState.currentSwapChain->cb.resetCommands();
+        }
+    }
     return QRhi::FrameOpSuccess;
 }
 
@@ -928,10 +1094,55 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
                 qWarning("No graphics pipeline active for drawIndexed; ignored");
             }
             break;
+        case QD3D11CommandBuffer::Command::ReadPixels:
+            readPixels(cmd);
+            break;
         default:
             break;
         }
     }
+}
+
+void QRhiD3D11::readPixels(const QD3D11CommandBuffer::Command &cmd)
+{
+    D3D11_TEXTURE2D_DESC desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.Width = cmd.args.readPixels.w;
+    desc.Height = cmd.args.readPixels.h;
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.Format = cmd.args.readPixels.dxgiFormat;
+    desc.SampleDesc.Count = 1;
+    desc.Usage = D3D11_USAGE_STAGING;
+    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+    ID3D11Texture2D *stagingTex;
+    HRESULT hr = dev->CreateTexture2D(&desc, nullptr, &stagingTex);
+    if (FAILED(hr)) {
+        qWarning("Failed to create readback staging texture: %s", qPrintable(comErrorMessage(hr)));
+        return;
+    }
+
+    context->CopySubresourceRegion(stagingTex, 0, 0, 0, 0,
+                                   cmd.args.readPixels.src, cmd.args.readPixels.subres, nullptr);
+
+    D3D11_MAPPED_SUBRESOURCE mp;
+    hr = context->Map(stagingTex, 0, D3D11_MAP_READ, 0, &mp);
+    if (FAILED(hr)) {
+        qWarning("Failed to map readback staging texture: %s", qPrintable(comErrorMessage(hr)));
+        stagingTex->Release();
+        return;
+    }
+    QRhiReadbackResult *result = cmd.args.readPixels.result;
+    result->format = cmd.args.readPixels.format;
+    result->pixelSize = QSize(cmd.args.readPixels.w, cmd.args.readPixels.h);
+    result->data.resize(cmd.args.readPixels.byteSize);
+    memcpy(result->data.data(), mp.pData, result->data.size());
+    context->Unmap(stagingTex, 0);
+
+    stagingTex->Release();
+
+    if (result->completed)
+        result->completed();
 }
 
 QD3D11Buffer::QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
@@ -1065,96 +1276,6 @@ void QD3D11Texture::release()
 
     tex->Release();
     tex = nullptr;
-}
-
-static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
-{
-    const bool srgb = flags.testFlag(QRhiTexture::sRGB);
-    switch (format) {
-    case QRhiTexture::RGBA8:
-        return srgb ? DXGI_FORMAT_R8G8B8A8_UNORM_SRGB : DXGI_FORMAT_R8G8B8A8_UNORM;
-    case QRhiTexture::BGRA8:
-        return srgb ? DXGI_FORMAT_B8G8R8A8_UNORM_SRGB : DXGI_FORMAT_B8G8R8A8_UNORM;
-    case QRhiTexture::R8:
-        return DXGI_FORMAT_R8_UNORM;
-    case QRhiTexture::R16:
-        return DXGI_FORMAT_R16_UNORM;
-
-    case QRhiTexture::D16:
-        return DXGI_FORMAT_R16_TYPELESS;
-    case QRhiTexture::D32:
-        return DXGI_FORMAT_R32_TYPELESS;
-
-    case QRhiTexture::BC1:
-        return srgb ? DXGI_FORMAT_BC1_UNORM_SRGB : DXGI_FORMAT_BC1_UNORM;
-    case QRhiTexture::BC2:
-        return srgb ? DXGI_FORMAT_BC2_UNORM_SRGB : DXGI_FORMAT_BC2_UNORM;
-    case QRhiTexture::BC3:
-        return srgb ? DXGI_FORMAT_BC3_UNORM_SRGB : DXGI_FORMAT_BC3_UNORM;
-    case QRhiTexture::BC4:
-        return DXGI_FORMAT_BC4_UNORM;
-    case QRhiTexture::BC5:
-        return DXGI_FORMAT_BC5_UNORM;
-    case QRhiTexture::BC6H:
-        return DXGI_FORMAT_BC6H_UF16;
-    case QRhiTexture::BC7:
-        return srgb ? DXGI_FORMAT_BC7_UNORM_SRGB : DXGI_FORMAT_BC7_UNORM;
-
-    case QRhiTexture::ETC2_RGB8:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ETC2_RGB8A1:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ETC2_RGBA8:
-        qWarning("QRhiD3D11 does not support ETC2 textures");
-        return DXGI_FORMAT_R8G8B8A8_UNORM;
-
-    case QRhiTexture::ASTC_4x4:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_5x4:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_5x5:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_6x5:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_6x6:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_8x5:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_8x6:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_8x8:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_10x5:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_10x6:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_10x8:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_10x10:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_12x10:
-        Q_FALLTHROUGH();
-    case QRhiTexture::ASTC_12x12:
-        qWarning("QRhiD3D11 does not support ASTC textures");
-        return DXGI_FORMAT_R8G8B8A8_UNORM;
-
-    default:
-        Q_UNREACHABLE();
-        return DXGI_FORMAT_R8G8B8A8_UNORM;
-    }
-}
-
-static inline bool isDepthTextureFormat(QRhiTexture::Format format)
-{
-    switch (format) {
-    case QRhiTexture::Format::D16:
-        Q_FALLTHROUGH();
-    case QRhiTexture::Format::D32:
-        return true;
-
-    default:
-        return false;
-    }
 }
 
 static inline DXGI_FORMAT toD3DDepthTextureSRVFormat(QRhiTexture::Format format)

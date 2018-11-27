@@ -1,6 +1,5 @@
-mtl, d3d, gl: readback (tex, backbuffer)
-mtl, d3d, gl: implement finish()
-mtl, gl: rhi without a window
+gl, mtl: rhi without a window, offscreen frame
+gl, mtl: readback (tex, backbuffer)
 gl, mtl: compressed textures
 gl, mtl: srgb (tex, swapchain buf)
 multi window? (multi swapchain) -> trouble
@@ -15,7 +14,8 @@ cbuffer alignment rules - some things fail to translate (to hlsl e.g. with struc
 resource import/export, what's the co-op story?
 copy-only passes for kicking off transfers early? (copy/transfer queue?)
 copyimage (color and ds, no resolve or transforms here)
-msaa offscreen (msaa texture? renderbuffer?)
+does reading back an msaa swapchain buffer work?
+msaa offscreen (msaa texture. no readback.)
 resolveimage (color and ds, only to resolve samples)
 threading options? secondary command lists?
 mipmap generation?
@@ -50,6 +50,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: readback
 d3d: offscreen frame
 vk: read back the backbuffer
 vk: readback size/formats

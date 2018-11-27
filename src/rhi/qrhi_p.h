@@ -121,8 +121,18 @@ public:
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
     virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
 
+protected:
+    bool isCompressedFormat(QRhiTexture::Format format);
+    void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
+                              quint32 *bpl, quint32 *byteSize);
+    void textureFormatInfo(QRhiTexture::Format format, const QSize &size,
+                           quint32 *bpl, quint32 *byteSize);
+
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
+
+    friend class QRhi;
+    friend struct QRhiResourceUpdateBatchPrivate;
 };
 
 struct QRhiResourceUpdateBatchPrivate

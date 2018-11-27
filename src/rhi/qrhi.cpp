@@ -181,6 +181,171 @@ QRhiImplementation::~QRhiImplementation()
     qDeleteAll(resUpdPool);
 }
 
+bool QRhiImplementation::isCompressedFormat(QRhiTexture::Format format)
+{
+    return (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
+            || (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ETC2_RGBA8)
+            || (format >= QRhiTexture::ASTC_4x4 && format <= QRhiTexture::ASTC_12x12);
+}
+
+void QRhiImplementation::compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
+                                              quint32 *bpl, quint32 *byteSize)
+{
+    int xdim = 4;
+    int ydim = 4;
+    quint32 blockSize = 0;
+
+    switch (format) {
+    case QRhiTexture::BC1:
+        blockSize = 8;
+        break;
+    case QRhiTexture::BC2:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC3:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC4:
+        blockSize = 8;
+        break;
+    case QRhiTexture::BC5:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC6H:
+        blockSize = 16;
+        break;
+    case QRhiTexture::BC7:
+        blockSize = 16;
+        break;
+
+    case QRhiTexture::ETC2_RGB8:
+        blockSize = 8;
+        break;
+    case QRhiTexture::ETC2_RGB8A1:
+        blockSize = 8;
+        break;
+    case QRhiTexture::ETC2_RGBA8:
+        blockSize = 16;
+        break;
+
+    case QRhiTexture::ASTC_4x4:
+        blockSize = 16;
+        break;
+    case QRhiTexture::ASTC_5x4:
+        blockSize = 16;
+        xdim = 5;
+        break;
+    case QRhiTexture::ASTC_5x5:
+        blockSize = 16;
+        xdim = ydim = 5;
+        break;
+    case QRhiTexture::ASTC_6x5:
+        blockSize = 16;
+        xdim = 6;
+        ydim = 5;
+        break;
+    case QRhiTexture::ASTC_6x6:
+        blockSize = 16;
+        xdim = ydim = 6;
+        break;
+    case QRhiTexture::ASTC_8x5:
+        blockSize = 16;
+        xdim = 8;
+        ydim = 5;
+        break;
+    case QRhiTexture::ASTC_8x6:
+        blockSize = 16;
+        xdim = 8;
+        ydim = 6;
+        break;
+    case QRhiTexture::ASTC_8x8:
+        blockSize = 16;
+        xdim = ydim = 8;
+        break;
+    case QRhiTexture::ASTC_10x5:
+        blockSize = 16;
+        xdim = 10;
+        ydim = 5;
+        break;
+    case QRhiTexture::ASTC_10x6:
+        blockSize = 16;
+        xdim = 10;
+        ydim = 6;
+        break;
+    case QRhiTexture::ASTC_10x8:
+        blockSize = 16;
+        xdim = 10;
+        ydim = 8;
+        break;
+    case QRhiTexture::ASTC_10x10:
+        blockSize = 16;
+        xdim = ydim = 10;
+        break;
+    case QRhiTexture::ASTC_12x10:
+        blockSize = 16;
+        xdim = 12;
+        ydim = 10;
+        break;
+    case QRhiTexture::ASTC_12x12:
+        blockSize = 16;
+        xdim = ydim = 12;
+        break;
+
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
+    const quint32 wblocks = (size.width() + xdim - 1) / xdim;
+    const quint32 hblocks = (size.height() + ydim - 1) / ydim;
+
+    if (bpl)
+        *bpl = wblocks * blockSize;
+    if (byteSize)
+        *byteSize = wblocks * hblocks * blockSize;
+}
+
+void QRhiImplementation::textureFormatInfo(QRhiTexture::Format format, const QSize &size,
+                                           quint32 *bpl, quint32 *byteSize)
+{
+    if (isCompressedFormat(format)) {
+        compressedFormatInfo(format, size, bpl, byteSize);
+        return;
+    }
+
+    quint32 bpc = 0;
+    switch (format) {
+    case QRhiTexture::RGBA8:
+        bpc = 4;
+        break;
+    case QRhiTexture::BGRA8:
+        bpc = 4;
+        break;
+    case QRhiTexture::R8:
+        bpc = 1;
+        break;
+    case QRhiTexture::R16:
+        bpc = 2;
+        break;
+
+    case QRhiTexture::D16:
+        bpc = 2;
+        break;
+    case QRhiTexture::D32:
+        bpc = 4;
+        break;
+
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+
+    if (bpl)
+        *bpl = size.width() * bpc;
+    if (byteSize)
+        *byteSize = size.width() * size.height() * bpc;
+}
+
 QRhi::QRhi()
 {
 }

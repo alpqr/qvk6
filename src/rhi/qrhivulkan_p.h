@@ -475,7 +475,7 @@ public:
         QRhiReadbackResult *result;
         VkBuffer buf;
         QVkAlloc bufAlloc;
-        int bufSize;
+        quint32 bufSize;
     };
     QVector<ActiveReadback> activeReadbacks;
 

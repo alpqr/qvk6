@@ -1393,8 +1393,7 @@ bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &
     aRb.result = result;
 
     QVkTexture *tex = QRHI_RES(QVkTexture, aRb.desc.texture);
-    // ###
-    aRb.bufSize = tex->m_pixelSize.width() * tex->m_pixelSize.height() * 4;
+    textureFormatInfo(tex->m_format, tex->m_pixelSize, nullptr, &aRb.bufSize);
 
     // Create a host visible buffer.
     VkBufferCreateInfo bufferInfo;
@@ -1412,7 +1411,7 @@ bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &
     if (err == VK_SUCCESS) {
         aRb.bufAlloc = allocation;
     } else {
-        qWarning("Failed to create readback buffer of size %d: %d", aRb.bufSize, err);
+        qWarning("Failed to create readback buffer of size %u: %d", aRb.bufSize, err);
         return false;
     }
 

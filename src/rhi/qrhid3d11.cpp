@@ -526,47 +526,6 @@ QRhi::FrameOpResult QRhiD3D11::finish()
     return QRhi::FrameOpSuccess;
 }
 
-static inline bool isCompressedFormat(QRhiTexture::Format format)
-{
-    return format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7;
-}
-
-static void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
-                                 quint32 *bpl, quint32 *alignedHeight)
-{
-    quint32 blockSize = 0;
-    switch (format) {
-    case QRhiTexture::BC1:
-        blockSize = 8;
-        break;
-    case QRhiTexture::BC2:
-        blockSize = 16;
-        break;
-    case QRhiTexture::BC3:
-        blockSize = 16;
-        break;
-    case QRhiTexture::BC4:
-        blockSize = 8;
-        break;
-    case QRhiTexture::BC5:
-        blockSize = 16;
-        break;
-    case QRhiTexture::BC6H:
-        blockSize = 16;
-        break;
-    case QRhiTexture::BC7:
-        blockSize = 16;
-        break;
-    default:
-        Q_UNREACHABLE();
-        break;
-    }
-    if (bpl)
-        *bpl = qMax<quint32>(1, (size.width() + 3) / 4) * blockSize;
-    if (alignedHeight)
-        *alignedHeight = qMax<quint32>(1, (size.height() + 3) / 4);
-}
-
 void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);

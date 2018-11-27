@@ -1460,6 +1460,11 @@ QRhi::FrameOpResult QRhiVulkan::finish()
         } else {
             Q_ASSERT(currentSwapChain);
             swapChainD = currentSwapChain;
+            if (swapChainD->wrapWindow) {
+                // QVulkanWindow's command buffer cannot be submitted and then recreated by us
+                qWarning("finish() within a frame is not supported in combination with QVulkanWindow");
+                return QRhi::FrameOpError;
+            }
             cb = swapChainD->imageRes[swapChainD->currentImage].cmdBuf;
         }
         QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(cb, VK_NULL_HANDLE, nullptr, nullptr);

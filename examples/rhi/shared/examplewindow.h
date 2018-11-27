@@ -79,6 +79,7 @@ protected:
     bool m_running = false;
     bool m_notExposed = false;
     bool m_newlyExposed = false;
+    int m_frameCount = 0;
 
     QRhi *m_r = nullptr;
     bool m_hasSwapChain = false;

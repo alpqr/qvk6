@@ -94,6 +94,13 @@ void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 
     m_ps = m_r->newGraphicsPipeline();
 
+    // No blending but the texture has alpha which we do not want to write out.
+    // Be nice. (would not matter for an onscreen window but makes a difference
+    // when reading back and saving into image files f.ex.)
+    QRhiGraphicsPipeline::TargetBlend blend;
+    blend.colorWrite = QRhiGraphicsPipeline::R | QRhiGraphicsPipeline::G | QRhiGraphicsPipeline::B;
+    m_ps->setTargetBlends({ blend });
+
     m_ps->setDepthTest(true);
     m_ps->setDepthWrite(true);
     m_ps->setDepthOp(QRhiGraphicsPipeline::Less);

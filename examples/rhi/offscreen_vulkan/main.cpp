@@ -204,7 +204,7 @@ int main(int argc, char **argv)
         // since the endOffscreenFrame() implies a wait for completion.
         if (!rbResult.data.isEmpty()) {
             const uchar *p = reinterpret_cast<const uchar *>(rbResult.data.constData());
-            QImage image(p, 1280, 720, QImage::Format_RGBA8888);
+            QImage image(p, rbResult.pixelSize.width(), rbResult.pixelSize.height(), QImage::Format_RGBA8888);
             QString fn = QString::asprintf("frame%d.png", frame);
             fn = QFileInfo(fn).absoluteFilePath();
             qDebug("Saving into %s", qPrintable(fn));

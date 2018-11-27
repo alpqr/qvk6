@@ -280,6 +280,7 @@ struct QVkSwapChain : public QRhiSwapChain
         VkFramebuffer fb = VK_NULL_HANDLE;
         VkImage msaaImage = VK_NULL_HANDLE;
         VkImageView msaaImageView = VK_NULL_HANDLE;
+        bool presentableLayout = true;
     } imageRes[MAX_BUFFER_COUNT];
 
     struct FrameResources {
@@ -476,6 +477,8 @@ public:
         VkBuffer buf;
         QVkAlloc bufAlloc;
         quint32 bufSize;
+        QSize pixelSize;
+        QRhiTexture::Format format;
     };
     QVector<ActiveReadback> activeReadbacks;
 

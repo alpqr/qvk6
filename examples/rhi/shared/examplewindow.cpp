@@ -49,8 +49,10 @@
 ****************************************************************************/
 
 #include "examplewindow.h"
+#include <QFileInfo>
 
 //#define USE_SRGB_SWAPCHAIN
+//#define READBACK_SWAPCHAIN
 
 void ExampleWindow::exposeEvent(QExposeEvent *)
 {
@@ -254,7 +256,29 @@ void ExampleWindow::render()
         m_liveTexCubeRenderer.queueDraw(cb, outputSize);
     m_r->endPass(cb);
 
+#ifdef READBACK_SWAPCHAIN
+    QRhiReadbackDescription rb; // no texture given -> backbuffer
+    QRhiReadbackResult *rbResult = new QRhiReadbackResult;
+    int frameNo = m_frameCount;
+    rbResult->completed = [this, rbResult, frameNo] {
+        {
+            QImage::Format fmt = rbResult->format == QRhiTexture::BGRA8 ? QImage::Format_ARGB32_Premultiplied
+                                                                        : QImage::Format_RGBA8888_Premultiplied;
+            const uchar *p = reinterpret_cast<const uchar *>(rbResult->data.constData());
+            QImage image(p, rbResult->pixelSize.width(), rbResult->pixelSize.height(), fmt);
+            QString fn = QString::asprintf("frame%d.png", frameNo);
+            fn = QFileInfo(fn).absoluteFilePath();
+            qDebug("Saving into %s", qPrintable(fn));
+            image.save(fn);
+        }
+        delete rbResult;
+    };
+    m_r->readback(cb, rb, rbResult);
+#endif
+
     m_r->endFrame(m_sc);
+
+    ++m_frameCount;
 
     requestUpdate(); // render continuously, throttled by the presentation rate
 }

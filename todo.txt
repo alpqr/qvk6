@@ -1,6 +1,6 @@
 mtl, d3d, gl: rhi without a window
 mtl, d3d, gl: implement finish()
-mtl, d3d, gl: readback
+mtl, d3d, gl: readback (tex, backbuffer)
 gl, mtl: compressed textures
 gl, mtl: srgb (tex, swapchain buf)
 multi window? (multi swapchain) -> trouble
@@ -50,6 +50,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: read back the backbuffer
 vk: readback size/formats
 vk: readback
 vk: implement finish()

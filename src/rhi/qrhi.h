@@ -283,20 +283,14 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiReadbackDescription
 {
-    QRhiReadbackDescription() { }
-    QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { }
+    QRhiReadbackDescription() { } // source is the current back buffer (if swapchain supports readback)
+    QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { } // source is the specified texture
     QRhiTexture *texture = nullptr;
     int layer = 0;
     int level = 0;
 };
 
 Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);
-
-struct Q_RHI_EXPORT QRhiReadbackResult
-{
-    std::function<void()> completed = nullptr;
-    QByteArray data;
-}; // non-movable due to the std::function
 
 class Q_RHI_EXPORT QRhiResource
 {
@@ -402,6 +396,8 @@ public:
     Q_DECLARE_FLAGS(Flags, Flag)
 
     enum Format {
+        UnknownFormat,
+
         RGBA8,
         BGRA8,
         R8,
@@ -882,6 +878,14 @@ private:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiResourceUpdateBatch::TexturePrepareFlags)
+
+struct Q_RHI_EXPORT QRhiReadbackResult
+{
+    std::function<void()> completed = nullptr;
+    QRhiTexture::Format format;
+    QSize pixelSize;
+    QByteArray data;
+}; // non-movable due to the std::function
 
 struct Q_RHI_EXPORT QRhiInitParams
 {

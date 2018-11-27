@@ -329,6 +329,7 @@ void QRhiVulkan::destroy()
     df->vkDeviceWaitIdle(dev);
 
     executeDeferredReleases(true);
+    finishActiveReadbacks(true);
 
     if (ofr.cmdFence) {
         df->vkDestroyFence(dev, ofr.cmdFence, nullptr);
@@ -505,6 +506,36 @@ static inline VkFormat toVkTextureFormat(QRhiTexture::Format format, QRhiTexture
         Q_UNREACHABLE();
         return VK_FORMAT_R8G8B8A8_UNORM;
     }
+}
+
+static inline QRhiTexture::Format colorTextureFormatFromVkFormat(VkFormat format, QRhiTexture::Flags *flags)
+{
+    switch (format) {
+    case VK_FORMAT_R8G8B8A8_UNORM:
+        return QRhiTexture::RGBA8;
+    case VK_FORMAT_R8G8B8A8_SRGB:
+        if (flags)
+            (*flags) |= QRhiTexture::sRGB;
+        return QRhiTexture::RGBA8;
+    case VK_FORMAT_B8G8R8A8_UNORM:
+        return QRhiTexture::BGRA8;
+    case VK_FORMAT_B8G8R8A8_SRGB:
+        if (flags)
+            (*flags) |= QRhiTexture::sRGB;
+        return QRhiTexture::BGRA8;
+    case VK_FORMAT_R8_UNORM:
+        return QRhiTexture::R8;
+    case VK_FORMAT_R8_SRGB:
+        if (flags)
+            (*flags) |= QRhiTexture::sRGB;
+        return QRhiTexture::R8;
+    case VK_FORMAT_R16_UNORM:
+        return QRhiTexture::R16;
+    default: // this cannot assert, must warn and return unknown
+        qWarning("VkFormat %d is not a recognized uncompressed color format", format);
+        break;
+    }
+    return QRhiTexture::UnknownFormat;
 }
 
 static inline bool isDepthTextureFormat(QRhiTexture::Format format)
@@ -1285,6 +1316,25 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
     QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
 
+    if (!image.presentableLayout) {
+        // was used in a readback as transfer source, go back to presentable layout
+        VkImageMemoryBarrier presTrans;
+        memset(&presTrans, 0, sizeof(presTrans));
+        presTrans.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        presTrans.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        presTrans.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        presTrans.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        presTrans.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        presTrans.image = image.image;
+        presTrans.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        presTrans.subresourceRange.levelCount = presTrans.subresourceRange.layerCount = 1;
+        df->vkCmdPipelineBarrier(image.cmdBuf,
+                                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                                 0, 0, nullptr, 0, nullptr,
+                                 1, &presTrans);
+        image.presentableLayout = true;
+    }
+
     // stop recording and submit to the queue
     Q_ASSERT(!image.cmdFenceWaitable);
     QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(image.cmdBuf,
@@ -1392,8 +1442,24 @@ bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &
     aRb.desc = rb;
     aRb.result = result;
 
-    QVkTexture *tex = QRHI_RES(QVkTexture, aRb.desc.texture);
-    textureFormatInfo(tex->m_format, tex->m_pixelSize, nullptr, &aRb.bufSize);
+    QVkTexture *texD = QRHI_RES(QVkTexture, aRb.desc.texture);
+    QVkSwapChain *swapChainD = nullptr;
+    if (texD) {
+        aRb.pixelSize = texD->m_pixelSize;
+        aRb.format = texD->m_format;
+    } else {
+        Q_ASSERT(currentSwapChain);
+        swapChainD = QRHI_RES(QVkSwapChain, currentSwapChain);
+        if (!swapChainD->supportsReadback) {
+            qWarning("Swapchain does not support readback");
+            return false;
+        }
+        aRb.pixelSize = swapChainD->pixelSize;
+        aRb.format = colorTextureFormatFromVkFormat(swapChainD->colorFormat, nullptr);
+        if (aRb.format == QRhiTexture::UnknownFormat)
+            return false;
+    }
+    textureFormatInfo(aRb.format, aRb.pixelSize, nullptr, &aRb.bufSize);
 
     // Create a host visible buffer.
     VkBufferCreateInfo bufferInfo;
@@ -1423,23 +1489,45 @@ bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &
     copyDesc.imageSubresource.mipLevel = aRb.desc.level;
     copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
     copyDesc.imageSubresource.layerCount = 1;
-    copyDesc.imageExtent.width = tex->m_pixelSize.width();
-    copyDesc.imageExtent.height = tex->m_pixelSize.height();
+    copyDesc.imageExtent.width = aRb.pixelSize.width();
+    copyDesc.imageExtent.height = aRb.pixelSize.height();
     copyDesc.imageExtent.depth = 1;
 
-    // assume the image was written
-    imageBarrier(cb, tex,
-                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    if (texD) {
+        // assume the image was written
+        imageBarrier(cb, texD,
+                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-    df->vkCmdCopyImageToBuffer(cbD->cb, tex->image, tex->layout, aRb.buf, 1, &copyDesc);
+        df->vkCmdCopyImageToBuffer(cbD->cb, texD->image, texD->layout, aRb.buf, 1, &copyDesc);
 
-    // behave as if the image was used for shader read
-    imageBarrier(cb, tex,
-                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                 VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        // behave as if the image was used for shader read
+        imageBarrier(cb, texD,
+                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                     VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    } else {
+        // use the swapchain image
+        VkImage image = swapChainD->imageRes[swapChainD->currentImage].image;
+        VkImageMemoryBarrier barrier;
+        memset(&barrier, 0, sizeof(barrier));
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.image = image;
+        df->vkCmdPipelineBarrier(cbD->cb,
+                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                 0, 0, nullptr, 0, nullptr,
+                                 1, &barrier);
+        swapChainD->imageRes[swapChainD->currentImage].presentableLayout = false;
+
+        df->vkCmdCopyImageToBuffer(cbD->cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, aRb.buf, 1, &copyDesc);
+    }
 
     activeReadbacks.append(aRb);
     return true;
@@ -2078,6 +2166,8 @@ void QRhiVulkan::finishActiveReadbacks(bool forced)
     for (int i = activeReadbacks.count() - 1; i >= 0; --i) {
         const QRhiVulkan::ActiveReadback &aRb(activeReadbacks[i]);
         if (forced || currentFrameSlot == aRb.activeFrameSlot || aRb.activeFrameSlot < 0) {
+            aRb.result->format = aRb.format;
+            aRb.result->pixelSize = aRb.pixelSize;
             aRb.result->data.resize(aRb.bufSize);
             void *p = nullptr;
             VmaAllocation a = toVmaAllocation(aRb.bufAlloc);
@@ -2098,6 +2188,7 @@ void QRhiVulkan::finishActiveReadbacks(bool forced)
         }
     }
 
+    // the callback may destroy the result object so invoke it last
     for (auto f : completedCallbacks)
         f();
 }

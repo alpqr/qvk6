@@ -14,7 +14,8 @@ qtConfig(vulkan) {
 
 win32 {
     SUBDIRS += \
-        plainqwindow_d3d11
+        plainqwindow_d3d11 \
+        offscreen_d3d11
 }
 
 mac {

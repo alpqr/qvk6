@@ -55,6 +55,7 @@ QT_BEGIN_NAMESPACE
 */
 
 QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
+    : ofr(this)
 {
     QRhiD3D11InitParams *d3dparams = static_cast<QRhiD3D11InitParams *>(params);
     debugLayer = d3dparams->enableDebugLayer;
@@ -461,11 +462,9 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
     swapChainD->cb.resetState();
 
-    currentFrameSlot = swapChainD->currentFrame;
-
     swapChainD->rt.d.pixelSize = swapChainD->pixelSize;
     swapChainD->rt.d.rtv[0] = swapChainD->sampleDesc.Count > 1 ?
-                swapChainD->msaaRtv[currentFrameSlot] : swapChainD->rtv[currentFrameSlot];
+                swapChainD->msaaRtv[swapChainD->currentFrame] : swapChainD->rtv[swapChainD->currentFrame];
     swapChainD->rt.d.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
 
     return QRhi::FrameOpSuccess;
@@ -480,8 +479,8 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     executeCommandBuffer(&swapChainD->cb);
 
     if (swapChainD->sampleDesc.Count > 1) {
-        context->ResolveSubresource(swapChainD->tex[currentFrameSlot], 0,
-                                    swapChainD->msaaTex[currentFrameSlot], 0,
+        context->ResolveSubresource(swapChainD->tex[swapChainD->currentFrame], 0,
+                                    swapChainD->msaaTex[swapChainD->currentFrame], 0,
                                     swapChainD->colorFormat);
     }
 
@@ -491,7 +490,7 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     if (FAILED(hr))
         qWarning("Failed to present: %s", qPrintable(comErrorMessage(hr)));
 
-    swapChainD->currentFrame = (swapChainD->currentFrame + 1) % FRAMES_IN_FLIGHT;
+    swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QD3D11SwapChain::BUFFER_COUNT;
 
     ++finishedFrameCount;
     return QRhi::FrameOpSuccess;
@@ -499,13 +498,27 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiD3D11::beginOffscreenFrame(QRhiCommandBuffer **cb)
 {
-    Q_UNUSED(cb);
-    return QRhi::FrameOpError;
+    Q_ASSERT(!inFrame);
+    inFrame = true;
+    ofr.active = true;
+
+    ofr.cbWrapper.resetState();
+    *cb = &ofr.cbWrapper;
+
+    return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
 {
-    return QRhi::FrameOpError;
+    Q_ASSERT(inFrame && ofr.active);
+    inFrame = false;
+    ofr.active = false;
+
+    executeCommandBuffer(&ofr.cbWrapper);
+    context->Flush();
+
+    ++finishedFrameCount;
+    return QRhi::FrameOpSuccess;;
 }
 
 bool QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
@@ -522,7 +535,7 @@ bool QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &r
 QRhi::FrameOpResult QRhiD3D11::finish()
 {
     Q_ASSERT(!inPass);
-
+    context->Flush();
     return QRhi::FrameOpSuccess;
 }
 

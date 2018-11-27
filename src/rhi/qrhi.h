@@ -1008,17 +1008,38 @@ public:
     FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
     FrameOpResult endOffscreenFrame();
 
-    // Cannot be inside a pass.
+    /*
+      Readbacks cannot be inside a pass. When used in a begin-endFrame (not
+      offscreen), the data may only be available in a future frame. Hence the
+      completed callback:
+          m_r->beginFrame(sc);
+          ...
+          QRhiReadbackResult *rbResult = new QRhiReadbackResult;
+          rbResult->completed = [rbResult] {
+              {
+                  QImage::Format fmt = rbResult->format == QRhiTexture::BGRA8 ? QImage::Format_ARGB32_Premultiplied
+                                                                              : QImage::Format_RGBA8888_Premultiplied;
+                  const uchar *p = reinterpret_cast<const uchar *>(rbResult->data.constData());
+                  QImage image(p, rbResult->pixelSize.width(), rbResult->pixelSize.height(), fmt);
+                    ...
+              }
+              delete rbResult;
+          };
+          QRhiReadbackDescription rb; // no texture -> backbuffer
+          m_r->readback(cb, rb, rbResult);
+          m_r->endFrame(sc);
+     */
     bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     // Waits for any work on the graphics queue (where applicable) to complete,
     // then forcibly executes all deferred operations, like completing
     // readbacks and resource releases. This should _not_ be used in practice,
     // except in infrequent special cases, like when the results of a readback
-    // are needed right away. Can be called inside and outside of a frame, but
-    // not inside a pass. Inside a frame it implies submitting any work on the
-    // command buffer. Unnecessary in combination with begin/endOffscreenFrame
-    // because ending an offscreen frame implies waiting for completion.
+    // are needed asap and no new frames are going to be generated for some
+    // time. Can be called inside and outside of a frame, but not inside a
+    // pass. Inside a frame it implies submitting any work on the command
+    // buffer. Unnecessary in combination with begin/endOffscreenFrame because
+    // ending an offscreen frame implies waiting for completion.
     QRhi::FrameOpResult finish();
 
     // Returns an instance to which updates can be queued. Batch instances are

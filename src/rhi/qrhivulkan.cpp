@@ -1403,6 +1403,8 @@ QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
 
 QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
 {
+    Q_ASSERT(ofr.active);
+
     ofr.active = false;
     prepareFrameEnd();
 

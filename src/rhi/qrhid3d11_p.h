@@ -429,8 +429,6 @@ public:
     D3D_FEATURE_LEVEL featureLevel;
     IDXGIFactory2 *dxgiFactory = nullptr;
 
-    static const int FRAMES_IN_FLIGHT = QD3D11SwapChain::BUFFER_COUNT;
-    int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
@@ -438,7 +436,14 @@ public:
     struct {
         int vsLastActiveSrvBinding = 0;
         int fsLastActiveSrvBinding = 0;
+        QD3D11SwapChain *currentSwapChain = nullptr;
     } contextState;
+
+    struct OffscreenFrame {
+        OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
+        bool active = false;
+        QD3D11CommandBuffer cbWrapper;
+    } ofr;
 };
 
 QT_END_NAMESPACE

@@ -198,7 +198,7 @@ int main(int argc, char **argv)
             QString fn = QString::asprintf("frame%d.png", frame);
             fn = QFileInfo(fn).absoluteFilePath();
             qDebug("Saving into %s", qPrintable(fn));
-            image.save(fn);
+            image.mirrored().save(fn); // gl has isYUpInFramebuffer == true so mirror
         } else {
             qWarning("Readback failed!");
         }

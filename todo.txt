@@ -1,5 +1,5 @@
-gl, mtl: rhi without a window, offscreen frame
-gl, mtl: readback (tex, backbuffer)
+mtl: rhi without a window, offscreen frame
+mtl: readback (tex, backbuffer)
 gl, mtl: compressed textures
 gl, mtl: srgb (tex, swapchain buf)
 multi window? (multi swapchain) -> trouble
@@ -10,6 +10,7 @@ mtl: cbuffers, textures, samplers set should be batched too
 mtl: msaa (onscreen)
 test cubemap
 test cubemap face as target
+face cubemap readback? (test vk/d3d, impl for gl)
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 resource import/export, what's the co-op story?
 copy-only passes for kicking off transfers early? (copy/transfer queue?)
@@ -28,7 +29,7 @@ d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hl
 gl: more ubuf types
 gl: reduce state, reduce texparam
 gl: tex size stuff (npot etc.)
-gl: tex formats
+gl: tex formats (texture, readback)
 more QImage->tex formats
 vk compressed tex: could it consume a complete ktx without any memcpys?
 multi-buffer (region) readback?
@@ -50,6 +51,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+gl: offscreen frame, readback
 d3d: readback
 d3d: offscreen frame
 vk: read back the backbuffer

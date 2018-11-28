@@ -444,13 +444,19 @@ QRhi::FrameOpResult QRhiGles2::endOffscreenFrame()
 
 bool QRhiGles2::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
-    Q_UNUSED(cb);
-    Q_UNUSED(rb);
-    Q_UNUSED(result);
-
     Q_ASSERT(inFrame && !inPass);
 
-    return false;
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+
+    QGles2CommandBuffer::Command cmd;
+    cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
+    cmd.args.readPixels.tex = rb.texture;
+    cmd.args.readPixels.layer = rb.layer;
+    cmd.args.readPixels.level = rb.level;
+    cmd.args.readPixels.result = result;
+    cbD->commands.append(cmd);
+
+    return true;
 }
 
 QRhi::FrameOpResult QRhiGles2::finish()
@@ -886,6 +892,35 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 f->glClearStencil(cmd.args.clear.s);
             }
             f->glClear(cmd.args.clear.mask);
+            break;
+        case QGles2CommandBuffer::Command::ReadPixels:
+        {
+            // ### more formats, layer, level
+            QRhiReadbackResult *result = cmd.args.readPixels.result;
+            GLuint fbo = 0;
+            if (cmd.args.readPixels.tex) {
+                QGles2Texture *texD = QRHI_RES(QGles2Texture, cmd.args.readPixels.tex);
+                result->pixelSize = texD->m_pixelSize;
+                result->format = texD->m_format;
+                // this is going to be suboptimal but will do for now
+                f->glGenFramebuffers(1, &fbo);
+                f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+                f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
+            } else {
+                result->pixelSize = currentSwapChain->pixelSize;
+                result->format = QRhiTexture::RGBA8;
+            }
+            result->data.resize(result->pixelSize.width() * result->pixelSize.height() * 4);
+            f->glReadPixels(0, 0, result->pixelSize.width(), result->pixelSize.height(),
+                            GL_RGBA, GL_UNSIGNED_BYTE,
+                            result->data.data());
+            if (fbo) {
+                f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
+                f->glDeleteFramebuffers(1, &fbo);
+            }
+            if (result->completed)
+                result->completed();
+        }
             break;
         default:
             break;

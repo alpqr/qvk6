@@ -269,7 +269,10 @@ void ExampleWindow::render()
             QString fn = QString::asprintf("frame%d.png", frameNo);
             fn = QFileInfo(fn).absoluteFilePath();
             qDebug("Saving into %s", qPrintable(fn));
-            image.save(fn);
+            if (m_r->isYUpInFramebuffer())
+                image.mirrored().save(fn);
+            else
+                image.save(fn);
         }
         delete rbResult;
     };

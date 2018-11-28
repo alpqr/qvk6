@@ -210,7 +210,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             DrawIndexed,
             BindGraphicsPipeline,
             BindFramebuffer,
-            Clear
+            Clear,
+            ReadPixels
         };
         Cmd cmd;
         union {
@@ -263,6 +264,12 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             struct {
                 QRhiTextureRenderTarget *rt;
             } bindFramebuffer;
+            struct {
+                QRhiTexture *tex;
+                int layer;
+                int level;
+                QRhiReadbackResult *result;
+            } readPixels;
         } args;
     };
 

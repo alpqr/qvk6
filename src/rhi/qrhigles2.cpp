@@ -56,6 +56,7 @@ QT_BEGIN_NAMESPACE
 */
 
 QRhiGles2::QRhiGles2(QRhiInitParams *params)
+    : ofr(this)
 {
     QRhiGles2InitParams *glparams = static_cast<QRhiGles2InitParams *>(params);
     ctx = glparams->context;
@@ -70,7 +71,7 @@ QRhiGles2::~QRhiGles2()
     destroy();
 }
 
-void QRhiGles2::ensureContext(QSurface *surface)
+bool QRhiGles2::ensureContext(QSurface *surface)
 {
     bool nativeWindowGone = false;
     if (surface && surface->surfaceClass() == QSurface::Window && !surface->surfaceHandle()) {
@@ -84,10 +85,14 @@ void QRhiGles2::ensureContext(QSurface *surface)
     if (buffersSwapped)
         buffersSwapped = false;
     else if (!nativeWindowGone && QOpenGLContext::currentContext() == ctx && (surface == fallbackSurface || ctx->surface() == surface))
-        return;
+        return true;
 
-    if (!ctx->makeCurrent(surface))
+    if (!ctx->makeCurrent(surface)) {
         qWarning("QRhiGles2: Failed to make context current. Expect bad things to happen.");
+        return false;
+    }
+
+    return true;
 }
 
 void QRhiGles2::create()
@@ -371,8 +376,11 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
     Q_ASSERT(!inFrame);
 
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
-    ensureContext(swapChainD->surface);
+    if (!ensureContext(swapChainD->surface))
+        return QRhi::FrameOpError;
+
     inFrame = true;
+    currentSwapChain = swapChainD;
 
     executeDeferredReleases();
     QRHI_RES(QGles2CommandBuffer, &swapChainD->cb)->resetState();
@@ -383,12 +391,15 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
 QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 {
     Q_ASSERT(inFrame);
+    inFrame = false;
 
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
-    ensureContext(swapChainD->surface);
+    if (!ensureContext(swapChainD->surface))
+        return QRhi::FrameOpError;
+
     executeCommandBuffer(&swapChainD->cb);
 
-    inFrame = false;
+    currentSwapChain = nullptr;
     ++finishedFrameCount;
 
     if (swapChainD->surface) {
@@ -401,13 +412,34 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiGles2::beginOffscreenFrame(QRhiCommandBuffer **cb)
 {
-    Q_UNUSED(cb);
-    return QRhi::FrameOpError;
+    Q_ASSERT(!inFrame);
+
+    if (!ensureContext())
+        return QRhi::FrameOpError;
+
+    inFrame = true;
+    ofr.active = true;
+
+    executeDeferredReleases();
+    ofr.cbWrapper.resetState();
+    *cb = &ofr.cbWrapper;
+
+    return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiGles2::endOffscreenFrame()
 {
-    return QRhi::FrameOpError;
+    Q_ASSERT(inFrame && ofr.active);
+    inFrame = false;
+    ofr.active = false;
+
+    if (!ensureContext())
+        return QRhi::FrameOpError;
+
+    executeCommandBuffer(&ofr.cbWrapper);
+
+    ++finishedFrameCount;
+    return QRhi::FrameOpSuccess;;
 }
 
 bool QRhiGles2::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
@@ -424,7 +456,21 @@ bool QRhiGles2::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &r
 QRhi::FrameOpResult QRhiGles2::finish()
 {
     Q_ASSERT(!inPass);
-
+    if (inFrame) {
+        if (ofr.active) {
+            Q_ASSERT(!currentSwapChain);
+            if (!ensureContext())
+                return QRhi::FrameOpError;
+            executeCommandBuffer(&ofr.cbWrapper);
+            ofr.cbWrapper.resetCommands();
+        } else {
+            Q_ASSERT(currentSwapChain);
+            if (!ensureContext(currentSwapChain->surface))
+                return QRhi::FrameOpError;
+            executeCommandBuffer(&currentSwapChain->cb);
+            currentSwapChain->cb.resetCommands();
+        }
+    }
     return QRhi::FrameOpSuccess;
 }
 
@@ -1112,7 +1158,8 @@ bool QGles2Buffer::build()
         return true;
     }
 
-    rhiD->ensureContext();
+    if (!rhiD->ensureContext())
+        return false;
 
     if (m_usage.testFlag(QRhiBuffer::VertexBuffer))
         target = GL_ARRAY_BUFFER;
@@ -1158,7 +1205,8 @@ bool QGles2RenderBuffer::build()
     if (m_hints.testFlag(ToBeUsedWithSwapChainOnly))
         return true;
 
-    rhiD->ensureContext();
+    if (!rhiD->ensureContext())
+        return false;
 
     rhiD->f->glGenRenderbuffers(1, &renderbuffer);
     rhiD->f->glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
@@ -1208,7 +1256,8 @@ bool QGles2Texture::build()
     if (texture)
         release();
 
-    rhiD->ensureContext();
+    if (!rhiD->ensureContext())
+        return false;
 
     const QSize size = safeSize(m_pixelSize);
     // ### adjust size for npot when repeat with npot is not supported?
@@ -1340,7 +1389,8 @@ bool QGles2TextureRenderTarget::build()
     if (m_desc.depthTexture)
         qWarning("QGles2TextureRenderTarget: Depth texture is not supported and will be ignored");
 
-    rhiD->ensureContext();
+    if (!rhiD->ensureContext())
+        return false;
 
     rhiD->f->glGenFramebuffers(1, &framebuffer);
     rhiD->f->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -1428,7 +1478,8 @@ bool QGles2GraphicsPipeline::build()
     if (program)
         release();
 
-    rhiD->ensureContext();
+    if (!rhiD->ensureContext())
+        return false;
 
     drawMode = toGlTopology(m_topology);
 

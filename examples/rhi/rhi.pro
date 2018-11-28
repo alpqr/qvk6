@@ -3,7 +3,8 @@ TEMPLATE = subdirs
 SUBDIRS += \
     hellominimalcrossgfxtriangle \
     compressedtexture_bc1 \
-    plainqwindow_gles2
+    plainqwindow_gles2 \
+    offscreen_gles2
 
 qtConfig(vulkan) {
     SUBDIRS += \

@@ -273,8 +273,12 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
 
-    void resetState() {
+    void resetCommands() {
         commands.clear();
+    }
+
+    void resetState() {
+        resetCommands();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
@@ -371,7 +375,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
 
-    void ensureContext(QSurface *surface = nullptr);
+    bool ensureContext(QSurface *surface = nullptr);
     void create();
     void destroy();
     void executeDeferredReleases();
@@ -388,6 +392,7 @@ public:
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
+    QGles2SwapChain *currentSwapChain = nullptr;
 
     struct DeferredReleaseEntry {
         enum Type {
@@ -417,6 +422,12 @@ public:
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
+
+    struct OffscreenFrame {
+        OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
+        bool active = false;
+        QGles2CommandBuffer cbWrapper;
+    } ofr;
 };
 
 Q_DECLARE_TYPEINFO(QRhiGles2::DeferredReleaseEntry, Q_MOVABLE_TYPE);

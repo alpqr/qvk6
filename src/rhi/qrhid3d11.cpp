@@ -61,9 +61,11 @@ QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
     debugLayer = d3dparams->enableDebugLayer;
     importedDevice = d3dparams->importExistingDevice;
     if (importedDevice) {
-        dev = d3dparams->dev;
-        if (SUCCEEDED(d3dparams->context->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
-            d3dparams->context->Release();
+        dev = reinterpret_cast<ID3D11Device *>(d3dparams->dev);
+        ID3D11DeviceContext *ctx = reinterpret_cast<ID3D11DeviceContext *>(d3dparams->context);
+        if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
+            // get rid of the ref added by QueryInterface
+            ctx->Release();
         } else {
             qWarning("ID3D11DeviceContext1 not supported by context, cannot import");
             importedDevice = false;

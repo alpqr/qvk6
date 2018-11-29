@@ -932,8 +932,6 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShader
 {
     QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, ps);
 
-    // ### this needs some proper caching later on to minimize state changes
-
     if (psD->m_flags.testFlag(QRhiGraphicsPipeline::UsesScissor))
         f->glEnable(GL_SCISSOR_TEST);
     else

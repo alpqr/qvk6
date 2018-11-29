@@ -185,7 +185,6 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
 
     GLuint program = 0;
     GLenum drawMode = GL_TRIANGLES;
-    uint generation = 0;
     QShaderDescription vsDesc;
     QShaderDescription fsDesc;
 
@@ -204,6 +203,7 @@ struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
     };
     QVector<Sampler> samplers;
 
+    uint generation = 0;
     friend class QRhiGles2;
 };
 

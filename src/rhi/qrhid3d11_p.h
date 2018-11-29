@@ -195,6 +195,8 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     friend class QRhiD3D11;
 };
 
+Q_DECLARE_TYPEINFO(QD3D11ShaderResourceBindings::BoundResourceData, Q_MOVABLE_TYPE);
+
 struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
 {
     QD3D11GraphicsPipeline(QRhiImplementation *rhi);
@@ -329,6 +331,8 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
         currentSrbGeneration = 0;
     }
 };
+
+Q_DECLARE_TYPEINFO(QD3D11CommandBuffer::Command, Q_MOVABLE_TYPE);
 
 struct QD3D11SwapChain : public QRhiSwapChain
 {

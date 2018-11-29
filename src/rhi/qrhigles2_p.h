@@ -91,6 +91,8 @@ struct QGles2Texture : public QRhiTexture
     GLenum glintformat;
     GLenum glformat;
     GLenum gltype;
+
+    uint generation = 0;
     friend class QRhiGles2;
 };
 
@@ -106,6 +108,8 @@ struct QGles2Sampler : public QRhiSampler
     GLenum glwraps;
     GLenum glwrapt;
     GLenum glwrapr;
+
+    uint generation = 0;
     friend class QRhiGles2;
 };
 
@@ -156,9 +160,22 @@ struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
     void release() override;
     bool build() override;
 
+    struct BoundSampledTextureData {
+        uint texGeneration;
+        uint samplerGeneration;
+    };
+    struct BoundResourceData {
+        union {
+            BoundSampledTextureData stex;
+        };
+    };
+    QVector<BoundResourceData> boundResourceData;
+
     uint generation = 0;
     friend class QRhiGles2;
 };
+
+Q_DECLARE_TYPEINFO(QGles2ShaderResourceBindings::BoundResourceData, Q_MOVABLE_TYPE);
 
 struct QGles2GraphicsPipeline : public QRhiGraphicsPipeline
 {

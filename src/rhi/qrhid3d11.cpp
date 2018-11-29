@@ -842,7 +842,6 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
     srbD->fssamplers.clear();
     srbD->fsshaderresources.clear();
 
-    srbD->boundResourceData.resize(srbD->sortedBindings.count());
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
         QD3D11ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
@@ -1627,6 +1626,8 @@ bool QD3D11ShaderResourceBindings::build()
     {
         return a.binding < b.binding;
     });
+
+    boundResourceData.resize(sortedBindings.count());
 
     QRHI_RES_RHI(QRhiD3D11);
     rhiD->updateShaderResourceBindings(this);

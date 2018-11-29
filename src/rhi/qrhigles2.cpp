@@ -1000,8 +1000,11 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShader
 void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly)
 {
     QGles2ShaderResourceBindings *srbD = QRHI_RES(QGles2ShaderResourceBindings, srb);
+
     for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBinding &b(srbD->m_bindings[i]);
+        QGles2ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
+
         switch (b.type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
@@ -1067,18 +1070,26 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
             QGles2Texture *texD = QRHI_RES(QGles2Texture, b.stex.tex);
             QGles2Sampler *samplerD = QRHI_RES(QGles2Sampler, b.stex.sampler);
 
+            const bool textureChanged = QRHI_RES(QGles2Texture, b.stex.tex)->generation != bd.stex.texGeneration;
+            if (textureChanged)
+                bd.stex.texGeneration = QRHI_RES(QGles2Texture, b.stex.tex)->generation;
+            const bool samplerChanged = QRHI_RES(QGles2Sampler, b.stex.sampler)->generation != bd.stex.samplerGeneration;
+            if (samplerChanged)
+                bd.stex.samplerGeneration = QRHI_RES(QGles2Sampler, b.stex.sampler)->generation;
+
             int texUnit = 0;
             for (QGles2GraphicsPipeline::Sampler &sampler : psD->samplers) {
                 if (sampler.binding == b.binding) {
-                    // ### should this use sampler->generation or something to prevent doing it over and over again
                     f->glActiveTexture(GL_TEXTURE0 + texUnit);
                     f->glBindTexture(texD->target, texD->texture);
 
-                    f->glTexParameteri(texD->target, GL_TEXTURE_MIN_FILTER, samplerD->glminfilter);
-                    f->glTexParameteri(texD->target, GL_TEXTURE_MAG_FILTER, samplerD->glmagfilter);
-                    f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_S, samplerD->glwraps);
-                    f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_T, samplerD->glwrapt);
-                    f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_R, samplerD->glwrapr);
+                    if (textureChanged || samplerChanged) {
+                        f->glTexParameteri(texD->target, GL_TEXTURE_MIN_FILTER, samplerD->glminfilter);
+                        f->glTexParameteri(texD->target, GL_TEXTURE_MAG_FILTER, samplerD->glmagfilter);
+                        f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_S, samplerD->glwraps);
+                        f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_T, samplerD->glwrapt);
+                        f->glTexParameteri(texD->target, GL_TEXTURE_WRAP_R, samplerD->glwrapr);
+                    }
 
                     f->glUniform1i(sampler.glslLocation, texUnit);
                     ++texUnit;
@@ -1323,6 +1334,7 @@ bool QGles2Texture::build()
         rhiD->f->glTexImage2D(target, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
     }
 
+    generation += 1;
     return true;
 }
 
@@ -1345,6 +1357,7 @@ bool QGles2Sampler::build()
     glwrapt = toGlWrapMode(m_addressV);
     glwrapr = toGlWrapMode(m_addressW);
 
+    generation += 1;
     return true;
 }
 
@@ -1479,6 +1492,26 @@ void QGles2ShaderResourceBindings::release()
 
 bool QGles2ShaderResourceBindings::build()
 {
+    boundResourceData.resize(m_bindings.count());
+
+    for (int i = 0, ie = m_bindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBinding &b(m_bindings[i]);
+        BoundResourceData &bd(boundResourceData[i]);
+        switch (b.type) {
+        case QRhiShaderResourceBinding::UniformBuffer:
+            // nothing, we do not track buffer generations
+            break;
+        case QRhiShaderResourceBinding::SampledTexture:
+            // Start with values that will fail the first comparison for sure.
+            bd.stex.texGeneration = UINT_MAX; // QRHI_RES(QGles2Texture, b.stex.tex)->generation;
+            bd.stex.samplerGeneration = UINT_MAX; // QRHI_RES(QGles2Sampler, b.stex.sampler)->generation;
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
     generation += 1;
     return true;
 }

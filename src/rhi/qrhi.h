@@ -55,6 +55,8 @@ class QRhiBuffer;
 class QRhiRenderBuffer;
 class QRhiTexture;
 class QRhiSampler;
+class QRhiCommandBuffer;
+class QRhiResourceUpdateBatch;
 struct QRhiResourceUpdateBatchPrivate;
 
 // C++ object ownership rules:
@@ -784,13 +786,6 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::ColorMask)
 Q_DECLARE_TYPEINFO(QRhiGraphicsPipeline::TargetBlend, Q_MOVABLE_TYPE);
 
-class Q_RHI_EXPORT QRhiCommandBuffer : public QRhiResource
-{
-protected:
-    QRhiCommandBuffer(QRhiImplementation *rhi);
-    void *m_reserved;
-};
-
 class Q_RHI_EXPORT QRhiSwapChain : public QRhiResource
 {
 public:
@@ -863,6 +858,92 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
 
+struct Q_RHI_EXPORT QRhiReadbackResult
+{
+    std::function<void()> completed = nullptr;
+    QRhiTexture::Format format;
+    QSize pixelSize;
+    QByteArray data;
+}; // non-movable due to the std::function
+
+class Q_RHI_EXPORT QRhiCommandBuffer : public QRhiResource
+{
+public:
+    enum IndexFormat {
+        IndexUInt16,
+        IndexUInt32
+    };
+
+    void beginPass(QRhiRenderTarget *rt,
+                   const QRhiColorClearValue &colorClearValue, // ignored when rt has PreserveColorContents
+                   const QRhiDepthStencilClearValue &depthStencilClearValue, // ignored when no ds attachment
+                   QRhiResourceUpdateBatch *resourceUpdates = nullptr);
+    void endPass();
+
+    // When specified, srb can be different from ps' srb but the layouts must
+    // match. Basic tracking is included: no command is added to the cb when
+    // the pipeline or desc.set are the same as in the last call in the same
+    // frame; srb is updated automatically at this point whenever a referenced
+    // buffer, texture, etc. is out of date internally (due to rebuilding since
+    // the creation of the srb) - hence no need to manually recreate the srb in
+    // case a QRhiBuffer is "resized" etc.
+    void setGraphicsPipeline(QRhiGraphicsPipeline *ps,
+                             QRhiShaderResourceBindings *srb = nullptr);
+
+    // The set* and draw* functions expect to have the pipeline set before on
+    // the command buffer. Otherwise, unspecified issues may arise depending on
+    // the backend.
+
+    using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
+    void setVertexInput(int startBinding, const QVector<VertexInput> &bindings,
+                        QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,
+                        IndexFormat indexFormat = IndexUInt16);
+
+    void setViewport(const QRhiViewport &viewport);
+    void setScissor(const QRhiScissor &scissor);
+    void setBlendConstants(const QVector4D &c);
+    void setStencilRef(quint32 refValue);
+
+    void draw(quint32 vertexCount,
+              quint32 instanceCount = 1,
+              quint32 firstVertex = 0,
+              quint32 firstInstance = 0);
+
+    // final offset (indexOffset + firstIndex * n) must be 4 byte aligned with some backends
+    void drawIndexed(quint32 indexCount,
+                     quint32 instanceCount = 1,
+                     quint32 firstIndex = 0,
+                     qint32 vertexOffset = 0,
+                     quint32 firstInstance = 0);
+
+    /*
+      Readbacks cannot be inside a pass. When used in a begin-endFrame (not
+      offscreen), the data may only be available in a future frame. Hence the
+      completed callback:
+          beginFrame(sc);
+          ...
+          QRhiReadbackResult *rbResult = new QRhiReadbackResult;
+          rbResult->completed = [rbResult] {
+              {
+                  QImage::Format fmt = rbResult->format == QRhiTexture::BGRA8 ? QImage::Format_ARGB32_Premultiplied
+                                                                              : QImage::Format_RGBA8888_Premultiplied;
+                  const uchar *p = reinterpret_cast<const uchar *>(rbResult->data.constData());
+                  QImage image(p, rbResult->pixelSize.width(), rbResult->pixelSize.height(), fmt);
+                    ...
+              }
+              delete rbResult;
+          };
+          QRhiReadbackDescription rb; // no texture -> backbuffer
+          cb->readback(rb, rbResult);
+          endFrame(sc);
+     */
+    bool readback(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
+
+protected:
+    QRhiCommandBuffer(QRhiImplementation *rhi);
+    void *m_reserved;
+};
+
 class Q_RHI_EXPORT QRhiResourceUpdateBatch // sort of a command buffer for copy type of operations
 {
 public:
@@ -905,14 +986,6 @@ private:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiResourceUpdateBatch::TexturePrepareFlags)
 
-struct Q_RHI_EXPORT QRhiReadbackResult
-{
-    std::function<void()> completed = nullptr;
-    QRhiTexture::Format format;
-    QSize pixelSize;
-    QByteArray data;
-}; // non-movable due to the std::function
-
 struct Q_RHI_EXPORT QRhiInitParams
 {
 };
@@ -932,11 +1005,6 @@ public:
         FrameOpError,
         FrameOpSwapChainOutOfDate,
         FrameOpDeviceLost
-    };
-
-    enum IndexFormat {
-        IndexUInt16,
-        IndexUInt32
     };
 
     ~QRhi();
@@ -1007,9 +1075,10 @@ public:
            beginFrame(sc);
            updates = nextResourceUpdateBatch();
            updates->...
-           beginPass(sc->currentFrameRenderTarget(), sc->currentFrameCommandBuffer(), clearValues, updates);
+           QRhiCommandBuffer *cb = sc->currentFrameCommandBuffer();
+           cb->beginPass(sc->currentFrameRenderTarget(), clearValues, updates);
            ...
-           endPass(sc->currentFrameCommandBuffer());
+           cb->endPass();
            endFrame(sc); // this queues the Present, begin/endFrame manages double buffering internally
      */
     QRhiSwapChain *newSwapChain();
@@ -1027,35 +1096,12 @@ public:
           QRhiCommandBuffer *cb; // not owned
           beginOffscreenFrame(&cb);
           // ... the usual, set up a QRhiTextureRenderTarget, beginPass-endPass, etc.
-          readback(cb, rb, &rbResult);
+          cb->readback(rb, &rbResult);
           endOffscreenFrame();
           // image data available in rbResult
      */
     FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
     FrameOpResult endOffscreenFrame();
-
-    /*
-      Readbacks cannot be inside a pass. When used in a begin-endFrame (not
-      offscreen), the data may only be available in a future frame. Hence the
-      completed callback:
-          m_r->beginFrame(sc);
-          ...
-          QRhiReadbackResult *rbResult = new QRhiReadbackResult;
-          rbResult->completed = [rbResult] {
-              {
-                  QImage::Format fmt = rbResult->format == QRhiTexture::BGRA8 ? QImage::Format_ARGB32_Premultiplied
-                                                                              : QImage::Format_RGBA8888_Premultiplied;
-                  const uchar *p = reinterpret_cast<const uchar *>(rbResult->data.constData());
-                  QImage image(p, rbResult->pixelSize.width(), rbResult->pixelSize.height(), fmt);
-                    ...
-              }
-              delete rbResult;
-          };
-          QRhiReadbackDescription rb; // no texture -> backbuffer
-          m_r->readback(cb, rb, rbResult);
-          m_r->endFrame(sc);
-     */
-    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     // Waits for any work on the graphics queue (where applicable) to complete,
     // then forcibly executes all deferred operations, like completing
@@ -1074,46 +1120,6 @@ public:
     // calling release(). Can be called outside begin-endFrame as well since
     // a batch instance just collects data on its own.
     QRhiResourceUpdateBatch *nextResourceUpdateBatch();
-
-    void beginPass(QRhiRenderTarget *rt,
-                   QRhiCommandBuffer *cb,
-                   const QRhiColorClearValue &colorClearValue, // ignored when rt has PreserveColorContents
-                   const QRhiDepthStencilClearValue &depthStencilClearValue, // ignored when no ds attachment
-                   QRhiResourceUpdateBatch *resourceUpdates = nullptr);
-    void endPass(QRhiCommandBuffer *cb);
-
-    // When specified, srb can be different from ps' srb but the layouts must
-    // match. Basic tracking is included: no command is added to the cb when
-    // the pipeline or desc.set are the same as in the last call in the same
-    // frame; srb is updated automatically at this point whenever a referenced
-    // buffer, texture, etc. is out of date internally (due to rebuilding since
-    // the creation of the srb) - hence no need to manually recreate the srb in
-    // case a QRhiBuffer is "resized" etc.
-    void setGraphicsPipeline(QRhiCommandBuffer *cb,
-                             QRhiGraphicsPipeline *ps,
-                             QRhiShaderResourceBindings *srb = nullptr);
-
-    // The following functions (taking a command buffer) expect to have the
-    // pipeline set already on the command buffer. Otherwise, unspecified
-    // issues may arise depending on the backend.
-    using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
-    void setVertexInput(QRhiCommandBuffer *cb,
-                        int startBinding, const QVector<VertexInput> &bindings,
-                        QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,
-                        IndexFormat indexFormat = IndexUInt16);
-
-    void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport);
-    void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor);
-    void setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c);
-    void setStencilRef(QRhiCommandBuffer *cb, quint32 refValue);
-
-    void draw(QRhiCommandBuffer *cb, quint32 vertexCount,
-              quint32 instanceCount = 1, quint32 firstVertex = 0, quint32 firstInstance = 0);
-
-    // final offset (indexOffset + firstIndex * n) must be 4 byte aligned with some backends
-    void drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
-                     quint32 instanceCount = 1, quint32 firstIndex = 0,
-                     qint32 vertexOffset = 0, quint32 firstInstance = 0);
 
     QVector<int> supportedSampleCounts() const;
 

@@ -2432,8 +2432,8 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     srbD->lastActiveFrameSlot = currentFrameSlot;
 }
 
-void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
-                                QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
+void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
+                                QRhiBuffer *indexBuf, quint32 indexOffset, QRhiCommandBuffer::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
 
@@ -2463,7 +2463,8 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
             executeBufferHostWritesForCurrentFrame(ibufD);
 
         const int idx = ibufD->m_type == QRhiBuffer::Dynamic ? currentFrameSlot : 0;
-        const VkIndexType type = indexFormat == QRhi::IndexUInt16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+        const VkIndexType type = indexFormat == QRhiCommandBuffer::IndexUInt16 ? VK_INDEX_TYPE_UINT16
+                                                                               : VK_INDEX_TYPE_UINT32;
         df->vkCmdBindIndexBuffer(cbD->cb, ibufD->buffers[idx], indexOffset, type);
     }
 }

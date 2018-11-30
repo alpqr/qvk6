@@ -117,9 +117,9 @@ void Renderer::startNextFrame()
     QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
     m_triRenderer.queueResourceUpdates(u);
 
-    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
+    cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
     m_triRenderer.queueDraw(cb, m_sc->effectivePixelSize());
-    m_r->endPass(cb);
+    cb->endPass();
 
     m_r->endFrame(m_sc);
 

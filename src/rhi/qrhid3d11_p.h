@@ -413,9 +413,9 @@ public:
                              QRhiShaderResourceBindings *srb) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
-                        int startBinding, const QVector<QRhi::VertexInput> &bindings,
+                        int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
                         QRhiBuffer *indexBuf, quint32 indexOffset,
-                        QRhi::IndexFormat indexFormat) override;
+                        QRhiCommandBuffer::IndexFormat indexFormat) override;
 
     void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) override;
     void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) override;

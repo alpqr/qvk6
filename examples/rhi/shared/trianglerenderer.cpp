@@ -199,8 +199,8 @@ void TriangleRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpd
 
 void TriangleRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
-    m_r->setGraphicsPipeline(cb, m_ps);
-    m_r->setViewport(cb, QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
-    m_r->setVertexInput(cb, 0, { { m_vbuf, 0 } });
-    m_r->draw(cb, 3);
+    cb->setGraphicsPipeline(m_ps);
+    cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    cb->setVertexInput(0, { { m_vbuf, 0 } });
+    cb->draw(3);
 }

@@ -283,12 +283,12 @@ void Window::customRender()
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
     const QSize outputSizeInPixels = m_sc->effectivePixelSize();
 
-    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
+    cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
 
-    m_r->setGraphicsPipeline(cb, d.ps);
-    m_r->setViewport(cb, { 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
-    m_r->setVertexInput(cb, 0, { { d.vbuf, 0 }, { d.vbuf, 36 * 3 * sizeof(float) } });
-    m_r->draw(cb, 36);
+    cb->setGraphicsPipeline(d.ps);
+    cb->setViewport({ 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
+    cb->setVertexInput(0, { { d.vbuf, 0 }, { d.vbuf, 36 * 3 * sizeof(float) } });
+    cb->draw(36);
 
-    m_r->endPass(cb);
+    cb->endPass();
 }

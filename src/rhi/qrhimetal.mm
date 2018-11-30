@@ -361,8 +361,8 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     psD->lastActiveFrameSlot = currentFrameSlot;
 }
 
-void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
-                               QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
+void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
+                               QRhiBuffer *indexBuf, quint32 indexOffset, QRhiCommandBuffer::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
@@ -480,7 +480,7 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
     if (!cbD->currentIndexBuffer)
         return;
 
-    const quint32 indexOffset = cbD->currentIndexOffset + firstIndex * (cbD->currentIndexFormat == QRhi::IndexUInt16 ? 2 : 4);
+    const quint32 indexOffset = cbD->currentIndexOffset + firstIndex * (cbD->currentIndexFormat == QRhiCommandBuffer::IndexUInt16 ? 2 : 4);
     Q_ASSERT(indexOffset == aligned(indexOffset, 4));
 
     QMetalBuffer *ibufD = QRHI_RES(QMetalBuffer, cbD->currentIndexBuffer);
@@ -488,7 +488,7 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 
     [cbD->d->currentPassEncoder drawIndexedPrimitives: QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->d->primitiveType
       indexCount: indexCount
-      indexType: cbD->currentIndexFormat == QRhi::IndexUInt16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
+      indexType: cbD->currentIndexFormat == QRhiCommandBuffer::IndexUInt16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
       indexBuffer: mtlbuf
       indexBufferOffset: indexOffset
       instanceCount: instanceCount

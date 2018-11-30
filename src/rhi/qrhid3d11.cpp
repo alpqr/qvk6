@@ -332,8 +332,8 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     }
 }
 
-void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
-                               QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
+void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
+                               QRhiBuffer *indexBuf, quint32 indexOffset, QRhiCommandBuffer::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
@@ -363,7 +363,8 @@ void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         cmd.cmd = QD3D11CommandBuffer::Command::BindIndexBuffer;
         cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
         cmd.args.bindIndexBuffer.offset = indexOffset;
-        cmd.args.bindIndexBuffer.format = indexFormat == QRhi::IndexUInt16 ? DXGI_FORMAT_R16_UINT : DXGI_FORMAT_R32_UINT;
+        cmd.args.bindIndexBuffer.format = indexFormat == QRhiCommandBuffer::IndexUInt16 ? DXGI_FORMAT_R16_UINT
+                                                                                        : DXGI_FORMAT_R32_UINT;
         cbD->commands.append(cmd);
         if (ibufD->m_type == QRhiBuffer::Dynamic)
             executeBufferHostWritesForCurrentFrame(ibufD);

@@ -256,8 +256,8 @@ void QRhiGles2::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     }
 }
 
-void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhi::VertexInput> &bindings,
-                               QRhiBuffer *indexBuf, quint32 indexOffset, QRhi::IndexFormat indexFormat)
+void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
+                               QRhiBuffer *indexBuf, quint32 indexOffset, QRhiCommandBuffer::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
@@ -283,7 +283,7 @@ void QRhiGles2::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         cmd.cmd = QGles2CommandBuffer::Command::BindIndexBuffer;
         cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
         cmd.args.bindIndexBuffer.offset = indexOffset;
-        cmd.args.bindIndexBuffer.type = indexFormat == QRhi::IndexUInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
+        cmd.args.bindIndexBuffer.type = indexFormat == QRhiCommandBuffer::IndexUInt16 ? GL_UNSIGNED_SHORT : GL_UNSIGNED_INT;
         cbD->commands.append(cmd);
     }
 }

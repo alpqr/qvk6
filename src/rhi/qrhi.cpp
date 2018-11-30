@@ -512,6 +512,70 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
     texturePrepares += other->texturePrepares;
 }
 
+void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
+                                  const QRhiColorClearValue &colorClearValue,
+                                  const QRhiDepthStencilClearValue &depthStencilClearValue,
+                                  QRhiResourceUpdateBatch *resourceUpdates)
+{
+    rhi->beginPass(rt, this, colorClearValue, depthStencilClearValue, resourceUpdates);
+}
+
+void QRhiCommandBuffer::endPass()
+{
+    rhi->endPass(this);
+}
+
+void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps,
+                                            QRhiShaderResourceBindings *srb)
+{
+    rhi->setGraphicsPipeline(this, ps, srb);
+}
+
+void QRhiCommandBuffer::setVertexInput(int startBinding, const QVector<VertexInput> &bindings,
+                                       QRhiBuffer *indexBuf, quint32 indexOffset,
+                                       IndexFormat indexFormat)
+{
+    rhi->setVertexInput(this, startBinding, bindings, indexBuf, indexOffset, indexFormat);
+}
+
+void QRhiCommandBuffer::setViewport(const QRhiViewport &viewport)
+{
+    rhi->setViewport(this, viewport);
+}
+
+void QRhiCommandBuffer::setScissor(const QRhiScissor &scissor)
+{
+    rhi->setScissor(this, scissor);
+}
+
+void QRhiCommandBuffer::setBlendConstants(const QVector4D &c)
+{
+    rhi->setBlendConstants(this, c);
+}
+
+void QRhiCommandBuffer::setStencilRef(quint32 refValue)
+{
+    rhi->setStencilRef(this, refValue);
+}
+
+void QRhiCommandBuffer::draw(quint32 vertexCount,
+                             quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
+{
+    rhi->draw(this, vertexCount, instanceCount, firstVertex, firstInstance);
+}
+
+void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
+                                    quint32 instanceCount, quint32 firstIndex,
+                                    qint32 vertexOffset, quint32 firstInstance)
+{
+    rhi->drawIndexed(this, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+bool QRhiCommandBuffer::readback(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    return rhi->readback(this, rb, result);
+}
+
 int QRhi::ubufAligned(int v) const
 {
     const int byteAlign = ubufAlignment();
@@ -615,76 +679,9 @@ QRhi::FrameOpResult QRhi::endOffscreenFrame()
     return d->endOffscreenFrame();
 }
 
-bool QRhi::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    return d->readback(cb, rb, result);
-}
-
 QRhi::FrameOpResult QRhi::finish()
 {
     return d->finish();
-}
-
-void QRhi::beginPass(QRhiRenderTarget *rt,
-                     QRhiCommandBuffer *cb,
-                     const QRhiColorClearValue &colorClearValue,
-                     const QRhiDepthStencilClearValue &depthStencilClearValue,
-                     QRhiResourceUpdateBatch *resourceUpdates)
-{
-    d->beginPass(rt, cb, colorClearValue, depthStencilClearValue, resourceUpdates);
-}
-
-void QRhi::endPass(QRhiCommandBuffer *cb)
-{
-    d->endPass(cb);
-}
-
-void QRhi::setGraphicsPipeline(QRhiCommandBuffer *cb,
-                               QRhiGraphicsPipeline *ps,
-                               QRhiShaderResourceBindings *srb)
-{
-    d->setGraphicsPipeline(cb, ps, srb);
-}
-
-void QRhi::setVertexInput(QRhiCommandBuffer *cb,
-                          int startBinding, const QVector<VertexInput> &bindings,
-                          QRhiBuffer *indexBuf, quint32 indexOffset,
-                          IndexFormat indexFormat)
-{
-    d->setVertexInput(cb, startBinding, bindings, indexBuf, indexOffset, indexFormat);
-}
-
-void QRhi::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
-{
-    d->setViewport(cb, viewport);
-}
-
-void QRhi::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
-{
-    d->setScissor(cb, scissor);
-}
-
-void QRhi::setBlendConstants(QRhiCommandBuffer *cb, const QVector4D &c)
-{
-    d->setBlendConstants(cb, c);
-}
-
-void QRhi::setStencilRef(QRhiCommandBuffer *cb, quint32 refValue)
-{
-    d->setStencilRef(cb, refValue);
-}
-
-void QRhi::draw(QRhiCommandBuffer *cb, quint32 vertexCount,
-                quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
-{
-    d->draw(cb, vertexCount, instanceCount, firstVertex, firstInstance);
-}
-
-void QRhi::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
-                       quint32 instanceCount, quint32 firstIndex,
-                       qint32 vertexOffset, quint32 firstInstance)
-{
-    d->drawIndexed(cb, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 QVector<int> QRhi::supportedSampleCounts() const

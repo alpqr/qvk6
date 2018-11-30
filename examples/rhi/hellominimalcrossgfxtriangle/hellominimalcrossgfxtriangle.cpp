@@ -480,14 +480,14 @@ void Window::render()
     const QSize outputSizeInPixels = m_sc->effectivePixelSize();
 
     // Apply buffer updates, clear, start the renderpass (where applicable).
-    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
+    cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
 
-    m_r->setGraphicsPipeline(cb, m_ps);
-    m_r->setViewport(cb, { 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
-    m_r->setVertexInput(cb, 0, { { m_vbuf, 0 } });
-    m_r->draw(cb, 3);
+    cb->setGraphicsPipeline(m_ps);
+    cb->setViewport({ 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
+    cb->setVertexInput(0, { { m_vbuf, 0 } });
+    cb->draw(3);
 
-    m_r->endPass(cb);
+    cb->endPass();
 
     // Submit.
     m_r->endFrame(m_sc);

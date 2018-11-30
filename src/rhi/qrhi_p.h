@@ -100,9 +100,9 @@ public:
                                      QRhiShaderResourceBindings *srb = nullptr) = 0;
 
     virtual void setVertexInput(QRhiCommandBuffer *cb,
-                                int startBinding, const QVector<QRhi::VertexInput> &bindings,
+                                int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
                                 QRhiBuffer *indexBuf, quint32 indexOffset,
-                                QRhi::IndexFormat indexFormat) = 0;
+                                QRhiCommandBuffer::IndexFormat indexFormat) = 0;
 
     virtual void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) = 0;
     virtual void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) = 0;

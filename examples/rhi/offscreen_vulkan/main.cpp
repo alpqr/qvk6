@@ -185,17 +185,17 @@ int main(int argc, char **argv)
             opacity = qBound(0.0f, opacity, 1.0f);
         }
 
-        r->beginPass(rt, cb, { 0, 1, 0, 1 }, { 1, 0 }, u);
-        r->setGraphicsPipeline(cb, ps);
-        r->setViewport(cb, { 0, 0, 1280, 720 });
-        r->setVertexInput(cb, 0, { { vbuf, 0 } });
-        r->draw(cb, 3);
-        r->endPass(cb);
+        cb->beginPass(rt, { 0, 1, 0, 1 }, { 1, 0 }, u);
+        cb->setGraphicsPipeline(ps);
+        cb->setViewport({ 0, 0, 1280, 720 });
+        cb->setVertexInput(0, { { vbuf, 0 } });
+        cb->draw(3);
+        cb->endPass();
 
         QRhiReadbackDescription rb(tex);
         QRhiReadbackResult rbResult;
         rbResult.completed = [frame] { qDebug("  - readback %d completed", frame); };
-        r->readback(cb, rb, &rbResult);
+        cb->readback(rb, &rbResult);
 
         qDebug("Submit and wait");
         r->endOffscreenFrame();

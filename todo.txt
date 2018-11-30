@@ -55,6 +55,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+move cb api into QRhiCommandBuffer
 d3d: texcopy
 copyimage (color, with rect?, no resolve or transforms here)
 vk, d3d, gl: tex upload with pos

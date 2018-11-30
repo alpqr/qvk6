@@ -246,7 +246,7 @@ void ExampleWindow::render()
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueResourceUpdates(u);
 
-    m_r->beginPass(m_sc->currentFrameRenderTarget(), cb, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
+    cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
     m_triRenderer.queueDraw(cb, outputSize);
     if (!m_triangleOnly) {
         m_quadRenderer.queueDraw(cb, outputSize);
@@ -254,7 +254,7 @@ void ExampleWindow::render()
     }
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueDraw(cb, outputSize);
-    m_r->endPass(cb);
+    cb->endPass();
 
 #ifdef READBACK_SWAPCHAIN
     QRhiReadbackDescription rb; // no texture given -> backbuffer

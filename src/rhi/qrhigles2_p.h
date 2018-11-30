@@ -91,6 +91,7 @@ struct QGles2Texture : public QRhiTexture
     GLenum glintformat;
     GLenum glformat;
     GLenum gltype;
+    bool specified = false;
 
     uint generation = 0;
     friend class QRhiGles2;
@@ -399,7 +400,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
 
-    bool ensureContext(QSurface *surface = nullptr);
+    bool ensureContext(QSurface *surface = nullptr) const;
     void create();
     void destroy();
     void executeDeferredReleases();
@@ -411,12 +412,13 @@ public:
     QOpenGLContext *ctx = nullptr;
     QWindow *maybeWindow = nullptr;
     QSurface *fallbackSurface = nullptr;
-    bool buffersSwapped = false;
+    mutable bool buffersSwapped = false;
     QOpenGLFunctions *f = nullptr;
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
     QGles2SwapChain *currentSwapChain = nullptr;
+    QVector<GLint> supportedCompressedFormats;
 
     struct DeferredReleaseEntry {
         enum Type {

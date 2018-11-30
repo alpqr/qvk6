@@ -71,7 +71,7 @@ QRhiGles2::~QRhiGles2()
     destroy();
 }
 
-bool QRhiGles2::ensureContext(QSurface *surface)
+bool QRhiGles2::ensureContext(QSurface *surface) const
 {
     bool nativeWindowGone = false;
     if (surface && surface->surfaceClass() == QSurface::Window && !surface->surfaceHandle()) {
@@ -100,7 +100,8 @@ void QRhiGles2::create()
     Q_ASSERT(ctx);
     Q_ASSERT(fallbackSurface);
 
-    ensureContext(maybeWindow ? maybeWindow : fallbackSurface); // see 'window' discussion in QRhiGles2InitParams comments
+    if (!ensureContext(maybeWindow ? maybeWindow : fallbackSurface)) // see 'window' discussion in QRhiGles2InitParams comments
+        return;
 
     f = ctx->functions();
 
@@ -109,6 +110,12 @@ void QRhiGles2::create()
     const char *version = reinterpret_cast<const char *>(f->glGetString(GL_VERSION));
     if (vendor && renderer && version)
         qDebug("OpenGL VENDOR: %s RENDERER: %s VERSION: %s", vendor, renderer, version);
+
+    GLint n = 0;
+    f->glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &n);
+    supportedCompressedFormats.resize(n);
+    if (n > 0)
+        f->glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, supportedCompressedFormats.data());
 }
 
 void QRhiGles2::destroy()
@@ -183,12 +190,62 @@ QMatrix4x4 QRhiGles2::clipSpaceCorrMatrix() const
     return QMatrix4x4(); // identity
 }
 
+static inline GLenum toGlCompressedTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
+{
+    const bool srgb = flags.testFlag(QRhiTexture::sRGB);
+    switch (format) {
+    case QRhiTexture::BC1:
+        return srgb ? 0x8C4C : 0x83F0;
+    case QRhiTexture::BC3:
+        return srgb ? 0x8C4E : 0x83F2;
+    case QRhiTexture::BC5:
+        return srgb ? 0x8C4F : 0x83F3;
+
+    case QRhiTexture::ETC2_RGB8:
+        return srgb ? 0x9275 : 0x9274;
+    case QRhiTexture::ETC2_RGB8A1:
+        return srgb ? 0x9277 : 0x9276;
+    case QRhiTexture::ETC2_RGBA8:
+        return srgb ? 0x9279 : 0x9278;
+
+    case QRhiTexture::ASTC_4x4:
+        return srgb ? 0x93D0 : 0x93B0;
+    case QRhiTexture::ASTC_5x4:
+        return srgb ? 0x93D1 : 0x93B1;
+    case QRhiTexture::ASTC_5x5:
+        return srgb ? 0x93D2 : 0x93B2;
+    case QRhiTexture::ASTC_6x5:
+        return srgb ? 0x93D3 : 0x93B3;
+    case QRhiTexture::ASTC_6x6:
+        return srgb ? 0x93D4 : 0x93B4;
+    case QRhiTexture::ASTC_8x5:
+        return srgb ? 0x93D5 : 0x93B5;
+    case QRhiTexture::ASTC_8x6:
+        return srgb ? 0x93D6 : 0x93B6;
+    case QRhiTexture::ASTC_8x8:
+        return srgb ? 0x93D7 : 0x93B7;
+    case QRhiTexture::ASTC_10x5:
+        return srgb ? 0x93D8 : 0x93B8;
+    case QRhiTexture::ASTC_10x6:
+        return srgb ? 0x93D9 : 0x93B9;
+    case QRhiTexture::ASTC_10x8:
+        return srgb ? 0x93DA : 0x93BA;
+    case QRhiTexture::ASTC_10x10:
+        return srgb ? 0x93DB : 0x93BB;
+    case QRhiTexture::ASTC_12x10:
+        return srgb ? 0x93DC : 0x93BC;
+    case QRhiTexture::ASTC_12x12:
+        return srgb ? 0x93DD : 0x93BD;
+
+    default:
+        return 0; // this is reachable, just return an invalid format
+    }
+}
+
 bool QRhiGles2::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const
 {
-    Q_UNUSED(flags);
-
-    if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
-        return false;
+    if (isCompressedFormat(format))
+        return supportedCompressedFormats.contains(toGlCompressedTextureFormat(format, flags));
 
     return true;
 }
@@ -515,6 +572,7 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
+        const bool isCompressed = isCompressedFormat(texD->m_format);
         const bool isCubeMap = texD->m_flags.testFlag(QRhiTexture::CubeMap);
         const GLenum targetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
         for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
@@ -522,13 +580,30 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             f->glBindTexture(targetBase + layer, texD->texture);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const float x = mipDesc.destinationTopLeft.x();
-                const float y = mipDesc.destinationTopLeft.y();
-                f->glTexSubImage2D(targetBase + layer, level,
-                                   x, y, mipDesc.image.width(), mipDesc.image.height(),
-                                   texD->glformat, texD->gltype, mipDesc.image.constBits());
+                const int x = mipDesc.destinationTopLeft.x();
+                const int y = mipDesc.destinationTopLeft.y();
+                if (isCompressed && !mipDesc.compressedData.isEmpty()) {
+                    const int w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
+                    const int h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+                    if (texD->specified) {
+                        f->glCompressedTexSubImage2D(targetBase + layer, level,
+                                                     x, y, w, h,
+                                                     texD->glintformat,
+                                                     mipDesc.compressedData.size(), mipDesc.compressedData.constData());
+                    } else {
+                        f->glCompressedTexImage2D(targetBase + layer, level,
+                                                  texD->glintformat,
+                                                  w, h, 0,
+                                                  mipDesc.compressedData.size(), mipDesc.compressedData.constData());
+                    }
+                } else {
+                    f->glTexSubImage2D(targetBase + layer, level,
+                                       x, y, mipDesc.image.width(), mipDesc.image.height(),
+                                       texD->glformat, texD->gltype, mipDesc.image.constBits());
+                }
             }
         }
+        texD->specified = true;
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
@@ -1325,6 +1400,7 @@ void QGles2Texture::release()
     e.texture.texture = texture;
 
     texture = 0;
+    specified = false;
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
@@ -1346,6 +1422,7 @@ bool QGles2Texture::build()
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
     const int mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    const bool isCompressed = rhiD->isCompressedFormat(m_format);
 
     // ### more formats
     target = isCube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
@@ -1353,20 +1430,39 @@ bool QGles2Texture::build()
     glformat = GL_RGBA;
     gltype = GL_UNSIGNED_BYTE;
 
-    rhiD->f->glGenTextures(1, &texture);
-    if (hasMipMaps || isCube) {
-        const GLenum targetBase = isCube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : target;
-        for (int layer = 0, layerCount = isCube ? 6 : 1; layer != layerCount; ++layer) {
-            rhiD->f->glBindTexture(targetBase + layer, texture);
-            for (int level = 0; level != mipLevelCount; ++level) {
-                rhiD->f->glTexImage2D(targetBase + layer, level, glintformat,
-                                      qFloor(float(qMax(1, size.width() >> level))), qFloor(float(qMax(1, size.height() >> level))),
-                                      0, glformat, gltype, nullptr);
-            }
+    if (isCompressed) {
+        glintformat = toGlCompressedTextureFormat(m_format, m_flags);
+        if (!glintformat) {
+            qWarning("Compressed format %d not mappable to GL compressed format", m_format);
+            return false;
         }
+    }
+
+    rhiD->f->glGenTextures(1, &texture);
+
+    if (!isCompressed) {
+        if (hasMipMaps || isCube) {
+            const GLenum targetBase = isCube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : target;
+            for (int layer = 0, layerCount = isCube ? 6 : 1; layer != layerCount; ++layer) {
+                rhiD->f->glBindTexture(targetBase + layer, texture);
+                for (int level = 0; level != mipLevelCount; ++level) {
+                    const int w = qFloor(float(qMax(1, size.width() >> level)));
+                    const int h = qFloor(float(qMax(1, size.height() >> level)));
+                    rhiD->f->glTexImage2D(targetBase + layer, level, glintformat,
+                                          w, h, 0,
+                                          glformat, gltype, nullptr);
+                }
+            }
+        } else {
+            rhiD->f->glBindTexture(target, texture);
+            rhiD->f->glTexImage2D(target, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
+        }
+        specified = true;
     } else {
-        rhiD->f->glBindTexture(target, texture);
-        rhiD->f->glTexImage2D(target, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
+        // Cannot use glCompressedTexImage2D without valid data, so defer.
+        // Compressed textures will not be used as render targets so this is
+        // not an issue.
+        specified = false;
     }
 
     generation += 1;
@@ -1481,7 +1577,7 @@ bool QGles2TextureRenderTarget::build()
     QRhiTexture *texture = m_desc.colorAttachments.first().texture;
     Q_ASSERT(texture);
     QGles2Texture *texD = QRHI_RES(QGles2Texture, texture);
-    Q_ASSERT(texD->texture);
+    Q_ASSERT(texD->texture && texD->specified);
 
     rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
 

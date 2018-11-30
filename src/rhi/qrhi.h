@@ -284,6 +284,21 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer::MipLevel, Q_MOVABLE_TYPE
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
+struct Q_RHI_EXPORT QRhiTextureCopyDescription
+{
+    QSizeF pixelSize; // empty = entire texture
+
+    int sourceLayer = 0;
+    int sourceLevel = 0;
+    QPointF sourceTopLeft;
+
+    int destinationLayer = 0;
+    int destinationLevel = 0;
+    QPointF destinationTopLeft;
+};
+
+Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
+
 struct Q_RHI_EXPORT QRhiReadbackDescription
 {
     QRhiReadbackDescription() { } // source is the current back buffer (if swapchain supports readback)
@@ -873,6 +888,8 @@ public:
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
     void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut
+    void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc);
+    void copyTexture(QRhiTexture *dst, QRhiTexture *src); // shortcut
 
     // This is not normally needed, textures that have an upload or are used
     // with a TextureRenderTarget will be fine without it. May be more relevant later.

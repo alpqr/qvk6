@@ -64,6 +64,8 @@ struct {
     QRhiResourceUpdateBatch *initialUpdates = nullptr;
     int frameCount = 0;
     QImage customImage;
+    QRhiTexture *newTex = nullptr;
+    int testStage = 0;
 } d;
 
 void Window::customInit()
@@ -172,6 +174,11 @@ void Window::customRelease()
         d.tex->releaseAndDestroy();
         d.tex = nullptr;
     }
+
+    if (d.newTex) {
+        d.newTex->releaseAndDestroy();
+        d.newTex = nullptr;
+    }
 }
 
 void Window::customRender()
@@ -191,20 +198,59 @@ void Window::customRender()
     mvp.rotate(d.rotation, 0, 1, 0);
     u->updateDynamicBuffer(d.ubuf, 0, 64, mvp.constData());
 
-    // After some time, partially change the texture.
-    if (d.frameCount > 100) {
-        QRhiTextureUploadDescription desc;
-        QRhiTextureUploadDescription::Layer layer;
-        QRhiTextureUploadDescription::Layer::MipLevel mipDesc;
+    if (d.frameCount > 0 && (d.frameCount % 100) == 0) {
+        d.testStage += 1;
+        qDebug("testStage = %d", d.testStage);
 
-        mipDesc.image = d.customImage;
-        // The image here is smaller than the original. Use a non-zero position
-        // to make it more interesting.
-        mipDesc.destinationTopLeft = QPointF(100, 20);
+        // Partially change the texture.
+        if (d.testStage == 1) {
+            QRhiTextureUploadDescription desc;
+            QRhiTextureUploadDescription::Layer layer;
+            QRhiTextureUploadDescription::Layer::MipLevel mipDesc;
 
-        layer.mipImages.append(mipDesc);
-        desc.layers.append(layer);
-        u->uploadTexture(d.tex, desc);
+            mipDesc.image = d.customImage;
+            // The image here is smaller than the original. Use a non-zero position
+            // to make it more interesting.
+            mipDesc.destinationTopLeft = QPointF(100, 20);
+
+            layer.mipImages.append(mipDesc);
+            desc.layers.append(layer);
+            u->uploadTexture(d.tex, desc);
+        }
+
+        // Exercise image copying.
+        if (d.testStage == 2) {
+            const QSize sz = d.tex->pixelSize();
+            d.newTex = m_r->newTexture(QRhiTexture::RGBA8, sz);
+            d.newTex->build();
+
+            QImage empty(sz.width(), sz.height(), QImage::Format_RGBA8888);
+            empty.fill(Qt::blue);
+            u->uploadTexture(d.newTex, empty);
+
+            QRhiTextureCopyDescription desc;
+            // Copy the left-half of tex to the right-half of newTex, while
+            // leaving the left-half of newTex blue. Keep a 20 pixel gap at
+            // the top.
+            desc.sourceTopLeft = QPointF(0, 20);
+            desc.pixelSize = QSizeF(sz.width() / 2.0f, sz.height() - 20);
+            desc.destinationTopLeft = QPointF(sz.width() / 2.0f, 20);
+
+            u->copyTexture(d.newTex, d.tex, desc);
+
+            // Now replace d.tex with d.newTex as the shader resource.
+            auto bindings = d.srb->bindings();
+            bindings[1].stex.tex = d.newTex; // see customInit, this was d.tex originally
+            d.srb->setBindings(bindings);
+            // "rebuild", whatever that means for a given backend. This srb is
+            // already live as the ps in the setGraphicsPipeline references it,
+            // but that's fine. Changes will be picked up automatically.
+            d.srb->build();
+        }
+
+        // Exercise simple, full texture copy.
+        if (d.testStage == 5)
+            u->copyTexture(d.newTex, d.tex);
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();

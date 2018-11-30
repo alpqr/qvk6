@@ -445,6 +445,16 @@ void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &imag
     uploadTexture(tex, {{{{{ image }}}}});
 }
 
+void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc)
+{
+    d->textureCopies.append({ dst, src, desc });
+}
+
+void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src)
+{
+    d->textureCopies.append({ dst, src, QRhiTextureCopyDescription() });
+}
+
 void QRhiResourceUpdateBatch::prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags)
 {
     d->texturePrepares.append({ tex, flags });
@@ -486,6 +496,7 @@ void QRhiResourceUpdateBatchPrivate::free()
     dynamicBufferUpdates.clear();
     staticBufferUploads.clear();
     textureUploads.clear();
+    textureCopies.clear();
     texturePrepares.clear();
 
     rhi->resUpdPoolMap.clearBit(poolIndex);
@@ -497,6 +508,7 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
     dynamicBufferUpdates += other->dynamicBufferUpdates;
     staticBufferUploads += other->staticBufferUploads;
     textureUploads += other->textureUploads;
+    textureCopies += other->textureCopies;
     texturePrepares += other->texturePrepares;
 }
 

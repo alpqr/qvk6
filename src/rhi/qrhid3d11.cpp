@@ -767,6 +767,27 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
         }
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
+        Q_ASSERT(u.src && u.dst);
+        QD3D11Texture *srcD = QRHI_RES(QD3D11Texture, u.src);
+        QD3D11Texture *dstD = QRHI_RES(QD3D11Texture, u.dst);
+        UINT srcSubRes = D3D11CalcSubresource(u.desc.sourceLevel, u.desc.sourceLayer, srcD->mipLevelCount);
+        UINT dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel, u.desc.destinationLayer, dstD->mipLevelCount);
+        const float dx = u.desc.destinationTopLeft.x();
+        const float dy = u.desc.destinationTopLeft.y();
+        const QSizeF size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        D3D11_BOX srcBox;
+        srcBox.left = u.desc.sourceTopLeft.x();
+        srcBox.top = u.desc.sourceTopLeft.y();
+        srcBox.front = 0;
+        // back, right, bottom are exclusive
+        srcBox.right = srcBox.left + size.width();
+        srcBox.bottom = srcBox.top + size.height();
+        srcBox.back = 1;
+        context->CopySubresourceRegion(dstD->tex, dstSubRes, dx, dy, 0,
+                                       srcD->tex, srcSubRes, &srcBox);
+    }
+
     ud->free();
 }
 

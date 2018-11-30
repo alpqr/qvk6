@@ -1,5 +1,5 @@
+vk, gl, mtl: texcopy
 mtl: tex upload with pos
-copyimage (color, with rect?, no resolve or transforms here)
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
 gl, mtl: compressed textures
@@ -55,6 +55,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: texcopy
+copyimage (color, with rect?, no resolve or transforms here)
 vk, d3d, gl: tex upload with pos
 res upd batch combine
 gl: offscreen frame, readback

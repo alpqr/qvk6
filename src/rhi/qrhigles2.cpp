@@ -531,6 +531,39 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
         }
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
+        Q_ASSERT(u.src && u.dst);
+        QGles2Texture *srcD = QRHI_RES(QGles2Texture, u.src);
+        QGles2Texture *dstD = QRHI_RES(QGles2Texture, u.dst);
+
+        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        // source offset is bottom-left
+        const float sx = u.desc.sourceTopLeft.x();
+        const float sy = srcD->m_pixelSize.height() - (u.desc.sourceTopLeft.y() + size.height() - 1);
+        // destination offset is top-left
+        const float dx = u.desc.destinationTopLeft.x();
+        const float dy = u.desc.destinationTopLeft.y();
+
+        // ugh...
+        GLuint fbo;
+        f->glGenFramebuffers(1, &fbo);
+        f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        const GLenum srcTargetBase = srcD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : srcD->target;
+        const GLenum srcTarget = srcTargetBase + u.desc.sourceLayer;
+        f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, srcTarget, srcD->texture, u.desc.sourceLevel);
+
+        const GLenum dstTargetBase = dstD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : dstD->target;
+        const GLenum dstTarget = dstTargetBase + u.desc.destinationLayer;
+        f->glBindTexture(dstTarget, dstD->texture);
+
+        f->glCopyTexSubImage2D(dstTarget, u.desc.destinationLevel,
+                               dx, dy,
+                               sx, sy, size.width(), size.height());
+
+        f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
+        f->glDeleteFramebuffers(1, &fbo);
+    }
+
     ud->free();
 }
 
@@ -897,7 +930,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             break;
         case QGles2CommandBuffer::Command::ReadPixels:
         {
-            // ### more formats, layer, level
+            // ### more formats
             QRhiReadbackResult *result = cmd.args.readPixels.result;
             GLuint fbo = 0;
             if (cmd.args.readPixels.tex) {
@@ -907,7 +940,9 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 // this is going to be suboptimal but will do for now
                 f->glGenFramebuffers(1, &fbo);
                 f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-                f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
+                const GLenum targetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+                const GLenum target = targetBase + cmd.args.readPixels.layer;
+                f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, texD->texture, cmd.args.readPixels.level);
             } else {
                 result->pixelSize = currentSwapChain->pixelSize;
                 result->format = QRhiTexture::RGBA8;

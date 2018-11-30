@@ -1,5 +1,5 @@
-gl, mtl: texcopy
 mtl: tex upload with pos
+mtl: texcopy
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
 gl, mtl: compressed textures
@@ -56,7 +56,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
-vk: texcopy
+vk, gl: texcopy
 move cb api into QRhiCommandBuffer
 d3d: texcopy
 copyimage (color, with rect?, no resolve or transforms here)

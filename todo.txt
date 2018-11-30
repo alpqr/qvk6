@@ -1,4 +1,4 @@
-vk, d3d, gl, mtl: tex upload with rect
+mtl: tex upload with pos
 copyimage (color, with rect?, no resolve or transforms here)
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
@@ -55,6 +55,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk, d3d, gl: tex upload with pos
 res upd batch combine
 gl: offscreen frame, readback
 d3d: readback

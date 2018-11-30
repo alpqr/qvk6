@@ -267,13 +267,14 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
             MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
             QImage image;
             QByteArray compressedData;
-            QPointF topLeft; // (0, 0) by default
-            QSizeF size; // empty = entire image
+            QPointF destinationTopLeft; // for non-compressed only. (0, 0) by default.
         };
+
         Layer() { }
         Layer(const QVector<MipLevel> &mipImages_) : mipImages(mipImages_) { }
         QVector<MipLevel> mipImages;
     };
+
     QRhiTextureUploadDescription() { }
     QRhiTextureUploadDescription(const QVector<Layer> &layers_) : layers(layers_) { }
     QVector<Layer> layers; // 6 layers for cubemaps, 1 otherwise

@@ -3,6 +3,7 @@ TEMPLATE = subdirs
 SUBDIRS += \
     hellominimalcrossgfxtriangle \
     compressedtexture_bc1 \
+    texuploads \
     plainqwindow_gles2 \
     offscreen_gles2
 

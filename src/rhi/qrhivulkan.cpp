@@ -2004,6 +2004,8 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     imageSizeBytes = mipDesc.image.sizeInBytes();
                     if (imageSizeBytes > 0) {
                         src = mipDesc.image.constBits();
+                        copyInfo.imageOffset.x = mipDesc.destinationTopLeft.x();
+                        copyInfo.imageOffset.y = mipDesc.destinationTopLeft.y();
                         copyInfo.imageExtent.width = mipDesc.image.width();
                         copyInfo.imageExtent.height = mipDesc.image.height();
                         copyInfos.append(copyInfo);

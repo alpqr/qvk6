@@ -522,8 +522,10 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             f->glBindTexture(targetBase + layer, texD->texture);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+                const float x = mipDesc.destinationTopLeft.x();
+                const float y = mipDesc.destinationTopLeft.y();
                 f->glTexSubImage2D(targetBase + layer, level,
-                                   0, 0, mipDesc.image.width(), mipDesc.image.height(),
+                                   x, y, mipDesc.image.width(), mipDesc.image.height(),
                                    texD->glformat, texD->gltype, mipDesc.image.constBits());
             }
         }

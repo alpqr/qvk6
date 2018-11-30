@@ -431,6 +431,9 @@ int main(int argc, char **argv)
     if (cmdLineParser.isSet(mtlOption))
         graphicsApi = Metal;
 
+    qDebug("Selected graphics API is %s", qPrintable(graphicsApiName()));
+    qDebug("This is a multi-api example, use command line arguments to override:\n%s", qPrintable(cmdLineParser.helpText()));
+
     // OpenGL specifics.
     QSurfaceFormat fmt;
     fmt.setDepthBufferSize(24);

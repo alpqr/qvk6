@@ -267,6 +267,8 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
             MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
             QImage image;
             QByteArray compressedData;
+            QPointF topLeft; // (0, 0) by default
+            QSizeF size; // empty = entire image
         };
         Layer() { }
         Layer(const QVector<MipLevel> &mipImages_) : mipImages(mipImages_) { }
@@ -857,6 +859,12 @@ public:
     ~QRhiResourceUpdateBatch();
     // Puts the batch back to the pool without any processing.
     void release();
+
+    // Applications do not have to defer all upload preparation to the first
+    // frame: an update batch can be prepared in advance during initialization,
+    // and afterwards, if needed, merged into another that is then submitted to
+    // beginPass(). (nb the one we merged from must be release()'d manually)
+    void merge(QRhiResourceUpdateBatch *other);
 
     // None of these execute anything. Deferred to beginPass. What exactly then
     // happens underneath is hidden from the applications.

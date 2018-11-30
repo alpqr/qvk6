@@ -1,3 +1,5 @@
+vk, d3d, gl, mtl: tex upload with rect
+copyimage (color, with rect?, no resolve or transforms here)
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
 gl, mtl: compressed textures
@@ -13,7 +15,6 @@ test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl)
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 resource import/export, what's the co-op story?
-copyimage (color and ds, no resolve or transforms here)
 does reading back an msaa swapchain buffer work?
 msaa offscreen (msaa texture. no readback.)
 resolveimage (color and ds, only to resolve samples)
@@ -46,13 +47,15 @@ vk: subpasses?
 more tex: 3d, array?
 vk compressed tex: could it consume a complete ktx without any memcpys?
 multi-buffer (region) readback?
-depth readback?
+depth readback
+copy image depth
 
 shadertools:
 dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+res upd batch combine
 gl: offscreen frame, readback
 d3d: readback
 d3d: offscreen frame

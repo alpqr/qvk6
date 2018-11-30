@@ -420,6 +420,11 @@ void QRhiResourceUpdateBatch::release()
     d->free();
 }
 
+void QRhiResourceUpdateBatch::merge(QRhiResourceUpdateBatch *other)
+{
+    d->merge(other->d);
+}
+
 void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
 {
     d->dynamicBufferUpdates.append({ buf, offset, size, data });
@@ -485,6 +490,14 @@ void QRhiResourceUpdateBatchPrivate::free()
 
     rhi->resUpdPoolMap.clearBit(poolIndex);
     poolIndex = -1;
+}
+
+void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other)
+{
+    dynamicBufferUpdates += other->dynamicBufferUpdates;
+    staticBufferUploads += other->staticBufferUploads;
+    textureUploads += other->textureUploads;
+    texturePrepares += other->texturePrepares;
 }
 
 int QRhi::ubufAligned(int v) const

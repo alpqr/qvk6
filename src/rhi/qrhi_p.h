@@ -188,6 +188,7 @@ struct QRhiResourceUpdateBatchPrivate
     int poolIndex = -1;
 
     void free();
+    void merge(QRhiResourceUpdateBatchPrivate *other);
 
     static QRhiResourceUpdateBatchPrivate *get(QRhiResourceUpdateBatch *b) { return b->d; }
 };

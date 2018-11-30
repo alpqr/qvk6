@@ -743,7 +743,13 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
                 UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
                 if (!mipDesc.image.isNull()) {
-                    context->UpdateSubresource(texD->tex, subres, nullptr,
+                    D3D11_BOX box;
+                    box.left = box.top = box.front = 0;
+                    // back, right, bottom are exclusive
+                    box.back = 1;
+                    box.right = mipDesc.image.width();
+                    box.bottom = mipDesc.image.height();
+                    context->UpdateSubresource(texD->tex, subres, &box,
                                                mipDesc.image.constBits(), mipDesc.image.bytesPerLine(), 0);
                 } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(texD->m_format)) {
                     const int w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));

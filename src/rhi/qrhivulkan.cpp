@@ -2001,12 +2001,14 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 copyInfo.imageSubresource.layerCount = 1;
                 copyInfo.imageExtent.depth = 1;
 
+                const int x = mipDesc.destinationTopLeft.x();
+                const int y = mipDesc.destinationTopLeft.y();
                 if (!mipDesc.image.isNull()) {
                     imageSizeBytes = mipDesc.image.sizeInBytes();
                     if (imageSizeBytes > 0) {
                         src = mipDesc.image.constBits();
-                        copyInfo.imageOffset.x = mipDesc.destinationTopLeft.x();
-                        copyInfo.imageOffset.y = mipDesc.destinationTopLeft.y();
+                        copyInfo.imageOffset.x = x;
+                        copyInfo.imageOffset.y = y;
                         copyInfo.imageExtent.width = mipDesc.image.width();
                         copyInfo.imageExtent.height = mipDesc.image.height();
                         copyInfos.append(copyInfo);
@@ -2015,8 +2017,25 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     imageSizeBytes = mipDesc.compressedData.size();
                     if (imageSizeBytes > 0) {
                         src = mipDesc.compressedData.constData();
-                        copyInfo.imageExtent.width = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
-                        copyInfo.imageExtent.height = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
+                        const int subresw = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
+                        const int subresh = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
+                        int w, h;
+                        if (mipDesc.compressedPixelSize.isEmpty()) {
+                            w = subresw;
+                            h = subresh;
+                        } else {
+                            w = mipDesc.compressedPixelSize.width();
+                            h = mipDesc.compressedPixelSize.height();
+                        }
+                        QSize blockDim;
+                        compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
+                        // x and y must be multiples of the block width and height
+                        copyInfo.imageOffset.x = aligned(x, blockDim.width());
+                        copyInfo.imageOffset.y = aligned(y, blockDim.height());
+                        // width and height must be multiples of the block width and height
+                        // or x + width and y + height must equal the subresource width and height
+                        copyInfo.imageExtent.width = x + w == subresw ? w : aligned(w, blockDim.width());
+                        copyInfo.imageExtent.height = y + h == subresh ? h : aligned(h, blockDim.height());
                         copyInfos.append(copyInfo);
                     }
                 }

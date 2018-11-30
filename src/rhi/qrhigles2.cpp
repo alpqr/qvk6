@@ -583,8 +583,14 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                 const int x = mipDesc.destinationTopLeft.x();
                 const int y = mipDesc.destinationTopLeft.y();
                 if (isCompressed && !mipDesc.compressedData.isEmpty()) {
-                    const int w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
-                    const int h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+                    int w, h;
+                    if (mipDesc.compressedPixelSize.isEmpty()) {
+                        w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
+                        h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+                    } else {
+                        w = mipDesc.compressedPixelSize.width();
+                        h = mipDesc.compressedPixelSize.height();
+                    }
                     if (texD->specified) {
                         f->glCompressedTexSubImage2D(targetBase + layer, level,
                                                      x, y, w, h,

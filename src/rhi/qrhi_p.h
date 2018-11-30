@@ -121,13 +121,14 @@ public:
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
     virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
 
-protected:
-    bool isCompressedFormat(QRhiTexture::Format format);
+    bool isCompressedFormat(QRhiTexture::Format format) const;
     void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
-                              quint32 *bpl, quint32 *byteSize);
+                              quint32 *bpl, quint32 *byteSize,
+                              QSize *blockDim) const;
     void textureFormatInfo(QRhiTexture::Format format, const QSize &size,
-                           quint32 *bpl, quint32 *byteSize);
+                           quint32 *bpl, quint32 *byteSize) const;
 
+protected:
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
 

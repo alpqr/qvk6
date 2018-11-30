@@ -743,25 +743,39 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
                 UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
+                const int x = mipDesc.destinationTopLeft.x();
+                const int y = mipDesc.destinationTopLeft.y();
+                D3D11_BOX box;
+                box.front = 0;
+                // back, right, bottom are exclusive
+                box.back = 1;
                 if (!mipDesc.image.isNull()) {
-                    const float x = mipDesc.destinationTopLeft.x();
-                    const float y = mipDesc.destinationTopLeft.y();
-                    D3D11_BOX box;
                     box.left = x;
                     box.top = y;
-                    box.front = 0;
-                    // back, right, bottom are exclusive
                     box.right = x + mipDesc.image.width();
                     box.bottom = y + mipDesc.image.height();
-                    box.back = 1;
                     context->UpdateSubresource(texD->tex, subres, &box,
                                                mipDesc.image.constBits(), mipDesc.image.bytesPerLine(), 0);
                 } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(texD->m_format)) {
-                    const int w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
-                    const int h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+                    int w, h;
+                    if (mipDesc.compressedPixelSize.isEmpty()) {
+                        w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
+                        h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+                    } else {
+                        w = mipDesc.compressedPixelSize.width();
+                        h = mipDesc.compressedPixelSize.height();
+                    }
                     quint32 bpl = 0;
-                    compressedFormatInfo(texD->m_format, QSize(w, h), &bpl, nullptr);
-                    context->UpdateSubresource(texD->tex, subres, nullptr,
+                    QSize blockDim;
+                    compressedFormatInfo(texD->m_format, QSize(w, h), &bpl, nullptr, &blockDim);
+                    // Everything must be a multiple of the block width and
+                    // height, so e.g. a mip level of size 2x2 will be 4x4 when it
+                    // comes to the actual data.
+                    box.left = aligned(x, blockDim.width());
+                    box.top = aligned(y, blockDim.height());
+                    box.right = aligned(x + w, blockDim.width());
+                    box.bottom = aligned(y + h, blockDim.height());
+                    context->UpdateSubresource(texD->tex, subres, &box,
                                                mipDesc.compressedData.constData(), bpl, 0);
                 }
             }

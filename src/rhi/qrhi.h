@@ -269,7 +269,8 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
             MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
             QImage image;
             QByteArray compressedData;
-            QPointF destinationTopLeft; // for non-compressed only. (0, 0) by default.
+            QPoint destinationTopLeft;
+            QSize compressedPixelSize; // empty = entire subresource; ignored for non-compressed as the QImage size is used instead
         };
 
         Layer() { }
@@ -288,7 +289,7 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiTextureCopyDescription
 {
-    QSize pixelSize; // empty = entire texture
+    QSize pixelSize; // empty = entire subresource
 
     int sourceLayer = 0;
     int sourceLevel = 0;

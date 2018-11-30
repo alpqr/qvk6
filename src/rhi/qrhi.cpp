@@ -181,7 +181,7 @@ QRhiImplementation::~QRhiImplementation()
     qDeleteAll(resUpdPool);
 }
 
-bool QRhiImplementation::isCompressedFormat(QRhiTexture::Format format)
+bool QRhiImplementation::isCompressedFormat(QRhiTexture::Format format) const
 {
     return (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
             || (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ETC2_RGBA8)
@@ -189,7 +189,8 @@ bool QRhiImplementation::isCompressedFormat(QRhiTexture::Format format)
 }
 
 void QRhiImplementation::compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
-                                              quint32 *bpl, quint32 *byteSize)
+                                              quint32 *bpl, quint32 *byteSize,
+                                              QSize *blockDim) const
 {
     int xdim = 4;
     int ydim = 4;
@@ -303,13 +304,15 @@ void QRhiImplementation::compressedFormatInfo(QRhiTexture::Format format, const 
         *bpl = wblocks * blockSize;
     if (byteSize)
         *byteSize = wblocks * hblocks * blockSize;
+    if (blockDim)
+        *blockDim = QSize(xdim, ydim);
 }
 
 void QRhiImplementation::textureFormatInfo(QRhiTexture::Format format, const QSize &size,
-                                           quint32 *bpl, quint32 *byteSize)
+                                           quint32 *bpl, quint32 *byteSize) const
 {
     if (isCompressedFormat(format)) {
-        compressedFormatInfo(format, size, bpl, byteSize);
+        compressedFormatInfo(format, size, bpl, byteSize, nullptr);
         return;
     }
 

@@ -2,7 +2,7 @@ mtl: tex upload with pos
 mtl: texcopy
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
-gl, mtl: compressed textures
+mtl: compressed textures
 gl, mtl: srgb (tex, swapchain buf)
 multi window? (multi swapchain) -> trouble
 vk: rendering hangs sometimes when minimize and back on some systems?
@@ -15,6 +15,7 @@ test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl)
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 resource import/export, what's the co-op story?
+what does image copy do for compressed formats?
 does reading back an msaa swapchain buffer work?
 msaa offscreen (msaa texture. no readback.)
 resolveimage (color and ds, only to resolve samples)
@@ -56,6 +57,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+gl: compressed textures
 vk, gl: texcopy
 move cb api into QRhiCommandBuffer
 d3d: texcopy

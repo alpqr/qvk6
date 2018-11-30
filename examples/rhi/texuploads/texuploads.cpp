@@ -211,7 +211,7 @@ void Window::customRender()
             mipDesc.image = d.customImage;
             // The image here is smaller than the original. Use a non-zero position
             // to make it more interesting.
-            mipDesc.destinationTopLeft = QPointF(100, 20);
+            mipDesc.destinationTopLeft = QPoint(100, 20);
 
             layer.mipImages.append(mipDesc);
             desc.layers.append(layer);

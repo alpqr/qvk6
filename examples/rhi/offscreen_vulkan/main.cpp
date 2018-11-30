@@ -106,7 +106,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    QRhiTexture *tex = r->newTexture(QRhiTexture::RGBA8, QSize(1280, 720), QRhiTexture::RenderTarget | QRhiTexture::ReadBack);
+    QRhiTexture *tex = r->newTexture(QRhiTexture::RGBA8, QSize(1280, 720), QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource);
     tex->build();
     QRhiTextureRenderTarget *rt = r->newTextureRenderTarget({ tex });
     QRhiRenderPassDescriptor *rp = rt->newCompatibleRenderPassDescriptor();

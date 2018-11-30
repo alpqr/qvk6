@@ -776,7 +776,7 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
         UINT dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel, u.desc.destinationLayer, dstD->mipLevelCount);
         const float dx = u.desc.destinationTopLeft.x();
         const float dy = u.desc.destinationTopLeft.y();
-        const QSizeF size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
         D3D11_BOX srcBox;
         srcBox.left = u.desc.sourceTopLeft.x();
         srcBox.top = u.desc.sourceTopLeft.y();

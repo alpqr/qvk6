@@ -1,4 +1,4 @@
-vk, gl, mtl: texcopy
+gl, mtl: texcopy
 mtl: tex upload with pos
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
@@ -46,6 +46,7 @@ indirect draw?
 vk: subpasses?
 more tex: 3d, array?
 vk compressed tex: could it consume a complete ktx without any memcpys?
+multi mip/layer copy? (fewer barriers...)
 multi-buffer (region) readback?
 depth readback
 copy image depth
@@ -55,6 +56,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: texcopy
 move cb api into QRhiCommandBuffer
 d3d: texcopy
 copyimage (color, with rect?, no resolve or transforms here)

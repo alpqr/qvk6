@@ -1500,6 +1500,7 @@ bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &
     copyDesc.imageExtent.depth = 1;
 
     if (texD) {
+        Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
         // assume the image was written
         imageBarrier(cb, texD,
                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -2060,6 +2061,73 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         }
 
         imageBarrier(cb, u.tex,
+                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
+        Q_ASSERT(u.src && u.dst);
+        QVkTexture *srcD = QRHI_RES(QVkTexture, u.src);
+        QVkTexture *dstD = QRHI_RES(QVkTexture, u.dst);
+
+        VkImageCopy region;
+        memset(&region, 0, sizeof(region));
+
+        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.srcSubresource.mipLevel = u.desc.sourceLevel;
+        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer;
+        region.srcSubresource.layerCount = 1;
+
+        region.srcOffset.x = u.desc.sourceTopLeft.x();
+        region.srcOffset.y = u.desc.sourceTopLeft.y();
+
+        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.dstSubresource.mipLevel = u.desc.destinationLevel;
+        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer;
+        region.dstSubresource.layerCount = 1;
+
+        region.dstOffset.x = u.desc.destinationTopLeft.x();
+        region.dstOffset.y = u.desc.destinationTopLeft.y();
+
+        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        region.extent.width = size.width();
+        region.extent.height = size.height();
+        region.extent.depth = 1;
+
+        if (srcD->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+            Q_ASSERT(srcD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
+            imageBarrier(cb, srcD,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        }
+
+        if (dstD->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            if (dstD->layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+                imageBarrier(cb, dstD,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             0, VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            } else {
+                imageBarrier(cb, dstD,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+            }
+        }
+
+        df->vkCmdCopyImage(QRHI_RES(QVkCommandBuffer, cb)->cb,
+                           srcD->image, srcD->layout,
+                           dstD->image, dstD->layout,
+                           1, &region);
+
+        imageBarrier(cb, srcD,
+                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                     VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+
+        imageBarrier(cb, dstD,
                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                      VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
@@ -3087,7 +3155,7 @@ bool QVkTexture::build()
         else
             imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
-    if (m_flags.testFlag(QRhiTexture::ReadBack))
+    if (m_flags.testFlag(QRhiTexture::UsedAsTransferSource))
         imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     VmaAllocationCreateInfo allocInfo;
@@ -3294,6 +3362,7 @@ bool QVkTextureRenderTarget::build()
     d.colorAttCount = m_desc.colorAttachments.count();
     for (int i = 0; i < d.colorAttCount; ++i) {
         QVkTexture *texD = QRHI_RES(QVkTexture, m_desc.colorAttachments[i].texture);
+        Q_ASSERT(texD->flags().testFlag(QRhiTexture::RenderTarget));
         VkImageView view = texD->imageView;
         if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
             const int face = m_desc.colorAttachments[i].layer;

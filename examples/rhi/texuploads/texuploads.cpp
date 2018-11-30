@@ -77,7 +77,7 @@ void Window::customInit()
     d.ubuf->build();
 
     QImage baseImage(QLatin1String(":/qt256.png"));
-    d.tex = m_r->newTexture(QRhiTexture::RGBA8, baseImage.size());
+    d.tex = m_r->newTexture(QRhiTexture::RGBA8, baseImage.size(), QRhiTexture::UsedAsTransferSource);
     d.tex->build();
 
     // As an alternative to what some of the other examples do, prepare an
@@ -232,9 +232,9 @@ void Window::customRender()
             // Copy the left-half of tex to the right-half of newTex, while
             // leaving the left-half of newTex blue. Keep a 20 pixel gap at
             // the top.
-            desc.sourceTopLeft = QPointF(0, 20);
-            desc.pixelSize = QSizeF(sz.width() / 2.0f, sz.height() - 20);
-            desc.destinationTopLeft = QPointF(sz.width() / 2.0f, 20);
+            desc.sourceTopLeft = QPoint(0, 20);
+            desc.pixelSize = QSize(sz.width() / 2, sz.height() - 20);
+            desc.destinationTopLeft = QPoint(sz.width() / 2, 20);
 
             u->copyTexture(d.newTex, d.tex, desc);
 

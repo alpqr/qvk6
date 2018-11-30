@@ -288,15 +288,15 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiTextureCopyDescription
 {
-    QSizeF pixelSize; // empty = entire texture
+    QSize pixelSize; // empty = entire texture
 
     int sourceLayer = 0;
     int sourceLevel = 0;
-    QPointF sourceTopLeft;
+    QPoint sourceTopLeft;
 
     int destinationLayer = 0;
     int destinationLevel = 0;
-    QPointF destinationTopLeft;
+    QPoint destinationTopLeft;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
@@ -411,7 +411,7 @@ public:
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
         sRGB = 1 << 4,
-        ReadBack = 1 << 5
+        UsedAsTransferSource = 1 << 5
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 

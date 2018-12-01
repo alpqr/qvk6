@@ -64,6 +64,7 @@ struct {
     float rotation = 0;
 
     QByteArrayList compressedData;
+    QByteArrayList compressedData2;
 } d;
 
 void Window::customInit()
@@ -80,12 +81,15 @@ void Window::customInit()
 
     QSize imageSize;
     d.compressedData = loadBC1(QLatin1String(":/qt256_bc1_9mips.dds"), &imageSize);
-    qDebug() << d.compressedData.count() << imageSize << m_r->mipLevelsForSize(imageSize);
+    Q_ASSERT(imageSize == QSize(256, 256));
 
-    d.tex = m_r->newTexture(QRhiTexture::BC1, imageSize, QRhiTexture::MipMapped);
+    d.tex = m_r->newTexture(QRhiTexture::BC1, imageSize);
     d.tex->build();
 
-    d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,
+    d.compressedData2 = loadBC1(QLatin1String(":/bwqt224_64_nomips.dds"), &imageSize);
+    Q_ASSERT(imageSize == QSize(224, 64));
+
+    d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, // no mipmapping here
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     d.sampler->build();
 
@@ -177,15 +181,31 @@ void Window::customRender()
         u->updateDynamicBuffer(d.ubuf, 64, 4, &flip);
     }
     if (!d.compressedData.isEmpty()) {
-        QRhiTextureUploadDescription desc;
-        QRhiTextureUploadDescription::Layer layer;
-        for (int i = 0; i < d.compressedData.count(); ++i) {
-            QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData[i]);
+        {
+            QRhiTextureUploadDescription desc;
+            QRhiTextureUploadDescription::Layer layer;
+            QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData[0]);
             layer.mipImages.append(image);
+            desc.layers.append(layer);
+            u->uploadTexture(d.tex, desc);
+            d.compressedData.clear();
         }
-        desc.layers.append(layer);
-        u->uploadTexture(d.tex, desc);
-        d.compressedData.clear();
+
+        // now exercise uploading a smaller compressed image into the same texture
+        {
+            QRhiTextureUploadDescription desc;
+            QRhiTextureUploadDescription::Layer layer;
+            QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData2[0]);
+            // positions and sizes must be multiples of 4 here (for BC1)
+            image.destinationTopLeft = QPoint(16, 32);
+            // the image is smaller than the subresource size (128x64 vs
+            // 256x256) so the size must be specified manually
+            image.compressedPixelSize = QSize(224, 64);
+            layer.mipImages.append(image);
+            desc.layers.append(layer);
+            u->uploadTexture(d.tex, desc);
+            d.compressedData2.clear();
+        }
     }
     d.rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;

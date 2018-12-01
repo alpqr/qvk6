@@ -580,20 +580,20 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             f->glBindTexture(targetBase + layer, texD->texture);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const int x = mipDesc.destinationTopLeft.x();
-                const int y = mipDesc.destinationTopLeft.y();
+                const int dx = mipDesc.destinationTopLeft.x();
+                const int dy = mipDesc.destinationTopLeft.y();
                 if (isCompressed && !mipDesc.compressedData.isEmpty()) {
                     int w, h;
-                    if (mipDesc.compressedPixelSize.isEmpty()) {
+                    if (mipDesc.sourceSize.isEmpty()) {
                         w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
                         h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
                     } else {
-                        w = mipDesc.compressedPixelSize.width();
-                        h = mipDesc.compressedPixelSize.height();
+                        w = mipDesc.sourceSize.width();
+                        h = mipDesc.sourceSize.height();
                     }
                     if (texD->specified) {
                         f->glCompressedTexSubImage2D(targetBase + layer, level,
-                                                     x, y, w, h,
+                                                     dx, dy, w, h,
                                                      texD->glintformat,
                                                      mipDesc.compressedData.size(), mipDesc.compressedData.constData());
                     } else {
@@ -603,9 +603,23 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                                                   mipDesc.compressedData.size(), mipDesc.compressedData.constData());
                     }
                 } else {
+                    QImage img = mipDesc.image;
+                    int w = img.width();
+                    int h = img.height();
+                    const uchar *p = img.constBits();
+                    if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
+                        const int sx = mipDesc.sourceTopLeft.x();
+                        const int sy = mipDesc.sourceTopLeft.y();
+                        if (!mipDesc.sourceSize.isEmpty()) {
+                            w = mipDesc.sourceSize.width();
+                            h = mipDesc.sourceSize.height();
+                        }
+                        img = img.copy(sx, sy, w, h);
+                        p = img.constBits();
+                    }
                     f->glTexSubImage2D(targetBase + layer, level,
-                                       x, y, mipDesc.image.width(), mipDesc.image.height(),
-                                       texD->glformat, texD->gltype, mipDesc.image.constBits());
+                                       dx, dy, w, h,
+                                       texD->glformat, texD->gltype, p);
                 }
             }
         }

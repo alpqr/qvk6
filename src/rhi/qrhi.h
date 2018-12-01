@@ -267,10 +267,25 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
             // either a QImage or compressed data (not both)
             MipLevel(const QImage &image_) : image(image_) { }
             MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
+
             QImage image;
             QByteArray compressedData;
+
             QPoint destinationTopLeft;
-            QSize compressedPixelSize; // empty = entire subresource; ignored for non-compressed as the QImage size is used instead
+
+            // Empty = entire subresource. For uncompressed this then means the
+            // size of the source image must match the subresource. When
+            // non-empty, this size is used.
+            //
+            // Works for compressed as well, but the first compressed upload
+            // must always match the subresource size (and sourceSize can be
+            // left unset) due to gfx api limitations with some backends.
+            QSize sourceSize;
+
+            // This is only supported for uncompressed. Setting sourceSize or
+            // sourceTopLeft may trigger a QImage copy internally (depending on
+            // the format and the gfx api).
+            QPoint sourceTopLeft;
         };
 
         Layer() { }

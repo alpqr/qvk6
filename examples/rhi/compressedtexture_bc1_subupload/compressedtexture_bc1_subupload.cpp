@@ -198,9 +198,9 @@ void Window::customRender()
             QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData2[0]);
             // positions and sizes must be multiples of 4 here (for BC1)
             image.destinationTopLeft = QPoint(16, 32);
-            // the image is smaller than the subresource size (128x64 vs
+            // the image is smaller than the subresource size (224x64 vs
             // 256x256) so the size must be specified manually
-            image.compressedPixelSize = QSize(224, 64);
+            image.sourceSize = QSize(224, 64);
             layer.mipImages.append(image);
             desc.layers.append(layer);
             u->uploadTexture(d.tex, desc);

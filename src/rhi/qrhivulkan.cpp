@@ -1986,6 +1986,7 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             qWarning("Failed to map image data: %d", err);
             continue;
         }
+        QVector<QImage> tempImages; // yes, we rely heavily on implicit sharing in QImage
         for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
             const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
@@ -2001,16 +2002,37 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 copyInfo.imageSubresource.layerCount = 1;
                 copyInfo.imageExtent.depth = 1;
 
-                const int x = mipDesc.destinationTopLeft.x();
-                const int y = mipDesc.destinationTopLeft.y();
+                const int dx = mipDesc.destinationTopLeft.x();
+                const int dy = mipDesc.destinationTopLeft.y();
                 if (!mipDesc.image.isNull()) {
                     imageSizeBytes = mipDesc.image.sizeInBytes();
                     if (imageSizeBytes > 0) {
-                        src = mipDesc.image.constBits();
-                        copyInfo.imageOffset.x = x;
-                        copyInfo.imageOffset.y = y;
-                        copyInfo.imageExtent.width = mipDesc.image.width();
-                        copyInfo.imageExtent.height = mipDesc.image.height();
+                        QImage img = mipDesc.image;
+                        int w = img.width();
+                        int h = img.height();
+                        src = img.constBits();
+                        copyInfo.bufferRowLength = w; // this is in pixels, not bytes
+                        if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
+                            const int sx = mipDesc.sourceTopLeft.x();
+                            const int sy = mipDesc.sourceTopLeft.y();
+                            if (!mipDesc.sourceSize.isEmpty()) {
+                                w = mipDesc.sourceSize.width();
+                                h = mipDesc.sourceSize.height();
+                            }
+                            if (img.depth() == 32) {
+                                src = img.constBits() + sy * img.bytesPerLine() + sx * 4;
+                                // bufferRowLength remains set to the original image's width
+                            } else {
+                                img = img.copy(sx, sy, w, h);
+                                src = img.constBits();
+                                copyInfo.bufferRowLength = w;
+                                tempImages.append(img); // keep the new, temporary image alive until the vkCmdCopy
+                            }
+                        }
+                        copyInfo.imageOffset.x = dx;
+                        copyInfo.imageOffset.y = dy;
+                        copyInfo.imageExtent.width = w;
+                        copyInfo.imageExtent.height = h;
                         copyInfos.append(copyInfo);
                     }
                 } else {
@@ -2020,22 +2042,22 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                         const int subresw = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
                         const int subresh = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
                         int w, h;
-                        if (mipDesc.compressedPixelSize.isEmpty()) {
+                        if (mipDesc.sourceSize.isEmpty()) {
                             w = subresw;
                             h = subresh;
                         } else {
-                            w = mipDesc.compressedPixelSize.width();
-                            h = mipDesc.compressedPixelSize.height();
+                            w = mipDesc.sourceSize.width();
+                            h = mipDesc.sourceSize.height();
                         }
                         QSize blockDim;
                         compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
                         // x and y must be multiples of the block width and height
-                        copyInfo.imageOffset.x = aligned(x, blockDim.width());
-                        copyInfo.imageOffset.y = aligned(y, blockDim.height());
+                        copyInfo.imageOffset.x = aligned(dx, blockDim.width());
+                        copyInfo.imageOffset.y = aligned(dy, blockDim.height());
                         // width and height must be multiples of the block width and height
                         // or x + width and y + height must equal the subresource width and height
-                        copyInfo.imageExtent.width = x + w == subresw ? w : aligned(w, blockDim.width());
-                        copyInfo.imageExtent.height = y + h == subresh ? h : aligned(h, blockDim.height());
+                        copyInfo.imageExtent.width = dx + w == subresw ? w : aligned(w, blockDim.width());
+                        copyInfo.imageExtent.height = dy + h == subresh ? h : aligned(h, blockDim.height());
                         copyInfos.append(copyInfo);
                     }
                 }

@@ -743,27 +743,46 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
                 UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
-                const int x = mipDesc.destinationTopLeft.x();
-                const int y = mipDesc.destinationTopLeft.y();
+                const int dx = mipDesc.destinationTopLeft.x();
+                const int dy = mipDesc.destinationTopLeft.y();
                 D3D11_BOX box;
                 box.front = 0;
                 // back, right, bottom are exclusive
                 box.back = 1;
                 if (!mipDesc.image.isNull()) {
-                    box.left = x;
-                    box.top = y;
-                    box.right = x + mipDesc.image.width();
-                    box.bottom = y + mipDesc.image.height();
-                    context->UpdateSubresource(texD->tex, subres, &box,
-                                               mipDesc.image.constBits(), mipDesc.image.bytesPerLine(), 0);
+                    QImage img = mipDesc.image;
+                    int w = img.width();
+                    int h = img.height();
+                    int bpl = img.bytesPerLine();
+                    const uchar *p = img.constBits();
+                    if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
+                        const int sx = mipDesc.sourceTopLeft.x();
+                        const int sy = mipDesc.sourceTopLeft.y();
+                        if (!mipDesc.sourceSize.isEmpty()) {
+                            w = mipDesc.sourceSize.width();
+                            h = mipDesc.sourceSize.height();
+                        }
+                        if (img.depth() == 32) {
+                            p = img.constBits() + sy * img.bytesPerLine() + sx * 4;
+                        } else {
+                            img = img.copy(sx, sy, w, h);
+                            bpl = img.bytesPerLine();
+                            p = img.constBits();
+                        }
+                    }
+                    box.left = dx;
+                    box.top = dy;
+                    box.right = dx + w;
+                    box.bottom = dy + h;
+                    context->UpdateSubresource(texD->tex, subres, &box, p, bpl, 0);
                 } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(texD->m_format)) {
                     int w, h;
-                    if (mipDesc.compressedPixelSize.isEmpty()) {
+                    if (mipDesc.sourceSize.isEmpty()) {
                         w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
                         h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
                     } else {
-                        w = mipDesc.compressedPixelSize.width();
-                        h = mipDesc.compressedPixelSize.height();
+                        w = mipDesc.sourceSize.width();
+                        h = mipDesc.sourceSize.height();
                     }
                     quint32 bpl = 0;
                     QSize blockDim;
@@ -771,10 +790,10 @@ void QRhiD3D11::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                     // Everything must be a multiple of the block width and
                     // height, so e.g. a mip level of size 2x2 will be 4x4 when it
                     // comes to the actual data.
-                    box.left = aligned(x, blockDim.width());
-                    box.top = aligned(y, blockDim.height());
-                    box.right = aligned(x + w, blockDim.width());
-                    box.bottom = aligned(y + h, blockDim.height());
+                    box.left = aligned(dx, blockDim.width());
+                    box.top = aligned(dy, blockDim.height());
+                    box.right = aligned(dx + w, blockDim.width());
+                    box.bottom = aligned(dy + h, blockDim.height());
                     context->UpdateSubresource(texD->tex, subres, &box,
                                                mipDesc.compressedData.constData(), bpl, 0);
                 }

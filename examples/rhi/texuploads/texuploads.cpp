@@ -249,8 +249,24 @@ void Window::customRender()
         }
 
         // Exercise simple, full texture copy.
-        if (d.testStage == 5)
+        if (d.testStage == 4)
             u->copyTexture(d.newTex, d.tex);
+
+        // Now again upload customImage but this time only a part of it.
+        if (d.testStage == 5) {
+            QRhiTextureUploadDescription desc;
+            QRhiTextureUploadDescription::Layer layer;
+            QRhiTextureUploadDescription::Layer::MipLevel mipDesc;
+
+            mipDesc.image = d.customImage;
+            mipDesc.destinationTopLeft = QPoint(10, 120);
+            mipDesc.sourceSize = QSize(50, 40);
+            mipDesc.sourceTopLeft = QPoint(20, 10);
+
+            layer.mipImages.append(mipDesc);
+            desc.layers.append(layer);
+            u->uploadTexture(d.newTex, desc);
+        }
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();

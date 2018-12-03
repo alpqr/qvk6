@@ -12,8 +12,9 @@ test cubemap
 test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl/mtl)
 
+d3d: resolveimage (color only)
 mtl, gl, vk: msaa tex+rt
-mtl, gl, vk: resolveimage
+mtl, gl, vk: resolveimage (color only)
 
 gl: tex size stuff (npot etc.)
 gl: tex formats (texture, readback)
@@ -59,13 +60,14 @@ multi mip/layer copy? (fewer barriers...)
 multi-buffer (region) readback?
 depth readback
 copy image depth
+depth resolve
 
 shadertools:
 dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
-d3d: resolveimage (color and ds, only to resolve samples)
+resourceUpdates in endPass
 d3d: msaa tex+rt
 multisample texture (and tex rt) (no readback)
 gl: compressed textures

@@ -899,7 +899,7 @@ public:
                    const QRhiColorClearValue &colorClearValue, // ignored when rt has PreserveColorContents
                    const QRhiDepthStencilClearValue &depthStencilClearValue, // ignored when no ds attachment
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
-    void endPass();
+    void endPass(QRhiResourceUpdateBatch *resourceUpdates = nullptr);
 
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
@@ -938,10 +938,10 @@ public:
                      quint32 firstInstance = 0);
 
     /*
-      Readbacks cannot be inside a pass. When used in a begin-endFrame (not
-      offscreen), the data may only be available in a future frame. Hence the
-      completed callback:
+      When used in a begin-endFrame (not offscreen), the data may only be
+      available in a future frame. Hence the completed callback:
           beginFrame(sc);
+          beginPass
           ...
           QRhiReadbackResult *rbResult = new QRhiReadbackResult;
           rbResult->completed = [rbResult] {
@@ -954,8 +954,10 @@ public:
               }
               delete rbResult;
           };
+          u = nextResourceUpdateBatch();
           QRhiReadbackDescription rb; // no texture -> backbuffer
-          cb->readback(rb, rbResult);
+          u->readback(rb, rbResult);
+          endPass(u);
           endFrame(sc);
      */
     bool readback(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
@@ -1117,8 +1119,11 @@ public:
           QRhiReadbackResult rbResult;
           QRhiCommandBuffer *cb; // not owned
           beginOffscreenFrame(&cb);
-          // ... the usual, set up a QRhiTextureRenderTarget, beginPass-endPass, etc.
-          cb->readback(rb, &rbResult);
+          beginPass
+          ...
+          u = nextResourceUpdateBatch();
+          u->readback(rb, &rbResult);
+          endPass(u);
           endOffscreenFrame();
           // image data available in rbResult
      */

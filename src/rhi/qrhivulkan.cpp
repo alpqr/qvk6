@@ -1698,7 +1698,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
     inPass = true;
 }
 
-void QRhiVulkan::endPass(QRhiCommandBuffer *cb)
+void QRhiVulkan::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(inPass);
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
@@ -1709,6 +1709,9 @@ void QRhiVulkan::endPass(QRhiCommandBuffer *cb)
         deactivateTextureRenderTarget(cb, static_cast<QRhiTextureRenderTarget *>(cbD->currentTarget));
 
     cbD->currentTarget = nullptr;
+
+    if (resourceUpdates)
+        commitResourceUpdates(cb, resourceUpdates);
 }
 
 VkShaderModule QRhiVulkan::createShader(const QByteArray &spirv)

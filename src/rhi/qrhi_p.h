@@ -94,7 +94,7 @@ public:
                            const QRhiColorClearValue &colorClearValue,
                            const QRhiDepthStencilClearValue &depthStencilClearValue,
                            QRhiResourceUpdateBatch *resourceUpdates) = 0;
-    virtual void endPass(QRhiCommandBuffer *cb) = 0;
+    virtual void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) = 0;
 
     virtual void setGraphicsPipeline(QRhiCommandBuffer *cb,
                                      QRhiGraphicsPipeline *ps,

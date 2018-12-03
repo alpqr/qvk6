@@ -776,7 +776,7 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
     inPass = true;
 }
 
-void QRhiMetal::endPass(QRhiCommandBuffer *cb)
+void QRhiMetal::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(inPass);
     inPass = false;
@@ -785,6 +785,9 @@ void QRhiMetal::endPass(QRhiCommandBuffer *cb)
     [cbD->d->currentPassEncoder endEncoding];
 
     cbD->currentTarget = nullptr;
+
+    if (resourceUpdates)
+        commitResourceUpdates(cb, resourceUpdates);
 }
 
 void QRhiMetal::executeDeferredReleases(bool forced)

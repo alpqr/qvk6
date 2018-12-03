@@ -1292,13 +1292,16 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt,
     inPass = true;
 }
 
-void QRhiGles2::endPass(QRhiCommandBuffer *cb)
+void QRhiGles2::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(inPass);
     inPass = false;
 
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     cbD->currentTarget = nullptr;
+
+    if (resourceUpdates)
+        commitResourceUpdates(resourceUpdates);
 }
 
 QGles2Buffer::QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)

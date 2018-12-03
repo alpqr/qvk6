@@ -889,13 +889,16 @@ void QRhiD3D11::beginPass(QRhiRenderTarget *rt,
     inPass = true;
 }
 
-void QRhiD3D11::endPass(QRhiCommandBuffer *cb)
+void QRhiD3D11::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     Q_ASSERT(inPass);
     inPass = false;
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     cbD->currentTarget = nullptr;
+
+    if (resourceUpdates)
+        commitResourceUpdates(resourceUpdates);
 }
 
 void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)

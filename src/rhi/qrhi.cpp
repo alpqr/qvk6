@@ -524,9 +524,9 @@ void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
     rhi->beginPass(rt, this, colorClearValue, depthStencilClearValue, resourceUpdates);
 }
 
-void QRhiCommandBuffer::endPass()
+void QRhiCommandBuffer::endPass(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    rhi->endPass(this);
+    rhi->endPass(this, resourceUpdates);
 }
 
 void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps,

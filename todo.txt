@@ -12,8 +12,8 @@ test cubemap
 test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl/mtl)
 
-msaa offscreen (msaa texture. no readback.)
-resolveimage (color and ds, only to resolve samples)
+mtl, gl, vk: msaa tex+rt
+mtl, gl, vk: resolveimage
 
 gl: tex size stuff (npot etc.)
 gl: tex formats (texture, readback)
@@ -31,7 +31,7 @@ vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cbuffers, textures, samplers set should be batched too
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 what does image copy do for compressed formats?
-does reading back an msaa swapchain buffer work?
+does/should reading back an msaa swapchain buffer work? (breaks with vk, d3d at least)
 figure sg out for minimizing viewport/scissor cmds
 vk: test FrameOpDeviceLost somehow
 d3d device loss?
@@ -65,6 +65,9 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: resolveimage (color and ds, only to resolve samples)
+d3d: msaa tex+rt
+multisample texture (and tex rt) (no readback)
 gl: compressed textures
 vk, gl: texcopy
 move cb api into QRhiCommandBuffer

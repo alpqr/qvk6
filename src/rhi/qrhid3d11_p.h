@@ -86,6 +86,7 @@ struct QD3D11Texture : public QRhiTexture
     ID3D11Texture2D *tex = nullptr;
     ID3D11ShaderResourceView *srv = nullptr;
     uint mipLevelCount = 0;
+    DXGI_SAMPLE_DESC sampleDesc;
     uint generation = 0;
     friend class QRhiD3D11;
 };

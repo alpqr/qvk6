@@ -654,6 +654,10 @@ bool QRhiD3D11::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &r
     QD3D11Texture *texD = QRHI_RES(QD3D11Texture, rb.texture);
     QD3D11SwapChain *swapChainD = nullptr;
     if (texD) {
+        if (texD->sampleDesc.Count > 1) {
+            qWarning("Multisample texture cannot be read back");
+            return false;
+        }
         src = texD->tex;
         dxgiFormat = toD3DTextureFormat(texD->m_format, texD->m_flags);
         pixelSize = texD->m_pixelSize;
@@ -1314,7 +1318,8 @@ bool QD3D11RenderBuffer::build()
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
         memset(&dsvDesc, 0, sizeof(dsvDesc));
         dsvDesc.Format = dsFormat;
-        dsvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS : D3D11_DSV_DIMENSION_TEXTURE2D;
+        dsvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS
+                                                          : D3D11_DSV_DIMENSION_TEXTURE2D;
         hr = rhiD->dev->CreateDepthStencilView(tex, &dsvDesc, &dsv);
         if (FAILED(hr)) {
             qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
@@ -1382,12 +1387,24 @@ bool QD3D11Texture::build()
     if (tex)
         release();
 
+    QRHI_RES_RHI(QRhiD3D11);
     const QSize size = safeSize(m_pixelSize);
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
+    if (sampleDesc.Count > 1) {
+        if (isCube) {
+            qWarning("Cubemap texture cannot be multisample");
+            return false;
+        }
+        if (hasMipMaps) {
+            qWarning("Multisample texture cannot have mipmaps");
+            return false;
+        }
+    }
 
     uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
     if (m_flags.testFlag(RenderTarget)) {
@@ -1404,12 +1421,11 @@ bool QD3D11Texture::build()
     desc.MipLevels = mipLevelCount;
     desc.ArraySize = isCube ? 6 : 1;;
     desc.Format = toD3DTextureFormat(m_format, m_flags);
-    desc.SampleDesc.Count = 1;
+    desc.SampleDesc = sampleDesc;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = bindFlags;
     desc.MiscFlags = isCube ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
 
-    QRHI_RES_RHI(QRhiD3D11);
     HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
     if (FAILED(hr)) {
         qWarning("Failed to create texture: %s", qPrintable(comErrorMessage(hr)));
@@ -1423,8 +1439,12 @@ bool QD3D11Texture::build()
         srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
         srvDesc.TextureCube.MipLevels = desc.MipLevels;
     } else {
-        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-        srvDesc.Texture2D.MipLevels = desc.MipLevels;
+        if (sampleDesc.Count > 1) {
+            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+        } else {
+            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels = desc.MipLevels;
+        }
     }
 
     hr = rhiD->dev->CreateShaderResourceView(tex, &srvDesc, &srv);
@@ -1617,7 +1637,8 @@ bool QD3D11TextureRenderTarget::build()
             rtvDesc.Texture2DArray.FirstArraySlice = m_desc.colorAttachments[i].layer;
             rtvDesc.Texture2DArray.ArraySize = 1;
         } else {
-            rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+            rtvDesc.ViewDimension = texD->sampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
+                                                               : D3D11_RTV_DIMENSION_TEXTURE2D;
         }
 
         HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv[i]);
@@ -1633,17 +1654,19 @@ bool QD3D11TextureRenderTarget::build()
     if (hasDepthStencil) {
         if (m_desc.depthTexture) {
             ownsDsv = true;
+            QD3D11Texture *depthTexD = QRHI_RES(QD3D11Texture, m_desc.depthTexture);
             D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
             memset(&dsvDesc, 0, sizeof(dsvDesc));
-            dsvDesc.Format = toD3DDepthTextureDSVFormat(m_desc.depthTexture->format());
-            dsvDesc.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
-            HRESULT hr = rhiD->dev->CreateDepthStencilView(QRHI_RES(QD3D11Texture, m_desc.depthTexture)->tex, &dsvDesc, &dsv);
+            dsvDesc.Format = toD3DDepthTextureDSVFormat(depthTexD->format());
+            dsvDesc.ViewDimension = depthTexD->sampleDesc.Count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS
+                                                                    : D3D11_DSV_DIMENSION_TEXTURE2D;
+            HRESULT hr = rhiD->dev->CreateDepthStencilView(depthTexD->tex, &dsvDesc, &dsv);
             if (FAILED(hr)) {
                 qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
                 return false;
             }
             if (d.colorAttCount == 0)
-                d.pixelSize = m_desc.depthTexture->pixelSize();
+                d.pixelSize = depthTexD->pixelSize();
         } else {
             ownsDsv = false;
             dsv = QRHI_RES(QD3D11RenderBuffer, m_desc.depthStencilBuffer)->dsv;

@@ -77,7 +77,7 @@ void Window::customInit()
     d.ubuf->build();
 
     QImage baseImage(QLatin1String(":/qt256.png"));
-    d.tex = m_r->newTexture(QRhiTexture::RGBA8, baseImage.size(), QRhiTexture::UsedAsTransferSource);
+    d.tex = m_r->newTexture(QRhiTexture::RGBA8, baseImage.size(), 1, QRhiTexture::UsedAsTransferSource);
     d.tex->build();
 
     // As an alternative to what some of the other examples do, prepare an

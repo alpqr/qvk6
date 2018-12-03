@@ -78,7 +78,7 @@ void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
     QRhiTexture::Flags texFlags = 0;
     if (MIPMAP)
         texFlags |= QRhiTexture::MipMapped;
-    m_tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), texFlags);
+    m_tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), 1, texFlags);
     m_tex->build();
 
     m_sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, MIPMAP ? QRhiSampler::Linear : QRhiSampler::None,

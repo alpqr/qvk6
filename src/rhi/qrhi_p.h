@@ -69,9 +69,10 @@ public:
     virtual QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                                  const QSize &pixelSize,
                                                  int sampleCount,
-                                                 QRhiRenderBuffer::Hints hints) = 0;
+                                                 QRhiRenderBuffer::Flags flags) = 0;
     virtual QRhiTexture *createTexture(QRhiTexture::Format format,
                                        const QSize &pixelSize,
+                                       int sampleCount,
                                        QRhiTexture::Flags flags) = 0;
     virtual QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                        QRhiSampler::Filter mipmapMode,

@@ -71,7 +71,7 @@ struct QMetalRenderBufferData;
 struct QMetalRenderBuffer : public QRhiRenderBuffer
 {
     QMetalRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                       int sampleCount, QRhiRenderBuffer::Hints hints);
+                       int sampleCount, QRhiRenderBuffer::Flags flags);
     ~QMetalRenderBuffer();
     void release() override;
     bool build() override;
@@ -86,7 +86,8 @@ struct QMetalTextureData;
 
 struct QMetalTexture : public QRhiTexture
 {
-    QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
+    QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                  int sampleCount, Flags flags);
     ~QMetalTexture();
     void release() override;
     bool build() override;
@@ -249,9 +250,10 @@ public:
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
-                                         QRhiRenderBuffer::Hints hints) override;
+                                         QRhiRenderBuffer::Flags flags) override;
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
+                               int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,

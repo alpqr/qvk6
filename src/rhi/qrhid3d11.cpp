@@ -242,14 +242,15 @@ bool QRhiD3D11::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
 }
 
 QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
-                                                int sampleCount, QRhiRenderBuffer::Hints hints)
+                                                int sampleCount, QRhiRenderBuffer::Flags flags)
 {
-    return new QD3D11RenderBuffer(this, type, pixelSize, sampleCount, hints);
+    return new QD3D11RenderBuffer(this, type, pixelSize, sampleCount, flags);
 }
 
-QRhiTexture *QRhiD3D11::createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags)
+QRhiTexture *QRhiD3D11::createTexture(QRhiTexture::Format format, const QSize &pixelSize,
+                                      int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QD3D11Texture(this, format, pixelSize, flags);
+    return new QD3D11Texture(this, format, pixelSize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiD3D11::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -1268,8 +1269,8 @@ bool QD3D11Buffer::build()
 }
 
 QD3D11RenderBuffer::QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                                       int sampleCount, QRhiRenderBuffer::Hints hints)
-    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints)
+                                       int sampleCount, QRhiRenderBuffer::Flags flags)
+    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, flags)
 {
 }
 
@@ -1325,8 +1326,9 @@ bool QD3D11RenderBuffer::build()
     return false;
 }
 
-QD3D11Texture::QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, flags)
+QD3D11Texture::QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                             int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, sampleCount, flags)
 {
 }
 

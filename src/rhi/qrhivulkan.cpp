@@ -2427,14 +2427,15 @@ bool QRhiVulkan::isTextureFormatSupported(QRhiTexture::Format format, QRhiTextur
 }
 
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
-                                                 int sampleCount, QRhiRenderBuffer::Hints hints)
+                                                 int sampleCount, QRhiRenderBuffer::Flags flags)
 {
-    return new QVkRenderBuffer(this, type, pixelSize, sampleCount, hints);
+    return new QVkRenderBuffer(this, type, pixelSize, sampleCount, flags);
 }
 
-QRhiTexture *QRhiVulkan::createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags)
+QRhiTexture *QRhiVulkan::createTexture(QRhiTexture::Format format, const QSize &pixelSize,
+                                       int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QVkTexture(this, format, pixelSize, flags);
+    return new QVkTexture(this, format, pixelSize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiVulkan::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -3058,8 +3059,8 @@ bool QVkBuffer::build()
 }
 
 QVkRenderBuffer::QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                                 int sampleCount, Hints hints)
-    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints)
+                                 int sampleCount, Flags flags)
+    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, flags)
 {
 }
 
@@ -3114,8 +3115,9 @@ bool QVkRenderBuffer::build()
     return true;
 }
 
-QVkTexture::QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, flags)
+QVkTexture::QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                       int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, sampleCount, flags)
 {
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         stagingBuffers[i] = VK_NULL_HANDLE;

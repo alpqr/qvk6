@@ -265,14 +265,15 @@ bool QRhiMetal::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
 }
 
 QRhiRenderBuffer *QRhiMetal::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
-                                                int sampleCount, QRhiRenderBuffer::Hints hints)
+                                                int sampleCount, QRhiRenderBuffer::Flags flags)
 {
-    return new QMetalRenderBuffer(this, type, pixelSize, sampleCount, hints);
+    return new QMetalRenderBuffer(this, type, pixelSize, sampleCount, flags);
 }
 
-QRhiTexture *QRhiMetal::createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags)
+QRhiTexture *QRhiMetal::createTexture(QRhiTexture::Format format, const QSize &pixelSize,
+                                      int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QMetalTexture(this, format, pixelSize, flags);
+    return new QMetalTexture(this, format, pixelSize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiMetal::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -882,8 +883,8 @@ bool QMetalBuffer::build()
 }
 
 QMetalRenderBuffer::QMetalRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                                       int sampleCount, QRhiRenderBuffer::Hints hints)
-    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints),
+                                       int sampleCount, QRhiRenderBuffer::Flags flags)
+    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, flags),
       d(new QMetalRenderBufferData)
 {
 }
@@ -938,8 +939,9 @@ bool QMetalRenderBuffer::build()
     return true;
 }
 
-QMetalTexture::QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, flags),
+QMetalTexture::QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                             int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, sampleCount, flags),
       d(new QMetalTextureData)
 {
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)

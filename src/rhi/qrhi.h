@@ -387,10 +387,10 @@ public:
         DepthStencil
     };
 
-    enum Hint {
+    enum Flag {
         ToBeUsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
     };
-    Q_DECLARE_FLAGS(Hints, Hint)
+    Q_DECLARE_FLAGS(Flags, Flag)
 
     Type type() const { return m_type; }
     void setType(Type t) { m_type = t; }
@@ -401,22 +401,22 @@ public:
     int sampleCount() const { return m_sampleCount; }
     void setSampleCount(int s) { m_sampleCount = s; }
 
-    Hints hints() const { return m_hints; }
-    void setHints(Hints h) { m_hints = h; }
+    Flags flags() const { return m_flags; }
+    void setFlags(Flags h) { m_flags = h; }
 
     virtual bool build() = 0;
 
 protected:
     QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
-                     int sampleCount_, Hints hints_);
+                     int sampleCount_, Flags flags_);
     Type m_type;
     QSize m_pixelSize;
     int m_sampleCount;
-    Hints m_hints;
+    Flags m_flags;
     void *m_reserved;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiRenderBuffer::Hints)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiRenderBuffer::Flags)
 
 class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 {
@@ -427,7 +427,7 @@ public:
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
         sRGB = 1 << 4,
-        UsedAsTransferSource = 1 << 5
+        UsedAsTransferSource = 1 << 5 // will (also) be used as the source of a readback or copy
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -479,13 +479,18 @@ public:
     Flags flags() const { return m_flags; }
     void setFlags(Flags f) { m_flags = f; }
 
+    int sampleCount() const { return m_sampleCount; }
+    void setSampleCount(int s) { m_sampleCount = s; }
+
     virtual bool build() = 0;
 
 protected:
-    QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_, Flags flags_);
+    QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
+                int sampleCount_, Flags flags_);
     Format m_format;
     QSize m_pixelSize;
     Flags m_flags;
+    int m_sampleCount;
     void *m_reserved;
 };
 
@@ -1064,15 +1069,16 @@ public:
     // To be used for depth-stencil when no access is needed afterwards.
     // Transient image, backed by lazily allocated memory (on Vulkan at least,
     // ideal for tiled GPUs). May also be a dummy internally depending on the
-    // backend and the hints (OpenGL, where the winsys interface provides the
+    // backend and the flags (OpenGL, where the winsys interface provides the
     // depth-stencil buffer via the window surface).
     QRhiRenderBuffer *newRenderBuffer(QRhiRenderBuffer::Type type,
                                       const QSize &pixelSize,
                                       int sampleCount = 1,
-                                      QRhiRenderBuffer::Hints hints = QRhiRenderBuffer::Hints());
+                                      QRhiRenderBuffer::Flags flags = QRhiRenderBuffer::Flags());
 
     QRhiTexture *newTexture(QRhiTexture::Format format,
                             const QSize &pixelSize,
+                            int sampleCount = 1,
                             QRhiTexture::Flags flags = QRhiTexture::Flags());
 
     QRhiSampler *newSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,

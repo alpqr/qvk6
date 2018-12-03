@@ -72,15 +72,16 @@ QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, i
 }
 
 QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
-                                   int sampleCount_, Hints hints_)
+                                   int sampleCount_, Flags flags_)
     : QRhiResource(rhi),
-      m_type(type_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_hints(hints_)
+      m_type(type_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_flags(flags_)
 {
 }
 
-QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_, Flags flags_)
+QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
+                         int sampleCount_, Flags flags_)
     : QRhiResource(rhi),
-      m_format(format_), m_pixelSize(pixelSize_), m_flags(flags_)
+      m_format(format_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_flags(flags_)
 {
 }
 
@@ -632,16 +633,17 @@ QRhiBuffer *QRhi::newBuffer(QRhiBuffer::Type type,
 QRhiRenderBuffer *QRhi::newRenderBuffer(QRhiRenderBuffer::Type type,
                                         const QSize &pixelSize,
                                         int sampleCount,
-                                        QRhiRenderBuffer::Hints hints)
+                                        QRhiRenderBuffer::Flags flags)
 {
-    return d->createRenderBuffer(type, pixelSize, sampleCount, hints);
+    return d->createRenderBuffer(type, pixelSize, sampleCount, flags);
 }
 
 QRhiTexture *QRhi::newTexture(QRhiTexture::Format format,
                               const QSize &pixelSize,
+                              int sampleCount,
                               QRhiTexture::Flags flags)
 {
-    return d->createTexture(format, pixelSize, flags);
+    return d->createTexture(format, pixelSize, sampleCount, flags);
 }
 
 QRhiSampler *QRhi::newSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,

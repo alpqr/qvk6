@@ -87,11 +87,11 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
             m_image = m_image.mirrored(); // just cause we'll flip texcoord Y when y up so accomodate our static background image as well
     }
 
-    m_tex = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+    m_tex = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
     m_tex->build();
 
     if (MRT) {
-        m_tex2 = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+        m_tex2 = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
         m_tex2->build();
     }
 
@@ -143,7 +143,7 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 
     if (DEPTH_TEXTURE) {
         m_offscreenTriangle.setDepthWrite(true);
-        m_depthTex = m_r->newTexture(QRhiTexture::D32, OFFSCREEN_SIZE, QRhiTexture::RenderTarget);
+        m_depthTex = m_r->newTexture(QRhiTexture::D32, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
         m_depthTex->build();
     }
 

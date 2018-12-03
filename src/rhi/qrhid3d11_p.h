@@ -67,7 +67,7 @@ struct QD3D11Buffer : public QRhiBuffer
 struct QD3D11RenderBuffer : public QRhiRenderBuffer
 {
     QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                       int sampleCount, QRhiRenderBuffer::Hints hints);
+                       int sampleCount, QRhiRenderBuffer::Flags flags);
     void release() override;
     bool build() override;
 
@@ -78,7 +78,8 @@ struct QD3D11RenderBuffer : public QRhiRenderBuffer
 
 struct QD3D11Texture : public QRhiTexture
 {
-    QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
+    QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                  int sampleCount, Flags flags);
     void release() override;
     bool build() override;
 
@@ -382,9 +383,10 @@ public:
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
-                                         QRhiRenderBuffer::Hints hints) override;
+                                         QRhiRenderBuffer::Flags flags) override;
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
+                               int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,

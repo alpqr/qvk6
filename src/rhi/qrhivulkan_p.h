@@ -79,7 +79,7 @@ struct QVkBuffer : public QRhiBuffer
 struct QVkRenderBuffer : public QRhiRenderBuffer
 {
     QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                    int sampleCount, Hints hints);
+                    int sampleCount, Flags flags);
     void release() override;
     bool build() override;
 
@@ -92,7 +92,8 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
 
 struct QVkTexture : public QRhiTexture
 {
-    QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
+    QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+               int sampleCount, Flags flags);
     void release() override;
     bool build() override;
 
@@ -312,9 +313,10 @@ public:
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
-                                         QRhiRenderBuffer::Hints hints) override;
+                                         QRhiRenderBuffer::Flags flags) override;
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
+                               int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,

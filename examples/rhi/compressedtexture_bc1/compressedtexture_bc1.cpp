@@ -82,7 +82,7 @@ void Window::customInit()
     d.compressedData = loadBC1(QLatin1String(":/qt256_bc1_9mips.dds"), &imageSize);
     qDebug() << d.compressedData.count() << imageSize << m_r->mipLevelsForSize(imageSize);
 
-    d.tex = m_r->newTexture(QRhiTexture::BC1, imageSize, QRhiTexture::MipMapped);
+    d.tex = m_r->newTexture(QRhiTexture::BC1, imageSize, 1, QRhiTexture::MipMapped);
     d.tex->build();
 
     d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::Linear,

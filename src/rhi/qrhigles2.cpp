@@ -251,14 +251,15 @@ bool QRhiGles2::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
 }
 
 QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
-                                                int sampleCount, QRhiRenderBuffer::Hints hints)
+                                                int sampleCount, QRhiRenderBuffer::Flags flags)
 {
-    return new QGles2RenderBuffer(this, type, pixelSize, sampleCount, hints);
+    return new QGles2RenderBuffer(this, type, pixelSize, sampleCount, flags);
 }
 
-QRhiTexture *QRhiGles2::createTexture(QRhiTexture::Format format, const QSize &pixelSize, QRhiTexture::Flags flags)
+QRhiTexture *QRhiGles2::createTexture(QRhiTexture::Format format, const QSize &pixelSize,
+                                      int sampleCount, QRhiTexture::Flags flags)
 {
-    return new QGles2Texture(this, format, pixelSize, flags);
+    return new QGles2Texture(this, format, pixelSize, sampleCount, flags);
 }
 
 QRhiSampler *QRhiGles2::createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
@@ -1350,8 +1351,8 @@ bool QGles2Buffer::build()
 }
 
 QGles2RenderBuffer::QGles2RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                                       int sampleCount, QRhiRenderBuffer::Hints hints)
-    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, hints)
+                                       int sampleCount, QRhiRenderBuffer::Flags flags)
+    : QRhiRenderBuffer(rhi, type, pixelSize, sampleCount, flags)
 {
 }
 
@@ -1378,7 +1379,7 @@ bool QGles2RenderBuffer::build()
     if (renderbuffer)
         release();
 
-    if (m_hints.testFlag(ToBeUsedWithSwapChainOnly))
+    if (m_flags.testFlag(ToBeUsedWithSwapChainOnly))
         return true;
 
     if (!rhiD->ensureContext())
@@ -1399,8 +1400,9 @@ bool QGles2RenderBuffer::build()
     return true;
 }
 
-QGles2Texture::QGles2Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags)
-    : QRhiTexture(rhi, format, pixelSize, flags)
+QGles2Texture::QGles2Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                             int sampleCount, Flags flags)
+    : QRhiTexture(rhi, format, pixelSize, sampleCount, flags)
 {
 }
 

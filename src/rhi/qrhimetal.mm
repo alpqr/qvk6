@@ -569,17 +569,6 @@ QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
     return QRhi::FrameOpError;
 }
 
-bool QRhiMetal::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    Q_UNUSED(cb);
-    Q_UNUSED(rb);
-    Q_UNUSED(result);
-
-    Q_ASSERT(inFrame && !inPass);
-
-    return false;
-}
-
 QRhi::FrameOpResult QRhiMetal::finish()
 {
     Q_ASSERT(!inPass);
@@ -613,7 +602,7 @@ MTLRenderPassDescriptor *QRhiMetalData::createDefaultRenderPass(bool hasDepthSte
     return rp;
 }
 
-void QRhiMetal::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
+void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
@@ -726,8 +715,15 @@ void QRhiMetal::executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD)
     updates.clear();
 }
 
-void QRhiMetal::beginPass(QRhiRenderTarget *rt,
-                          QRhiCommandBuffer *cb,
+void QRhiMetal::resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
+{
+    Q_ASSERT(inFrame && !inPass);
+
+    enqueueResourceUpdates(cb, resourceUpdates);
+}
+
+void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
+                          QRhiRenderTarget *rt,
                           const QRhiColorClearValue &colorClearValue,
                           const QRhiDepthStencilClearValue &depthStencilClearValue,
                           QRhiResourceUpdateBatch *resourceUpdates)
@@ -735,7 +731,7 @@ void QRhiMetal::beginPass(QRhiRenderTarget *rt,
     Q_ASSERT(!inPass);
 
     if (resourceUpdates)
-        commitResourceUpdates(cb, resourceUpdates);
+        enqueueResourceUpdates(cb, resourceUpdates);
 
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
 
@@ -787,7 +783,7 @@ void QRhiMetal::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resource
     cbD->currentTarget = nullptr;
 
     if (resourceUpdates)
-        commitResourceUpdates(cb, resourceUpdates);
+        enqueueResourceUpdates(cb, resourceUpdates);
 }
 
 void QRhiMetal::executeDeferredReleases(bool forced)

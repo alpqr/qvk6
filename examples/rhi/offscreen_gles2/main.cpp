@@ -180,12 +180,14 @@ int main(int argc, char **argv)
         cb->setViewport({ 0, 0, 1280, 720 });
         cb->setVertexInput(0, { { vbuf, 0 } });
         cb->draw(3);
-        cb->endPass();
 
+        u = r->nextResourceUpdateBatch();
         QRhiReadbackDescription rb(tex);
         QRhiReadbackResult rbResult;
         rbResult.completed = [frame] { qDebug("  - readback %d completed", frame); };
-        cb->readback(rb, &rbResult);
+        u->readBackTexture(rb, &rbResult);
+
+        cb->endPass(u);
 
         qDebug("Submit and wait");
         r->endOffscreenFrame();

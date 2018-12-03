@@ -500,23 +500,6 @@ QRhi::FrameOpResult QRhiGles2::endOffscreenFrame()
     return QRhi::FrameOpSuccess;;
 }
 
-bool QRhiGles2::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    Q_ASSERT(inFrame && !inPass);
-
-    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
-
-    QGles2CommandBuffer::Command cmd;
-    cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
-    cmd.args.readPixels.tex = rb.texture;
-    cmd.args.readPixels.layer = rb.layer;
-    cmd.args.readPixels.level = rb.level;
-    cmd.args.readPixels.result = result;
-    cbD->commands.append(cmd);
-
-    return true;
-}
-
 QRhi::FrameOpResult QRhiGles2::finish()
 {
     Q_ASSERT(!inPass);
@@ -538,8 +521,9 @@ QRhi::FrameOpResult QRhiGles2::finish()
     return QRhi::FrameOpSuccess;
 }
 
-void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
+void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
+    QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
@@ -553,8 +537,14 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             if (r.changeEnd == -1 || u.offset + u.data.size() > r.changeEnd)
                 r.changeEnd = u.offset + u.data.size();
         } else {
-            f->glBindBuffer(bufD->target, bufD->buffer);
-            f->glBufferSubData(bufD->target, u.offset, u.data.size(), u.data.constData());
+            QGles2CommandBuffer::Command cmd;
+            cmd.cmd = QGles2CommandBuffer::Command::BufferSubData;
+            cmd.args.bufferSubData.target = bufD->target;
+            cmd.args.bufferSubData.buffer = bufD->buffer;
+            cmd.args.bufferSubData.offset = u.offset;
+            cmd.args.bufferSubData.size = u.data.size();
+            cmd.args.bufferSubData.data = cbD->retainData(u.data);
+            cbD->commands.append(cmd);
         }
     }
 
@@ -566,8 +556,13 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
             memcpy(bufD->ubuf.data(), u.data.constData(), u.data.size());
             bufD->ubufChangeRange = { 0, u.data.size() };
         } else {
-            f->glBindBuffer(bufD->target, bufD->buffer);
-            f->glBufferData(bufD->target, u.data.size(), u.data.constData(), GL_STATIC_DRAW);
+            QGles2CommandBuffer::Command cmd;
+            cmd.cmd = QGles2CommandBuffer::Command::BufferData;
+            cmd.args.bufferData.target = bufD->target;
+            cmd.args.bufferData.buffer = bufD->buffer;
+            cmd.args.bufferData.size = u.data.size();
+            cmd.args.bufferData.data = cbD->retainData(u.data);
+            cbD->commands.append(cmd);
         }
     }
 
@@ -593,21 +588,36 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                         h = mipDesc.sourceSize.height();
                     }
                     if (texD->specified) {
-                        f->glCompressedTexSubImage2D(targetBase + layer, level,
-                                                     dx, dy, w, h,
-                                                     texD->glintformat,
-                                                     mipDesc.compressedData.size(), mipDesc.compressedData.constData());
+                        QGles2CommandBuffer::Command cmd;
+                        cmd.cmd = QGles2CommandBuffer::Command::CompressedSubImage;
+                        cmd.args.compressedSubImage.target = targetBase + layer;
+                        cmd.args.compressedSubImage.level = level;
+                        cmd.args.compressedSubImage.dx = dx;
+                        cmd.args.compressedSubImage.dy = dy;
+                        cmd.args.compressedSubImage.w = w;
+                        cmd.args.compressedSubImage.h = h;
+                        cmd.args.compressedSubImage.glintformat = texD->glintformat;
+                        cmd.args.compressedSubImage.size = mipDesc.compressedData.size();
+                        cmd.args.compressedSubImage.data = cbD->retainData(mipDesc.compressedData);
+                        cbD->commands.append(cmd);
                     } else {
-                        f->glCompressedTexImage2D(targetBase + layer, level,
-                                                  texD->glintformat,
-                                                  w, h, 0,
-                                                  mipDesc.compressedData.size(), mipDesc.compressedData.constData());
+                        QGles2CommandBuffer::Command cmd;
+                        cmd.cmd = QGles2CommandBuffer::Command::CompressedImage;
+                        cmd.args.compressedImage.target = targetBase + layer;
+                        cmd.args.compressedImage.level = level;
+                        cmd.args.compressedImage.glintformat = texD->glintformat;
+                        cmd.args.compressedImage.w = w;
+                        cmd.args.compressedImage.h = h;
+                        cmd.args.compressedImage.size = mipDesc.compressedData.size();
+                        cmd.args.compressedImage.data = cbD->retainData(mipDesc.compressedData);
+                        cbD->commands.append(cmd);
                     }
                 } else {
                     QImage img = mipDesc.image;
                     int w = img.width();
                     int h = img.height();
-                    const uchar *p = img.constBits();
+                    QGles2CommandBuffer::Command cmd;
+                    cmd.cmd = QGles2CommandBuffer::Command::SubImage;
                     if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
                         const int sx = mipDesc.sourceTopLeft.x();
                         const int sy = mipDesc.sourceTopLeft.y();
@@ -616,11 +626,17 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
                             h = mipDesc.sourceSize.height();
                         }
                         img = img.copy(sx, sy, w, h);
-                        p = img.constBits();
                     }
-                    f->glTexSubImage2D(targetBase + layer, level,
-                                       dx, dy, w, h,
-                                       texD->glformat, texD->gltype, p);
+                    cmd.args.subImage.target = targetBase + layer;
+                    cmd.args.subImage.level = level;
+                    cmd.args.subImage.dx = dx;
+                    cmd.args.subImage.dy = dy;
+                    cmd.args.subImage.w = w;
+                    cmd.args.subImage.h = h;
+                    cmd.args.subImage.glformat = texD->glformat;
+                    cmd.args.subImage.gltype = texD->gltype;
+                    cmd.args.subImage.data = cbD->retainImage(img);
+                    cbD->commands.append(cmd);
                 }
             }
         }
@@ -640,24 +656,40 @@ void QRhiGles2::commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
         const float dx = u.desc.destinationTopLeft.x();
         const float dy = u.desc.destinationTopLeft.y();
 
-        // ugh...
-        GLuint fbo;
-        f->glGenFramebuffers(1, &fbo);
-        f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         const GLenum srcTargetBase = srcD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : srcD->target;
         const GLenum srcTarget = srcTargetBase + u.desc.sourceLayer;
-        f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, srcTarget, srcD->texture, u.desc.sourceLevel);
-
         const GLenum dstTargetBase = dstD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : dstD->target;
         const GLenum dstTarget = dstTargetBase + u.desc.destinationLayer;
-        f->glBindTexture(dstTarget, dstD->texture);
 
-        f->glCopyTexSubImage2D(dstTarget, u.desc.destinationLevel,
-                               dx, dy,
-                               sx, sy, size.width(), size.height());
+        QGles2CommandBuffer::Command cmd;
+        cmd.cmd = QGles2CommandBuffer::Command::CopyTex;
 
-        f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
-        f->glDeleteFramebuffers(1, &fbo);
+        cmd.args.copyTex.srcTarget = srcTarget;
+        cmd.args.copyTex.srcTexture = srcD->texture;
+        cmd.args.copyTex.srcLevel = u.desc.sourceLevel;
+        cmd.args.copyTex.srcX = sx;
+        cmd.args.copyTex.srcY = sy;
+
+        cmd.args.copyTex.dstTarget = dstTarget;
+        cmd.args.copyTex.dstTexture = dstD->texture;
+        cmd.args.copyTex.dstLevel = u.desc.destinationLevel;
+        cmd.args.copyTex.dstX = dx;
+        cmd.args.copyTex.dstY = dy;
+
+        cmd.args.copyTex.w = size.width();
+        cmd.args.copyTex.h = size.height();
+
+        cbD->commands.append(cmd);
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
+        QGles2CommandBuffer::Command cmd;
+        cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
+        cmd.args.readPixels.result = u.result;
+        cmd.args.readPixels.texture = QRHI_RES(QGles2Texture, u.rb.texture);
+        cmd.args.readPixels.layer = u.rb.layer;
+        cmd.args.readPixels.level = u.rb.level;
+        cbD->commands.append(cmd);
     }
 
     ud->free();
@@ -1024,13 +1056,39 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             }
             f->glClear(cmd.args.clear.mask);
             break;
+        case QGles2CommandBuffer::Command::BufferData:
+            f->glBindBuffer(cmd.args.bufferData.target, cmd.args.bufferData.buffer);
+            f->glBufferData(cmd.args.bufferData.target, cmd.args.bufferData.size, cmd.args.bufferData.data, GL_STATIC_DRAW);
+            break;
+        case QGles2CommandBuffer::Command::BufferSubData:
+            f->glBindBuffer(cmd.args.bufferSubData.target, cmd.args.bufferSubData.buffer);
+            f->glBufferSubData(cmd.args.bufferSubData.target, cmd.args.bufferSubData.offset, cmd.args.bufferSubData.size,
+                               cmd.args.bufferSubData.data);
+            break;
+        case QGles2CommandBuffer::Command::CopyTex:
+        {
+            // ugh...
+            GLuint fbo;
+            f->glGenFramebuffers(1, &fbo);
+            f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+            f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                      cmd.args.copyTex.srcTarget, cmd.args.copyTex.srcTexture, cmd.args.copyTex.srcLevel);
+            f->glBindTexture(cmd.args.copyTex.dstTarget, cmd.args.copyTex.dstTexture);
+            f->glCopyTexSubImage2D(cmd.args.copyTex.dstTarget, cmd.args.copyTex.dstLevel,
+                                   cmd.args.copyTex.dstX, cmd.args.copyTex.dstY,
+                                   cmd.args.copyTex.srcX, cmd.args.copyTex.srcY,
+                                   cmd.args.copyTex.w, cmd.args.copyTex.h);
+            f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
+            f->glDeleteFramebuffers(1, &fbo);
+        }
+            break;
         case QGles2CommandBuffer::Command::ReadPixels:
         {
             // ### more formats
             QRhiReadbackResult *result = cmd.args.readPixels.result;
+            QGles2Texture *texD = cmd.args.readPixels.texture;
             GLuint fbo = 0;
-            if (cmd.args.readPixels.tex) {
-                QGles2Texture *texD = QRHI_RES(QGles2Texture, cmd.args.readPixels.tex);
+            if (texD) {
                 result->pixelSize = texD->m_pixelSize;
                 result->format = texD->m_format;
                 // this is going to be suboptimal but will do for now
@@ -1054,6 +1112,26 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             if (result->completed)
                 result->completed();
         }
+            break;
+        case QGles2CommandBuffer::Command::SubImage:
+            f->glTexSubImage2D(cmd.args.subImage.target, cmd.args.subImage.level,
+                               cmd.args.subImage.dx, cmd.args.subImage.dy,
+                               cmd.args.subImage.w, cmd.args.subImage.h,
+                               cmd.args.subImage.glformat, cmd.args.subImage.gltype,
+                               cmd.args.subImage.data);
+            break;
+        case QGles2CommandBuffer::Command::CompressedImage:
+            f->glCompressedTexImage2D(cmd.args.compressedImage.target, cmd.args.compressedImage.level,
+                                      cmd.args.compressedImage.glintformat,
+                                      cmd.args.compressedImage.w, cmd.args.compressedImage.h, 0,
+                                      cmd.args.compressedImage.size, cmd.args.compressedImage.data);
+            break;
+        case QGles2CommandBuffer::Command::CompressedSubImage:
+            f->glCompressedTexSubImage2D(cmd.args.compressedSubImage.target, cmd.args.compressedSubImage.level,
+                                         cmd.args.compressedSubImage.dx, cmd.args.compressedSubImage.dy,
+                                         cmd.args.compressedSubImage.w, cmd.args.compressedSubImage.h,
+                                         cmd.args.compressedSubImage.glintformat,
+                                         cmd.args.compressedSubImage.size, cmd.args.compressedSubImage.data);
             break;
         default:
             break;
@@ -1237,8 +1315,15 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
     }
 }
 
-void QRhiGles2::beginPass(QRhiRenderTarget *rt,
-                          QRhiCommandBuffer *cb,
+void QRhiGles2::resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
+{
+    Q_ASSERT(inFrame && !inPass);
+
+    enqueueResourceUpdates(cb, resourceUpdates);
+}
+
+void QRhiGles2::beginPass(QRhiCommandBuffer *cb,
+                          QRhiRenderTarget *rt,
                           const QRhiColorClearValue &colorClearValue,
                           const QRhiDepthStencilClearValue &depthStencilClearValue,
                           QRhiResourceUpdateBatch *resourceUpdates)
@@ -1246,7 +1331,7 @@ void QRhiGles2::beginPass(QRhiRenderTarget *rt,
     Q_ASSERT(!inPass);
 
     if (resourceUpdates)
-        commitResourceUpdates(resourceUpdates);
+        enqueueResourceUpdates(cb, resourceUpdates);
 
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     bool needsColorClear = true;
@@ -1301,7 +1386,7 @@ void QRhiGles2::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resource
     cbD->currentTarget = nullptr;
 
     if (resourceUpdates)
-        commitResourceUpdates(resourceUpdates);
+        enqueueResourceUpdates(cb, resourceUpdates);
 }
 
 QGles2Buffer::QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)

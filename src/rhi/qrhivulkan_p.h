@@ -330,11 +330,12 @@ public:
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
     QRhi::FrameOpResult endOffscreenFrame() override;
-    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
     QRhi::FrameOpResult finish() override;
 
-    void beginPass(QRhiRenderTarget *rt,
-                   QRhiCommandBuffer *cb,
+    void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
+
+    void beginPass(QRhiCommandBuffer *cb,
+                   QRhiRenderTarget *rt,
                    const QRhiColorClearValue &colorClearValue,
                    const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
@@ -404,7 +405,7 @@ public:
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void prepareFrameEnd();
-    void commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
+    void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD);
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);
     void deactivateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);

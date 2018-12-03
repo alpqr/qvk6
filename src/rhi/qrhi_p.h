@@ -86,11 +86,12 @@ public:
     virtual QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) = 0;
     virtual QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) = 0;
     virtual QRhi::FrameOpResult endOffscreenFrame() = 0;
-    virtual bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) = 0;
     virtual QRhi::FrameOpResult finish() = 0;
 
-    virtual void beginPass(QRhiRenderTarget *rt,
-                           QRhiCommandBuffer *cb,
+    virtual void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) = 0;
+
+    virtual void beginPass(QRhiCommandBuffer *cb,
+                           QRhiRenderTarget *rt,
                            const QRhiColorClearValue &colorClearValue,
                            const QRhiDepthStencilClearValue &depthStencilClearValue,
                            QRhiResourceUpdateBatch *resourceUpdates) = 0;
@@ -181,6 +182,16 @@ struct QRhiResourceUpdateBatchPrivate
         QRhiTextureCopyDescription desc;
     };
 
+    struct TextureRead {
+        TextureRead() { }
+        TextureRead(const QRhiReadbackDescription &rb_, QRhiReadbackResult *result_)
+            : rb(rb_), result(result_)
+        { }
+
+        QRhiReadbackDescription rb;
+        QRhiReadbackResult *result;
+    };
+
     struct TexturePrepare {
         TexturePrepare() { }
         TexturePrepare(QRhiTexture *tex_, QRhiResourceUpdateBatch::TexturePrepareFlags flags_)
@@ -195,6 +206,7 @@ struct QRhiResourceUpdateBatchPrivate
     QVector<StaticBufferUpload> staticBufferUploads;
     QVector<TextureUpload> textureUploads;
     QVector<TextureCopy> textureCopies;
+    QVector<TextureRead> textureReadbacks;
     QVector<TexturePrepare> texturePrepares;
 
     QRhiResourceUpdateBatch *q = nullptr;
@@ -211,6 +223,7 @@ Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate, Q_MOVABL
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::StaticBufferUpload, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureCopy, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureRead, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TexturePrepare, Q_MOVABLE_TYPE);
 
 template<typename T>

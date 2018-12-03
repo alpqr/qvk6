@@ -240,7 +240,8 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             BlendConstants,
             Draw,
             DrawIndexed,
-            ReadPixels
+            UpdateSubRes,
+            CopySubRes
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
@@ -303,15 +304,23 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
                 quint32 firstInstance;
             } drawIndexed;
             struct {
+                ID3D11Resource *dst;
+                UINT dstSubRes;
+                bool hasDstBox;
+                D3D11_BOX dstBox;
+                const void *src; // must come from retain*()
+                UINT srcRowPitch;
+            } updateSubRes;
+            struct {
+                ID3D11Resource *dst;
+                UINT dstSubRes;
+                UINT dstX;
+                UINT dstY;
                 ID3D11Resource *src;
-                QRhiTexture::Format format;
-                DXGI_FORMAT dxgiFormat;
-                int w;
-                int h;
-                quint32 byteSize;
-                UINT subres;
-                QRhiReadbackResult *result;
-            } readPixels;
+                UINT srcSubRes;
+                bool hasSrcBox;
+                D3D11_BOX srcBox;
+            } copySubRes;
         } args;
     };
 
@@ -322,8 +331,22 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
 
+    QVector<QByteArray> dataRetainPool;
+    QVector<QImage> imageRetainPool;
+
+    // relies heavily on implicit sharing (no copies of the actual data will be made)
+    const void *retainData(const QByteArray &data) {
+        dataRetainPool.append(data);
+        return dataRetainPool.constLast().constData();
+    }
+    const void *retainImage(const QImage &image) {
+        imageRetainPool.append(image);
+        return imageRetainPool.constLast().constBits();
+    }
     void resetCommands() {
         commands.clear();
+        dataRetainPool.clear();
+        imageRetainPool.clear();
     }
     void resetState() {
         resetCommands();
@@ -401,11 +424,12 @@ public:
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
     QRhi::FrameOpResult endOffscreenFrame() override;
-    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
     QRhi::FrameOpResult finish() override;
 
-    void beginPass(QRhiRenderTarget *rt,
-                   QRhiCommandBuffer *cb,
+    void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
+
+    void beginPass(QRhiCommandBuffer *cb,
+                   QRhiRenderTarget *rt,
                    const QRhiColorClearValue &colorClearValue,
                    const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
@@ -440,13 +464,13 @@ public:
 
     void create();
     void destroy();
-    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD);
-    void readPixels(const QD3D11CommandBuffer::Command &cmd);
     DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;
+    void finishActiveReadbacks();
 
     bool debugLayer = false;
     bool importedDevice = false;
@@ -470,7 +494,19 @@ public:
         bool active = false;
         QD3D11CommandBuffer cbWrapper;
     } ofr;
+
+    struct ActiveReadback {
+        QRhiReadbackDescription desc;
+        QRhiReadbackResult *result;
+        ID3D11Texture2D *stagingTex;
+        quint32 bufSize;
+        QSize pixelSize;
+        QRhiTexture::Format format;
+    };
+    QVector<ActiveReadback> activeReadbacks;
 };
+
+Q_DECLARE_TYPEINFO(QRhiD3D11::ActiveReadback, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

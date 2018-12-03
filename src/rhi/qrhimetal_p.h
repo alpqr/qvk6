@@ -267,11 +267,12 @@ public:
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
     QRhi::FrameOpResult endOffscreenFrame() override;
-    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
     QRhi::FrameOpResult finish() override;
 
-    void beginPass(QRhiRenderTarget *rt,
-                   QRhiCommandBuffer *cb,
+    void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
+
+    void beginPass(QRhiCommandBuffer *cb,
+                   QRhiRenderTarget *rt,
                    const QRhiColorClearValue &colorClearValue,
                    const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
@@ -307,7 +308,7 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases(bool forced = false);
-    void commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
+    void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
 
     bool importedDevice = false;

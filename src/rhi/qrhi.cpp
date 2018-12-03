@@ -459,6 +459,11 @@ void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src)
     d->textureCopies.append({ dst, src, QRhiTextureCopyDescription() });
 }
 
+void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+{
+    d->textureReadbacks.append({ rb, result });
+}
+
 void QRhiResourceUpdateBatch::prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags)
 {
     d->texturePrepares.append({ tex, flags });
@@ -501,6 +506,7 @@ void QRhiResourceUpdateBatchPrivate::free()
     staticBufferUploads.clear();
     textureUploads.clear();
     textureCopies.clear();
+    textureReadbacks.clear();
     texturePrepares.clear();
 
     rhi->resUpdPoolMap.clearBit(poolIndex);
@@ -513,7 +519,13 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
     staticBufferUploads += other->staticBufferUploads;
     textureUploads += other->textureUploads;
     textureCopies += other->textureCopies;
+    textureReadbacks += other->textureReadbacks;
     texturePrepares += other->texturePrepares;
+}
+
+void QRhiCommandBuffer::resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates)
+{
+    rhi->resourceUpdate(this, resourceUpdates);
 }
 
 void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
@@ -521,7 +533,7 @@ void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
                                   const QRhiDepthStencilClearValue &depthStencilClearValue,
                                   QRhiResourceUpdateBatch *resourceUpdates)
 {
-    rhi->beginPass(rt, this, colorClearValue, depthStencilClearValue, resourceUpdates);
+    rhi->beginPass(this, rt, colorClearValue, depthStencilClearValue, resourceUpdates);
 }
 
 void QRhiCommandBuffer::endPass(QRhiResourceUpdateBatch *resourceUpdates)
@@ -573,11 +585,6 @@ void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
                                     qint32 vertexOffset, quint32 firstInstance)
 {
     rhi->drawIndexed(this, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
-}
-
-bool QRhiCommandBuffer::readback(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    return rhi->readback(this, rb, result);
 }
 
 int QRhi::ubufAligned(int v) const

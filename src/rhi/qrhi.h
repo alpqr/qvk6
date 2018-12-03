@@ -319,7 +319,7 @@ Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiReadbackDescription
 {
-    QRhiReadbackDescription() { } // source is the current back buffer (if swapchain supports readback)
+    QRhiReadbackDescription() { } // source is the back buffer of the swapchain of the current frame (if the swapchain supports readback)
     QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { } // source is the specified texture
     QRhiTexture *texture = nullptr;
     int layer = 0;
@@ -879,14 +879,6 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
 
-struct Q_RHI_EXPORT QRhiReadbackResult
-{
-    std::function<void()> completed = nullptr;
-    QRhiTexture::Format format;
-    QSize pixelSize;
-    QByteArray data;
-}; // non-movable due to the std::function
-
 class Q_RHI_EXPORT QRhiCommandBuffer : public QRhiResource
 {
 public:
@@ -894,6 +886,11 @@ public:
         IndexUInt16,
         IndexUInt32
     };
+
+    // Sometimes committing the updates is necessary without starting a render
+    // pass. Not often needed, updates should typically be passed to beginPass
+    // (or endPass, in case of readbacks) instead.
+    void resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates);
 
     void beginPass(QRhiRenderTarget *rt,
                    const QRhiColorClearValue &colorClearValue, // ignored when rt has PreserveColorContents
@@ -937,9 +934,17 @@ public:
                      qint32 vertexOffset = 0,
                      quint32 firstInstance = 0);
 
+protected:
+    QRhiCommandBuffer(QRhiImplementation *rhi);
+    void *m_reserved;
+};
+
+struct Q_RHI_EXPORT QRhiReadbackResult
+{
     /*
-      When used in a begin-endFrame (not offscreen), the data may only be
-      available in a future frame. Hence the completed callback:
+      When doing a readback after a pass inside a begin-endFrame (not
+      offscreen), the data may only be available in a future frame. Hence the
+      completed callback:
           beginFrame(sc);
           beginPass
           ...
@@ -956,16 +961,15 @@ public:
           };
           u = nextResourceUpdateBatch();
           QRhiReadbackDescription rb; // no texture -> backbuffer
-          u->readback(rb, rbResult);
+          u->readBackTexture(rb, rbResult);
           endPass(u);
           endFrame(sc);
      */
-    bool readback(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
-
-protected:
-    QRhiCommandBuffer(QRhiImplementation *rhi);
-    void *m_reserved;
-};
+    std::function<void()> completed = nullptr;
+    QRhiTexture::Format format;
+    QSize pixelSize;
+    QByteArray data;
+}; // non-movable due to the std::function
 
 class Q_RHI_EXPORT QRhiResourceUpdateBatch // sort of a command buffer for copy type of operations
 {
@@ -986,14 +990,16 @@ public:
     // beginPass(). (nb the one we merged from must be release()'d manually)
     void merge(QRhiResourceUpdateBatch *other);
 
-    // None of these execute anything. Deferred to beginPass. What exactly then
-    // happens underneath is hidden from the applications.
+    // None of these execute anything. Deferred to
+    // beginPass/endPass/resourceUpdate. What exactly then happens underneath
+    // is hidden from the applications.
     void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
     void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut
     void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc);
     void copyTexture(QRhiTexture *dst, QRhiTexture *src); // shortcut
+    void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     // This is not normally needed, textures that have an upload or are used
     // with a TextureRenderTarget will be fine without it. May be more relevant later.
@@ -1122,7 +1128,7 @@ public:
           beginPass
           ...
           u = nextResourceUpdateBatch();
-          u->readback(rb, &rbResult);
+          u->readBackTexture(rb, &rbResult);
           endPass(u);
           endOffscreenFrame();
           // image data available in rbResult
@@ -1131,14 +1137,10 @@ public:
     FrameOpResult endOffscreenFrame();
 
     // Waits for any work on the graphics queue (where applicable) to complete,
-    // then forcibly executes all deferred operations, like completing
-    // readbacks and resource releases. This should _not_ be used in practice,
-    // except in infrequent special cases, like when the results of a readback
-    // are needed asap and no new frames are going to be generated for some
-    // time. Can be called inside and outside of a frame, but not inside a
-    // pass. Inside a frame it implies submitting any work on the command
-    // buffer. Unnecessary in combination with begin/endOffscreenFrame because
-    // ending an offscreen frame implies waiting for completion.
+    // then executes all deferred operations, like completing readbacks and
+    // resource releases. Can be called inside and outside of a frame, but not
+    // inside a pass. Inside a frame it implies submitting any work on the
+    // command buffer.
     QRhi::FrameOpResult finish();
 
     // Returns an instance to which updates can be queued. Batch instances are

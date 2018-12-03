@@ -1434,112 +1434,6 @@ QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
     return QRhi::FrameOpSuccess;
 }
 
-bool QRhiVulkan::readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
-{
-    Q_ASSERT(inFrame && !inPass);
-    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
-
-    ActiveReadback aRb;
-    aRb.activeFrameSlot = currentFrameSlot;
-    aRb.desc = rb;
-    aRb.result = result;
-
-    QVkTexture *texD = QRHI_RES(QVkTexture, aRb.desc.texture);
-    QVkSwapChain *swapChainD = nullptr;
-    if (texD) {
-        aRb.pixelSize = texD->m_pixelSize;
-        if (rb.level > 0) {
-            aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> rb.level))));
-            aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> rb.level))));
-        }
-        aRb.format = texD->m_format;
-    } else {
-        Q_ASSERT(currentSwapChain);
-        swapChainD = QRHI_RES(QVkSwapChain, currentSwapChain);
-        if (!swapChainD->supportsReadback) {
-            qWarning("Swapchain does not support readback");
-            return false;
-        }
-        aRb.pixelSize = swapChainD->pixelSize;
-        aRb.format = colorTextureFormatFromVkFormat(swapChainD->colorFormat, nullptr);
-        if (aRb.format == QRhiTexture::UnknownFormat)
-            return false;
-    }
-    textureFormatInfo(aRb.format, aRb.pixelSize, nullptr, &aRb.bufSize);
-
-    // Create a host visible buffer.
-    VkBufferCreateInfo bufferInfo;
-    memset(&bufferInfo, 0, sizeof(bufferInfo));
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = aRb.bufSize;
-    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-
-    VmaAllocationCreateInfo allocInfo;
-    memset(&allocInfo, 0, sizeof(allocInfo));
-    allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
-
-    VmaAllocation allocation;
-    VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &aRb.buf, &allocation, nullptr);
-    if (err == VK_SUCCESS) {
-        aRb.bufAlloc = allocation;
-    } else {
-        qWarning("Failed to create readback buffer of size %u: %d", aRb.bufSize, err);
-        return false;
-    }
-
-    // Copy from the (optimal and not host visible) image into the buffer.
-    VkBufferImageCopy copyDesc;
-    memset(&copyDesc, 0, sizeof(copyDesc));
-    copyDesc.bufferOffset = 0;
-    copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // ### no depth for now
-    copyDesc.imageSubresource.mipLevel = aRb.desc.level;
-    copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
-    copyDesc.imageSubresource.layerCount = 1;
-    copyDesc.imageExtent.width = aRb.pixelSize.width();
-    copyDesc.imageExtent.height = aRb.pixelSize.height();
-    copyDesc.imageExtent.depth = 1;
-
-    if (texD) {
-        Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
-        // assume the image was written
-        imageBarrier(cb, texD,
-                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-        df->vkCmdCopyImageToBuffer(cbD->cb, texD->image, texD->layout, aRb.buf, 1, &copyDesc);
-
-        // behave as if the image was used for shader read
-        imageBarrier(cb, texD,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                     VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    } else {
-        // use the swapchain image
-        VkImage image = swapChainD->imageRes[swapChainD->currentImage].image;
-        VkImageMemoryBarrier barrier;
-        memset(&barrier, 0, sizeof(barrier));
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.image = image;
-        df->vkCmdPipelineBarrier(cbD->cb,
-                                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                 0, 0, nullptr, 0, nullptr,
-                                 1, &barrier);
-        swapChainD->imageRes[swapChainD->currentImage].presentableLayout = false;
-
-        df->vkCmdCopyImageToBuffer(cbD->cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, aRb.buf, 1, &copyDesc);
-    }
-
-    activeReadbacks.append(aRb);
-    return true;
-}
-
 QRhi::FrameOpResult QRhiVulkan::finish()
 {
     Q_ASSERT(!inPass);
@@ -1632,8 +1526,15 @@ void QRhiVulkan::prepareFrameEnd()
     ++finishedFrameCount;
 }
 
-void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
-                           QRhiCommandBuffer *cb,
+void QRhiVulkan::resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
+{
+    Q_ASSERT(inFrame && !inPass);
+
+    enqueueResourceUpdates(cb, resourceUpdates);
+}
+
+void QRhiVulkan::beginPass(QRhiCommandBuffer *cb,
+                           QRhiRenderTarget *rt,
                            const QRhiColorClearValue &colorClearValue,
                            const QRhiDepthStencilClearValue &depthStencilClearValue,
                            QRhiResourceUpdateBatch *resourceUpdates)
@@ -1641,7 +1542,7 @@ void QRhiVulkan::beginPass(QRhiRenderTarget *rt,
     Q_ASSERT(!inPass);
 
     if (resourceUpdates)
-        commitResourceUpdates(cb, resourceUpdates);
+        enqueueResourceUpdates(cb, resourceUpdates);
 
     QVkRenderTargetData *rtD = nullptr;
     switch (rt->type()) {
@@ -1711,7 +1612,7 @@ void QRhiVulkan::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourc
     cbD->currentTarget = nullptr;
 
     if (resourceUpdates)
-        commitResourceUpdates(cb, resourceUpdates);
+        enqueueResourceUpdates(cb, resourceUpdates);
 }
 
 VkShaderModule QRhiVulkan::createShader(const QByteArray &spirv)
@@ -1842,9 +1743,9 @@ void QRhiVulkan::bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf)
 }
 
 void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
-                               VkImageLayout newLayout,
-                               VkAccessFlags srcAccess, VkAccessFlags dstAccess,
-                               VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
+                              VkImageLayout newLayout,
+                              VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                              VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage)
 {
     QVkTexture *texD = QRHI_RES(QVkTexture, tex);
 
@@ -1870,7 +1771,7 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     texD->layout = newLayout;
 }
 
-void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
+void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
@@ -2177,6 +2078,107 @@ void QRhiVulkan::commitResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
+        ActiveReadback aRb;
+        aRb.activeFrameSlot = currentFrameSlot;
+        aRb.desc = u.rb;
+        aRb.result = u.result;
+
+        QVkTexture *texD = QRHI_RES(QVkTexture, aRb.desc.texture);
+        QVkSwapChain *swapChainD = nullptr;
+        if (texD) {
+            aRb.pixelSize = texD->m_pixelSize;
+            if (u.rb.level > 0) {
+                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level))));
+                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level))));
+            }
+            aRb.format = texD->m_format;
+        } else {
+            Q_ASSERT(currentSwapChain);
+            swapChainD = QRHI_RES(QVkSwapChain, currentSwapChain);
+            if (!swapChainD->supportsReadback) {
+                qWarning("Swapchain does not support readback");
+                continue;
+            }
+            aRb.pixelSize = swapChainD->pixelSize;
+            aRb.format = colorTextureFormatFromVkFormat(swapChainD->colorFormat, nullptr);
+            if (aRb.format == QRhiTexture::UnknownFormat)
+                continue;
+        }
+        textureFormatInfo(aRb.format, aRb.pixelSize, nullptr, &aRb.bufSize);
+
+        // Create a host visible buffer.
+        VkBufferCreateInfo bufferInfo;
+        memset(&bufferInfo, 0, sizeof(bufferInfo));
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = aRb.bufSize;
+        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+        VmaAllocationCreateInfo allocInfo;
+        memset(&allocInfo, 0, sizeof(allocInfo));
+        allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+        VmaAllocation allocation;
+        VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &aRb.buf, &allocation, nullptr);
+        if (err == VK_SUCCESS) {
+            aRb.bufAlloc = allocation;
+        } else {
+            qWarning("Failed to create readback buffer of size %u: %d", aRb.bufSize, err);
+            continue;
+        }
+
+        // Copy from the (optimal and not host visible) image into the buffer.
+        VkBufferImageCopy copyDesc;
+        memset(&copyDesc, 0, sizeof(copyDesc));
+        copyDesc.bufferOffset = 0;
+        copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // ### no depth for now
+        copyDesc.imageSubresource.mipLevel = aRb.desc.level;
+        copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
+        copyDesc.imageSubresource.layerCount = 1;
+        copyDesc.imageExtent.width = aRb.pixelSize.width();
+        copyDesc.imageExtent.height = aRb.pixelSize.height();
+        copyDesc.imageExtent.depth = 1;
+
+        if (texD) {
+            Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
+            // assume the image was written
+            imageBarrier(cb, texD,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+            df->vkCmdCopyImageToBuffer(cbD->cb, texD->image, texD->layout, aRb.buf, 1, &copyDesc);
+
+            // behave as if the image was used for shader read
+            imageBarrier(cb, texD,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        } else {
+            // use the swapchain image
+            VkImage image = swapChainD->imageRes[swapChainD->currentImage].image;
+            VkImageMemoryBarrier barrier;
+            memset(&barrier, 0, sizeof(barrier));
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.image = image;
+            df->vkCmdPipelineBarrier(cbD->cb,
+                                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                     0, 0, nullptr, 0, nullptr,
+                                     1, &barrier);
+            swapChainD->imageRes[swapChainD->currentImage].presentableLayout = false;
+
+            df->vkCmdCopyImageToBuffer(cbD->cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, aRb.buf, 1, &copyDesc);
+        }
+
+        activeReadbacks.append(aRb);
+    }
+
     for (const QRhiResourceUpdateBatchPrivate::TexturePrepare &u : ud->texturePrepares) {
         if (u.flags.testFlag(QRhiResourceUpdateBatch::TextureRead)) {
             QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
@@ -2308,7 +2310,6 @@ void QRhiVulkan::finishActiveReadbacks(bool forced)
         }
     }
 
-    // the callback may destroy the result object so invoke it last
     for (auto f : completedCallbacks)
         f();
 }

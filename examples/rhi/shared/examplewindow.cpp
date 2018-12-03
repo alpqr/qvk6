@@ -254,9 +254,10 @@ void ExampleWindow::render()
     }
     if (!m_onScreenOnly)
         m_liveTexCubeRenderer.queueDraw(cb, outputSize);
-    cb->endPass();
 
+    QRhiResourceUpdateBatch *passEndUpdates = nullptr;
 #ifdef READBACK_SWAPCHAIN
+    passEndUpdates = m_r->nextResourceUpdateBatch();
     QRhiReadbackDescription rb; // no texture given -> backbuffer
     QRhiReadbackResult *rbResult = new QRhiReadbackResult;
     int frameNo = m_frameCount;
@@ -276,8 +277,10 @@ void ExampleWindow::render()
         }
         delete rbResult;
     };
-    m_r->readback(cb, rb, rbResult);
+    passEndUpdates->readBackTexture(rb, rbResult);
 #endif
+
+    cb->endPass(passEndUpdates);
 
     m_r->endFrame(m_sc);
 

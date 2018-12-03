@@ -7,14 +7,16 @@ mtl: cubemaps
 mtl: targeting cubemap faces
 mtl: msaa (onscreen)
 mtl: srgb (tex, swapchain buf)
+mtl: msaa tex+rt
+mtl: resolveimage (color)
 
 test cubemap
 test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl/mtl)
 
-d3d: resolveimage (color only)
-mtl, gl, vk: msaa tex+rt
-mtl, gl, vk: resolveimage (color only)
+d3d: resolveimage (color)
+vk, gl: msaa tex+rt
+vk, gl: resolveimage (color)
 
 gl: tex size stuff (npot etc.)
 gl: tex formats (texture, readback)
@@ -49,7 +51,7 @@ vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 
 optional:
 threading options? secondary command lists?
-copy-only passes for kicking off transfers early? (copy/transfer queue?)
+copy/transfer queue?
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 tessellation?
 indirect draw?
@@ -67,6 +69,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+resourceUpdate (run updates without begin/endPass)
 resourceUpdates in endPass
 d3d: msaa tex+rt
 multisample texture (and tex rt) (no readback)

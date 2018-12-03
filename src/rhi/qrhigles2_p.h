@@ -230,7 +230,13 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             BindGraphicsPipeline,
             BindFramebuffer,
             Clear,
-            ReadPixels
+            BufferData,
+            BufferSubData,
+            CopyTex,
+            ReadPixels,
+            SubImage,
+            CompressedImage,
+            CompressedSubImage
         };
         Cmd cmd;
         union {
@@ -284,11 +290,69 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 QRhiTextureRenderTarget *rt;
             } bindFramebuffer;
             struct {
-                QRhiTexture *tex;
+                GLenum target;
+                GLuint buffer;
+                int size;
+                const void *data; // must come from retainData()
+            } bufferData;
+            struct {
+                GLenum target;
+                GLuint buffer;
+                int offset;
+                int size;
+                const void *data; // must come from retainData()
+            } bufferSubData;
+            struct {
+                GLenum srcTarget;
+                GLuint srcTexture;
+                int srcLevel;
+                int srcX;
+                int srcY;
+                GLenum dstTarget;
+                GLuint dstTexture;
+                int dstLevel;
+                int dstX;
+                int dstY;
+                int w;
+                int h;
+            } copyTex;
+            struct {
+                QRhiReadbackResult *result;
+                QGles2Texture *texture;
                 int layer;
                 int level;
-                QRhiReadbackResult *result;
             } readPixels;
+            struct {
+                GLenum target;
+                int level;
+                int dx;
+                int dy;
+                int w;
+                int h;
+                GLenum glformat;
+                GLenum gltype;
+                const void *data; // must come from retainImage()
+            } subImage;
+            struct {
+                GLenum target;
+                int level;
+                GLenum glintformat;
+                int w;
+                int h;
+                int size;
+                const void *data; // must come from retainData()
+            } compressedImage;
+            struct {
+                GLenum target;
+                int level;
+                int dx;
+                int dy;
+                int w;
+                int h;
+                GLenum glintformat;
+                int size;
+                const void *data; // must come from retainData()
+            } compressedSubImage;
         } args;
     };
 
@@ -299,10 +363,23 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
 
+    QVector<QByteArray> dataRetainPool;
+    QVector<QImage> imageRetainPool;
+
+    // relies heavily on implicit sharing (no copies of the actual data will be made)
+    const void *retainData(const QByteArray &data) {
+        dataRetainPool.append(data);
+        return dataRetainPool.constLast().constData();
+    }
+    const void *retainImage(const QImage &image) {
+        imageRetainPool.append(image);
+        return imageRetainPool.constLast().constBits();
+    }
     void resetCommands() {
         commands.clear();
+        dataRetainPool.clear();
+        imageRetainPool.clear();
     }
-
     void resetState() {
         resetCommands();
         currentTarget = nullptr;
@@ -365,11 +442,12 @@ public:
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
     QRhi::FrameOpResult endOffscreenFrame() override;
-    bool readback(QRhiCommandBuffer *cb, const QRhiReadbackDescription &rb, QRhiReadbackResult *result) override;
     QRhi::FrameOpResult finish() override;
 
-    void beginPass(QRhiRenderTarget *rt,
-                   QRhiCommandBuffer *cb,
+    void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
+
+    void beginPass(QRhiCommandBuffer *cb,
+                   QRhiRenderTarget *rt,
                    const QRhiColorClearValue &colorClearValue,
                    const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
@@ -406,7 +484,7 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases();
-    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);
     void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb);
     void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly);

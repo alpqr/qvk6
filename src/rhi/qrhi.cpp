@@ -434,9 +434,14 @@ void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, i
     d->dynamicBufferUpdates.append({ buf, offset, size, data });
 }
 
+void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
+{
+    d->staticBufferUploads.append({ buf, offset, size, data });
+}
+
 void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *data)
 {
-    d->staticBufferUploads.append({ buf, data });
+    d->staticBufferUploads.append({ buf, 0, 0, data });
 }
 
 void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc)

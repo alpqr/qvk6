@@ -335,11 +335,11 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QVector<QImage> imageRetainPool;
 
     // relies heavily on implicit sharing (no copies of the actual data will be made)
-    const void *retainData(const QByteArray &data) {
+    const uchar *retainData(const QByteArray &data) {
         dataRetainPool.append(data);
-        return dataRetainPool.constLast().constData();
+        return reinterpret_cast<const uchar *>(dataRetainPool.constLast().constData());
     }
-    const void *retainImage(const QImage &image) {
+    const uchar *retainImage(const QImage &image) {
         imageRetainPool.append(image);
         return imageRetainPool.constLast().constBits();
     }

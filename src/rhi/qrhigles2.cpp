@@ -553,7 +553,7 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
         Q_ASSERT(u.data.size() == bufD->m_size);
         if (bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
-            memcpy(bufD->ubuf.data(), u.data.constData(), u.data.size());
+            memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
             bufD->ubufChangeRange = { 0, u.data.size() };
         } else {
             QGles2CommandBuffer::Command cmd;
@@ -563,6 +563,7 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             cmd.args.bufferData.size = u.data.size();
             cmd.args.bufferData.data = cbD->retainData(u.data);
             cbD->commands.append(cmd);
+            // ### offset??
         }
     }
 

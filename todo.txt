@@ -9,10 +9,13 @@ mtl: msaa (onscreen)
 mtl: srgb (tex, swapchain buf)
 mtl: msaa tex+rt
 mtl: resolveimage (color)
+mtl: buffer upload with offset/size
 
 test cubemap
 test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl/mtl)
+
+gl: buffer upload with offset/size
 
 d3d: resolveimage (color)
 vk, gl: msaa tex+rt
@@ -69,6 +72,9 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: buffer upload with offset/size
+vk: buffer upload with offset/size
+buffer upload with offset
 resourceUpdate (run updates without begin/endPass)
 resourceUpdates in endPass
 d3d: msaa tex+rt

@@ -153,11 +153,12 @@ struct QRhiResourceUpdateBatchPrivate
 
     struct StaticBufferUpload {
         StaticBufferUpload() { }
-        StaticBufferUpload(QRhiBuffer *buf_, const void *data_)
-            : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size())
+        StaticBufferUpload(QRhiBuffer *buf_, int offset_, int size_, const void *data_)
+            : buf(buf_), offset(offset_), data(reinterpret_cast<const char *>(data_), size_ ? size_ : buf_->size())
         { }
 
         QRhiBuffer *buf = nullptr;
+        int offset = 0;
         QByteArray data;
     };
 

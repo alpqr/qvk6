@@ -1786,7 +1786,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
         Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
-        Q_ASSERT(u.data.size() == bufD->m_size);
+        Q_ASSERT(u.offset + u.data.size() <= bufD->m_size);
 
         if (!bufD->stagingBuffers[currentFrameSlot]) {
             VkBufferCreateInfo bufferInfo;
@@ -1817,13 +1817,15 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             qWarning("Failed to map buffer: %d", err);
             continue;
         }
-        memcpy(p, u.data.constData(), bufD->m_size);
+        memcpy(static_cast<uchar *>(p) + u.offset, u.data.constData(), u.data.size());
         vmaUnmapMemory(toVmaAllocator(allocator), a);
-        vmaFlushAllocation(toVmaAllocator(allocator), a, 0, bufD->m_size);
+        vmaFlushAllocation(toVmaAllocator(allocator), a, u.offset, u.data.size());
 
         VkBufferCopy copyInfo;
         memset(&copyInfo, 0, sizeof(copyInfo));
-        copyInfo.size = bufD->m_size;
+        copyInfo.srcOffset = u.offset;
+        copyInfo.dstOffset = u.offset;
+        copyInfo.size = u.data.size();
 
         df->vkCmdCopyBuffer(cbD->cb, bufD->stagingBuffers[currentFrameSlot], bufD->buffers[0], 1, &copyInfo);
         bufferBarrier(cb, u.buf);

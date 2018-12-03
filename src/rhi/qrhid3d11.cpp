@@ -681,25 +681,23 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
         Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
-        Q_ASSERT(u.data.size() == bufD->m_size);
+        Q_ASSERT(u.offset + u.data.size() <= bufD->m_size);
         QD3D11CommandBuffer::Command cmd;
         cmd.cmd = QD3D11CommandBuffer::Command::UpdateSubRes;
         cmd.args.updateSubRes.dst = bufD->buffer;
         cmd.args.updateSubRes.dstSubRes = 0;
         cmd.args.updateSubRes.src = cbD->retainData(u.data);
         cmd.args.updateSubRes.srcRowPitch = 0;
-        if (!(u.data.size() & 0xFF)) {
-            cmd.args.updateSubRes.hasDstBox = false;
-        } else {
-            // Specify the region since the ID3D11Buffer's size is rounded up to be
-            // a multiple of 256 while the data we have has the original size.
-            D3D11_BOX box;
-            box.left = box.top = box.front = 0;
-            box.back = box.bottom = 1;
-            box.right = u.data.size(); // no -1: right, bottom, back are exclusive, see D3D11_BOX doc
-            cmd.args.updateSubRes.hasDstBox = true;
-            cmd.args.updateSubRes.dstBox = box;
-        }
+        // Specify the region (even when offset is 0 and all data is provided)
+        // since the ID3D11Buffer's size is rounded up to be a multiple of 256
+        // while the data we have has the original size.
+        D3D11_BOX box;
+        box.left = u.offset;
+        box.top = box.front = 0;
+        box.back = box.bottom = 1;
+        box.right = u.offset + u.data.size(); // no -1: right, bottom, back are exclusive, see D3D11_BOX doc
+        cmd.args.updateSubRes.hasDstBox = true;
+        cmd.args.updateSubRes.dstBox = box;
         cbD->commands.append(cmd);
     }
 
@@ -735,7 +733,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                         }
                         if (img.depth() == 32) {
                             const int offset = sy * img.bytesPerLine() + sx * 4;
-                            cmd.args.updateSubRes.src = static_cast<const uchar *>(cbD->retainImage(img)) + offset;
+                            cmd.args.updateSubRes.src = cbD->retainImage(img) + offset;
                         } else {
                             img = img.copy(sx, sy, w, h);
                             bpl = img.bytesPerLine();

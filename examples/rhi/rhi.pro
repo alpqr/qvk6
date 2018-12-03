@@ -5,6 +5,7 @@ SUBDIRS += \
     compressedtexture_bc1 \
     compressedtexture_bc1_subupload \
     texuploads \
+    msaatexture \
     plainqwindow_gles2 \
     offscreen_gles2
 

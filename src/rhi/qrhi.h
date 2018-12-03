@@ -994,6 +994,7 @@ public:
     // beginPass/endPass/resourceUpdate. What exactly then happens underneath
     // is hidden from the applications.
     void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
+    void uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
     void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut

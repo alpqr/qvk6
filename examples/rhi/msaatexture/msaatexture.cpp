@@ -50,8 +50,9 @@
 
 #include "../shared/examplefw.h"
 
-// Renders into a non-multisample and then a multisample (4x) texture and then
-// uses those textures to draw two quads.
+// Renders into a non-multisample and a multisample (4x) texture, and then uses
+// those textures to draw two quads. Note that this uses an MSAA sampler in the
+// shader, not resolves. Not supported on the GL(ES) backend atm.
 
 static float vertexData[] =
 { // Y up, CCW
@@ -88,6 +89,9 @@ struct {
     QRhiGraphicsPipeline *psRight = nullptr;
     QRhiResourceUpdateBatch *initialUpdates = nullptr;
     int rightOfs;
+    QMatrix4x4 winProj;
+    QMatrix4x4 triBaseMvp;
+    float triRot = 0;
 
     QRhiShaderResourceBindings *triSrb = nullptr;
     QRhiGraphicsPipeline *msaaTriPs = nullptr;
@@ -98,6 +102,8 @@ struct {
     QRhiTextureRenderTarget *rt = nullptr;
     QRhiRenderPassDescriptor *rtRp = nullptr;
 } d;
+
+//#define NO_MSAA
 
 void Window::customInit()
 {
@@ -113,7 +119,11 @@ void Window::customInit()
 
     d.tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(512, 512), 1, QRhiTexture::RenderTarget);
     d.tex->build();
+#ifndef NO_MSAA
     d.msaaTex = m_r->newTexture(QRhiTexture::RGBA8, QSize(512, 512), 4, QRhiTexture::RenderTarget);
+#else
+    d.msaaTex = m_r->newTexture(QRhiTexture::RGBA8, QSize(512, 512), 1, QRhiTexture::RenderTarget);
+#endif
     d.msaaTex->build();
 
     d.initialUpdates = m_r->nextResourceUpdateBatch();
@@ -160,7 +170,11 @@ void Window::customInit()
     d.psRight = m_r->newGraphicsPipeline();
     d.psRight->setShaderStages({
         { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/texture.vert.qsb")) },
+#ifndef NO_MSAA
         { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/texture_ms4.frag.qsb")) }
+#else
+        { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/texture.frag.qsb")) }
+#endif
     });
     d.psRight->setVertexInputLayout(d.psLeft->vertexInputLayout());
     d.psRight->setShaderResourceBindings(d.srbRight);
@@ -201,7 +215,11 @@ void Window::customInit()
     d.triPs->setRenderPassDescriptor(d.rtRp);
     d.triPs->build();
     d.msaaTriPs = m_r->newGraphicsPipeline();
+#ifndef NO_MSAA
     d.msaaTriPs->setSampleCount(4);
+#else
+    d.msaaTriPs->setSampleCount(1);
+#endif
     d.msaaTriPs->setShaderStages(d.triPs->shaderStages());
     d.msaaTriPs->setVertexInputLayout(d.triPs->vertexInputLayout());
     d.msaaTriPs->setShaderResourceBindings(d.triSrb);
@@ -312,24 +330,36 @@ void Window::customRender()
         d.initialUpdates = nullptr;
 
         // onscreen ubuf
-        QMatrix4x4 mvp = m_proj; // aspect ratio is then wrong when resizing but oh well
-        mvp.scale(2);
-        mvp.translate(-0.8f, 0, 0);
-        u->updateDynamicBuffer(d.ubuf, 0, 64, mvp.constData());
-        qint32 flip = 0;
+        qint32 flip = m_r->isYUpInFramebuffer() ? 1 : 0;
         u->updateDynamicBuffer(d.ubuf, 64, 4, &flip);
-        mvp.translate(1.6f, 0, 0);
-        u->updateDynamicBuffer(d.ubuf, d.rightOfs, 64, mvp.constData());
         u->updateDynamicBuffer(d.ubuf, d.rightOfs + 64, 4, &flip);
 
         // offscreen ubuf
-        mvp = m_r->clipSpaceCorrMatrix();
-        mvp.perspective(45.0f, d.msaaTex->pixelSize().width() / float(d.msaaTex->pixelSize().height()), 0.01f, 1000.0f);
-        mvp.translate(0, 0, -2);
-        u->updateDynamicBuffer(d.triUbuf, 0, 64, mvp.constData());
+        d.triBaseMvp = m_r->clipSpaceCorrMatrix();
+        d.triBaseMvp.perspective(45.0f, d.msaaTex->pixelSize().width() / float(d.msaaTex->pixelSize().height()), 0.01f, 1000.0f);
+        d.triBaseMvp.translate(0, 0, -2);
         float opacity = 1.0f;
         u->updateDynamicBuffer(d.triUbuf, 64, 4, &opacity);
     }
+
+    if (d.winProj != m_proj) {
+        // onscreen buf, window size dependent
+        d.winProj = m_proj;
+        QMatrix4x4 mvp = m_proj;
+        mvp.scale(2);
+        mvp.translate(-0.8f, 0, 0);
+        u->updateDynamicBuffer(d.ubuf, 0, 64, mvp.constData());
+        mvp.translate(1.6f, 0, 0);
+        u->updateDynamicBuffer(d.ubuf, d.rightOfs, 64, mvp.constData());
+    }
+
+    // offscreen buf, apply the rotation on every frame
+    QMatrix4x4 triMvp = d.triBaseMvp;
+    triMvp.rotate(d.triRot, 0, 1, 0);
+    d.triRot += 1;
+    u->updateDynamicBuffer(d.triUbuf, 0, 64, triMvp.constData());
+
+    cb->resourceUpdate(u);
 
     // offscreen
     cb->beginPass(d.rt, { 0.5f, 0.2f, 0, 1 }, { 1, 0 });
@@ -340,7 +370,7 @@ void Window::customRender()
     cb->endPass();
 
     // offscreen msaa
-    cb->beginPass(d.msaaRt, { 0.5f, 0.2f, 0, 1 }, { 1, 0 }, u);
+    cb->beginPass(d.msaaRt, { 0.5f, 0.2f, 0, 1 }, { 1, 0 });
     cb->setGraphicsPipeline(d.msaaTriPs);
     cb->setViewport({ 0, 0, float(d.msaaTex->pixelSize().width()), float(d.msaaTex->pixelSize().height()) });
     cb->setVertexInput(0, { { d.vbuf, sizeof(vertexData) } });

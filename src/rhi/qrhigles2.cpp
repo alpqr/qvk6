@@ -551,19 +551,19 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, u.buf);
         Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
-        Q_ASSERT(u.data.size() == bufD->m_size);
+        Q_ASSERT(u.offset + u.data.size() <= bufD->m_size);
         if (bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
             bufD->ubufChangeRange = { 0, u.data.size() };
         } else {
             QGles2CommandBuffer::Command cmd;
-            cmd.cmd = QGles2CommandBuffer::Command::BufferData;
-            cmd.args.bufferData.target = bufD->target;
-            cmd.args.bufferData.buffer = bufD->buffer;
-            cmd.args.bufferData.size = u.data.size();
-            cmd.args.bufferData.data = cbD->retainData(u.data);
+            cmd.cmd = QGles2CommandBuffer::Command::BufferSubData;
+            cmd.args.bufferSubData.target = bufD->target;
+            cmd.args.bufferSubData.buffer = bufD->buffer;
+            cmd.args.bufferSubData.offset = u.offset;
+            cmd.args.bufferSubData.size = u.data.size();
+            cmd.args.bufferSubData.data = cbD->retainData(u.data);
             cbD->commands.append(cmd);
-            // ### offset??
         }
     }
 
@@ -1056,10 +1056,6 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 f->glClearStencil(cmd.args.clear.s);
             }
             f->glClear(cmd.args.clear.mask);
-            break;
-        case QGles2CommandBuffer::Command::BufferData:
-            f->glBindBuffer(cmd.args.bufferData.target, cmd.args.bufferData.buffer);
-            f->glBufferData(cmd.args.bufferData.target, cmd.args.bufferData.size, cmd.args.bufferData.data, GL_STATIC_DRAW);
             break;
         case QGles2CommandBuffer::Command::BufferSubData:
             f->glBindBuffer(cmd.args.bufferSubData.target, cmd.args.bufferSubData.buffer);

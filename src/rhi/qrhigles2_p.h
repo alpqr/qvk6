@@ -292,12 +292,6 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             struct {
                 GLenum target;
                 GLuint buffer;
-                int size;
-                const void *data; // must come from retainData()
-            } bufferData;
-            struct {
-                GLenum target;
-                GLuint buffer;
                 int offset;
                 int size;
                 const void *data; // must come from retainData()

@@ -592,7 +592,7 @@ bool QRhiVulkan::createTransientImage(VkFormat format,
                                       const QSize &pixelSize,
                                       VkImageUsageFlags usage,
                                       VkImageAspectFlags aspectMask,
-                                      VkSampleCountFlagBits sampleCount,
+                                      VkSampleCountFlagBits samples,
                                       VkDeviceMemory *mem,
                                       VkImage *images,
                                       VkImageView *views,
@@ -611,7 +611,7 @@ bool QRhiVulkan::createTransientImage(VkFormat format,
         imgInfo.extent.height = pixelSize.height();
         imgInfo.extent.depth = 1;
         imgInfo.mipLevels = imgInfo.arrayLayers = 1;
-        imgInfo.samples = sampleCount;
+        imgInfo.samples = samples;
         imgInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imgInfo.usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
         imgInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -708,7 +708,7 @@ VkFormat QRhiVulkan::optimalDepthStencilFormat()
     return optimalDsFormat;
 }
 
-bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits sampleCount, VkFormat colorFormat)
+bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil, VkSampleCountFlagBits samples, VkFormat colorFormat)
 {
     VkAttachmentDescription attDesc[3];
     memset(attDesc, 0, sizeof(attDesc));
@@ -726,7 +726,7 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
     // clear on load + no store + lazy alloc + transient image should play
     // nicely with tiled GPUs (no physical backing necessary for ds buffer)
     attDesc[1].format = optimalDepthStencilFormat();
-    attDesc[1].samples = sampleCount;
+    attDesc[1].samples = samples;
     attDesc[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     attDesc[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attDesc[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -734,10 +734,10 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
     attDesc[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attDesc[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-    if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+    if (samples > VK_SAMPLE_COUNT_1_BIT) {
         colorAttIndex = 2;
         attDesc[2].format = colorFormat;
-        attDesc[2].samples = sampleCount;
+        attDesc[2].samples = samples;
         attDesc[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         attDesc[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attDesc[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -768,7 +768,7 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
     if (hasDepthStencil)
         rpInfo.attachmentCount += 1;
 
-    if (sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+    if (samples > VK_SAMPLE_COUNT_1_BIT) {
         rpInfo.attachmentCount += 1;
         subPassDesc.pResolveAttachments = &resolveRef;
     }
@@ -785,9 +785,8 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
 bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
                                            const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
                                            bool preserveColor,
-                                           bool hasDepthStencil,
-                                           VkFormat dsFormat,
-                                           bool hasDepthTexture)
+                                           QRhiRenderBuffer *depthStencilBuffer,
+                                           QRhiTexture *depthTexture)
 {
     QVarLengthArray<VkAttachmentDescription, 8> attDescs;
     QVarLengthArray<VkAttachmentReference, 8> colorRefs;
@@ -798,7 +797,7 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         VkAttachmentDescription attDesc;
         memset(&attDesc, 0, sizeof(attDesc));
         attDesc.format = toVkTextureFormat(texD->m_format, texD->m_flags);
-        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc.samples = texD->samples;
         attDesc.loadOp = preserveColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
         attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -811,17 +810,22 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         colorRefs.append(ref);
     }
 
+    const bool hasDepthStencil = depthStencilBuffer || depthTexture;
     if (hasDepthStencil) {
+        const VkFormat dsFormat = depthTexture ? toVkTextureFormat(depthTexture->format(), depthTexture->flags())
+                                               : optimalDepthStencilFormat();
+        const VkSampleCountFlagBits samples = depthTexture ? QRHI_RES(QVkTexture, depthTexture)->samples
+                                                           : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->samples;
         VkAttachmentDescription attDesc;
         memset(&attDesc, 0, sizeof(attDesc));
         attDesc.format = dsFormat;
-        attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+        attDesc.samples = samples;
         attDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.storeOp = hasDepthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.storeOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.stencilStoreOp = hasDepthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.stencilStoreOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc.finalLayout = hasDepthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+        attDesc.finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
         attDescs.append(attDesc);
     }
 
@@ -970,12 +974,12 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
 
     VkImage msaaImages[QVkSwapChain::MAX_BUFFER_COUNT];
     VkImageView msaaViews[QVkSwapChain::MAX_BUFFER_COUNT];
-    if (swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+    if (swapChainD->samples > VK_SAMPLE_COUNT_1_BIT) {
         if (!createTransientImage(swapChainD->colorFormat,
                                   swapChainD->pixelSize,
                                   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                                   VK_IMAGE_ASPECT_COLOR_BIT,
-                                  swapChainD->sampleCount,
+                                  swapChainD->samples,
                                   &swapChainD->msaaImageMem,
                                   msaaImages,
                                   msaaViews,
@@ -993,7 +997,7 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
     for (int i = 0; i < swapChainD->bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(swapChainD->imageRes[i]);
         image.image = swapChainImages[i];
-        if (swapChainD->sampleCount > VK_SAMPLE_COUNT_1_BIT) {
+        if (swapChainD->samples > VK_SAMPLE_COUNT_1_BIT) {
             image.msaaImage = msaaImages[i];
             image.msaaImageView = msaaViews[i];
         }
@@ -2089,6 +2093,10 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         QVkTexture *texD = QRHI_RES(QVkTexture, aRb.desc.texture);
         QVkSwapChain *swapChainD = nullptr;
         if (texD) {
+            if (texD->samples > VK_SAMPLE_COUNT_1_BIT) {
+                qWarning("Multisample texture cannot be read back");
+                continue;
+            }
             aRb.pixelSize = texD->m_pixelSize;
             if (u.rb.level > 0) {
                 aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level))));
@@ -3099,11 +3107,12 @@ bool QVkRenderBuffer::build()
     QRHI_RES_RHI(QRhiVulkan);
     switch (m_type) {
     case QRhiRenderBuffer::DepthStencil:
+        samples = rhiD->effectiveSampleCount(m_sampleCount);
         if (!rhiD->createTransientImage(rhiD->optimalDepthStencilFormat(),
                                         m_pixelSize,
                                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                                         VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                                        rhiD->effectiveSampleCount(m_sampleCount),
+                                        samples,
                                         &memory,
                                         &image,
                                         &imageView,
@@ -3181,6 +3190,7 @@ bool QVkTexture::build()
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    samples = rhiD->effectiveSampleCount(m_sampleCount);
 
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));
@@ -3193,7 +3203,7 @@ bool QVkTexture::build()
     imageInfo.extent.depth = 1;
     imageInfo.mipLevels = mipLevelCount;
     imageInfo.arrayLayers = isCube ? 6 : 1;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples = samples;
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
 
@@ -3379,14 +3389,11 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
 
     QRHI_RES_RHI(QRhiVulkan);
     QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
-    const VkFormat dsFormat = m_desc.depthTexture ? toVkTextureFormat(m_desc.depthTexture->format(), m_desc.depthTexture->flags())
-                                                  : rhiD->optimalDepthStencilFormat();
     if (!rhiD->createOffscreenRenderPass(&rp->rp,
                                          m_desc.colorAttachments,
                                          m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
-                                         m_desc.depthStencilBuffer || m_desc.depthTexture,
-                                         dsFormat,
-                                         m_desc.depthTexture != nullptr))
+                                         m_desc.depthStencilBuffer,
+                                         m_desc.depthTexture))
     {
         delete rp;
         return nullptr;
@@ -3847,7 +3854,7 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
     QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
     if (!rhiD->createDefaultRenderPass(&rp->rp,
                                        m_depthStencil != nullptr,
-                                       sampleCount,
+                                       samples,
                                        colorFormat))
     {
         delete rp;
@@ -3901,7 +3908,7 @@ bool QVkSwapChain::ensureSurface()
         }
     }
 
-    sampleCount = rhiD->effectiveSampleCount(m_sampleCount);
+    samples = rhiD->effectiveSampleCount(m_sampleCount);
 
     return true;
 }
@@ -3956,7 +3963,7 @@ bool QVkSwapChain::buildOrResize()
         rtWrapper.d.dsAttCount = 0;
         ds = nullptr;
     }
-    if (sampleCount > VK_SAMPLE_COUNT_1_BIT)
+    if (samples > VK_SAMPLE_COUNT_1_BIT)
         rtWrapper.d.msaaAttCount = 1;
     else
         rtWrapper.d.msaaAttCount = 0;
@@ -3967,7 +3974,7 @@ bool QVkSwapChain::buildOrResize()
         VkImageView views[3] = {
             image.imageView,
             ds ? ds->imageView : VK_NULL_HANDLE,
-            sampleCount > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
+            samples > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
         };
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));

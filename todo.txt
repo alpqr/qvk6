@@ -15,10 +15,8 @@ test cubemap
 test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl/mtl)
 
-gl: buffer upload with offset/size
-
+gl: msaa tex+rt (do we need msaa color renderbuffer for gles 3.0, in combination with resolve (blitfb)?)
 d3d: resolveimage (color)
-vk, gl: msaa tex+rt
 vk, gl: resolveimage (color)
 
 gl: tex size stuff (npot etc.)
@@ -72,6 +70,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk, gl: msaa tex+rt
+gl: buffer upload with offset/size
 d3d: buffer upload with offset/size
 vk: buffer upload with offset/size
 buffer upload with offset

@@ -86,6 +86,7 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImage image;
     VkImageView imageView;
+    VkSampleCountFlagBits samples;
     int lastActiveFrameSlot = -1;
     friend class QRhiVulkan;
 };
@@ -104,6 +105,7 @@ struct QVkTexture : public QRhiTexture
     QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     uint mipLevelCount = 0;
+    VkSampleCountFlagBits samples;
     int lastActiveFrameSlot = -1;
     uint generation = 0;
     friend class QRhiVulkan;
@@ -267,7 +269,7 @@ struct QVkSwapChain : public QRhiSwapChain
     VkFormat colorFormat = VK_FORMAT_B8G8R8A8_UNORM;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     QVkRenderBuffer *ds = nullptr;
-    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+    VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
     QVkReferenceRenderTarget rtWrapper;
     QVkCommandBuffer cbWrapper;
@@ -374,7 +376,7 @@ public:
     bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *result, int *resultPoolIndex);
     uint32_t chooseTransientImageMemType(VkImage img, uint32_t startIndex);
     bool createTransientImage(VkFormat format, const QSize &pixelSize, VkImageUsageFlags usage,
-                              VkImageAspectFlags aspectMask, VkSampleCountFlagBits sampleCount,
+                              VkImageAspectFlags aspectMask, VkSampleCountFlagBits samples,
                               VkDeviceMemory *mem, VkImage *images, VkImageView *views, int count);
 
     bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QRhiSwapChain::SurfaceImportFlags flags,
@@ -385,14 +387,13 @@ public:
     VkSampleCountFlagBits effectiveSampleCount(int sampleCount);
     bool createDefaultRenderPass(VkRenderPass *rp,
                                  bool hasDepthStencil,
-                                 VkSampleCountFlagBits sampleCount,
+                                 VkSampleCountFlagBits samples,
                                  VkFormat colorFormat);
     bool createOffscreenRenderPass(VkRenderPass *rp,
                                    const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
                                    bool preserveColor,
-                                   bool hasDepthStencil,
-                                   VkFormat dsFormat,
-                                   bool hasDepthTexture);
+                                   QRhiRenderBuffer *depthStencilBuffer,
+                                   QRhiTexture *depthTexture);
     bool ensurePipelineCache();
     VkShaderModule createShader(const QByteArray &spirv);
 

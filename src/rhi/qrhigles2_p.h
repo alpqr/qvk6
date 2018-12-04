@@ -43,10 +43,13 @@
 
 #include "qrhigles2.h"
 #include "qrhi_p.h"
-#include <QOpenGLFunctions>
+#include <qopengl.h>
+#include <QSurface>
 #include <QShaderDescription>
 
 QT_BEGIN_NAMESPACE
+
+class QOpenGLExtensions;
 
 struct QGles2Buffer : public QRhiBuffer
 {
@@ -77,6 +80,7 @@ struct QGles2RenderBuffer : public QRhiRenderBuffer
     bool build() override;
 
     GLuint renderbuffer = 0;
+    int samples;
     friend class QRhiGles2;
 };
 
@@ -473,6 +477,7 @@ public:
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
+    bool isFeatureSupported(QRhi::Feature feature) const override;
 
     bool ensureContext(QSurface *surface = nullptr) const;
     void create();
@@ -487,7 +492,12 @@ public:
     QWindow *maybeWindow = nullptr;
     QSurface *fallbackSurface = nullptr;
     mutable bool buffersSwapped = false;
-    QOpenGLFunctions *f = nullptr;
+    QOpenGLExtensions *f = nullptr;
+    struct {
+        // Multisample fb and blit are supported (GLES 3.0 or OpenGL 3.x). Not
+        // the same as multisample textures!
+        bool msaaRenderBuffer = false;
+    } caps;
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;

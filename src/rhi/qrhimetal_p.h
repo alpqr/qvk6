@@ -304,6 +304,7 @@ public:
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
+    bool isFeatureSupported(QRhi::Feature feature) const override;
 
     void create();
     void destroy();

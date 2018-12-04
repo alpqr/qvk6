@@ -122,6 +122,7 @@ public:
     virtual bool isYUpInFramebuffer() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
     virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
+    virtual bool isFeatureSupported(QRhi::Feature) const = 0;
 
     bool isCompressedFormat(QRhiTexture::Format format) const;
     void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,

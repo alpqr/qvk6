@@ -625,6 +625,11 @@ bool QRhi::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Fla
     return d->isTextureFormatSupported(format, flags);
 }
 
+bool QRhi::isFeatureSupported(QRhi::Feature feature) const
+{
+    return d->isFeatureSupported(feature);
+}
+
 QRhiGraphicsPipeline *QRhi::newGraphicsPipeline()
 {
     return d->createGraphicsPipeline();

@@ -153,6 +153,7 @@ protected:
     QRhiBuffer *m_ubuf = nullptr;
     QRhiShaderResourceBindings *m_srb = nullptr;
     QRhiGraphicsPipeline *m_ps = nullptr;
+    QVector<QRhiResource *> releasePool;
 
     QMatrix4x4 m_proj;
     float m_rotation = 0;
@@ -293,25 +294,31 @@ void Window::init()
                                 QSize(), // we don't know the size yet, this is fine
                                 1,
                                 QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+    releasePool << m_ds;
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
     m_rp = m_sc->newCompatibleRenderPassDescriptor();
+    releasePool << m_rp;
     m_sc->setRenderPassDescriptor(m_rp);
 
     m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    releasePool << m_vbuf;
     m_vbuf->build();
     m_vbufReady = false;
 
     m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    releasePool << m_ubuf;
     m_ubuf->build();
 
     m_srb = m_r->newShaderResourceBindings();
+    releasePool << m_srb;
     m_srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
     });
     m_srb->build();
 
     m_ps = m_r->newGraphicsPipeline();
+    releasePool << m_ps;
 
     QRhiGraphicsPipeline::TargetBlend premulAlphaBlend;
     premulAlphaBlend.enable = true;
@@ -347,47 +354,17 @@ void Window::init()
 
 void Window::releaseResources()
 {
-    if (m_ps) {
-        m_ps->releaseAndDestroy();
-        m_ps = nullptr;
-    }
+    for (QRhiResource *r : releasePool)
+        r->releaseAndDestroy();
 
-    if (m_rp) {
-        m_rp->releaseAndDestroy();
-        m_rp = nullptr;
-    }
-
-    if (m_srb) {
-        m_srb->releaseAndDestroy();
-        m_srb = nullptr;
-    }
-
-    if (m_ubuf) {
-        m_ubuf->releaseAndDestroy();
-        m_ubuf = nullptr;
-    }
-
-    if (m_vbuf) {
-        m_vbuf->releaseAndDestroy();
-        m_vbuf = nullptr;
-    }
-
-    if (m_ds) {
-        m_ds->releaseAndDestroy();
-        m_ds = nullptr;
-    }
+    releasePool.clear();
 
     delete m_sc;
-    m_sc = nullptr;
-
     delete m_r;
-    m_r = nullptr;
 
 #ifndef QT_NO_OPENGL
     delete m_context;
-    m_context = nullptr;
     delete m_fallbackSurface;
-    m_fallbackSurface = nullptr;
 #endif
 }
 

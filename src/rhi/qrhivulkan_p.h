@@ -76,17 +76,21 @@ struct QVkBuffer : public QRhiBuffer
     friend class QRhiVulkan;
 };
 
+struct QVkTexture;
+
 struct QVkRenderBuffer : public QRhiRenderBuffer
 {
     QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
                     int sampleCount, Flags flags);
+    ~QVkRenderBuffer();
     void release() override;
     bool build() override;
 
     VkDeviceMemory memory = VK_NULL_HANDLE;
-    VkImage image;
-    VkImageView imageView;
+    VkImage image = VK_NULL_HANDLE;
+    VkImageView imageView = VK_NULL_HANDLE;
     VkSampleCountFlagBits samples;
+    QVkTexture *backingTexture = nullptr;
     int lastActiveFrameSlot = -1;
     friend class QRhiVulkan;
 };
@@ -369,6 +373,7 @@ public:
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
+    bool isFeatureSupported(QRhi::Feature feature) const override;
 
     void create();
     void destroy();

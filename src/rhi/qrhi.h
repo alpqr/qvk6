@@ -235,8 +235,12 @@ struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
 {
     struct Q_RHI_EXPORT ColorAttachment {
         ColorAttachment() { }
+        // either a texture or a renderbuffer
         ColorAttachment(QRhiTexture *texture_) : texture(texture_) { }
+        ColorAttachment(QRhiRenderBuffer *renderBuffer_) : renderBuffer(renderBuffer_) { }
+
         QRhiTexture *texture = nullptr;
+        QRhiRenderBuffer *renderBuffer = nullptr;
         int layer = 0; // face (0..5) for cubemaps
     };
 
@@ -252,6 +256,7 @@ struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
     { colorAttachments.append(colorAttachment); }
 
     QVector<ColorAttachment> colorAttachments;
+    // depth-stencil is is a renderbuffer, a texture, or none
     QRhiRenderBuffer *depthStencilBuffer = nullptr;
     QRhiTexture *depthTexture = nullptr;
 };
@@ -384,7 +389,8 @@ class Q_RHI_EXPORT QRhiRenderBuffer : public QRhiResource
 {
 public:
     enum Type {
-        DepthStencil
+        DepthStencil,
+        Color
     };
 
     enum Flag {
@@ -1037,6 +1043,11 @@ public:
         FrameOpDeviceLost
     };
 
+    enum Feature {
+        MultisampleTexture = 1,
+        MultisampleRenderBuffer
+    };
+
     ~QRhi();
 
     static QRhi *create(Implementation impl, QRhiInitParams *params);
@@ -1080,6 +1091,11 @@ public:
     // ideal for tiled GPUs). May also be a dummy internally depending on the
     // backend and the flags (OpenGL, where the winsys interface provides the
     // depth-stencil buffer via the window surface).
+    //
+    // Color is also supported. With some gfx apis (GL) this is different from
+    // textures. (cannot be sampled, but can be rendered to and used in a
+    // multisample resolve) This becomes important when doing msaa offscreen
+    // and the gfx api has no multisample textures.
     QRhiRenderBuffer *newRenderBuffer(QRhiRenderBuffer::Type type,
                                       const QSize &pixelSize,
                                       int sampleCount = 1,
@@ -1168,6 +1184,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const;
 
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags = QRhiTexture::Flags()) const;
+    bool isFeatureSupported(QRhi::Feature feature) const;
 
 protected:
     QRhi();

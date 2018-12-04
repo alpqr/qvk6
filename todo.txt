@@ -10,16 +10,16 @@ mtl: srgb (tex, swapchain buf)
 mtl: msaa tex+rt
 mtl: resolveimage (color)
 mtl: buffer upload with offset/size
+mtl: color renderbuffer
 
 test cubemap
 test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl/mtl)
 
-gl: msaa tex+rt (do we need msaa color renderbuffer for gles 3.0, in combination with resolve (blitfb)?)
 d3d: resolveimage (color)
-vk, gl: resolveimage (color)
+vk: resolveimage (color)
+gl: resolveimage (color)
 
-gl: tex size stuff (npot etc.)
 gl: tex formats (texture, readback)
 gl: srgb
 
@@ -31,6 +31,7 @@ resource import/export, what's the interop story
 
 multi window? (multi swapchain) -> trouble
 
+vk: image in wrong layout when beginFrame-endFrame without a pass in it
 vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cbuffers, textures, samplers set should be batched too
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
@@ -43,6 +44,7 @@ more what-if-resource-rebuilt cases
 anisotropic
 gl: more ubuf types
 more QImage->tex formats
+if tex adjust its size (e.g. npot on gl), should QImage get scaled automatically?
 d3d, gl, mtl: cache shader sources?
 resize to 0 width or height fails (vk)
 gl: ubuf structs, arrays
@@ -70,7 +72,10 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
-vk, gl: msaa tex+rt
+vk: color renderbuffer
+d3d: color renderbuffer
+gl: color renderbuffer
+vk: msaa tex+rt
 gl: buffer upload with offset/size
 d3d: buffer upload with offset/size
 vk: buffer upload with offset/size

@@ -73,6 +73,8 @@ struct QD3D11RenderBuffer : public QRhiRenderBuffer
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11DepthStencilView *dsv = nullptr;
+    ID3D11RenderTargetView *rtv = nullptr;
+    DXGI_SAMPLE_DESC sampleDesc;
     friend class QRhiD3D11;
 };
 
@@ -149,6 +151,7 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     bool build() override;
 
     QD3D11BasicRenderTargetData d;
+    bool ownsRtv[QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS];
     ID3D11RenderTargetView *rtv[QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS];
     bool ownsDsv = false;
     ID3D11DepthStencilView *dsv = nullptr;
@@ -461,6 +464,7 @@ public:
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
+    bool isFeatureSupported(QRhi::Feature feature) const override;
 
     void create();
     void destroy();

@@ -794,10 +794,15 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
 
     for (int i = 0; i < colorAttCount; ++i) {
         QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture);
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachments[i].renderBuffer);
+        Q_ASSERT(texD || rbD);
+        const VkFormat vkformat = texD ? toVkTextureFormat(texD->m_format, texD->m_flags)
+                                       : toVkTextureFormat(rbD->backingTexture->m_format, rbD->backingTexture->m_flags);
+
         VkAttachmentDescription attDesc;
         memset(&attDesc, 0, sizeof(attDesc));
-        attDesc.format = toVkTextureFormat(texD->m_format, texD->m_flags);
-        attDesc.samples = texD->samples;
+        attDesc.format = vkformat;
+        attDesc.samples = texD ? texD->samples : rbD->samples;
         attDesc.loadOp = preserveColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
         attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1488,18 +1493,36 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
     rtD->lastActiveFrameSlot = currentFrameSlot;
     rtD->d.rp->lastActiveFrameSlot = currentFrameSlot;
     // the renderpass will implicitly transition so no barrier needed here
-    for (const QRhiTextureRenderTargetDescription::ColorAttachment &colorAttachment : qAsConst(rtD->m_desc.colorAttachments))
-        QRHI_RES(QVkTexture, colorAttachment.texture)->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    if (rtD->m_desc.depthTexture)
-        QRHI_RES(QVkTexture, rtD->m_desc.depthTexture)->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    for (const QRhiTextureRenderTargetDescription::ColorAttachment &colorAttachment : qAsConst(rtD->m_desc.colorAttachments)) {
+        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachment.texture);
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachment.renderBuffer);
+        if (texD) {
+            texD->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            texD->lastActiveFrameSlot = currentFrameSlot;
+        } else if (rbD) {
+            rbD->backingTexture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            rbD->lastActiveFrameSlot = currentFrameSlot;
+        }
+    }
+    if (rtD->m_desc.depthTexture) {
+        QVkTexture *depthTexD = QRHI_RES(QVkTexture, rtD->m_desc.depthTexture);
+        depthTexD->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        depthTexD->lastActiveFrameSlot = currentFrameSlot;
+    }
 }
 
 void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
     QVkTextureRenderTarget *rtD = QRHI_RES(QVkTextureRenderTarget, rt);
     // already in the right layout when the renderpass ends
-    for (const QRhiTextureRenderTargetDescription::ColorAttachment &colorAttachment : qAsConst(rtD->m_desc.colorAttachments))
-        QRHI_RES(QVkTexture, colorAttachment.texture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    for (const QRhiTextureRenderTargetDescription::ColorAttachment &colorAttachment : qAsConst(rtD->m_desc.colorAttachments)) {
+        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachment.texture);
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachment.renderBuffer);
+        if (texD)
+            texD->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        else if (rbD)
+            rbD->backingTexture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
     if (rtD->m_desc.depthTexture)
         QRHI_RES(QVkTexture, rtD->m_desc.depthTexture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
@@ -2440,6 +2463,19 @@ bool QRhiVulkan::isTextureFormatSupported(QRhiTexture::Format format, QRhiTextur
     return (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
 }
 
+bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
+{
+    switch (feature) {
+    case QRhi::MultisampleTexture:
+        Q_FALLTHROUGH();
+    case QRhi::MultisampleRenderBuffer:
+        return true;
+    default:
+        Q_UNREACHABLE();
+        return false;
+    }
+}
+
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
                                                  int sampleCount, QRhiRenderBuffer::Flags flags)
 {
@@ -2679,11 +2715,6 @@ static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage
     if (usage.testFlag(QRhiBuffer::UniformBuffer))
         u |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     return VkBufferUsageFlagBits(u);
-}
-
-static inline QSize safeSize(const QSize &size)
-{
-    return size.isEmpty() ? QSize(16, 16) : size;
 }
 
 static inline VkFilter toVkFilter(QRhiSampler::Filter f)
@@ -3078,9 +3109,14 @@ QVkRenderBuffer::QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize
 {
 }
 
+QVkRenderBuffer::~QVkRenderBuffer()
+{
+    delete backingTexture;
+}
+
 void QVkRenderBuffer::release()
 {
-    if (!memory)
+    if (!memory && !backingTexture)
         return;
 
     QRhiVulkan::DeferredReleaseEntry e;
@@ -3097,17 +3133,31 @@ void QVkRenderBuffer::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    if (backingTexture)
+        backingTexture->release();
 }
 
 bool QVkRenderBuffer::build()
 {
-    if (memory)
+    if (memory || backingTexture)
         release();
 
     QRHI_RES_RHI(QRhiVulkan);
+    samples = rhiD->effectiveSampleCount(m_sampleCount);
+
     switch (m_type) {
+    case QRhiRenderBuffer::Color:
+    {
+        if (!backingTexture) {
+            backingTexture = QRHI_RES(QVkTexture, rhiD->createTexture(QRhiTexture::RGBA8, m_pixelSize,
+                                                                      m_sampleCount, QRhiTexture::RenderTarget));
+        }
+        if (!backingTexture->build())
+            return false;
+    }
+        break;
     case QRhiRenderBuffer::DepthStencil:
-        samples = rhiD->effectiveSampleCount(m_sampleCount);
         if (!rhiD->createTransientImage(rhiD->optimalDepthStencilFormat(),
                                         m_pixelSize,
                                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
@@ -3184,7 +3234,7 @@ bool QVkTexture::build()
         return false;
     }
 
-    const QSize size = safeSize(m_pixelSize);
+    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
@@ -3418,38 +3468,48 @@ bool QVkTextureRenderTarget::build()
     d.colorAttCount = m_desc.colorAttachments.count();
     for (int i = 0; i < d.colorAttCount; ++i) {
         QVkTexture *texD = QRHI_RES(QVkTexture, m_desc.colorAttachments[i].texture);
-        Q_ASSERT(texD->flags().testFlag(QRhiTexture::RenderTarget));
-        VkImageView view = texD->imageView;
-        if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
-            const int face = m_desc.colorAttachments[i].layer;
-            Q_ASSERT(face >= 0 && face < 6);
-            if (!cubeFaceView[face]) {
-                VkImageViewCreateInfo viewInfo;
-                memset(&viewInfo, 0, sizeof(viewInfo));
-                viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-                viewInfo.image = texD->image;
-                viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-                viewInfo.format = toVkTextureFormat(texD->format(), texD->flags());
-                viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-                viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-                viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-                viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-                viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                viewInfo.subresourceRange.levelCount = 1;
-                viewInfo.subresourceRange.baseArrayLayer = face;
-                viewInfo.subresourceRange.layerCount = 1;
-                VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &cubeFaceView[face]);
-                if (err != VK_SUCCESS) {
-                    qWarning("Failed to create cubemap face image view: %d", err);
-                    return false;
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, m_desc.colorAttachments[i].renderBuffer);
+        Q_ASSERT(texD || rbD);
+        if (texD) {
+            Q_ASSERT(texD->flags().testFlag(QRhiTexture::RenderTarget));
+            VkImageView view = texD->imageView;
+            if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
+                const int face = m_desc.colorAttachments[i].layer;
+                Q_ASSERT(face >= 0 && face < 6);
+                if (!cubeFaceView[face]) {
+                    VkImageViewCreateInfo viewInfo;
+                    memset(&viewInfo, 0, sizeof(viewInfo));
+                    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+                    viewInfo.image = texD->image;
+                    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+                    viewInfo.format = toVkTextureFormat(texD->format(), texD->flags());
+                    viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+                    viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+                    viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+                    viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+                    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    viewInfo.subresourceRange.levelCount = 1;
+                    viewInfo.subresourceRange.baseArrayLayer = face;
+                    viewInfo.subresourceRange.layerCount = 1;
+                    VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &cubeFaceView[face]);
+                    if (err != VK_SUCCESS) {
+                        qWarning("Failed to create cubemap face image view: %d", err);
+                        return false;
+                    }
                 }
+                view = cubeFaceView[face];
             }
-            view = cubeFaceView[face];
+            views.append(view);
+            if (i == 0)
+                d.pixelSize = texD->pixelSize();
+        } else if (rbD) {
+            Q_ASSERT(rbD->backingTexture);
+            views.append(rbD->backingTexture->imageView);
+            if (i == 0)
+                d.pixelSize = rbD->pixelSize();
+        } else {
+            Q_UNREACHABLE();
         }
-        views.append(view);
-
-        if (i == 0)
-            d.pixelSize = texD->pixelSize();
     }
 
     if (hasDepthStencil) {

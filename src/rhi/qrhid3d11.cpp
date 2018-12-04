@@ -244,6 +244,19 @@ bool QRhiD3D11::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
     return true;
 }
 
+bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
+{
+    switch (feature) {
+    case QRhi::MultisampleTexture:
+        Q_FALLTHROUGH();
+    case QRhi::MultisampleRenderBuffer:
+        return true;
+    default:
+        Q_UNREACHABLE();
+        return false;
+    }
+}
+
 QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
                                                 int sampleCount, QRhiRenderBuffer::Flags flags)
 {
@@ -1353,6 +1366,11 @@ void QD3D11RenderBuffer::release()
         dsv = nullptr;
     }
 
+    if (rtv) {
+        rtv->Release();
+        rtv = nullptr;
+    }
+
     tex->Release();
     tex = nullptr;
 }
@@ -1363,17 +1381,39 @@ bool QD3D11RenderBuffer::build()
         release();
 
     QRHI_RES_RHI(QRhiD3D11);
+    sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
     static const DXGI_FORMAT dsFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
-    if (m_type == DepthStencil) {
-        D3D11_TEXTURE2D_DESC desc;
-        memset(&desc, 0, sizeof(desc));
-        desc.Width = m_pixelSize.width();
-        desc.Height = m_pixelSize.height();
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
+
+    D3D11_TEXTURE2D_DESC desc;
+    memset(&desc, 0, sizeof(desc));
+    desc.Width = m_pixelSize.width();
+    desc.Height = m_pixelSize.height();
+    desc.MipLevels = 1;
+    desc.ArraySize = 1;
+    desc.SampleDesc = sampleDesc;
+    desc.Usage = D3D11_USAGE_DEFAULT;
+
+    if (m_type == Color) {
+        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+        HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
+        if (FAILED(hr)) {
+            qWarning("Failed to create color renderbuffer: %s", qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+        D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+        memset(&rtvDesc, 0, sizeof(rtvDesc));
+        rtvDesc.Format = desc.Format;
+        rtvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
+                                                          : D3D11_RTV_DIMENSION_TEXTURE2D;
+        hr = rhiD->dev->CreateRenderTargetView(tex, &rtvDesc, &rtv);
+        if (FAILED(hr)) {
+            qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
+            return false;
+        }
+        return true;
+    } else if (m_type == DepthStencil) {
         desc.Format = dsFormat;
-        desc.SampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
-        desc.Usage = D3D11_USAGE_DEFAULT;
         desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
         HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
         if (FAILED(hr)) {
@@ -1442,18 +1482,13 @@ static inline DXGI_FORMAT toD3DDepthTextureDSVFormat(QRhiTexture::Format format)
     }
 }
 
-static inline QSize safeSize(const QSize &size)
-{
-    return size.isEmpty() ? QSize(16, 16) : size;
-}
-
 bool QD3D11Texture::build()
 {
     if (tex)
         release();
 
     QRHI_RES_RHI(QRhiD3D11);
-    const QSize size = safeSize(m_pixelSize);
+    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
@@ -1651,8 +1686,10 @@ QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi,
     : QRhiTextureRenderTarget(rhi, desc, flags),
       d(rhi)
 {
-    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i)
+    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i) {
+        ownsRtv[i] = false;
         rtv[i] = nullptr;
+    }
 }
 
 void QD3D11TextureRenderTarget::release()
@@ -1668,7 +1705,8 @@ void QD3D11TextureRenderTarget::release()
 
     for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i) {
         if (rtv[i]) {
-            rtv[i]->Release();
+            if (ownsRtv[i])
+                rtv[i]->Release();
             rtv[i] = nullptr;
         }
     }
@@ -1693,27 +1731,38 @@ bool QD3D11TextureRenderTarget::build()
     d.colorAttCount = m_desc.colorAttachments.count();
     for (int i = 0; i < d.colorAttCount; ++i) {
         QRhiTexture *texture = m_desc.colorAttachments[i].texture;
-        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
-        D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
-        memset(&rtvDesc, 0, sizeof(rtvDesc));
-        rtvDesc.Format = toD3DTextureFormat(texD->format(), texD->flags());
-        if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
-            rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
-            rtvDesc.Texture2DArray.FirstArraySlice = m_desc.colorAttachments[i].layer;
-            rtvDesc.Texture2DArray.ArraySize = 1;
+        QRhiRenderBuffer *rb = m_desc.colorAttachments[i].renderBuffer;
+        Q_ASSERT(texture || rb);
+        if (texture) {
+            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, texture);
+            D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
+            memset(&rtvDesc, 0, sizeof(rtvDesc));
+            rtvDesc.Format = toD3DTextureFormat(texD->format(), texD->flags());
+            if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
+                rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                rtvDesc.Texture2DArray.FirstArraySlice = m_desc.colorAttachments[i].layer;
+                rtvDesc.Texture2DArray.ArraySize = 1;
+            } else {
+                rtvDesc.ViewDimension = texD->sampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
+                                                                   : D3D11_RTV_DIMENSION_TEXTURE2D;
+            }
+            HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv[i]);
+            if (FAILED(hr)) {
+                qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
+                return false;
+            }
+            ownsRtv[i] = true;
+            if (i == 0)
+                d.pixelSize = texD->pixelSize();
+        } else if (rb) {
+            QD3D11RenderBuffer *rbD = QRHI_RES(QD3D11RenderBuffer, rb);
+            ownsRtv[i] = false;
+            rtv[i] = rbD->rtv;
+            if (i == 0)
+                d.pixelSize = rbD->pixelSize();
         } else {
-            rtvDesc.ViewDimension = texD->sampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
-                                                               : D3D11_RTV_DIMENSION_TEXTURE2D;
+            Q_UNREACHABLE();
         }
-
-        HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv[i]);
-        if (FAILED(hr)) {
-            qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
-            return false;
-        }
-
-        if (i == 0)
-            d.pixelSize = texD->pixelSize();
     }
 
     if (hasDepthStencil) {

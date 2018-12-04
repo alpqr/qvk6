@@ -264,6 +264,19 @@ bool QRhiMetal::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
     return true;
 }
 
+bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
+{
+    switch (feature) {
+    case QRhi::MultisampleTexture:
+        Q_FALLTHROUGH();
+    case QRhi::MultisampleRenderBuffer:
+        return true;
+    default:
+        Q_UNREACHABLE();
+        return false;
+    }
+}
+
 QRhiRenderBuffer *QRhiMetal::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
                                                 int sampleCount, QRhiRenderBuffer::Flags flags)
 {
@@ -973,11 +986,6 @@ void QMetalTexture::release()
     rhiD->d->releaseQueue.append(e);
 }
 
-static inline QSize safeSize(const QSize &size)
-{
-    return size.isEmpty() ? QSize(16, 16) : size;
-}
-
 static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format)
 {
     switch (format) {
@@ -1006,7 +1014,7 @@ bool QMetalTexture::build()
     if (d->tex)
         release();
 
-    const QSize size = safeSize(m_pixelSize);
+    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     d->format = toMetalTextureFormat(m_format);

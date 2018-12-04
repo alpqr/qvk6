@@ -77,6 +77,7 @@ static float triangleData[] =
 const int UBUFSZ = 68;
 
 struct {
+    QVector<QRhiResource *> releasePool;
     QRhiBuffer *vbuf = nullptr;
     QRhiBuffer *ibuf = nullptr;
     QRhiBuffer *ubuf = nullptr;
@@ -107,23 +108,31 @@ struct {
 
 void Window::customInit()
 {
+    if (!m_r->isFeatureSupported(QRhi::MultisampleTexture))
+        qFatal("Multisample textures not supported by this backend");
+
     d.vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData) + sizeof(triangleData));
+    d.releasePool << d.vbuf;
     d.vbuf->build();
 
     d.ibuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, sizeof(indexData));
+    d.releasePool << d.ibuf;
     d.ibuf->build();
 
     d.rightOfs = m_r->ubufAligned(UBUFSZ);
     d.ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, d.rightOfs + UBUFSZ);
+    d.releasePool << d.ubuf;
     d.ubuf->build();
 
     d.tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(512, 512), 1, QRhiTexture::RenderTarget);
+    d.releasePool << d.tex;
     d.tex->build();
 #ifndef NO_MSAA
     d.msaaTex = m_r->newTexture(QRhiTexture::RGBA8, QSize(512, 512), 4, QRhiTexture::RenderTarget);
 #else
     d.msaaTex = m_r->newTexture(QRhiTexture::RGBA8, QSize(512, 512), 1, QRhiTexture::RenderTarget);
 #endif
+    d.releasePool << d.msaaTex;
     d.msaaTex->build();
 
     d.initialUpdates = m_r->nextResourceUpdateBatch();
@@ -133,9 +142,11 @@ void Window::customInit()
 
     d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    d.releasePool << d.sampler;
     d.sampler->build();
 
     d.srbLeft = m_r->newShaderResourceBindings();
+    d.releasePool << d.srbLeft;
     d.srbLeft->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, d.ubuf, 0, UBUFSZ),
         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, d.tex, d.sampler)
@@ -143,6 +154,7 @@ void Window::customInit()
     d.srbLeft->build();
 
     d.srbRight = m_r->newShaderResourceBindings();
+    d.releasePool << d.srbRight;
     d.srbRight->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, d.ubuf, d.rightOfs, UBUFSZ),
         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, d.msaaTex, d.sampler)
@@ -150,6 +162,7 @@ void Window::customInit()
     d.srbRight->build();
 
     d.psLeft = m_r->newGraphicsPipeline();
+    d.releasePool << d.psLeft;
     d.psLeft->setShaderStages({
         { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/texture.vert.qsb")) },
         { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/texture.frag.qsb")) }
@@ -168,6 +181,7 @@ void Window::customInit()
     d.psLeft->build();
 
     d.psRight = m_r->newGraphicsPipeline();
+    d.releasePool << d.psRight;
     d.psRight->setShaderStages({
         { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/texture.vert.qsb")) },
 #ifndef NO_MSAA
@@ -183,21 +197,28 @@ void Window::customInit()
 
     // set up the offscreen triangle that goes into tex and msaaTex
     d.triUbuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    d.releasePool << d.triUbuf;
     d.triUbuf->build();
     d.triSrb = m_r->newShaderResourceBindings();
+    d.releasePool << d.triSrb;
     d.triSrb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, d.triUbuf)
     });
     d.triSrb->build();
     d.rt = m_r->newTextureRenderTarget({ d.tex });
+    d.releasePool << d.rt;
     d.rtRp = d.rt->newCompatibleRenderPassDescriptor();
+    d.releasePool << d.rtRp;
     d.rt->setRenderPassDescriptor(d.rtRp);
     d.rt->build();
     d.msaaRt = m_r->newTextureRenderTarget({ d.msaaTex });
+    d.releasePool << d.msaaRt;
     d.msaaRtRp = d.msaaRt->newCompatibleRenderPassDescriptor();
+    d.releasePool << d.msaaRtRp;
     d.msaaRt->setRenderPassDescriptor(d.msaaRtRp);
     d.msaaRt->build();
     d.triPs = m_r->newGraphicsPipeline();
+    d.releasePool << d.triPs;
     d.triPs->setSampleCount(1);
     d.triPs->setShaderStages({
         { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/color.vert.qsb")) },
@@ -215,6 +236,7 @@ void Window::customInit()
     d.triPs->setRenderPassDescriptor(d.rtRp);
     d.triPs->build();
     d.msaaTriPs = m_r->newGraphicsPipeline();
+    d.releasePool << d.msaaTriPs;
 #ifndef NO_MSAA
     d.msaaTriPs->setSampleCount(4);
 #else
@@ -229,95 +251,9 @@ void Window::customInit()
 
 void Window::customRelease()
 {
-    if (d.psLeft) {
-        d.psLeft->releaseAndDestroy();
-        d.psLeft = nullptr;
-    }
-
-    if (d.psRight) {
-        d.psRight->releaseAndDestroy();
-        d.psRight = nullptr;
-    }
-
-    if (d.srbLeft) {
-        d.srbLeft->releaseAndDestroy();
-        d.srbLeft = nullptr;
-    }
-
-    if (d.srbRight) {
-        d.srbRight->releaseAndDestroy();
-        d.srbRight = nullptr;
-    }
-
-    if (d.triPs) {
-        d.triPs->releaseAndDestroy();
-        d.triPs = nullptr;
-    }
-
-    if (d.msaaTriPs) {
-        d.msaaTriPs->releaseAndDestroy();
-        d.msaaTriPs = nullptr;
-    }
-
-    if (d.triSrb) {
-        d.triSrb->releaseAndDestroy();
-        d.triSrb = nullptr;
-    }
-
-    if (d.triUbuf) {
-        d.triUbuf->releaseAndDestroy();
-        d.triUbuf = nullptr;
-    }
-
-    if (d.ubuf) {
-        d.ubuf->releaseAndDestroy();
-        d.ubuf = nullptr;
-    }
-
-    if (d.vbuf) {
-        d.vbuf->releaseAndDestroy();
-        d.vbuf = nullptr;
-    }
-
-    if (d.ibuf) {
-        d.ibuf->releaseAndDestroy();
-        d.ibuf = nullptr;
-    }
-
-    if (d.sampler) {
-        d.sampler->releaseAndDestroy();
-        d.sampler = nullptr;
-    }
-
-    if (d.rtRp) {
-        d.rtRp->releaseAndDestroy();
-        d.rtRp = nullptr;
-    }
-
-    if (d.rt) {
-        d.rt->releaseAndDestroy();
-        d.rt = nullptr;
-    }
-
-    if (d.msaaRtRp) {
-        d.msaaRtRp->releaseAndDestroy();
-        d.msaaRtRp = nullptr;
-    }
-
-    if (d.msaaRt) {
-        d.msaaRt->releaseAndDestroy();
-        d.msaaRt = nullptr;
-    }
-
-    if (d.msaaTex) {
-        d.msaaTex->releaseAndDestroy();
-        d.msaaTex = nullptr;
-    }
-
-    if (d.tex) {
-        d.tex->releaseAndDestroy();
-        d.tex = nullptr;
-    }
+    for (QRhiResource *r : d.releasePool)
+        r->releaseAndDestroy();
+    d.releasePool.clear();
 }
 
 void Window::customRender()
@@ -359,7 +295,7 @@ void Window::customRender()
     d.triRot += 1;
     u->updateDynamicBuffer(d.triUbuf, 0, 64, triMvp.constData());
 
-    cb->resourceUpdate(u);
+    cb->resourceUpdate(u); // could have passed u to beginPass but exercise this one too
 
     // offscreen
     cb->beginPass(d.rt, { 0.5f, 0.2f, 0, 1 }, { 1, 0 });

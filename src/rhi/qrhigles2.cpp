@@ -1107,7 +1107,6 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             break;
         case QGles2CommandBuffer::Command::CopyTex:
         {
-            // ugh...
             GLuint fbo;
             f->glGenFramebuffers(1, &fbo);
             f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -1131,7 +1130,6 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             if (texD) {
                 result->pixelSize = texD->m_pixelSize;
                 result->format = texD->m_format;
-                // this is going to be suboptimal but will do for now
                 f->glGenFramebuffers(1, &fbo);
                 f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
                 const GLenum targetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;

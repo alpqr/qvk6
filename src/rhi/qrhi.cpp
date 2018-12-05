@@ -459,24 +459,9 @@ void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src, co
     d->textureCopies.append({ dst, src, desc });
 }
 
-void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src)
-{
-    d->textureCopies.append({ dst, src, QRhiTextureCopyDescription() });
-}
-
 void QRhiResourceUpdateBatch::resolveTexture(QRhiTexture *dst, const QRhiTextureResolveDescription &desc)
 {
     d->textureResolves.append({ dst, desc });
-}
-
-void QRhiResourceUpdateBatch::resolveTexture(QRhiTexture *dst, QRhiTexture *src)
-{
-    d->textureResolves.append({ dst, src });
-}
-
-void QRhiResourceUpdateBatch::resolveRenderBuffer(QRhiTexture *dst, QRhiRenderBuffer *src)
-{
-    d->textureResolves.append({ dst, src });
 }
 
 void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)

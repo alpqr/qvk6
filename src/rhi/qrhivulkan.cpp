@@ -2228,7 +2228,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         VkBufferImageCopy copyDesc;
         memset(&copyDesc, 0, sizeof(copyDesc));
         copyDesc.bufferOffset = 0;
-        copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT; // ### no depth for now
+        copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         copyDesc.imageSubresource.mipLevel = aRb.desc.level;
         copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
         copyDesc.imageSubresource.layerCount = 1;

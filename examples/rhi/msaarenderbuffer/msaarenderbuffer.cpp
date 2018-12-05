@@ -238,7 +238,7 @@ void Window::customRender()
 
     // add the resolve (msaa renderbuffer -> non-msaa texture)
     u = m_r->nextResourceUpdateBatch();
-    u->resolveRenderBuffer(d.tex, d.rb);
+    u->resolveTexture(d.tex, { d.rb });
     cb->endPass(u);
 
     // onscreen (quad)

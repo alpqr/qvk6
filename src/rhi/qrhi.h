@@ -1023,11 +1023,8 @@ public:
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
     void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut
-    void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc);
-    void copyTexture(QRhiTexture *dst, QRhiTexture *src); // shortcut
+    void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc = QRhiTextureCopyDescription());
     void resolveTexture(QRhiTexture *dst, const QRhiTextureResolveDescription &desc);
-    void resolveTexture(QRhiTexture *dst, QRhiTexture *src); // shortcut
-    void resolveRenderBuffer(QRhiTexture *dst, QRhiRenderBuffer *src); // shortcut
     void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     // This is not normally needed, textures that have an upload or are used

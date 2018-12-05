@@ -2329,7 +2329,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             region.srcSubresource.mipLevel = level - 1;
             region.srcSubresource.baseArrayLayer = 0;
-            region.srcSubresource.layerCount = 1;
+            region.srcSubresource.layerCount = layerCount;
 
             region.srcOffsets[1].x = w;
             region.srcOffsets[1].y = h;
@@ -2338,7 +2338,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             region.dstSubresource.mipLevel = level;
             region.dstSubresource.baseArrayLayer = 0;
-            region.dstSubresource.layerCount = 1;
+            region.dstSubresource.layerCount = layerCount;
 
             region.dstOffsets[1].x = w >> 1;
             region.dstOffsets[1].y = h >> 1;

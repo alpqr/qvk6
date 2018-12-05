@@ -235,7 +235,11 @@ void Window::customRender()
     cb->setViewport({ 0, 0, float(d.rb->pixelSize().width()), float(d.rb->pixelSize().height()) });
     cb->setVertexInput(0, { { d.vbuf, sizeof(vertexData) } });
     cb->draw(3);
-    cb->endPass();
+
+    // add the resolve (msaa renderbuffer -> non-msaa texture)
+    u = m_r->nextResourceUpdateBatch();
+    u->resolveRenderBuffer(d.tex, d.rb);
+    cb->endPass(u);
 
     // onscreen (quad)
     const QSize outputSizeInPixels = m_sc->effectivePixelSize();

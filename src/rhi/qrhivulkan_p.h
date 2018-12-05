@@ -85,12 +85,14 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
     ~QVkRenderBuffer();
     void release() override;
     bool build() override;
+    QRhiTexture::Format backingFormat() const override;
 
     VkDeviceMemory memory = VK_NULL_HANDLE;
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     VkSampleCountFlagBits samples;
     QVkTexture *backingTexture = nullptr;
+    VkFormat vkformat;
     int lastActiveFrameSlot = -1;
     friend class QRhiVulkan;
 };
@@ -108,6 +110,7 @@ struct QVkTexture : public QRhiTexture
     VkBuffer stagingBuffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    VkFormat vkformat;
     uint mipLevelCount = 0;
     VkSampleCountFlagBits samples;
     int lastActiveFrameSlot = -1;
@@ -411,6 +414,9 @@ public:
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void prepareFrameEnd();
+    void prepareForTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
+    void finishTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
+    void prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD);
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD);
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);

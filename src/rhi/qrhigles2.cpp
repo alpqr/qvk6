@@ -702,6 +702,30 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cbD->commands.append(cmd);
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureResolve &u : ud->textureResolves) {
+        Q_ASSERT(u.dst);
+        Q_ASSERT(u.desc.sourceTexture || u.desc.sourceRenderBuffer);
+        if (u.desc.sourceTexture) {
+            qWarning("Multisample textures not supported, skipping resolve");
+            continue;
+        }
+        QGles2Texture *dstTexD = QRHI_RES(QGles2Texture, u.dst);
+        QGles2RenderBuffer *srcRbD = QRHI_RES(QGles2RenderBuffer, u.desc.sourceRenderBuffer);
+        if (srcRbD->m_pixelSize != dstTexD->m_pixelSize) {
+            qWarning("Resolve source and destination sizes do not match");
+            continue;
+        }
+        QGles2CommandBuffer::Command cmd;
+        cmd.cmd = QGles2CommandBuffer::Command::BlitFromRenderbuffer;
+        cmd.args.blitFromRb.renderbuffer = srcRbD->renderbuffer;
+        cmd.args.blitFromRb.w = srcRbD->m_pixelSize.width();
+        cmd.args.blitFromRb.h = srcRbD->m_pixelSize.height();
+        cmd.args.blitFromRb.dst = dstTexD;
+        cmd.args.blitFromRb.dstLayer = u.desc.destinationLayer;
+        cmd.args.blitFromRb.dstLevel = u.desc.destinationLevel;
+        cbD->commands.append(cmd);
+    }
+
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
@@ -1149,6 +1173,26 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                                          cmd.args.compressedSubImage.glintformat,
                                          cmd.args.compressedSubImage.size, cmd.args.compressedSubImage.data);
             break;
+        case QGles2CommandBuffer::Command::BlitFromRenderbuffer:
+        {
+            GLuint fbo[2];
+            f->glGenFramebuffers(2, fbo);
+            f->glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo[0]);
+            f->glFramebufferRenderbuffer(GL_READ_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                         GL_RENDERBUFFER, cmd.args.blitFromRb.renderbuffer);
+            f->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[1]);
+            QGles2Texture *texD = cmd.args.blitFromRb.dst;
+            const GLenum targetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+            const GLenum target = targetBase + cmd.args.blitFromRb.dstLayer;
+            f->glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target,
+                                      texD->texture, cmd.args.blitFromRb.dstLevel);
+            f->glBlitFramebuffer(0, 0, cmd.args.blitFromRb.w, cmd.args.blitFromRb.h,
+                                 0, 0, cmd.args.blitFromRb.w, cmd.args.blitFromRb.h,
+                                 GL_COLOR_BUFFER_BIT,
+                                 GL_LINEAR);
+            f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
+        }
+            break;
         default:
             break;
         }
@@ -1521,6 +1565,11 @@ bool QGles2RenderBuffer::build()
     }
 
     return true;
+}
+
+QRhiTexture::Format QGles2RenderBuffer::backingFormat() const
+{
+    return m_type == Color ? QRhiTexture::RGBA8 : QRhiTexture::UnknownFormat;
 }
 
 QGles2Texture::QGles2Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,

@@ -322,6 +322,23 @@ struct Q_RHI_EXPORT QRhiTextureCopyDescription
 
 Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
 
+struct Q_RHI_EXPORT QRhiTextureResolveDescription
+{
+    QRhiTextureResolveDescription() { }
+    QRhiTextureResolveDescription(QRhiTexture *src) : sourceTexture(src) { }
+    QRhiTextureResolveDescription(QRhiRenderBuffer *src) : sourceRenderBuffer(src) { }
+
+    // source is either a multisample texture or a multisample renderbuffer
+    QRhiTexture *sourceTexture = nullptr;
+    int sourceLayer = 0;
+    QRhiRenderBuffer *sourceRenderBuffer = nullptr;
+
+    int destinationLayer = 0;
+    int destinationLevel = 0;
+};
+
+Q_DECLARE_TYPEINFO(QRhiTextureResolveDescription, Q_MOVABLE_TYPE);
+
 struct Q_RHI_EXPORT QRhiReadbackDescription
 {
     QRhiReadbackDescription() { } // source is the back buffer of the swapchain of the current frame (if the swapchain supports readback)
@@ -385,45 +402,6 @@ protected:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
 
-class Q_RHI_EXPORT QRhiRenderBuffer : public QRhiResource
-{
-public:
-    enum Type {
-        DepthStencil,
-        Color
-    };
-
-    enum Flag {
-        ToBeUsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
-    };
-    Q_DECLARE_FLAGS(Flags, Flag)
-
-    Type type() const { return m_type; }
-    void setType(Type t) { m_type = t; }
-
-    QSize pixelSize() const { return m_pixelSize; }
-    void setPixelSize(const QSize &sz) { m_pixelSize = sz; }
-
-    int sampleCount() const { return m_sampleCount; }
-    void setSampleCount(int s) { m_sampleCount = s; }
-
-    Flags flags() const { return m_flags; }
-    void setFlags(Flags h) { m_flags = h; }
-
-    virtual bool build() = 0;
-
-protected:
-    QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
-                     int sampleCount_, Flags flags_);
-    Type m_type;
-    QSize m_pixelSize;
-    int m_sampleCount;
-    Flags m_flags;
-    void *m_reserved;
-};
-
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiRenderBuffer::Flags)
-
 class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 {
 public:
@@ -433,7 +411,7 @@ public:
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
         sRGB = 1 << 4,
-        UsedAsTransferSource = 1 << 5 // will (also) be used as the source of a readback or copy
+        UsedAsTransferSource = 1 << 5 // will (also) be used as the source of a readback or copy or resolve
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -551,6 +529,47 @@ protected:
     AddressMode m_addressW;
     void *m_reserved;
 };
+
+class Q_RHI_EXPORT QRhiRenderBuffer : public QRhiResource
+{
+public:
+    enum Type {
+        DepthStencil,
+        Color
+    };
+
+    enum Flag {
+        ToBeUsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
+    Type type() const { return m_type; }
+    void setType(Type t) { m_type = t; }
+
+    QSize pixelSize() const { return m_pixelSize; }
+    void setPixelSize(const QSize &sz) { m_pixelSize = sz; }
+
+    int sampleCount() const { return m_sampleCount; }
+    void setSampleCount(int s) { m_sampleCount = s; }
+
+    Flags flags() const { return m_flags; }
+    void setFlags(Flags h) { m_flags = h; }
+
+    virtual bool build() = 0;
+
+    virtual QRhiTexture::Format backingFormat() const = 0;
+
+protected:
+    QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
+                     int sampleCount_, Flags flags_);
+    Type m_type;
+    QSize m_pixelSize;
+    int m_sampleCount;
+    Flags m_flags;
+    void *m_reserved;
+};
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiRenderBuffer::Flags)
 
 class Q_RHI_EXPORT QRhiRenderPassDescriptor : public QRhiResource
 {
@@ -1006,6 +1025,9 @@ public:
     void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut
     void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc);
     void copyTexture(QRhiTexture *dst, QRhiTexture *src); // shortcut
+    void resolveTexture(QRhiTexture *dst, const QRhiTextureResolveDescription &desc);
+    void resolveTexture(QRhiTexture *dst, QRhiTexture *src); // shortcut
+    void resolveRenderBuffer(QRhiTexture *dst, QRhiRenderBuffer *src); // shortcut
     void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
 
     // This is not normally needed, textures that have an upload or are used

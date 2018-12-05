@@ -951,6 +951,11 @@ bool QMetalRenderBuffer::build()
     return true;
 }
 
+QRhiTexture::Format QMetalRenderBuffer::backingFormat() const
+{
+    return m_type == Color ? QRhiTexture::RGBA8 : QRhiTexture::UnknownFormat;
+}
+
 QMetalTexture::QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
                              int sampleCount, Flags flags)
     : QRhiTexture(rhi, format, pixelSize, sampleCount, flags),

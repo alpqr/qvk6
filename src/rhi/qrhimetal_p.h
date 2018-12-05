@@ -75,6 +75,7 @@ struct QMetalRenderBuffer : public QRhiRenderBuffer
     ~QMetalRenderBuffer();
     void release() override;
     bool build() override;
+    QRhiTexture::Format backingFormat() const override;
 
     QMetalRenderBufferData *d;
     uint generation = 0;

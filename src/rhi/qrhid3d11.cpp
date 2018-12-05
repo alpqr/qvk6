@@ -821,6 +821,52 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cbD->commands.append(cmd);
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureResolve &u : ud->textureResolves) {
+        Q_ASSERT(u.dst);
+        Q_ASSERT(u.desc.sourceTexture || u.desc.sourceRenderBuffer);
+        QD3D11Texture *dstTexD = QRHI_RES(QD3D11Texture, u.dst);
+        if (dstTexD->sampleDesc.Count > 1) {
+            qWarning("Cannot resolve into a multisample texture");
+            continue;
+        }
+        QD3D11Texture *srcTexD = QRHI_RES(QD3D11Texture, u.desc.sourceTexture);
+        QD3D11RenderBuffer *srcRbD = QRHI_RES(QD3D11RenderBuffer, u.desc.sourceRenderBuffer);
+        QD3D11CommandBuffer::Command cmd;
+        cmd.cmd = QD3D11CommandBuffer::Command::ResolveSubRes;
+        cmd.args.resolveSubRes.dst = dstTexD->tex;
+        cmd.args.resolveSubRes.dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel,
+                                                                u.desc.destinationLayer,
+                                                                dstTexD->mipLevelCount);
+        if (srcTexD) {
+            cmd.args.resolveSubRes.src = srcTexD->tex;
+            if (srcTexD->dxgiFormat != dstTexD->dxgiFormat) {
+                qWarning("Resolve source and destination formats do not match");
+                continue;
+            }
+            if (srcTexD->sampleDesc.Count <= 1) {
+                qWarning("Cannot resolve a non-multisample texture");
+                continue;
+            }
+            if (srcTexD->m_pixelSize != dstTexD->m_pixelSize) {
+                qWarning("Resolve source and destination sizes do not match");
+                continue;
+            }
+        } else {
+            cmd.args.resolveSubRes.src = srcRbD->tex;
+            if (srcRbD->dxgiFormat != dstTexD->dxgiFormat) {
+                qWarning("Resolve source and destination formats do not match");
+                continue;
+            }
+            if (srcRbD->m_pixelSize != dstTexD->m_pixelSize) {
+                qWarning("Resolve source and destination sizes do not match");
+                continue;
+            }
+        }
+        cmd.args.resolveSubRes.srcSubRes = D3D11CalcSubresource(0, u.desc.sourceLayer, 1);
+        cmd.args.resolveSubRes.format = dstTexD->dxgiFormat;
+        cbD->commands.append(cmd);
+    }
+
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
         ActiveReadback aRb;
         aRb.desc = u.rb;
@@ -840,7 +886,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 continue;
             }
             src = texD->tex;
-            dxgiFormat = toD3DTextureFormat(texD->m_format, texD->m_flags);
+            dxgiFormat = texD->dxgiFormat;
             pixelSize = texD->m_pixelSize;
             if (u.rb.level > 0) {
                 pixelSize.setWidth(qFloor(float(qMax(1, pixelSize.width() >> u.rb.level))));
@@ -1288,6 +1334,11 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
                                            cmd.args.copySubRes.src, cmd.args.copySubRes.srcSubRes,
                                            cmd.args.copySubRes.hasSrcBox ? &cmd.args.copySubRes.srcBox : nullptr);
             break;
+        case QD3D11CommandBuffer::Command::ResolveSubRes:
+            context->ResolveSubresource(cmd.args.resolveSubRes.dst, cmd.args.resolveSubRes.dstSubRes,
+                                        cmd.args.resolveSubRes.src, cmd.args.resolveSubRes.srcSubRes,
+                                        cmd.args.resolveSubRes.format);
+            break;
         default:
             break;
         }
@@ -1382,7 +1433,6 @@ bool QD3D11RenderBuffer::build()
 
     QRHI_RES_RHI(QRhiD3D11);
     sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
-    static const DXGI_FORMAT dsFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
     D3D11_TEXTURE2D_DESC desc;
     memset(&desc, 0, sizeof(desc));
@@ -1394,7 +1444,8 @@ bool QD3D11RenderBuffer::build()
     desc.Usage = D3D11_USAGE_DEFAULT;
 
     if (m_type == Color) {
-        desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+        dxgiFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+        desc.Format = dxgiFormat;
         desc.BindFlags = D3D11_BIND_RENDER_TARGET;
         HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
         if (FAILED(hr)) {
@@ -1403,8 +1454,7 @@ bool QD3D11RenderBuffer::build()
         }
         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
         memset(&rtvDesc, 0, sizeof(rtvDesc));
-        rtvDesc.Format = desc.Format;
-        rtvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
+        rtvDesc.Format = dxgiFormat; rtvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
                                                           : D3D11_RTV_DIMENSION_TEXTURE2D;
         hr = rhiD->dev->CreateRenderTargetView(tex, &rtvDesc, &rtv);
         if (FAILED(hr)) {
@@ -1413,7 +1463,8 @@ bool QD3D11RenderBuffer::build()
         }
         return true;
     } else if (m_type == DepthStencil) {
-        desc.Format = dsFormat;
+        dxgiFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        desc.Format = dxgiFormat;
         desc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
         HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
         if (FAILED(hr)) {
@@ -1422,7 +1473,7 @@ bool QD3D11RenderBuffer::build()
         }
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
         memset(&dsvDesc, 0, sizeof(dsvDesc));
-        dsvDesc.Format = dsFormat;
+        dsvDesc.Format = dxgiFormat;
         dsvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_DSV_DIMENSION_TEXTURE2DMS
                                                           : D3D11_DSV_DIMENSION_TEXTURE2D;
         hr = rhiD->dev->CreateDepthStencilView(tex, &dsvDesc, &dsv);
@@ -1434,6 +1485,11 @@ bool QD3D11RenderBuffer::build()
     }
 
     return false;
+}
+
+QRhiTexture::Format QD3D11RenderBuffer::backingFormat() const
+{
+    return m_type == Color ? QRhiTexture::RGBA8 : QRhiTexture::UnknownFormat;
 }
 
 QD3D11Texture::QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
@@ -1493,6 +1549,7 @@ bool QD3D11Texture::build()
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
+    dxgiFormat = toD3DTextureFormat(m_format, m_flags);
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
     sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
     if (sampleDesc.Count > 1) {
@@ -1520,7 +1577,7 @@ bool QD3D11Texture::build()
     desc.Height = size.height();
     desc.MipLevels = mipLevelCount;
     desc.ArraySize = isCube ? 6 : 1;;
-    desc.Format = toD3DTextureFormat(m_format, m_flags);
+    desc.Format = dxgiFormat;
     desc.SampleDesc = sampleDesc;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = bindFlags;

@@ -16,12 +16,9 @@ test cubemap
 test cubemap face as target
 face cubemap readback? (test vk/d3d, impl for gl/mtl)
 
-d3d: resolveimage (color)
-vk: resolveimage (color)
-gl: resolveimage (color)
-
 gl: tex formats (texture, readback)
 gl: srgb
+gl: readback and resolve could be made more optimal by taking a rt as source
 
 mipmap generation?
 
@@ -63,15 +60,18 @@ more tex: 3d, array?
 vk compressed tex: could it consume a complete ktx without any memcpys?
 multi mip/layer copy? (fewer barriers...)
 multi-buffer (region) readback?
-depth readback
-copy image depth
-depth resolve
+depth readback?
+copy image depth?
+depth resolve?
 
 shadertools:
 dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: resolveimage (color)
+vk: resolveimage (color)
+gl: resolveimage (color)
 vk: color renderbuffer
 d3d: color renderbuffer
 gl: color renderbuffer

@@ -70,10 +70,12 @@ struct QD3D11RenderBuffer : public QRhiRenderBuffer
                        int sampleCount, QRhiRenderBuffer::Flags flags);
     void release() override;
     bool build() override;
+    QRhiTexture::Format backingFormat() const override;
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11DepthStencilView *dsv = nullptr;
     ID3D11RenderTargetView *rtv = nullptr;
+    DXGI_FORMAT dxgiFormat;
     DXGI_SAMPLE_DESC sampleDesc;
     friend class QRhiD3D11;
 };
@@ -87,6 +89,7 @@ struct QD3D11Texture : public QRhiTexture
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11ShaderResourceView *srv = nullptr;
+    DXGI_FORMAT dxgiFormat;
     uint mipLevelCount = 0;
     DXGI_SAMPLE_DESC sampleDesc;
     uint generation = 0;
@@ -244,7 +247,8 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             Draw,
             DrawIndexed,
             UpdateSubRes,
-            CopySubRes
+            CopySubRes,
+            ResolveSubRes
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
@@ -324,6 +328,13 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
                 bool hasSrcBox;
                 D3D11_BOX srcBox;
             } copySubRes;
+            struct {
+                ID3D11Resource *dst;
+                UINT dstSubRes;
+                ID3D11Resource *src;
+                UINT srcSubRes;
+                DXGI_FORMAT format;
+            } resolveSubRes;
         } args;
     };
 

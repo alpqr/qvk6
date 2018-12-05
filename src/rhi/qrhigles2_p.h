@@ -78,6 +78,7 @@ struct QGles2RenderBuffer : public QRhiRenderBuffer
                        int sampleCount, QRhiRenderBuffer::Flags flags);
     void release() override;
     bool build() override;
+    QRhiTexture::Format backingFormat() const override;
 
     GLuint renderbuffer = 0;
     int samples;
@@ -240,7 +241,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             ReadPixels,
             SubImage,
             CompressedImage,
-            CompressedSubImage
+            CompressedSubImage,
+            BlitFromRenderbuffer
         };
         Cmd cmd;
         union {
@@ -351,6 +353,14 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 int size;
                 const void *data; // must come from retainData()
             } compressedSubImage;
+            struct {
+                GLuint renderbuffer;
+                int w;
+                int h;
+                QGles2Texture *dst;
+                int dstLayer;
+                int dstLevel;
+            } blitFromRb;
         } args;
     };
 

@@ -796,8 +796,7 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture);
         QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachments[i].renderBuffer);
         Q_ASSERT(texD || rbD);
-        const VkFormat vkformat = texD ? toVkTextureFormat(texD->m_format, texD->m_flags)
-                                       : toVkTextureFormat(rbD->backingTexture->m_format, rbD->backingTexture->m_flags);
+        const VkFormat vkformat = texD ? texD->vkformat : rbD->vkformat;
 
         VkAttachmentDescription attDesc;
         memset(&attDesc, 0, sizeof(attDesc));
@@ -817,8 +816,8 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
 
     const bool hasDepthStencil = depthStencilBuffer || depthTexture;
     if (hasDepthStencil) {
-        const VkFormat dsFormat = depthTexture ? toVkTextureFormat(depthTexture->format(), depthTexture->flags())
-                                               : optimalDepthStencilFormat();
+        const VkFormat dsFormat = depthTexture ? QRHI_RES(QVkTexture, depthTexture)->vkformat
+                                               : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->vkformat;
         const VkSampleCountFlagBits samples = depthTexture ? QRHI_RES(QVkTexture, depthTexture)->samples
                                                            : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->samples;
         VkAttachmentDescription attDesc;
@@ -1798,6 +1797,42 @@ void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     texD->layout = newLayout;
 }
 
+void QRhiVulkan::prepareForTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD)
+{
+    if (texD->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        if (texD->layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+            imageBarrier(cb, texD,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         0, VK_ACCESS_TRANSFER_WRITE_BIT,
+                         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        } else {
+            imageBarrier(cb, texD,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+        }
+    }
+}
+
+void QRhiVulkan::finishTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD)
+{
+    imageBarrier(cb, texD,
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+}
+
+void QRhiVulkan::prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD)
+{
+    if (texD->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+        Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
+        imageBarrier(cb, texD,
+                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    }
+}
+
 void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
 {
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
@@ -2004,19 +2039,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         vmaUnmapMemory(toVmaAllocator(allocator), a);
         vmaFlushAllocation(toVmaAllocator(allocator), a, 0, stagingSize);
 
-        if (utexD->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            if (utexD->layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
-                imageBarrier(cb, u.tex,
-                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             0, VK_ACCESS_TRANSFER_WRITE_BIT,
-                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-            } else {
-                imageBarrier(cb, u.tex,
-                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-            }
-        }
+        prepareForTransferDest(cb, utexD);
 
         df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffers[currentFrameSlot],
                                    utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -2034,10 +2057,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             releaseQueue.append(e);
         }
 
-        imageBarrier(cb, u.tex,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        finishTransferDest(cb, utexD);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
@@ -2069,27 +2089,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         region.extent.height = size.height();
         region.extent.depth = 1;
 
-        if (srcD->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-            Q_ASSERT(srcD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
-            imageBarrier(cb, srcD,
-                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                         VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-        }
-
-        if (dstD->layout != VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
-            if (dstD->layout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
-                imageBarrier(cb, dstD,
-                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             0, VK_ACCESS_TRANSFER_WRITE_BIT,
-                             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-            } else {
-                imageBarrier(cb, dstD,
-                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                             VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-            }
-        }
+        prepareForTransferSrc(cb, srcD);
+        prepareForTransferDest(cb, dstD);
 
         df->vkCmdCopyImage(QRHI_RES(QVkCommandBuffer, cb)->cb,
                            srcD->image, srcD->layout,
@@ -2101,10 +2102,76 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                      VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 
-        imageBarrier(cb, dstD,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                     VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+        finishTransferDest(cb, dstD);
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::TextureResolve &u : ud->textureResolves) {
+        Q_ASSERT(u.dst);
+        Q_ASSERT(u.desc.sourceTexture || u.desc.sourceRenderBuffer);
+        QVkTexture *dstTexD = QRHI_RES(QVkTexture, u.dst);
+        if (dstTexD->samples > VK_SAMPLE_COUNT_1_BIT) {
+            qWarning("Cannot resolve into a multisample texture");
+            continue;
+        }
+
+        QVkTexture *srcTexD = QRHI_RES(QVkTexture, u.desc.sourceTexture);
+        QVkRenderBuffer *srcRbD = QRHI_RES(QVkRenderBuffer, u.desc.sourceRenderBuffer);
+        VkImage srcImage;
+        VkImageLayout srcLayout;
+        VkImageResolve region;
+        memset(&region, 0, sizeof(region));
+        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer;
+        region.srcSubresource.layerCount = 1;
+        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.dstSubresource.mipLevel = u.desc.destinationLevel;
+        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer;
+        region.dstSubresource.layerCount = 1;
+        region.extent.depth = 1;
+
+        if (srcTexD) {
+            if (srcTexD->vkformat != dstTexD->vkformat) {
+                qWarning("Resolve source and destination formats do not match");
+                continue;
+            }
+            if (srcTexD->samples == VK_SAMPLE_COUNT_1_BIT) {
+                qWarning("Cannot resolve a non-multisample texture");
+                continue;
+            }
+            if (srcTexD->m_pixelSize != dstTexD->m_pixelSize) {
+                qWarning("Resolve source and destination sizes do not match");
+                continue;
+            }
+
+            region.extent.width = srcTexD->m_pixelSize.width();
+            region.extent.height = srcTexD->m_pixelSize.height();
+
+            prepareForTransferSrc(cb, srcTexD);
+            srcImage = srcTexD->image;
+            srcLayout = srcTexD->layout;
+        } else {
+            if (srcRbD->vkformat != dstTexD->vkformat) {
+                qWarning("Resolve source and destination formats do not match");
+                continue;
+            }
+            if (srcRbD->m_pixelSize != dstTexD->m_pixelSize) {
+                qWarning("Resolve source and destination sizes do not match");
+                continue;
+            }
+
+            region.extent.width = srcRbD->m_pixelSize.width();
+            region.extent.height = srcRbD->m_pixelSize.height();
+
+            prepareForTransferSrc(cb, srcRbD->backingTexture);
+            srcImage = srcRbD->backingTexture->image;
+            srcLayout = srcRbD->backingTexture->layout;
+        }
+
+        prepareForTransferDest(cb, dstTexD);
+
+        df->vkCmdResolveImage(cbD->cb, srcImage, srcLayout, dstTexD->image, dstTexD->layout, 1, &region);
+
+        finishTransferDest(cb, dstTexD);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
@@ -3134,8 +3201,10 @@ void QVkRenderBuffer::release()
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 
-    if (backingTexture)
+    if (backingTexture) {
+        Q_ASSERT(backingTexture->lastActiveFrameSlot == -1);
         backingTexture->release();
+    }
 }
 
 bool QVkRenderBuffer::build()
@@ -3150,15 +3219,19 @@ bool QVkRenderBuffer::build()
     case QRhiRenderBuffer::Color:
     {
         if (!backingTexture) {
-            backingTexture = QRHI_RES(QVkTexture, rhiD->createTexture(QRhiTexture::RGBA8, m_pixelSize,
-                                                                      m_sampleCount, QRhiTexture::RenderTarget));
+            backingTexture = QRHI_RES(QVkTexture, rhiD->createTexture(QRhiTexture::RGBA8,
+                                                                      m_pixelSize,
+                                                                      m_sampleCount,
+                                                                      QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
         }
         if (!backingTexture->build())
             return false;
+        vkformat = backingTexture->vkformat;
     }
         break;
     case QRhiRenderBuffer::DepthStencil:
-        if (!rhiD->createTransientImage(rhiD->optimalDepthStencilFormat(),
+        vkformat = rhiD->optimalDepthStencilFormat();
+        if (!rhiD->createTransientImage(vkformat,
                                         m_pixelSize,
                                         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                                         VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
@@ -3178,6 +3251,11 @@ bool QVkRenderBuffer::build()
 
     lastActiveFrameSlot = -1;
     return true;
+}
+
+QRhiTexture::Format QVkRenderBuffer::backingFormat() const
+{
+    return m_type == Color ? QRhiTexture::RGBA8 : QRhiTexture::UnknownFormat;
 }
 
 QVkTexture::QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
@@ -3225,7 +3303,7 @@ bool QVkTexture::build()
         release();
 
     QRHI_RES_RHI(QRhiVulkan);
-    VkFormat vkformat = toVkTextureFormat(m_format, m_flags);
+    vkformat = toVkTextureFormat(m_format, m_flags);
     VkFormatProperties props;
     rhiD->f->vkGetPhysicalDeviceFormatProperties(rhiD->physDev, vkformat, &props);
     const bool canSampleOptimal = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
@@ -3241,6 +3319,16 @@ bool QVkTexture::build()
 
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
+    if (samples > VK_SAMPLE_COUNT_1_BIT) {
+        if (isCube) {
+            qWarning("Cubemap texture cannot be multisample");
+            return false;
+        }
+        if (hasMipMaps) {
+            qWarning("Multisample texture cannot have mipmaps");
+            return false;
+        }
+    }
 
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));
@@ -3482,7 +3570,7 @@ bool QVkTextureRenderTarget::build()
                     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
                     viewInfo.image = texD->image;
                     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-                    viewInfo.format = toVkTextureFormat(texD->format(), texD->flags());
+                    viewInfo.format = texD->vkformat;
                     viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
                     viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
                     viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;

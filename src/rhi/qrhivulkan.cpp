@@ -1768,6 +1768,35 @@ void QRhiVulkan::bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf)
                              0, 0, nullptr, 1, &bufMemBarrier, 0, nullptr);
 }
 
+void QRhiVulkan::imageSubResBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
+                                    VkImageLayout oldLayout, VkImageLayout newLayout,
+                                    VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                                    VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+                                    int layer, int level)
+{
+    QVkTexture *texD = QRHI_RES(QVkTexture, tex);
+
+    VkImageMemoryBarrier barrier;
+    memset(&barrier, 0, sizeof(barrier));
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = level;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = layer;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcAccessMask = srcAccess;
+    barrier.dstAccessMask = dstAccess;
+    barrier.image = texD->image;
+
+    df->vkCmdPipelineBarrier(QRHI_RES(QVkCommandBuffer, cb)->cb,
+                             srcStage,
+                             dstStage,
+                             0, 0, nullptr, 0, nullptr,
+                             1, &barrier);
+}
+
 void QRhiVulkan::imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                               VkImageLayout newLayout,
                               VkAccessFlags srcAccess, VkAccessFlags dstAccess,
@@ -1817,7 +1846,8 @@ void QRhiVulkan::prepareForTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD)
 void QRhiVulkan::prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD)
 {
     if (texD->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-        Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
+        Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource)
+                 || texD->m_flags.testFlag(QRhiTexture::UsedWithGenerateMips));
         // assume the texture was written (so block up to color output, not just fragment)
         imageBarrier(cb, texD,
                      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -2266,6 +2296,71 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         }
 
         activeReadbacks.append(aRb);
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
+        QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
+        Q_ASSERT(utexD->m_flags.testFlag(QRhiTexture::UsedWithGenerateMips));
+        int w = utexD->m_pixelSize.width();
+        int h = utexD->m_pixelSize.height();
+
+        prepareForTransferSrc(cb, utexD);
+
+        for (int level = 1; level < utexD->mipLevelCount; ++level) {
+            if (level > 1) {
+                imageSubResBarrier(cb, utexD,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   0, level - 1);
+            }
+
+            imageSubResBarrier(cb, utexD,
+                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
+                               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                               0, level);
+
+            VkImageBlit region;
+            memset(&region, 0, sizeof(region));
+
+            region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.srcSubresource.mipLevel = level - 1;
+            region.srcSubresource.baseArrayLayer = 0;
+            region.srcSubresource.layerCount = 1;
+
+            region.srcOffsets[1].x = w;
+            region.srcOffsets[1].y = h;
+            region.srcOffsets[1].z = 1;
+
+            region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.dstSubresource.mipLevel = level;
+            region.dstSubresource.baseArrayLayer = 0;
+            region.dstSubresource.layerCount = 1;
+
+            region.dstOffsets[1].x = w >> 1;
+            region.dstOffsets[1].y = h >> 1;
+            region.dstOffsets[1].z = 1;
+
+            df->vkCmdBlitImage(cbD->cb,
+                               utexD->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                               utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                               1, &region,
+                               VK_FILTER_LINEAR);
+
+            w >>= 1;
+            h >>= 1;
+
+            if (level == utexD->mipLevelCount - 1) {
+                imageSubResBarrier(cb, utexD,
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                   0, level);
+            }
+        }
+
+        finishTransferDest(cb, utexD);
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TexturePrepare &u : ud->texturePrepares) {
@@ -3338,6 +3433,8 @@ bool QVkTexture::build()
             imageInfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
     if (m_flags.testFlag(QRhiTexture::UsedAsTransferSource))
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    if (m_flags.testFlag(QRhiTexture::UsedWithGenerateMips))
         imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     VmaAllocationCreateInfo allocInfo;

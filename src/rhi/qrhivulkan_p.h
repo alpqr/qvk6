@@ -426,6 +426,11 @@ public:
     void finishActiveReadbacks(bool forced = false);
 
     void bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf);
+    void imageSubResBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
+                            VkImageLayout oldLayout, VkImageLayout newLayout,
+                            VkAccessFlags srcAccess, VkAccessFlags dstAccess,
+                            VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
+                            int layer, int level);
     void imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                       VkImageLayout newLayout,
                       VkAccessFlags srcAccess, VkAccessFlags dstAccess,

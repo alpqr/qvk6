@@ -248,7 +248,8 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             DrawIndexed,
             UpdateSubRes,
             CopySubRes,
-            ResolveSubRes
+            ResolveSubRes,
+            GenMip
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
@@ -335,6 +336,9 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
                 UINT srcSubRes;
                 DXGI_FORMAT format;
             } resolveSubRes;
+            struct {
+                QD3D11Texture *tex;
+            } genMip;
         } args;
     };
 

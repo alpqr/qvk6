@@ -56,6 +56,8 @@
 const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
 const bool UPLOAD_UNDERLAY_ON_EVERY_FRAME = false;
 
+const bool DS_ATT = false; // have a depth-stencil attachment for the offscreen pass
+
 const bool DEPTH_TEXTURE = false; // offscreen pass uses a depth texture (verify with renderdoc etc., ignore valid.layer about ps slot 0)
 const bool MRT = false; // two textures, the second is just cleared as the shader does not write anything (valid.layer may warn but for testing that's ok)
 
@@ -93,6 +95,18 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
     if (MRT) {
         m_tex2 = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
         m_tex2->build();
+    }
+
+    if (DS_ATT) {
+        m_offscreenTriangle.setDepthWrite(true);
+        m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil, m_tex->pixelSize());
+        m_ds->build();
+    }
+
+    if (DEPTH_TEXTURE) {
+        m_offscreenTriangle.setDepthWrite(true);
+        m_depthTex = m_r->newTexture(QRhiTexture::D32, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
+        m_depthTex->build();
     }
 
     m_sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
@@ -141,12 +155,6 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 
     m_ps->build();
 
-    if (DEPTH_TEXTURE) {
-        m_offscreenTriangle.setDepthWrite(true);
-        m_depthTex = m_r->newTexture(QRhiTexture::D32, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
-        m_depthTex->build();
-    }
-
     QRhiTextureRenderTarget::Flags rtFlags = 0;
     if (IMAGE_UNDER_OFFSCREEN_RENDERING)
         rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
@@ -157,6 +165,8 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
         m_rt = m_r->newTextureRenderTarget(desc, rtFlags);
     } else {
         QRhiTextureRenderTargetDescription desc { m_tex };
+        if (DS_ATT)
+            desc.depthStencilBuffer = m_ds;
         if (MRT) {
             m_offscreenTriangle.setColorAttCount(2);
             desc.colorAttachments.append(m_tex2);
@@ -226,6 +236,11 @@ void TriangleOnCubeRenderer::releaseResources()
     if (m_tex) {
         m_tex->releaseAndDestroy();
         m_tex = nullptr;
+    }
+
+    if (m_ds) {
+        m_ds->releaseAndDestroy();
+        m_ds = nullptr;
     }
 
     if (m_ubuf) {

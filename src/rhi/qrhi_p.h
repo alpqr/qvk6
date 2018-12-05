@@ -204,6 +204,10 @@ struct QRhiResourceUpdateBatchPrivate
         QRhiReadbackResult *result;
     };
 
+    struct TextureMipGen {
+        QRhiTexture *tex = nullptr;
+    };
+
     struct TexturePrepare {
         TexturePrepare() { }
         TexturePrepare(QRhiTexture *tex_, QRhiResourceUpdateBatch::TexturePrepareFlags flags_)
@@ -220,6 +224,7 @@ struct QRhiResourceUpdateBatchPrivate
     QVector<TextureCopy> textureCopies;
     QVector<TextureResolve> textureResolves;
     QVector<TextureRead> textureReadbacks;
+    QVector<TextureMipGen> textureMipGens;
     QVector<TexturePrepare> texturePrepares;
 
     QRhiResourceUpdateBatch *q = nullptr;
@@ -238,6 +243,7 @@ Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureCopy, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureResolve, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureRead, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureMipGen, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TexturePrepare, Q_MOVABLE_TYPE);
 
 template<typename T>

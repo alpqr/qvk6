@@ -242,7 +242,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             SubImage,
             CompressedImage,
             CompressedSubImage,
-            BlitFromRenderbuffer
+            BlitFromRenderbuffer,
+            GenMip
         };
         Cmd cmd;
         union {
@@ -361,6 +362,9 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 int dstLayer;
                 int dstLevel;
             } blitFromRb;
+            struct {
+                QGles2Texture *tex;
+            } genMip;
         } args;
     };
 

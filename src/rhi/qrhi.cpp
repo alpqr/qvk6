@@ -469,6 +469,11 @@ void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb,
     d->textureReadbacks.append({ rb, result });
 }
 
+void QRhiResourceUpdateBatch::generateMips(QRhiTexture *tex)
+{
+    d->textureMipGens.append({ tex });
+}
+
 void QRhiResourceUpdateBatch::prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags)
 {
     d->texturePrepares.append({ tex, flags });
@@ -513,6 +518,7 @@ void QRhiResourceUpdateBatchPrivate::free()
     textureCopies.clear();
     textureResolves.clear();
     textureReadbacks.clear();
+    textureMipGens.clear();
     texturePrepares.clear();
 
     rhi->resUpdPoolMap.clearBit(poolIndex);
@@ -527,6 +533,7 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
     textureCopies += other->textureCopies;
     textureResolves += other->textureResolves;
     textureReadbacks += other->textureReadbacks;
+    textureMipGens += other->textureMipGens;
     texturePrepares += other->texturePrepares;
 }
 

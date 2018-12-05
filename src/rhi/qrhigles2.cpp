@@ -736,6 +736,13 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cbD->commands.append(cmd);
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
+        QGles2CommandBuffer::Command cmd;
+        cmd.cmd = QGles2CommandBuffer::Command::GenMip;
+        cmd.args.genMip.tex = QRHI_RES(QGles2Texture, u.tex);
+        cbD->commands.append(cmd);
+    }
+
     ud->free();
 }
 
@@ -1191,6 +1198,10 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                                  GL_LINEAR);
             f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
         }
+            break;
+        case QGles2CommandBuffer::Command::GenMip:
+            f->glBindTexture(cmd.args.genMip.tex->target, cmd.args.genMip.tex->texture);
+            f->glGenerateMipmap(cmd.args.genMip.tex->target);
             break;
         default:
             break;

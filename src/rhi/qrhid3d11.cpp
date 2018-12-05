@@ -955,6 +955,14 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         activeReadbacks.append(aRb);
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
+        Q_ASSERT(u.tex->flags().testFlag(QRhiTexture::UsedWithGenerateMips));
+        QD3D11CommandBuffer::Command cmd;
+        cmd.cmd = QD3D11CommandBuffer::Command::GenMip;
+        cmd.args.genMip.tex = QRHI_RES(QD3D11Texture, u.tex);
+        cbD->commands.append(cmd);
+    }
+
     ud->free();
 }
 
@@ -1351,6 +1359,9 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
                                         cmd.args.resolveSubRes.src, cmd.args.resolveSubRes.srcSubRes,
                                         cmd.args.resolveSubRes.format);
             break;
+        case QD3D11CommandBuffer::Command::GenMip:
+            context->GenerateMips(cmd.args.genMip.tex->srv);
+            break;
         default:
             break;
         }
@@ -1574,13 +1585,26 @@ bool QD3D11Texture::build()
             return false;
         }
     }
+    if (isDepth && hasMipMaps) {
+        qWarning("Depth texture cannot have mipmaps");
+        return false;
+    }
 
     uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
+    uint miscFlags = isCube ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
     if (m_flags.testFlag(RenderTarget)) {
         if (isDepth)
             bindFlags |= D3D11_BIND_DEPTH_STENCIL;
         else
             bindFlags |= D3D11_BIND_RENDER_TARGET;
+    }
+    if (m_flags.testFlag(UsedWithGenerateMips)) {
+        if (isDepth) {
+            qWarning("Depth texture cannot have mipmaps generated");
+            return false;
+        }
+        bindFlags |= D3D11_BIND_RENDER_TARGET;
+        miscFlags |= D3D11_RESOURCE_MISC_GENERATE_MIPS;
     }
 
     D3D11_TEXTURE2D_DESC desc;
@@ -1593,7 +1617,7 @@ bool QD3D11Texture::build()
     desc.SampleDesc = sampleDesc;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = bindFlags;
-    desc.MiscFlags = isCube ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
+    desc.MiscFlags = miscFlags;
 
     HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
     if (FAILED(hr)) {

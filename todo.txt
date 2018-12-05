@@ -11,6 +11,7 @@ mtl: msaa tex+rt
 mtl: resolveimage (color)
 mtl: buffer upload with offset/size
 mtl: color renderbuffer
+mtl: mipmap generation
 
 gl: tex formats (texture, readback)
 gl: srgb
@@ -18,8 +19,6 @@ gl: srgb
 test cubemap
 test cubemap face as target
 test cubemap face readback
-
-mipmap generation?
 
 advanced blend modes
 
@@ -67,6 +66,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk, d3d, gl: mipmap gen
 msaa swapchain readback
 d3d: resolveimage (color)
 vk: resolveimage (color)

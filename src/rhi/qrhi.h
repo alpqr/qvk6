@@ -415,7 +415,8 @@ public:
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
         sRGB = 1 << 4,
-        UsedAsTransferSource = 1 << 5 // will (also) be used as the source of a readback or copy or resolve
+        UsedAsTransferSource = 1 << 5, // will (also) be used as the source of a readback or copy or resolve
+        UsedWithGenerateMips = 1 << 6
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -918,7 +919,7 @@ public:
 
     // Sometimes committing the updates is necessary without starting a render
     // pass. Not often needed, updates should typically be passed to beginPass
-    // (or endPass, in case of readbacks) instead.
+    // (or endPass, in case of readbacks or resolves) instead.
     void resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates);
 
     void beginPass(QRhiRenderTarget *rt,
@@ -1030,6 +1031,7 @@ public:
     void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc = QRhiTextureCopyDescription());
     void resolveTexture(QRhiTexture *dst, const QRhiTextureResolveDescription &desc);
     void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
+    void generateMips(QRhiTexture *tex);
 
     // This is not normally needed, textures that have an upload or are used
     // with a TextureRenderTarget will be fine without it. May be more relevant later.

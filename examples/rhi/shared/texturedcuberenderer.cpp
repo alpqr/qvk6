@@ -55,6 +55,7 @@
 #include "cube.h"
 
 const bool MIPMAP = true;
+const bool AUTOGENMIPMAP = true;
 
 static QBakedShader getShader(const QString &name)
 {
@@ -78,6 +79,8 @@ void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
     QRhiTexture::Flags texFlags = 0;
     if (MIPMAP)
         texFlags |= QRhiTexture::MipMapped;
+    if (AUTOGENMIPMAP)
+        texFlags |= QRhiTexture::UsedWithGenerateMips;
     m_tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), 1, texFlags);
     m_tex->build();
 
@@ -189,12 +192,18 @@ void TexturedCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourc
         if (MIPMAP) {
             QRhiTextureUploadDescription desc;
             desc.layers.append(QRhiTextureUploadDescription::Layer());
-            // the ghetto mipmap generator...
-            for (int i = 0, ie = m_r->mipLevelsForSize(m_image.size()); i != ie; ++i) {
-                QImage image = m_image.scaled(m_r->sizeForMipLevel(i, m_image.size()));
-                desc.layers[0].mipImages.push_back({ image });
+            if (!AUTOGENMIPMAP) {
+                // the ghetto mipmap generator...
+                for (int i = 0, ie = m_r->mipLevelsForSize(m_image.size()); i != ie; ++i) {
+                    QImage image = m_image.scaled(m_r->sizeForMipLevel(i, m_image.size()));
+                    desc.layers[0].mipImages.push_back({ image });
+                }
+            } else {
+                desc.layers[0].mipImages.push_back({ m_image });
             }
             resourceUpdates->uploadTexture(m_tex, desc);
+            if (AUTOGENMIPMAP)
+                resourceUpdates->generateMips(m_tex);
         } else {
             resourceUpdates->uploadTexture(m_tex, m_image);
         }

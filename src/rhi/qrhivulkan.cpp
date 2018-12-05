@@ -2201,6 +2201,9 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             aRb.format = colorTextureFormatFromVkFormat(swapChainD->colorFormat, nullptr);
             if (aRb.format == QRhiTexture::UnknownFormat)
                 continue;
+
+            // Multisample swapchains need nothing special since resolving
+            // happens when ending a renderpass.
         }
         textureFormatInfo(aRb.format, aRb.pixelSize, nullptr, &aRb.bufSize);
 

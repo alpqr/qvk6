@@ -343,6 +343,10 @@ struct Q_RHI_EXPORT QRhiReadbackDescription
 {
     QRhiReadbackDescription() { } // source is the back buffer of the swapchain of the current frame (if the swapchain supports readback)
     QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { } // source is the specified texture
+    // Note that reading back an msaa image is only supported for swapchains
+    // (by inserting an implicit resolve). For multisample textures, do an
+    // explicit resolve first.
+
     QRhiTexture *texture = nullptr;
     int layer = 0;
     int level = 0;

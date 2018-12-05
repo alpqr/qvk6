@@ -1138,6 +1138,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             } else {
                 result->pixelSize = currentSwapChain->pixelSize;
                 result->format = QRhiTexture::RGBA8;
+                // readPixels handles multisample resolving implicitly
             }
             result->data.resize(result->pixelSize.width() * result->pixelSize.height() * 4);
             f->glReadPixels(0, 0, result->pixelSize.width(), result->pixelSize.height(),

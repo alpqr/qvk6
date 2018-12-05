@@ -104,6 +104,7 @@ int main(int argc, char **argv)
     QSurfaceFormat fmt;
     fmt.setDepthBufferSize(24);
     fmt.setStencilBufferSize(8);
+    //fmt.setSamples(4); // enable 4x MSAA (except for the render-to-texture pass)
     QSurfaceFormat::setDefaultFormat(fmt);
 
     GlWindow w;

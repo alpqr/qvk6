@@ -32,7 +32,6 @@ vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cbuffers, textures, samplers set should be batched too
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 what does image copy do for compressed formats?
-does/should reading back an msaa swapchain buffer work? (breaks with vk, d3d at least)
 figure sg out for minimizing viewport/scissor cmds
 vk: test FrameOpDeviceLost somehow
 d3d device loss?
@@ -68,6 +67,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+msaa swapchain readback
 d3d: resolveimage (color)
 vk: resolveimage (color)
 gl: resolveimage (color)

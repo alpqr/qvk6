@@ -897,6 +897,18 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         } else {
             Q_ASSERT(contextState.currentSwapChain);
             swapChainD = QRHI_RES(QD3D11SwapChain, contextState.currentSwapChain);
+            if (swapChainD->sampleDesc.Count > 1) {
+                // Unlike with textures, reading back a multisample swapchain image
+                // has to be supported. Insert a resolve.
+                QD3D11CommandBuffer::Command rcmd;
+                rcmd.cmd = QD3D11CommandBuffer::Command::ResolveSubRes;
+                rcmd.args.resolveSubRes.dst = swapChainD->tex[swapChainD->currentFrame];
+                rcmd.args.resolveSubRes.dstSubRes = 0;
+                rcmd.args.resolveSubRes.src = swapChainD->msaaTex[swapChainD->currentFrame];
+                rcmd.args.resolveSubRes.srcSubRes = 0;
+                rcmd.args.resolveSubRes.format = swapChainD->colorFormat;
+                cbD->commands.append(rcmd);
+            }
             src = swapChainD->tex[swapChainD->currentFrame];
             dxgiFormat = swapChainD->colorFormat;
             pixelSize = swapChainD->pixelSize;

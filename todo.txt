@@ -12,13 +12,13 @@ mtl: resolveimage (color)
 mtl: buffer upload with offset/size
 mtl: color renderbuffer
 
-test cubemap
-test cubemap face as target
-face cubemap readback? (test vk/d3d, impl for gl/mtl)
-
 gl: tex formats (texture, readback)
 gl: srgb
 gl: readback and resolve could be made more optimal by taking a rt as source
+
+test cubemap
+test cubemap face as target
+test cubemap face readback
 
 mipmap generation?
 

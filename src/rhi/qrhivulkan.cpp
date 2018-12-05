@@ -1814,6 +1814,18 @@ void QRhiVulkan::prepareForTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD)
     }
 }
 
+void QRhiVulkan::prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD)
+{
+    if (texD->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
+        Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
+        // assume the texture was written (so block up to color output, not just fragment)
+        imageBarrier(cb, texD,
+                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                     VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+    }
+}
+
 void QRhiVulkan::finishTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD)
 {
     imageBarrier(cb, texD,
@@ -1822,15 +1834,12 @@ void QRhiVulkan::finishTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD)
                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 }
 
-void QRhiVulkan::prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD)
+void QRhiVulkan::finishTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD)
 {
-    if (texD->layout != VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) {
-        Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
-        imageBarrier(cb, texD,
-                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                     VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    }
+    imageBarrier(cb, texD,
+                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 }
 
 void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
@@ -2097,11 +2106,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                            dstD->image, dstD->layout,
                            1, &region);
 
-        imageBarrier(cb, srcD,
-                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                     VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-                     VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-
+        finishTransferSrc(cb, srcD);
         finishTransferDest(cb, dstD);
     }
 
@@ -2114,10 +2119,6 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             continue;
         }
 
-        QVkTexture *srcTexD = QRHI_RES(QVkTexture, u.desc.sourceTexture);
-        QVkRenderBuffer *srcRbD = QRHI_RES(QVkRenderBuffer, u.desc.sourceRenderBuffer);
-        VkImage srcImage;
-        VkImageLayout srcLayout;
         VkImageResolve region;
         memset(&region, 0, sizeof(region));
         region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -2129,6 +2130,9 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         region.dstSubresource.layerCount = 1;
         region.extent.depth = 1;
 
+        QVkTexture *srcTexD = QRHI_RES(QVkTexture, u.desc.sourceTexture);
+        QVkRenderBuffer *srcRbD = QRHI_RES(QVkRenderBuffer, u.desc.sourceRenderBuffer);
+        QVkTexture *src;
         if (srcTexD) {
             if (srcTexD->vkformat != dstTexD->vkformat) {
                 qWarning("Resolve source and destination formats do not match");
@@ -2142,13 +2146,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 qWarning("Resolve source and destination sizes do not match");
                 continue;
             }
-
-            region.extent.width = srcTexD->m_pixelSize.width();
-            region.extent.height = srcTexD->m_pixelSize.height();
-
-            prepareForTransferSrc(cb, srcTexD);
-            srcImage = srcTexD->image;
-            srcLayout = srcTexD->layout;
+            src = srcTexD;
         } else {
             if (srcRbD->vkformat != dstTexD->vkformat) {
                 qWarning("Resolve source and destination formats do not match");
@@ -2158,19 +2156,18 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 qWarning("Resolve source and destination sizes do not match");
                 continue;
             }
-
-            region.extent.width = srcRbD->m_pixelSize.width();
-            region.extent.height = srcRbD->m_pixelSize.height();
-
-            prepareForTransferSrc(cb, srcRbD->backingTexture);
-            srcImage = srcRbD->backingTexture->image;
-            srcLayout = srcRbD->backingTexture->layout;
+            src = srcRbD->backingTexture;
         }
 
+        region.extent.width = src->m_pixelSize.width();
+        region.extent.height = src->m_pixelSize.height();
+
+        prepareForTransferSrc(cb, src);
         prepareForTransferDest(cb, dstTexD);
 
-        df->vkCmdResolveImage(cbD->cb, srcImage, srcLayout, dstTexD->image, dstTexD->layout, 1, &region);
+        df->vkCmdResolveImage(cbD->cb, src->image, src->layout, dstTexD->image, dstTexD->layout, 1, &region);
 
+        finishTransferSrc(cb, src);
         finishTransferDest(cb, dstTexD);
     }
 
@@ -2240,20 +2237,9 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         copyDesc.imageExtent.depth = 1;
 
         if (texD) {
-            Q_ASSERT(texD->m_flags.testFlag(QRhiTexture::UsedAsTransferSource));
-            // assume the image was written
-            imageBarrier(cb, texD,
-                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
+            prepareForTransferSrc(cb, texD);
             df->vkCmdCopyImageToBuffer(cbD->cb, texD->image, texD->layout, aRb.buf, 1, &copyDesc);
-
-            // behave as if the image was used for shader read
-            imageBarrier(cb, texD,
-                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                         VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+            finishTransferSrc(cb, texD);
         } else {
             // use the swapchain image
             VkImage image = swapChainD->imageRes[swapChainD->currentImage].image;
@@ -2282,12 +2268,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
     for (const QRhiResourceUpdateBatchPrivate::TexturePrepare &u : ud->texturePrepares) {
         if (u.flags.testFlag(QRhiResourceUpdateBatch::TextureRead)) {
             QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
-            if (utexD->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) {
-                imageBarrier(cb, u.tex,
-                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                             VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-                             VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-            }
+            if (utexD->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+                finishTransferDest(cb, utexD);
         }
     }
 

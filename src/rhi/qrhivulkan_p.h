@@ -415,8 +415,9 @@ public:
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void prepareFrameEnd();
     void prepareForTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
-    void finishTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
     void prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD);
+    void finishTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
+    void finishTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD);
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD);
     void activateTextureRenderTarget(QRhiCommandBuffer *cb, QRhiTextureRenderTarget *rt);

@@ -430,7 +430,8 @@ public:
                             VkImageLayout oldLayout, VkImageLayout newLayout,
                             VkAccessFlags srcAccess, VkAccessFlags dstAccess,
                             VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
-                            int layer, int level);
+                            int startLayer, int layerCount,
+                            int startLevel, int levelCount);
     void imageBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                       VkImageLayout newLayout,
                       VkAccessFlags srcAccess, VkAccessFlags dstAccess,

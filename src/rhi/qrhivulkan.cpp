@@ -1772,7 +1772,8 @@ void QRhiVulkan::imageSubResBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                                     VkImageLayout oldLayout, VkImageLayout newLayout,
                                     VkAccessFlags srcAccess, VkAccessFlags dstAccess,
                                     VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage,
-                                    int layer, int level)
+                                    int startLayer, int layerCount,
+                                    int startLevel, int levelCount)
 {
     QVkTexture *texD = QRHI_RES(QVkTexture, tex);
 
@@ -1780,10 +1781,10 @@ void QRhiVulkan::imageSubResBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
     memset(&barrier, 0, sizeof(barrier));
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = level;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = layer;
-    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.baseMipLevel = startLevel;
+    barrier.subresourceRange.levelCount = levelCount;
+    barrier.subresourceRange.baseArrayLayer = startLayer;
+    barrier.subresourceRange.layerCount = layerCount;
     barrier.oldLayout = oldLayout;
     barrier.newLayout = newLayout;
     barrier.srcAccessMask = srcAccess;
@@ -2306,20 +2307,21 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
 
         prepareForTransferSrc(cb, utexD);
 
+        const uint layerCount = utexD->m_flags.testFlag(QRhiTexture::CubeMap) ? 6 : 1;
         for (int level = 1; level < utexD->mipLevelCount; ++level) {
             if (level > 1) {
                 imageSubResBarrier(cb, utexD,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                    VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   0, level - 1);
+                                   0, layerCount, level - 1, 1);
             }
 
             imageSubResBarrier(cb, utexD,
                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                               0, level);
+                               0, layerCount, level, 1);
 
             VkImageBlit region;
             memset(&region, 0, sizeof(region));
@@ -2356,7 +2358,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                                    VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
                                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   0, level);
+                                   0, layerCount, level, 1);
             }
         }
 

@@ -670,20 +670,48 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
-                if (imageSizeBytes > 0) {
-                    memcpy(reinterpret_cast<char *>(mp) + curOfs, mipDesc.image.constBits(), imageSizeBytes);
+                const qsizetype fullImageSizeBytes = mipDesc.image.sizeInBytes();
+                if (fullImageSizeBytes > 0) {
+                    QImage img = mipDesc.image;
+                    int w = img.width();
+                    int h = img.height();
+                    int bpl = img.bytesPerLine();
+                    int srcOffset = 0;
+
+                    if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
+                        const int sx = mipDesc.sourceTopLeft.x();
+                        const int sy = mipDesc.sourceTopLeft.y();
+                        if (!mipDesc.sourceSize.isEmpty()) {
+                            w = mipDesc.sourceSize.width();
+                            h = mipDesc.sourceSize.height();
+                        }
+                        if (img.depth() == 32) {
+                            memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
+                            srcOffset = sy * bpl + sx * 4;
+                            // bpl remains set to the original image's row stride
+                        } else {
+                            img = img.copy(sx, sy, w, h);
+                            bpl = img.bytesPerLine();
+                            Q_ASSERT(img.sizeInBytes() <= fullImageSizeBytes);
+                            memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), img.sizeInBytes());
+                        }
+                    } else {
+                        memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
+                    }
+
+                    const int dx = mipDesc.destinationTopLeft.x();
+                    const int dy = mipDesc.destinationTopLeft.y();
                     [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
-                                             sourceOffset: curOfs
-                                             sourceBytesPerRow: mipDesc.image.bytesPerLine()
+                                             sourceOffset: curOfs + srcOffset
+                                             sourceBytesPerRow: bpl
                                              sourceBytesPerImage: 0
-                                             sourceSize: MTLSizeMake(mipDesc.image.width(), mipDesc.image.height(), 1)
+                                             sourceSize: MTLSizeMake(w, h, 1)
                                              toTexture: utexD->d->tex
                                              destinationSlice: layer
                                              destinationLevel: level
-                                             destinationOrigin: MTLOriginMake(0, 0, 0)
+                                             destinationOrigin: MTLOriginMake(dx, dy, 0)
                                              options: MTLBlitOptionNone];
-                    curOfs += aligned(imageSizeBytes, texbufAlign);
+                    curOfs += aligned(fullImageSizeBytes, texbufAlign);
                 }
             }
         }

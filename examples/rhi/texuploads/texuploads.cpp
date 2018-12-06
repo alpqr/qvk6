@@ -139,6 +139,8 @@ void Window::customInit()
     d.customImage = QImage(128, 64, QImage::Format_RGBA8888);
     d.customImage.fill(Qt::red);
     QPainter painter(&d.customImage);
+    // the text may look different on different platforms, so no guarantee the
+    // output on the screen will be identical everywhere
     painter.drawText(5, 25, "Hello world");
     painter.end();
 }

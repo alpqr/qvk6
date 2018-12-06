@@ -11,7 +11,6 @@ mtl: msaa tex+rt
 mtl: resolveimage (color)
 mtl: buffer upload with offset/size
 mtl: color renderbuffer
-mtl: mipmap generation
 
 gl: tex formats (texture, readback)
 gl: srgb
@@ -66,6 +65,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: mipmap generation
 vk, d3d, gl: mipmap gen
 msaa swapchain readback
 d3d: resolveimage (color)

@@ -636,8 +636,10 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     }
 
     id<MTLBlitCommandEncoder> blitEnc = nil;
-    if (!ud->textureUploads.isEmpty())
-        blitEnc = [cbD->d->cb blitCommandEncoder];
+    auto ensureBlit = [&blitEnc, cbD] {
+        if (!blitEnc)
+            blitEnc = [cbD->d->cb blitCommandEncoder];
+    };
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         if (u.desc.layers.isEmpty() || u.desc.layers[0].mipImages.isEmpty())
@@ -658,11 +660,11 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             }
         }
 
+        ensureBlit();
         if (!utexD->d->stagingBuf[currentFrameSlot])
             utexD->d->stagingBuf[currentFrameSlot] = [d->dev newBufferWithLength: stagingSize options: MTLResourceStorageModeShared];
 
         void *mp = [utexD->d->stagingBuf[currentFrameSlot] contents];
-
         qsizetype curOfs = 0;
         for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
             const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
@@ -696,6 +698,11 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             utexD->d->stagingBuf[currentFrameSlot] = nil;
             d->releaseQueue.append(e);
         }
+    }
+
+    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
+        ensureBlit();
+        [blitEnc generateMipmapsForTexture: QRHI_RES(QMetalTexture, u.tex)->d->tex];
     }
 
     if (blitEnc)

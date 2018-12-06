@@ -2546,6 +2546,16 @@ bool QD3D11SwapChain::buildOrResize()
         }
     }
 
+    if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {
+        qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
+                 m_depthStencil->sampleCount(), m_sampleCount);
+    }
+    if (m_depthStencil && m_depthStencil->pixelSize() != pixelSize) {
+        qWarning("Depth-stencil buffer's size (%dx%d) does not match the surface size (%dx%d). Expect problems.",
+                 m_depthStencil->pixelSize().width(), m_depthStencil->pixelSize().height(),
+                 pixelSize.width(), pixelSize.height());
+    }
+
     currentFrame = 0;
     ds = m_depthStencil ? QRHI_RES(QD3D11RenderBuffer, m_depthStencil) : nullptr;
 

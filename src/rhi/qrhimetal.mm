@@ -1951,6 +1951,11 @@ bool QMetalSwapChain::buildOrResize()
         qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
                  m_depthStencil->sampleCount(), m_sampleCount);
     }
+    if (m_depthStencil && m_depthStencil->pixelSize() != pixelSize) {
+        qWarning("Depth-stencil buffer's size (%dx%d) does not match the layer size (%dx%d). Expect problems.",
+                 m_depthStencil->pixelSize().width(), m_depthStencil->pixelSize().height(),
+                 pixelSize.width(), pixelSize.height());
+    }
 
     rtWrapper.d->pixelSize = pixelSize;
     rtWrapper.d->colorAttCount = 1;

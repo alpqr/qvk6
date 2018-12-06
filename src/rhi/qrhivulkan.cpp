@@ -4171,14 +4171,19 @@ bool QVkSwapChain::buildOrResize()
     if (!ensureSurface())
         return false;
 
+    QRHI_RES_RHI(QRhiVulkan);
+    if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
+        return false;
+
     if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {
         qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
                  m_depthStencil->sampleCount(), m_sampleCount);
     }
-
-    QRHI_RES_RHI(QRhiVulkan);
-    if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
-        return false;
+    if (m_depthStencil && m_depthStencil->pixelSize() != pixelSize) {
+        qWarning("Depth-stencil buffer's size (%dx%d) does not match the surface size (%dx%d). Expect problems.",
+                 m_depthStencil->pixelSize().width(), m_depthStencil->pixelSize().height(),
+                 pixelSize.width(), pixelSize.height());
+    }
 
     if (!m_renderPassDesc)
         qWarning("QVkSwapChain: No renderpass descriptor set. See newCompatibleRenderPassDescriptor() and setRenderPassDescriptor().");

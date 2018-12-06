@@ -2308,7 +2308,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         prepareForTransferSrc(cb, utexD);
 
         const uint layerCount = utexD->m_flags.testFlag(QRhiTexture::CubeMap) ? 6 : 1;
-        for (int level = 1; level < utexD->mipLevelCount; ++level) {
+        for (uint level = 1; level < utexD->mipLevelCount; ++level) {
             if (level > 1) {
                 imageSubResBarrier(cb, utexD,
                                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -2546,6 +2546,7 @@ VkSampleCountFlagBits QRhiVulkan::effectiveSampleCount(int sampleCount)
     }
 
     Q_UNREACHABLE();
+    return VK_SAMPLE_COUNT_1_BIT;
 }
 
 QRhiSwapChain *QRhiVulkan::createSwapChain()

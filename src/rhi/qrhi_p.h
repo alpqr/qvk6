@@ -205,6 +205,10 @@ struct QRhiResourceUpdateBatchPrivate
     };
 
     struct TextureMipGen {
+        TextureMipGen() { }
+        TextureMipGen(QRhiTexture *tex_) : tex(tex_)
+        { }
+
         QRhiTexture *tex = nullptr;
     };
 

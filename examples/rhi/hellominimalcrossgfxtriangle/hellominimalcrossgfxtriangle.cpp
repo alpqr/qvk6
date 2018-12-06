@@ -370,20 +370,18 @@ void Window::releaseResources()
 
 void Window::resizeSwapChain()
 {
-    const QSize outputSize = size() * devicePixelRatio();
+    const QSize outputSize = m_sc->surfacePixelSize();
 
     m_ds->setPixelSize(outputSize);
     m_ds->build(); // == m_ds->release(); m_ds->build();
 
-    m_sc->setRequestedPixelSize(outputSize);
     m_hasSwapChain = m_sc->buildOrResize();
 
     m_elapsedMs = 0;
     m_elapsedCount = 0;
 
-    const QSize outputSizeInPixels = m_sc->effectivePixelSize();
     m_proj = m_r->clipSpaceCorrMatrix();
-    m_proj.perspective(45.0f, outputSizeInPixels.width() / (float) outputSizeInPixels.height(), 0.01f, 100.0f);
+    m_proj.perspective(45.0f, outputSize.width() / (float) outputSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
 }
 
@@ -403,7 +401,7 @@ void Window::render()
     // If the window got resized or got newly exposed, resize the swapchain.
     // (the newly-exposed case is not actually required by some
     // platforms/backends, but f.ex. Vulkan on Windows seems to need it)
-    if (m_sc->requestedPixelSize() != size() * devicePixelRatio() || m_newlyExposed) {
+    if (m_sc->currentPixelSize() != m_sc->surfacePixelSize() || m_newlyExposed) {
         resizeSwapChain();
         if (!m_hasSwapChain)
             return;
@@ -454,7 +452,7 @@ void Window::render()
     u->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
-    const QSize outputSizeInPixels = m_sc->effectivePixelSize();
+    const QSize outputSizeInPixels = m_sc->currentPixelSize();
 
     // Apply buffer updates, clear, start the renderpass (where applicable).
     cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);

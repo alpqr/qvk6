@@ -858,10 +858,10 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
     return true;
 }
 
-bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
-                                   QRhiSwapChain::SurfaceImportFlags flags, QRhiSwapChain *swapChain)
+bool QRhiVulkan::recreateSwapChain(QRhiSwapChain *swapChain)
 {
-    if (pixelSize.isEmpty())
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
+    if (swapChainD->pixelSize.isEmpty())
         return false;
 
     df->vkDeviceWaitIdle(dev);
@@ -878,24 +878,11 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
         }
     }
 
-
     VkSurfaceCapabilitiesKHR surfaceCaps;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDev, surface, &surfaceCaps);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physDev, swapChainD->surface, &surfaceCaps);
     quint32 reqBufferCount = QVkSwapChain::DEFAULT_BUFFER_COUNT;
     if (surfaceCaps.maxImageCount)
         reqBufferCount = qBound(surfaceCaps.minImageCount, reqBufferCount, surfaceCaps.maxImageCount);
-
-    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
-    VkExtent2D bufferSize = surfaceCaps.currentExtent;
-    if (bufferSize.width == quint32(-1)) {
-        Q_ASSERT(bufferSize.height == quint32(-1));
-        bufferSize.width = swapChainD->m_requestedPixelSize.width();
-        bufferSize.height = swapChainD->m_requestedPixelSize.height();
-    }
-
-    swapChainD->pixelSize = QSize(bufferSize.width, bufferSize.height);
-    if (swapChainD->pixelSize.isEmpty())
-        return false;
 
     VkSurfaceTransformFlagBitsKHR preTransform =
         (surfaceCaps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
@@ -907,13 +894,13 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
         ? VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
         : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
-    if (flags.testFlag(QRhiSwapChain::SurfaceHasPreMulAlpha)
+    if (swapChainD->m_flags.testFlag(QRhiSwapChain::SurfaceHasPreMulAlpha)
             && (surfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR))
     {
         compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
     }
 
-    if (flags.testFlag(QRhiSwapChain::SurfaceHasNonPreMulAlpha)
+    if (swapChainD->m_flags.testFlag(QRhiSwapChain::SurfaceHasNonPreMulAlpha)
             && (surfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR))
     {
         compositeAlpha = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
@@ -924,17 +911,18 @@ bool QRhiVulkan::recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize,
     if (swapChainD->supportsReadback)
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-    qDebug("Creating new swapchain of %d buffers, size %dx%d", reqBufferCount, bufferSize.width, bufferSize.height);
+    qDebug("Creating new swapchain of %d buffers, size %dx%d",
+           reqBufferCount, swapChainD->pixelSize.width(), swapChainD->pixelSize.height());
 
     VkSwapchainKHR oldSwapChain = swapChainD->sc;
     VkSwapchainCreateInfoKHR swapChainInfo;
     memset(&swapChainInfo, 0, sizeof(swapChainInfo));
     swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-    swapChainInfo.surface = surface;
+    swapChainInfo.surface = swapChainD->surface;
     swapChainInfo.minImageCount = reqBufferCount;
     swapChainInfo.imageFormat = swapChainD->colorFormat;
     swapChainInfo.imageColorSpace = swapChainD->colorSpace;
-    swapChainInfo.imageExtent = bufferSize;
+    swapChainInfo.imageExtent = VkExtent2D { uint32_t(swapChainD->pixelSize.width()), uint32_t(swapChainD->pixelSize.height()) };
     swapChainInfo.imageArrayLayers = 1;
     swapChainInfo.imageUsage = usage;
     swapChainInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -1157,7 +1145,7 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
     swapChainD->cbWrapper.cb = w->currentCommandBuffer();
 
     swapChainD->rtWrapper.d.fb = w->currentFramebuffer();
-    swapChainD->m_requestedPixelSize = swapChainD->pixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
+    swapChainD->m_currentPixelSize = swapChainD->pixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
 
     currentFrameSlot = w->currentFrame();
     currentSwapChain = swapChainD;
@@ -4060,9 +4048,27 @@ QRhiRenderTarget *QVkSwapChain::currentFrameRenderTarget()
     return &rtWrapper;
 }
 
-QSize QVkSwapChain::effectivePixelSize() const
+QSize QVkSwapChain::surfacePixelSize()
 {
-    return pixelSize;
+    if (m_target) {
+        QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
+        return vkw ? vkw->swapChainImageSize() : QSize();
+    }
+
+    ensureSurface();
+
+    // The size from the QWindow may not exactly match the surface... so if a
+    // size is reported from the surface, use that.
+    VkSurfaceCapabilitiesKHR surfaceCaps;
+    memset(&surfaceCaps, 0, sizeof(surfaceCaps));
+    QRHI_RES_RHI(QRhiVulkan);
+    rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR(rhiD->physDev, surface, &surfaceCaps);
+    VkExtent2D bufferSize = surfaceCaps.currentExtent;
+    if (bufferSize.width == quint32(-1)) {
+        Q_ASSERT(bufferSize.height == quint32(-1));
+        return m_window->size() * m_window->devicePixelRatio();
+    }
+    return QSize(bufferSize.width, bufferSize.height);
 }
 
 QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
@@ -4100,6 +4106,7 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
 
 bool QVkSwapChain::ensureSurface()
 {
+    Q_ASSERT(m_window);
     surface = QVulkanInstance::surfaceForWindow(m_window);
     if (!surface) {
         qWarning("Failed to get surface for window");
@@ -4155,7 +4162,7 @@ bool QVkSwapChain::buildOrResize()
         if (vkw) {
             rtWrapper.d.rp = QRHI_RES(QVkRenderPassDescriptor, m_renderPassDesc);
             Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);
-            m_requestedPixelSize = pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
+            m_currentPixelSize = pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
             rtWrapper.d.colorAttCount = 1;
             rtWrapper.d.dsAttCount = 1;
             rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
@@ -4172,8 +4179,11 @@ bool QVkSwapChain::buildOrResize()
     if (!ensureSurface())
         return false;
 
+    m_currentPixelSize = surfacePixelSize();
+    pixelSize = m_currentPixelSize;
+
     QRHI_RES_RHI(QRhiVulkan);
-    if (!rhiD->recreateSwapChain(surface, m_requestedPixelSize, m_flags, this))
+    if (!rhiD->recreateSwapChain(this))
         return false;
 
     if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {

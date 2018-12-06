@@ -85,7 +85,7 @@ void Renderer::initSwapChainResources()
 {
     m_sc->buildOrResize(); // this just wraps the qvulkanwindow's swapchain and other resources
 
-    m_triRenderer.resize(m_sc->effectivePixelSize());
+    m_triRenderer.resize(m_sc->currentPixelSize());
 }
 
 void Renderer::releaseSwapChainResources()
@@ -118,7 +118,7 @@ void Renderer::startNextFrame()
     m_triRenderer.queueResourceUpdates(u);
 
     cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
-    m_triRenderer.queueDraw(cb, m_sc->effectivePixelSize());
+    m_triRenderer.queueDraw(cb, m_sc->currentPixelSize());
     cb->endPass();
 
     m_r->endFrame(m_sc);

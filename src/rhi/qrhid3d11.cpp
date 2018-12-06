@@ -2422,9 +2422,10 @@ QRhiRenderTarget *QD3D11SwapChain::currentFrameRenderTarget()
     return &rt;
 }
 
-QSize QD3D11SwapChain::effectivePixelSize() const
+QSize QD3D11SwapChain::surfacePixelSize()
 {
-    return pixelSize;
+    Q_ASSERT(m_window);
+    return m_window->size() * m_window->devicePixelRatio();
 }
 
 QRhiRenderPassDescriptor *QD3D11SwapChain::newCompatibleRenderPassDescriptor()
@@ -2477,7 +2478,8 @@ bool QD3D11SwapChain::buildOrResize()
     Q_ASSERT(!swapChain || window == m_window);
 
     window = m_window;
-    pixelSize = m_requestedPixelSize;
+    m_currentPixelSize = surfacePixelSize();
+    pixelSize = m_currentPixelSize;
 
     colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     const DXGI_FORMAT srgbAdjustedFormat = m_flags.testFlag(sRGB) ?

@@ -179,12 +179,11 @@ void ExampleWindow::releaseResources()
 
 void ExampleWindow::recreateSwapChain()
 {
-    const QSize outputSize = size() * devicePixelRatio();
+    const QSize outputSize = m_sc->surfacePixelSize();
 
     m_ds->setPixelSize(outputSize);
     m_ds->build(); // == m_ds->release(); m_ds->build();
 
-    m_sc->setRequestedPixelSize(outputSize);
     m_hasSwapChain = m_sc->buildOrResize();
     m_resizedSwapChain = true;
 }
@@ -202,7 +201,7 @@ void ExampleWindow::render()
     if (!m_hasSwapChain || m_notExposed)
         return;
 
-    if (m_sc->requestedPixelSize() != size() * devicePixelRatio() || m_newlyExposed) {
+    if (m_sc->currentPixelSize() != m_sc->surfacePixelSize() || m_newlyExposed) {
         recreateSwapChain();
         if (!m_hasSwapChain)
             return;
@@ -221,7 +220,7 @@ void ExampleWindow::render()
         return;
     }
 
-    const QSize outputSize = m_sc->effectivePixelSize();
+    const QSize outputSize = m_sc->currentPixelSize();
     if (m_resizedSwapChain) {
         m_resizedSwapChain = false;
         m_triRenderer.resize(outputSize);

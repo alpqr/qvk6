@@ -257,7 +257,7 @@ struct QVkSwapChain : public QRhiSwapChain
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
 
-    QSize effectivePixelSize() const override;
+    QSize surfacePixelSize() override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool buildOrResize() override;
@@ -387,8 +387,7 @@ public:
                               VkImageAspectFlags aspectMask, VkSampleCountFlagBits samples,
                               VkDeviceMemory *mem, VkImage *images, VkImageView *views, int count);
 
-    bool recreateSwapChain(VkSurfaceKHR surface, const QSize &pixelSize, QRhiSwapChain::SurfaceImportFlags flags,
-                           QRhiSwapChain *swapChain);
+    bool recreateSwapChain(QRhiSwapChain *swapChain);
     void releaseSwapChainResources(QRhiSwapChain *swapChain);
 
     VkFormat optimalDepthStencilFormat();

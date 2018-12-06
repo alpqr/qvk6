@@ -61,6 +61,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+clear window vs surface/layer size mess
 mtl: msaa (onscreen)
 mtl: buffer upload with offset/size
 mtl: texcopy

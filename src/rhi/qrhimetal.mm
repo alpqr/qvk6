@@ -1889,7 +1889,7 @@ QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
     return &rtWrapper;
 }
 
-QSize QMetalSwapChain::effectivePixelSize() const
+QSize QMetalSwapChain::surfacePixelSize()
 {
     return pixelSize;
 }

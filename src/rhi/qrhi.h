@@ -850,9 +850,6 @@ public:
     QWindow *window() const { return m_window; }
     void setWindow(QWindow *window) { m_window = window; }
 
-    QSize requestedPixelSize() const { return m_requestedPixelSize; }
-    void setRequestedPixelSize(const QSize &size) { m_requestedPixelSize = size; }
-
     SurfaceImportFlags flags() const { return m_flags; }
     void setFlags(SurfaceImportFlags f) { m_flags = f; }
 
@@ -870,21 +867,27 @@ public:
     QObject *target() const { return m_target; }
     void setTarget(QObject *obj) { m_target = obj; }
 
+    // Returns the size with which the swapchain was last successfully built.
+    // Use this to decide or buildOrResize() needs to be called again: if
+    // currentPixelSize() != surfacePixelSize() then the swapchain needs to
+    // be resized.
+    QSize currentPixelSize() const { return m_currentPixelSize; }
+
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
 
-    // Applications are expected to use requestedPixelSize() for logic like "if
-    // qwindow->size() * qwindow->dpr() != requestedPixelSize() then
-    // resize_swapchain", and effectivePixelSize() for all graphics
-    // calculations, like the viewport. On some platforms they may not be the
-    // same, e.g. some Vulkan implementations on Windows were observed to make
-    // the swapchain buffers' height off by one on high dpi screens, this is
-    // then reflected in the effective size.
-    virtual QSize effectivePixelSize() const = 0;
+    // The size of the window's associated surface or layer. Do not assume this
+    // is the same as size() * devicePixelRatio()! Can be called before
+    // buildOrResize() (with window set), which allows setting the correct size
+    // for the depth-stencil buffer that is then used together with the
+    // swapchain's color buffers. Also used in combination with
+    // currentPixelSize() to detect size changes.
+    virtual QSize surfacePixelSize() = 0;
 
-    // To be called before build() with relevant parameters like depthStencil and sampleCount set.
-    // As an exception to the common rules, m_depthStencil is not required to be built yet.
-    // Note setRenderPassDescriptor(), that must still be called afterwards (but before buildOrResize()).
+    // To be called before build() with relevant parameters like depthStencil
+    // and sampleCount set. As an exception to the common rules, m_depthStencil
+    // is not required to be built yet. Note setRenderPassDescriptor(), that
+    // must still be called afterwards (but before buildOrResize()).
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
 
     // As the name suggests, this is slightly different from the typical
@@ -898,12 +901,12 @@ public:
 protected:
     QRhiSwapChain(QRhiImplementation *rhi);
     QWindow *m_window = nullptr;
-    QSize m_requestedPixelSize;
     SurfaceImportFlags m_flags;
     QRhiRenderBuffer *m_depthStencil = nullptr;
     int m_sampleCount = 1;
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
     QObject *m_target = nullptr;
+    QSize m_currentPixelSize;
     void *m_reserved;
 };
 

@@ -272,7 +272,7 @@ void Window::customRender()
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
-    const QSize outputSizeInPixels = m_sc->effectivePixelSize();
+    const QSize outputSizeInPixels = m_sc->currentPixelSize();
 
     cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
 

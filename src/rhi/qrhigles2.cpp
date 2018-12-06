@@ -2042,9 +2042,10 @@ QRhiRenderTarget *QGles2SwapChain::currentFrameRenderTarget()
     return &rt;
 }
 
-QSize QGles2SwapChain::effectivePixelSize() const
+QSize QGles2SwapChain::surfacePixelSize()
 {
-    return pixelSize;
+    Q_ASSERT(m_window);
+    return m_window->size() * m_window->devicePixelRatio();
 }
 
 QRhiRenderPassDescriptor *QGles2SwapChain::newCompatibleRenderPassDescriptor()
@@ -2055,7 +2056,8 @@ QRhiRenderPassDescriptor *QGles2SwapChain::newCompatibleRenderPassDescriptor()
 bool QGles2SwapChain::buildOrResize()
 {
     surface = m_window;
-    pixelSize = m_requestedPixelSize;
+    m_currentPixelSize = surfacePixelSize();
+    pixelSize = m_currentPixelSize;
 
     rt.d.rp = QRHI_RES(QGles2RenderPassDescriptor, m_renderPassDesc);
     rt.d.pixelSize = pixelSize;

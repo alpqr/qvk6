@@ -4055,7 +4055,8 @@ QSize QVkSwapChain::surfacePixelSize()
         return vkw ? vkw->swapChainImageSize() : QSize();
     }
 
-    ensureSurface();
+    if (!ensureSurface())
+        return QSize();
 
     // The size from the QWindow may not exactly match the surface... so if a
     // size is reported from the surface, use that.
@@ -4175,9 +4176,6 @@ bool QVkSwapChain::buildOrResize()
     // Can be called multiple times due to window resizes - that is not the
     // same as a simple release+build (as with other resources). Thus no
     // release() here. See recreateSwapChain() below.
-
-    if (!ensureSurface())
-        return false;
 
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;

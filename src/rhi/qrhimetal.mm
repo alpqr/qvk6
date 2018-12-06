@@ -1891,7 +1891,15 @@ QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
 
 QSize QMetalSwapChain::surfacePixelSize()
 {
-    return pixelSize;
+    NSView *v = (NSView *) m_window->winId();
+    if (v) {
+        CAMetalLayer *layer = (CAMetalLayer *) [v layer];
+        if (layer) {
+            CGSize size = [layer drawableSize];
+            return QSize(size.width, size.height);
+        }
+    }
+    return QSize();
 }
 
 QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
@@ -1933,8 +1941,8 @@ bool QMetalSwapChain::buildOrResize()
     d->layer = (CAMetalLayer *) [v layer];
     Q_ASSERT(d->layer);
 
-    CGSize size = [d->layer drawableSize];
-    pixelSize = QSize(size.width, size.height);
+    m_currentPixelSize = surfacePixelSize();
+    pixelSize = m_currentPixelSize;
 
     QRHI_RES_RHI(QRhiMetal);
     [d->layer setDevice: rhiD->d->dev];

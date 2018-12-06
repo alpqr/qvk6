@@ -868,7 +868,7 @@ public:
     void setTarget(QObject *obj) { m_target = obj; }
 
     // Returns the size with which the swapchain was last successfully built.
-    // Use this to decide or buildOrResize() needs to be called again: if
+    // Use this to decide if buildOrResize() needs to be called again: if
     // currentPixelSize() != surfacePixelSize() then the swapchain needs to
     // be resized.
     QSize currentPixelSize() const { return m_currentPixelSize; }

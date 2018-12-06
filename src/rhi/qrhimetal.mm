@@ -728,6 +728,28 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         }
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
+        Q_ASSERT(u.src && u.dst);
+        QMetalTexture *srcD = QRHI_RES(QMetalTexture, u.src);
+        QMetalTexture *dstD = QRHI_RES(QMetalTexture, u.dst);
+        const float dx = u.desc.destinationTopLeft.x();
+        const float dy = u.desc.destinationTopLeft.y();
+        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        const float sx = u.desc.sourceTopLeft.x();
+        const float sy = u.desc.sourceTopLeft.y();
+
+        ensureBlit();
+        [blitEnc copyFromTexture: srcD->d->tex
+                                  sourceSlice: u.desc.sourceLayer
+                                  sourceLevel: u.desc.sourceLevel
+                                  sourceOrigin: MTLOriginMake(sx, sy, 0)
+                                  sourceSize: MTLSizeMake(size.width(), size.height(), 1)
+                                  toTexture: dstD->d->tex
+                                  destinationSlice: u.desc.destinationLayer
+                                  destinationLevel: u.desc.destinationLevel
+                                  destinationOrigin: MTLOriginMake(dx, dy, 0)];
+    }
+
     for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
         ensureBlit();
         [blitEnc generateMipmapsForTexture: QRHI_RES(QMetalTexture, u.tex)->d->tex];

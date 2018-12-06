@@ -7,7 +7,6 @@ mtl: msaa (onscreen)
 mtl: srgb (tex, swapchain buf)
 mtl: msaa tex+rt
 mtl: resolveimage (color)
-mtl: buffer upload with offset/size
 mtl: color renderbuffer
 
 gl: tex formats (texture, readback)
@@ -63,6 +62,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: buffer upload with offset/size
 mtl: texcopy
 mtl: tex upload with pos
 mtl: mipmap generation

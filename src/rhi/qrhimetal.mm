@@ -630,9 +630,9 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     for (const QRhiResourceUpdateBatchPrivate::StaticBufferUpload &u : ud->staticBufferUploads) {
         QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, u.buf);
         Q_ASSERT(bufD->m_type != QRhiBuffer::Dynamic);
-        Q_ASSERT(u.data.size() == bufD->m_size);
+        Q_ASSERT(u.offset + u.data.size() <= bufD->m_size);
         for (int i = 0, ie = bufD->m_type == QRhiBuffer::Immutable ? 1 : QMTL_FRAMES_IN_FLIGHT; i != ie; ++i)
-            bufD->d->pendingUpdates[i].append({ u.buf, 0, u.data.size(), u.data.constData() });
+            bufD->d->pendingUpdates[i].append({ u.buf, u.offset, u.data.size(), u.data.constData() });
     }
 
     id<MTLBlitCommandEncoder> blitEnc = nil;

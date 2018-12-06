@@ -78,6 +78,7 @@ struct QMetalRenderBuffer : public QRhiRenderBuffer
     QRhiTexture::Format backingFormat() const override;
 
     QMetalRenderBufferData *d;
+    int samples = 1;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;
@@ -227,8 +228,11 @@ struct QMetalSwapChain : public QRhiSwapChain
 
     bool buildOrResize() override;
 
+    void chooseFormats();
+
     QSize pixelSize;
     int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
+    int samples = 1;
     QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;
     QMetalRenderBuffer *ds = nullptr;
@@ -312,6 +316,7 @@ public:
     void executeDeferredReleases(bool forced = false);
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
+    int effectiveSampleCount(int sampleCount) const;
 
     bool importedDevice = false;
     bool inFrame = false;

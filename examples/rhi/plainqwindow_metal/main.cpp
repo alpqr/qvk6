@@ -67,6 +67,8 @@ void MetalWindow::init()
     QRhiMetalInitParams params;
     m_r = QRhi::create(QRhi::Metal, &params);
 
+    //setSampleCount(4); // enable 4x MSAA (except for the render-to-texture pass)
+
     ExampleWindow::init();
 }
 

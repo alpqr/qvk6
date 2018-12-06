@@ -3,7 +3,6 @@ mtl: readback (tex, backbuffer)
 mtl: compressed textures
 mtl: cubemaps
 mtl: targeting cubemap faces
-mtl: msaa (onscreen)
 mtl: srgb (tex, swapchain buf)
 mtl: msaa tex+rt
 mtl: resolveimage (color)
@@ -62,6 +61,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: msaa (onscreen)
 mtl: buffer upload with offset/size
 mtl: texcopy
 mtl: tex upload with pos

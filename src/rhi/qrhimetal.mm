@@ -146,6 +146,7 @@ struct QMetalRenderTargetData
     struct {
         id<MTLTexture> colorTex[QMetalRenderPassDescriptor::MAX_COLOR_ATTACHMENTS];
         id<MTLTexture> dsTex = nil;
+        id<MTLTexture> resolveTex = nil;
         bool hasStencil = false;
     } fb;
 };
@@ -170,6 +171,8 @@ struct QMetalSwapChainData
     dispatch_semaphore_t sem = nullptr;
     id<MTLCommandBuffer> cb[QMTL_FRAMES_IN_FLIGHT];
     MTLRenderPassDescriptor *rp = nullptr;
+    id<MTLTexture> msaaTex[QMTL_FRAMES_IN_FLIGHT];
+    MTLPixelFormat colorFormat;
 };
 
 QRhiMetal::QRhiMetal(QRhiInitParams *params)
@@ -224,7 +227,18 @@ void QRhiMetal::destroy()
 
 QVector<int> QRhiMetal::supportedSampleCounts() const
 {
-    return { 1 };
+    return { 1, 2, 4, 8 };
+}
+
+int QRhiMetal::effectiveSampleCount(int sampleCount) const
+{
+    // Stay compatible with QSurfaceFormat and friends where samples == 0 means the same as 1.
+    const int s = qBound(1, sampleCount, 64);
+    if (!supportedSampleCounts().contains(s)) {
+        qWarning("Attempted to set unsupported sample count %d", sampleCount);
+        return 1;
+    }
+    return s;
 }
 
 QRhiSwapChain *QRhiMetal::createSwapChain()
@@ -540,8 +554,16 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     swapChainD->cbWrapper.d->cb = swapChainD->d->cb[currentFrameSlot];
     swapChainD->cbWrapper.resetState();
 
-    swapChainD->rtWrapper.d->fb.colorTex[0] = swapChainD->d->curDrawable.texture;
+    id<MTLTexture> scTex = swapChainD->d->curDrawable.texture;
+    id<MTLTexture> resolveTex = nil;
+    if (swapChainD->samples > 1) {
+        resolveTex = scTex;
+        scTex = swapChainD->d->msaaTex[currentFrameSlot];
+    }
+
+    swapChainD->rtWrapper.d->fb.colorTex[0] = scTex;
     swapChainD->rtWrapper.d->fb.dsTex = swapChainD->ds ? swapChainD->ds->d->tex : nil;
+    swapChainD->rtWrapper.d->fb.resolveTex = resolveTex;
     swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
 
     executeDeferredReleases();
@@ -830,6 +852,13 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
     for (int i = 0; i < rtD->colorAttCount; ++i)
         cbD->d->currentPassRpDesc.colorAttachments[i].texture = rtD->fb.colorTex[i];
 
+    // MSAA swapchains pass the multisample texture in colorTex and the
+    // non-multisample texture (from the drawable) in resolveTex.
+    if (rtD->fb.resolveTex) {
+        cbD->d->currentPassRpDesc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
+        cbD->d->currentPassRpDesc.colorAttachments[0].resolveTexture = rtD->fb.resolveTex;
+    }
+
     if (rtD->dsAttCount) {
         Q_ASSERT(rtD->fb.dsTex);
         cbD->d->currentPassRpDesc.depthAttachment.texture = rtD->fb.dsTex;
@@ -991,11 +1020,15 @@ bool QMetalRenderBuffer::build()
     d->format = rhiD->d->dev.depth24Stencil8PixelFormatSupported
             ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
 
+    samples = rhiD->effectiveSampleCount(m_sampleCount);
+
     MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
-    desc.textureType = MTLTextureType2D;
+    desc.textureType = samples > 1 ? MTLTextureType2DMultisample : MTLTextureType2D;
     desc.pixelFormat = d->format;
     desc.width = m_pixelSize.width();
     desc.height = m_pixelSize.height();
+    if (samples > 1)
+        desc.sampleCount = samples;
     desc.resourceOptions = MTLResourceStorageModePrivate;
     desc.storageMode = MTLStorageModePrivate;
     desc.usage = MTLTextureUsageRenderTarget;
@@ -1744,7 +1777,7 @@ bool QMetalGraphicsPipeline::build()
             rpDesc.stencilAttachmentPixelFormat = fmt;
     }
 
-    rpDesc.sampleCount = 1;
+    rpDesc.sampleCount = rhiD->effectiveSampleCount(m_sampleCount);
 
     NSError *err = nil;
     d->ps = [rhiD->d->dev newRenderPipelineStateWithDescriptor: rpDesc error: &err];
@@ -1824,6 +1857,8 @@ QMetalSwapChain::QMetalSwapChain(QRhiImplementation *rhi)
       cbWrapper(rhi),
       d(new QMetalSwapChainData)
 {
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+        d->msaaTex[i] = nil;
 }
 
 QMetalSwapChain::~QMetalSwapChain()
@@ -1837,6 +1872,10 @@ void QMetalSwapChain::release()
     if (d->sem) {
         dispatch_release(d->sem);
         d->sem = nullptr;
+    }
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+        [d->msaaTex[i] release];
+        d->msaaTex[i] = nil;
     }
 }
 
@@ -1857,18 +1896,27 @@ QSize QMetalSwapChain::effectivePixelSize() const
 
 QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
 {
+    chooseFormats(); // ensure colorFormat and similar are filled out
+
     QRHI_RES_RHI(QRhiMetal);
     QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
     rpD->colorAttachmentCount = 1;
     rpD->hasDepthStencil = m_depthStencil != nullptr;
 
-    rpD->colorFormat[0] = MTLPixelFormatBGRA8Unorm;
+    rpD->colorFormat[0] = d->colorFormat;
 
     // m_depthStencil may not be built yet so cannot rely on computed fields in it
     rpD->dsFormat = rhiD->d->dev.depth24Stencil8PixelFormatSupported
             ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
 
     return rpD;
+}
+
+void QMetalSwapChain::chooseFormats()
+{
+    QRHI_RES_RHI(QRhiMetal);
+    samples = rhiD->effectiveSampleCount(m_sampleCount);
+    d->colorFormat = MTLPixelFormatBGRA8Unorm;
 }
 
 bool QMetalSwapChain::buildOrResize()
@@ -1896,13 +1944,36 @@ bool QMetalSwapChain::buildOrResize()
 
     currentFrame = 0;
 
+    chooseFormats();
+
     ds = m_depthStencil ? QRHI_RES(QMetalRenderBuffer, m_depthStencil) : nullptr;
+    if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {
+        qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
+                 m_depthStencil->sampleCount(), m_sampleCount);
+    }
 
     rtWrapper.d->pixelSize = pixelSize;
     rtWrapper.d->colorAttCount = 1;
     rtWrapper.d->dsAttCount = ds ? 1 : 0;
 
     qDebug("got CAMetalLayer, size %dx%d", pixelSize.width(), pixelSize.height());
+
+    if (samples > 1) {
+        MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
+        desc.textureType = MTLTextureType2DMultisample;
+        desc.pixelFormat = d->colorFormat;
+        desc.width = pixelSize.width();
+        desc.height = pixelSize.height();
+        desc.sampleCount = samples;
+        desc.resourceOptions = MTLResourceStorageModePrivate;
+        desc.storageMode = MTLStorageModePrivate;
+        desc.usage = MTLTextureUsageRenderTarget;
+        for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+            [d->msaaTex[i] release];
+            d->msaaTex[i] = [rhiD->d->dev newTextureWithDescriptor: desc];
+        }
+        [desc release];
+    }
 
     return true;
 }

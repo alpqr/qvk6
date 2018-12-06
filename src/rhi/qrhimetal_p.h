@@ -206,7 +206,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     uint currentSrbGeneration;
     QRhiBuffer *currentIndexBuffer;
     quint32 currentIndexOffset;
-    QRhi::IndexFormat currentIndexFormat;
+    QRhiCommandBuffer::IndexFormat currentIndexFormat;
 
     void resetState();
 };

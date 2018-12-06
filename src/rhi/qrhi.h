@@ -478,8 +478,8 @@ protected:
                 int sampleCount_, Flags flags_);
     Format m_format;
     QSize m_pixelSize;
-    Flags m_flags;
     int m_sampleCount;
+    Flags m_flags;
     void *m_reserved;
 };
 

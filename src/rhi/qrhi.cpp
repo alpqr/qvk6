@@ -471,7 +471,7 @@ void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb,
 
 void QRhiResourceUpdateBatch::generateMips(QRhiTexture *tex)
 {
-    d->textureMipGens.append({ tex });
+    d->textureMipGens.append(QRhiResourceUpdateBatchPrivate::TextureMipGen(tex));
 }
 
 void QRhiResourceUpdateBatch::prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags)

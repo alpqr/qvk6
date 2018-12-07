@@ -790,6 +790,7 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
 {
     QVarLengthArray<VkAttachmentDescription, 8> attDescs;
     QVarLengthArray<VkAttachmentReference, 8> colorRefs;
+    QVarLengthArray<VkAttachmentReference, 8> resolveRefs;
     const int colorAttCount = colorAttachments.count();
 
     // attachment list layout is color (0-8), ds (0-1), resolve (0-8)
@@ -799,20 +800,21 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachments[i].renderBuffer);
         Q_ASSERT(texD || rbD);
         const VkFormat vkformat = texD ? texD->vkformat : rbD->vkformat;
+        const VkSampleCountFlagBits samples = texD ? texD->samples : rbD->samples;
 
         VkAttachmentDescription attDesc;
         memset(&attDesc, 0, sizeof(attDesc));
         attDesc.format = vkformat;
-        attDesc.samples = texD ? texD->samples : rbD->samples;
+        attDesc.samples = samples;
         attDesc.loadOp = preserveColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attDesc.storeOp = samples > VK_SAMPLE_COUNT_1_BIT ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc.initialLayout = preserveColor ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        attDesc.finalLayout = samples > VK_SAMPLE_COUNT_1_BIT ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         attDescs.append(attDesc);
 
-        const VkAttachmentReference ref = { uint32_t(i), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+        const VkAttachmentReference ref = { uint32_t(attDescs.count() - 1), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
         colorRefs.append(ref);
     }
 
@@ -834,14 +836,42 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         attDesc.finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
         attDescs.append(attDesc);
     }
+    VkAttachmentReference dsRef = { uint32_t(attDescs.count() - 1), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
-    VkAttachmentReference dsRef = { uint32_t(colorAttCount), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+    for (int i = 0; i < colorAttCount; ++i) {
+        if (colorAttachments[i].resolveTexture) {
+            QVkTexture *rtexD = QRHI_RES(QVkTexture, colorAttachments[i].resolveTexture);
+            if (rtexD->samples > VK_SAMPLE_COUNT_1_BIT)
+                qWarning("Resolving into a multisample texture is not supported");
+
+            VkAttachmentDescription attDesc;
+            memset(&attDesc, 0, sizeof(attDesc));
+            attDesc.format = rtexD->vkformat;
+            attDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+            attDesc.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE; // ignored
+            attDesc.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+            attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+            attDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            attDesc.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            attDescs.append(attDesc);
+
+            const VkAttachmentReference ref = { uint32_t(attDescs.count() - 1), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+            resolveRefs.append(ref);
+        } else {
+            const VkAttachmentReference ref = { VK_ATTACHMENT_UNUSED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+            resolveRefs.append(ref);
+        }
+    }
+
     VkSubpassDescription subPassDesc;
     memset(&subPassDesc, 0, sizeof(subPassDesc));
     subPassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     subPassDesc.colorAttachmentCount = colorRefs.count();
+    Q_ASSERT(colorRefs.count() == resolveRefs.count());
     subPassDesc.pColorAttachments = !colorRefs.isEmpty() ? colorRefs.constData() : nullptr;
     subPassDesc.pDepthStencilAttachment = hasDepthStencil ? &dsRef : nullptr;
+    subPassDesc.pResolveAttachments = !resolveRefs.isEmpty() ? resolveRefs.constData() : nullptr;
 
     VkRenderPassCreateInfo rpInfo;
     memset(&rpInfo, 0, sizeof(rpInfo));
@@ -2375,8 +2405,10 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 break;
             case QRhiVulkan::DeferredReleaseEntry::TextureRenderTarget:
                 df->vkDestroyFramebuffer(dev, e.textureRenderTarget.fb, nullptr);
-                for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att)
+                for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att) {
                     df->vkDestroyImageView(dev, e.textureRenderTarget.rtv[att], nullptr);
+                    df->vkDestroyImageView(dev, e.textureRenderTarget.resrtv[att], nullptr);
+                }
                 break;
             case QRhiVulkan::DeferredReleaseEntry::RenderPass:
                 df->vkDestroyRenderPass(dev, e.renderPass.rp, nullptr);
@@ -3510,8 +3542,10 @@ QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi,
                                                Flags flags)
     : QRhiTextureRenderTarget(rhi, desc, flags)
 {
-    for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att)
+    for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att) {
         rtv[att] = VK_NULL_HANDLE;
+        resrtv[att] = VK_NULL_HANDLE;
+    }
 }
 
 void QVkTextureRenderTarget::release()
@@ -3528,7 +3562,9 @@ void QVkTextureRenderTarget::release()
 
     for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att) {
         e.textureRenderTarget.rtv[att] = rtv[att];
+        e.textureRenderTarget.resrtv[att] = resrtv[att];
         rtv[att] = VK_NULL_HANDLE;
+        resrtv[att] = VK_NULL_HANDLE;
     }
 
     QRHI_RES_RHI(QRhiVulkan);
@@ -3591,7 +3627,7 @@ bool QVkTextureRenderTarget::build()
             viewInfo.subresourceRange.layerCount = 1;
             VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &rtv[i]);
             if (err != VK_SUCCESS) {
-                qWarning("Failed to create cubemap face image view: %d", err);
+                qWarning("Failed to create render target image view: %d", err);
                 return false;
             }
             views.append(rtv[i]);
@@ -3618,6 +3654,36 @@ bool QVkTextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
+    d.resolveAttCount = 0;
+    for (int i = 0; i < d.colorAttCount; ++i) {
+        if (m_desc.colorAttachments[i].resolveTexture) {
+            d.resolveAttCount += 1;
+            QVkTexture *resTexD = QRHI_RES(QVkTexture, m_desc.colorAttachments[i].resolveTexture);
+
+            VkImageViewCreateInfo viewInfo;
+            memset(&viewInfo, 0, sizeof(viewInfo));
+            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            viewInfo.image = resTexD->image;
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            viewInfo.format = resTexD->vkformat;
+            viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+            viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+            viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+            viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            viewInfo.subresourceRange.baseMipLevel = m_desc.colorAttachments[i].resolveLevel;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.baseArrayLayer = m_desc.colorAttachments[i].resolveLayer;
+            viewInfo.subresourceRange.layerCount = 1;
+            VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &resrtv[i]);
+            if (err != VK_SUCCESS) {
+                qWarning("Failed to create render target resolve image view: %d", err);
+                return false;
+            }
+            views.append(resrtv[i]);
+        }
+    }
+
     if (!m_renderPassDesc)
         qWarning("QVkTextureRenderTarget: No renderpass descriptor set. See newCompatibleRenderPassDescriptor() and setRenderPassDescriptor().");
 
@@ -3628,7 +3694,7 @@ bool QVkTextureRenderTarget::build()
     memset(&fbInfo, 0, sizeof(fbInfo));
     fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     fbInfo.renderPass = d.rp->rp;
-    fbInfo.attachmentCount = d.colorAttCount + d.dsAttCount;
+    fbInfo.attachmentCount = d.colorAttCount + d.dsAttCount + d.resolveAttCount;
     fbInfo.pAttachments = views.constData();
     fbInfo.width = d.pixelSize.width();
     fbInfo.height = d.pixelSize.height();

@@ -175,6 +175,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
 
     QVkRenderTargetData d;
     VkImageView rtv[QVkRenderTargetData::MAX_COLOR_ATTACHMENTS];
+    VkImageView resrtv[QVkRenderTargetData::MAX_COLOR_ATTACHMENTS];
     int lastActiveFrameSlot = -1;
     friend class QRhiVulkan;
 };
@@ -551,6 +552,7 @@ public:
             struct {
                 VkFramebuffer fb;
                 VkImageView rtv[QVkRenderTargetData::MAX_COLOR_ATTACHMENTS];
+                VkImageView resrtv[QVkRenderTargetData::MAX_COLOR_ATTACHMENTS];
             } textureRenderTarget;
             struct {
                 VkRenderPass rp;

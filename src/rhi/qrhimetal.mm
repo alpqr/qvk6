@@ -1110,18 +1110,35 @@ bool QMetalTexture::build()
         release();
 
     const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
+    const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
+    QRHI_RES_RHI(QRhiMetal);
     d->format = toMetalTextureFormat(m_format);
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    samples = rhiD->effectiveSampleCount(m_sampleCount);
+    if (samples > 1) {
+        if (isCube) {
+            qWarning("Cubemap texture cannot be multisample");
+            return false;
+        }
+        if (hasMipMaps) {
+            qWarning("Multisample texture cannot have mipmaps");
+            return false;
+        }
+    }
 
-    QRHI_RES_RHI(QRhiMetal);
     MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
-    desc.textureType = MTLTextureType2D;
+    if (isCube)
+        desc.textureType = MTLTextureTypeCube;
+    else
+        desc.textureType = samples > 1 ? MTLTextureType2DMultisample : MTLTextureType2D;
     desc.pixelFormat = d->format;
     desc.width = size.width();
     desc.height = size.height();
     desc.mipmapLevelCount = mipLevelCount;
+    if (samples > 1)
+        desc.sampleCount = samples;
     desc.resourceOptions = MTLResourceStorageModePrivate;
     desc.storageMode = MTLStorageModePrivate;
     desc.usage = MTLTextureUsageShaderRead;

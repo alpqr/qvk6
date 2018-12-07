@@ -96,6 +96,7 @@ struct QMetalTexture : public QRhiTexture
 
     QMetalTextureData *d;
     int mipLevelCount = 0;
+    int samples = 1;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;

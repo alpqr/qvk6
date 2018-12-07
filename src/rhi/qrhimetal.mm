@@ -144,7 +144,12 @@ struct QMetalRenderTargetData
     int colorAttCount = 0;
     int dsAttCount = 0;
     struct {
-        id<MTLTexture> colorTex[QMetalRenderPassDescriptor::MAX_COLOR_ATTACHMENTS];
+        struct ColorAtt {
+            id<MTLTexture> tex = nil;
+            int layer = 0;
+            int level = 0;
+        };
+        ColorAtt colorAtt[QMetalRenderPassDescriptor::MAX_COLOR_ATTACHMENTS];
         id<MTLTexture> dsTex = nil;
         id<MTLTexture> resolveTex = nil;
         bool hasStencil = false;
@@ -561,7 +566,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
         scTex = swapChainD->d->msaaTex[currentFrameSlot];
     }
 
-    swapChainD->rtWrapper.d->fb.colorTex[0] = scTex;
+    swapChainD->rtWrapper.d->fb.colorAtt[0] = { scTex, 0, 0 };
     swapChainD->rtWrapper.d->fb.dsTex = swapChainD->ds ? swapChainD->ds->d->tex : nil;
     swapChainD->rtWrapper.d->fb.resolveTex = resolveTex;
     swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
@@ -849,8 +854,11 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
         break;
     }
 
-    for (int i = 0; i < rtD->colorAttCount; ++i)
-        cbD->d->currentPassRpDesc.colorAttachments[i].texture = rtD->fb.colorTex[i];
+    for (int i = 0; i < rtD->colorAttCount; ++i) {
+        cbD->d->currentPassRpDesc.colorAttachments[i].texture = rtD->fb.colorAtt[i].tex;
+        cbD->d->currentPassRpDesc.colorAttachments[i].slice = rtD->fb.colorAtt[i].layer;
+        cbD->d->currentPassRpDesc.colorAttachments[i].level = rtD->fb.colorAtt[i].level;
+    }
 
     // MSAA swapchains pass the multisample texture in colorTex and the
     // non-multisample texture (from the drawable) in resolveTex.
@@ -1334,7 +1342,7 @@ bool QMetalTextureRenderTarget::build()
         QRhiTexture *texture = m_desc.colorAttachments[i].texture;
         Q_ASSERT(texture);
         QMetalTexture *texD = QRHI_RES(QMetalTexture, texture);
-        d->fb.colorTex[i] = texD->d->tex;
+        d->fb.colorAtt[i] = { texD->d->tex, m_desc.colorAttachments[i].layer, m_desc.colorAttachments[i].level };
         if (i == 0)
             d->pixelSize = texD->pixelSize();
     }

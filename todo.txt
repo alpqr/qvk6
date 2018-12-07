@@ -1,7 +1,6 @@
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
 mtl: compressed textures
-mtl: targeting cubemap faces
 mtl: srgb (tex, swapchain buf)
 mtl: resolveimage (color)
 mtl: color renderbuffer
@@ -59,6 +58,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+targeting mip level in texrt
+mtl: targeting cubemap faces
 mtl: cubemaps
 mtl: msaa tex+rt
 clear window vs surface/layer size mess

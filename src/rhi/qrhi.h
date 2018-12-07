@@ -242,6 +242,7 @@ struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
         QRhiTexture *texture = nullptr;
         QRhiRenderBuffer *renderBuffer = nullptr;
         int layer = 0; // face (0..5) for cubemaps
+        int level = 0;
     };
 
     QRhiTextureRenderTargetDescription()

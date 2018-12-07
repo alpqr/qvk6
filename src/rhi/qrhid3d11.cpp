@@ -998,7 +998,7 @@ void QRhiD3D11::finishActiveReadbacks()
         f();
 }
 
-static inline QD3D11BasicRenderTargetData *basicRtData(QRhiRenderTarget *rt)
+static inline QD3D11RenderTargetData *rtData(QRhiRenderTarget *rt)
 {
     switch (rt->type()) {
     case QRhiRenderTarget::RtRef:
@@ -1031,7 +1031,7 @@ void QRhiD3D11::beginPass(QRhiCommandBuffer *cb,
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     bool needsColorClear = true;
-    QD3D11BasicRenderTargetData *rtD = basicRtData(rt);
+    QD3D11RenderTargetData *rtD = rtData(rt);
     if (rt->type() == QRhiRenderTarget::RtTexture) {
         QD3D11TextureRenderTarget *rtTex = QRHI_RES(QD3D11TextureRenderTarget, rt);
         needsColorClear = !rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
@@ -1241,13 +1241,13 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
                 nullsrvs[i] = nullptr;
             context->VSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
             context->PSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
-            QD3D11BasicRenderTargetData *rtD = basicRtData(rt);
+            QD3D11RenderTargetData *rtD = rtData(rt);
             context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rtD->rtv : nullptr, rtD->dsv);
         }
             break;
         case QD3D11CommandBuffer::Command::Clear:
         {
-            QD3D11BasicRenderTargetData *rtD = basicRtData(cmd.args.clear.rt);
+            QD3D11RenderTargetData *rtD = rtData(cmd.args.clear.rt);
             if (cmd.args.clear.mask & QD3D11CommandBuffer::Command::Color) {
                 for (int i = 0; i < rtD->colorAttCount; ++i)
                     context->ClearRenderTargetView(rtD->rtv[i], cmd.args.clear.c);
@@ -1779,7 +1779,7 @@ QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi,
     : QRhiTextureRenderTarget(rhi, desc, flags),
       d(rhi)
 {
-    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i) {
+    for (int i = 0; i < QD3D11RenderTargetData::MAX_COLOR_ATTACHMENTS; ++i) {
         ownsRtv[i] = false;
         rtv[i] = nullptr;
     }
@@ -1796,7 +1796,7 @@ void QD3D11TextureRenderTarget::release()
         dsv = nullptr;
     }
 
-    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i) {
+    for (int i = 0; i < QD3D11RenderTargetData::MAX_COLOR_ATTACHMENTS; ++i) {
         if (rtv[i]) {
             if (ownsRtv[i])
                 rtv[i]->Release();
@@ -1833,11 +1833,16 @@ bool QD3D11TextureRenderTarget::build()
             rtvDesc.Format = toD3DTextureFormat(texD->format(), texD->flags());
             if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
                 rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DARRAY;
+                rtvDesc.Texture2DArray.MipSlice = m_desc.colorAttachments[i].level;
                 rtvDesc.Texture2DArray.FirstArraySlice = m_desc.colorAttachments[i].layer;
                 rtvDesc.Texture2DArray.ArraySize = 1;
             } else {
-                rtvDesc.ViewDimension = texD->sampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
-                                                                   : D3D11_RTV_DIMENSION_TEXTURE2D;
+                if (texD->sampleDesc.Count > 1) {
+                    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2DMS;
+                } else {
+                    rtvDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+                    rtvDesc.Texture2D.MipSlice = m_desc.colorAttachments[i].level;
+                }
             }
             HRESULT hr = rhiD->dev->CreateRenderTargetView(texD->tex, &rtvDesc, &rtv[i]);
             if (FAILED(hr)) {
@@ -1885,7 +1890,7 @@ bool QD3D11TextureRenderTarget::build()
         d.dsAttCount = 0;
     }
 
-    for (int i = 0; i < QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS; ++i)
+    for (int i = 0; i < QD3D11RenderTargetData::MAX_COLOR_ATTACHMENTS; ++i)
         d.rtv[i] = i < d.colorAttCount ? rtv[i] : nullptr;
 
     d.dsv = dsv;

@@ -2434,8 +2434,8 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 break;
             case QRhiVulkan::DeferredReleaseEntry::TextureRenderTarget:
                 df->vkDestroyFramebuffer(dev, e.textureRenderTarget.fb, nullptr);
-                for (int face = 0; face < 6; ++face)
-                    df->vkDestroyImageView(dev, e.textureRenderTarget.cubeFaceView[face], nullptr);
+                for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att)
+                    df->vkDestroyImageView(dev, e.textureRenderTarget.rtv[att], nullptr);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::RenderPass:
                 df->vkDestroyRenderPass(dev, e.renderPass.rp, nullptr);
@@ -3451,7 +3451,7 @@ bool QVkTexture::build()
     viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
     viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
     viewInfo.subresourceRange.aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.levelCount = mipLevelCount;
     viewInfo.subresourceRange.layerCount = isCube ? 6 : 1;
 
     err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &imageView);
@@ -3569,8 +3569,8 @@ QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi,
                                                Flags flags)
     : QRhiTextureRenderTarget(rhi, desc, flags)
 {
-    for (int i = 0; i < 6; ++i)
-        cubeFaceView[i] = VK_NULL_HANDLE;
+    for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att)
+        rtv[att] = VK_NULL_HANDLE;
 }
 
 void QVkTextureRenderTarget::release()
@@ -3585,9 +3585,9 @@ void QVkTextureRenderTarget::release()
     e.textureRenderTarget.fb = d.fb;
     d.fb = VK_NULL_HANDLE;
 
-    for (int i = 0; i < 6; ++i) {
-        e.textureRenderTarget.cubeFaceView[i] = cubeFaceView[i];
-        cubeFaceView[i] = VK_NULL_HANDLE;
+    for (int att = 0; att < QVkRenderTargetData::MAX_COLOR_ATTACHMENTS; ++att) {
+        e.textureRenderTarget.rtv[att] = rtv[att];
+        rtv[att] = VK_NULL_HANDLE;
     }
 
     QRHI_RES_RHI(QRhiVulkan);
@@ -3633,34 +3633,27 @@ bool QVkTextureRenderTarget::build()
         Q_ASSERT(texD || rbD);
         if (texD) {
             Q_ASSERT(texD->flags().testFlag(QRhiTexture::RenderTarget));
-            VkImageView view = texD->imageView;
-            if (texD->flags().testFlag(QRhiTexture::CubeMap)) {
-                const int face = m_desc.colorAttachments[i].layer;
-                Q_ASSERT(face >= 0 && face < 6);
-                if (!cubeFaceView[face]) {
-                    VkImageViewCreateInfo viewInfo;
-                    memset(&viewInfo, 0, sizeof(viewInfo));
-                    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-                    viewInfo.image = texD->image;
-                    viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-                    viewInfo.format = texD->vkformat;
-                    viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-                    viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-                    viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-                    viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-                    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                    viewInfo.subresourceRange.levelCount = 1;
-                    viewInfo.subresourceRange.baseArrayLayer = face;
-                    viewInfo.subresourceRange.layerCount = 1;
-                    VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &cubeFaceView[face]);
-                    if (err != VK_SUCCESS) {
-                        qWarning("Failed to create cubemap face image view: %d", err);
-                        return false;
-                    }
-                }
-                view = cubeFaceView[face];
+            VkImageViewCreateInfo viewInfo;
+            memset(&viewInfo, 0, sizeof(viewInfo));
+            viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+            viewInfo.image = texD->image;
+            viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+            viewInfo.format = texD->vkformat;
+            viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+            viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+            viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+            viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+            viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            viewInfo.subresourceRange.baseMipLevel = m_desc.colorAttachments[i].level;
+            viewInfo.subresourceRange.levelCount = 1;
+            viewInfo.subresourceRange.baseArrayLayer = m_desc.colorAttachments[i].layer;
+            viewInfo.subresourceRange.layerCount = 1;
+            VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &rtv[i]);
+            if (err != VK_SUCCESS) {
+                qWarning("Failed to create cubemap face image view: %d", err);
+                return false;
             }
-            views.append(view);
+            views.append(rtv[i]);
             if (i == 0)
                 d.pixelSize = texD->pixelSize();
         } else if (rbD) {

@@ -1783,8 +1783,9 @@ bool QGles2TextureRenderTarget::build()
     rhiD->f->glGenFramebuffers(1, &framebuffer);
     rhiD->f->glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
-    QRhiTexture *texture = m_desc.colorAttachments.first().texture;
-    QRhiRenderBuffer *renderBuffer = m_desc.colorAttachments.first().renderBuffer;
+    const QRhiTextureRenderTargetDescription::ColorAttachment &colorAtt(m_desc.colorAttachments.constFirst());
+    QRhiTexture *texture = colorAtt.texture;
+    QRhiRenderBuffer *renderBuffer = colorAtt.renderBuffer;
     Q_ASSERT(texture || renderBuffer);
 
     d.rp = QRHI_RES(QGles2RenderPassDescriptor, m_renderPassDesc);
@@ -1793,7 +1794,9 @@ bool QGles2TextureRenderTarget::build()
     if (texture) {
         QGles2Texture *texD = QRHI_RES(QGles2Texture, texture);
         Q_ASSERT(texD->texture && texD->specified);
-        rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texD->target, texD->texture, 0);
+        const GLenum targetBase = texD->flags().testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+        const GLenum target = targetBase + colorAtt.layer;
+        rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, texD->texture, colorAtt.level);
         d.pixelSize = texD->pixelSize();
     } else {
         QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, renderBuffer);

@@ -149,6 +149,7 @@ struct QVkRenderTargetData
     int colorAttCount = 0;
     int dsAttCount = 0;
     int msaaAttCount = 0;
+    static const int MAX_COLOR_ATTACHMENTS = 8;
 };
 
 struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
@@ -173,7 +174,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
     bool build() override;
 
     QVkRenderTargetData d;
-    VkImageView cubeFaceView[6];
+    VkImageView rtv[QVkRenderTargetData::MAX_COLOR_ATTACHMENTS];
     int lastActiveFrameSlot = -1;
     friend class QRhiVulkan;
 };
@@ -549,7 +550,7 @@ public:
             } sampler;
             struct {
                 VkFramebuffer fb;
-                VkImageView cubeFaceView[6];
+                VkImageView rtv[QVkRenderTargetData::MAX_COLOR_ATTACHMENTS];
             } textureRenderTarget;
             struct {
                 VkRenderPass rp;

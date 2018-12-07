@@ -114,9 +114,9 @@ struct QD3D11RenderPassDescriptor : public QRhiRenderPassDescriptor
     void release() override;
 };
 
-struct QD3D11BasicRenderTargetData
+struct QD3D11RenderTargetData
 {
-    QD3D11BasicRenderTargetData(QRhiImplementation *)
+    QD3D11RenderTargetData(QRhiImplementation *)
     {
         for (int i = 0; i < MAX_COLOR_ATTACHMENTS; ++i)
             rtv[i] = nullptr;
@@ -139,7 +139,7 @@ struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
     Type type() const override;
     QSize sizeInPixels() const override;
 
-    QD3D11BasicRenderTargetData d;
+    QD3D11RenderTargetData d;
 };
 
 struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
@@ -153,9 +153,9 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
-    QD3D11BasicRenderTargetData d;
-    bool ownsRtv[QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS];
-    ID3D11RenderTargetView *rtv[QD3D11BasicRenderTargetData::MAX_COLOR_ATTACHMENTS];
+    QD3D11RenderTargetData d;
+    bool ownsRtv[QD3D11RenderTargetData::MAX_COLOR_ATTACHMENTS];
+    ID3D11RenderTargetView *rtv[QD3D11RenderTargetData::MAX_COLOR_ATTACHMENTS];
     bool ownsDsv = false;
     ID3D11DepthStencilView *dsv = nullptr;
     friend class QRhiD3D11;

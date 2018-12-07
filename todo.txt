@@ -3,7 +3,6 @@ mtl: readback (tex, backbuffer)
 mtl: compressed textures
 mtl: srgb (tex, swapchain buf)
 mtl: resolveimage (color)
-mtl: color renderbuffer
 
 gl: tex formats (texture, readback)
 gl: srgb
@@ -58,6 +57,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: color renderbuffer
 targeting mip level in texrt
 mtl: targeting cubemap faces
 mtl: cubemaps

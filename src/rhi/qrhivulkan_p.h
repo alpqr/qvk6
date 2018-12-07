@@ -148,7 +148,7 @@ struct QVkRenderTargetData
     QSize pixelSize;
     int colorAttCount = 0;
     int dsAttCount = 0;
-    int msaaAttCount = 0;
+    int resolveAttCount = 0;
     static const int MAX_COLOR_ATTACHMENTS = 8;
 };
 

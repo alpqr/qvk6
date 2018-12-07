@@ -713,15 +713,16 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
     VkAttachmentDescription attDesc[3];
     memset(attDesc, 0, sizeof(attDesc));
 
-    uint32_t colorAttIndex = 0;
+    // attachment list layout is color (1), ds (0-1), resolve (0-1)
+
     attDesc[0].format = colorFormat;
-    attDesc[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attDesc[0].samples = samples;
     attDesc[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attDesc[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attDesc[0].storeOp = samples > VK_SAMPLE_COUNT_1_BIT ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
     attDesc[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     attDesc[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     attDesc[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attDesc[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    attDesc[0].finalLayout = samples > VK_SAMPLE_COUNT_1_BIT ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     // clear on load + no store + lazy alloc + transient image should play
     // nicely with tiled GPUs (no physical backing necessary for ds buffer)
@@ -735,20 +736,19 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
     attDesc[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     if (samples > VK_SAMPLE_COUNT_1_BIT) {
-        colorAttIndex = 2;
         attDesc[2].format = colorFormat;
-        attDesc[2].samples = samples;
+        attDesc[2].samples = VK_SAMPLE_COUNT_1_BIT;
         attDesc[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         attDesc[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         attDesc[2].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attDesc[2].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc[2].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        attDesc[2].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     }
 
-    VkAttachmentReference colorRef = { colorAttIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-    VkAttachmentReference resolveRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+    VkAttachmentReference colorRef = { 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
     VkAttachmentReference dsRef = { 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+    VkAttachmentReference resolveRef = { 2, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
     VkSubpassDescription subPassDesc;
     memset(&subPassDesc, 0, sizeof(subPassDesc));
@@ -791,6 +791,8 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
     QVarLengthArray<VkAttachmentDescription, 8> attDescs;
     QVarLengthArray<VkAttachmentReference, 8> colorRefs;
     const int colorAttCount = colorAttachments.count();
+
+    // attachment list layout is color (0-8), ds (0-1), resolve (0-8)
 
     for (int i = 0; i < colorAttCount; ++i) {
         QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture);
@@ -1601,7 +1603,7 @@ void QRhiVulkan::beginPass(QRhiCommandBuffer *cb,
         cv.depthStencil = { depthStencilClearValue.d, depthStencilClearValue.s };
         cvs.append(cv);
     }
-    for (int i = 0; i < rtD->msaaAttCount; ++i) {
+    for (int i = 0; i < rtD->resolveAttCount; ++i) {
         VkClearValue cv;
         cv.color = { { colorClearValue.rgba.x(), colorClearValue.rgba.y(), colorClearValue.rgba.z(), colorClearValue.rgba.w() } };
         cvs.append(cv);
@@ -4098,7 +4100,7 @@ bool QVkSwapChain::buildOrResize()
             m_currentPixelSize = pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
             rtWrapper.d.colorAttCount = 1;
             rtWrapper.d.dsAttCount = 1;
-            rtWrapper.d.msaaAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
+            rtWrapper.d.resolveAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
             wrapWindow = vkw;
             return true;
         }
@@ -4142,27 +4144,28 @@ bool QVkSwapChain::buildOrResize()
         ds = nullptr;
     }
     if (samples > VK_SAMPLE_COUNT_1_BIT)
-        rtWrapper.d.msaaAttCount = 1;
+        rtWrapper.d.resolveAttCount = 1;
     else
-        rtWrapper.d.msaaAttCount = 0;
+        rtWrapper.d.resolveAttCount = 0;
 
     for (int i = 0; i < bufferCount; ++i) {
         QVkSwapChain::ImageResources &image(imageRes[i]);
-
-        VkImageView views[3] = {
-            image.imageView,
+        VkImageView views[3] = { // color, ds, resolve
+            samples > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : image.imageView,
             ds ? ds->imageView : VK_NULL_HANDLE,
-            samples > VK_SAMPLE_COUNT_1_BIT ? image.msaaImageView : VK_NULL_HANDLE
+            samples > VK_SAMPLE_COUNT_1_BIT ? image.imageView : VK_NULL_HANDLE
         };
+
         VkFramebufferCreateInfo fbInfo;
         memset(&fbInfo, 0, sizeof(fbInfo));
         fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         fbInfo.renderPass = rtWrapper.d.rp->rp;
-        fbInfo.attachmentCount = rtWrapper.d.colorAttCount + rtWrapper.d.dsAttCount + rtWrapper.d.msaaAttCount;
+        fbInfo.attachmentCount = rtWrapper.d.colorAttCount + rtWrapper.d.dsAttCount + rtWrapper.d.resolveAttCount;
         fbInfo.pAttachments = views;
         fbInfo.width = pixelSize.width();
         fbInfo.height = pixelSize.height();
         fbInfo.layers = 1;
+
         VkResult err = rhiD->df->vkCreateFramebuffer(rhiD->dev, &fbInfo, nullptr, &image.fb);
         if (err != VK_SUCCESS) {
             qWarning("Failed to create framebuffer: %d", err);

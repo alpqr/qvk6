@@ -459,11 +459,6 @@ void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src, co
     d->textureCopies.append({ dst, src, desc });
 }
 
-void QRhiResourceUpdateBatch::resolveTexture(QRhiTexture *dst, const QRhiTextureResolveDescription &desc)
-{
-    d->textureResolves.append({ dst, desc });
-}
-
 void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
     d->textureReadbacks.append({ rb, result });
@@ -516,7 +511,6 @@ void QRhiResourceUpdateBatchPrivate::free()
     staticBufferUploads.clear();
     textureUploads.clear();
     textureCopies.clear();
-    textureResolves.clear();
     textureReadbacks.clear();
     textureMipGens.clear();
     texturePrepares.clear();
@@ -531,7 +525,6 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
     staticBufferUploads += other->staticBufferUploads;
     textureUploads += other->textureUploads;
     textureCopies += other->textureCopies;
-    textureResolves += other->textureResolves;
     textureReadbacks += other->textureReadbacks;
     textureMipGens += other->textureMipGens;
     texturePrepares += other->texturePrepares;

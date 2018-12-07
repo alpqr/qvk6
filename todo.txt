@@ -2,7 +2,6 @@ mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
 mtl: compressed textures
 mtl: srgb (tex, swapchain buf)
-mtl: resolveimage (color)
 
 gl: tex formats (texture, readback)
 gl: srgb
@@ -50,13 +49,13 @@ multi mip/layer copy? (fewer barriers...)
 multi-buffer (region) readback?
 depth readback?
 copy image depth?
-depth resolve?
 
 shadertools:
 dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+change how resolve is done
 mtl: color renderbuffer
 targeting mip level in texrt
 mtl: targeting cubemap faces

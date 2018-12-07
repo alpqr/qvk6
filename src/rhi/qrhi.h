@@ -241,8 +241,20 @@ struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
 
         QRhiTexture *texture = nullptr;
         QRhiRenderBuffer *renderBuffer = nullptr;
+
+        // for texture
         int layer = 0; // face (0..5) for cubemaps
-        int level = 0;
+        int level = 0; // only when non-multisample
+
+        // When texture or renderBuffer is multisample. Optional. When set,
+        // samples are resolved into this non-multisample texture. Note that
+        // the msaa data may not be written out at all in this case. This is
+        // the only way to get a non-msaa texture from an msaa render target as
+        // we do not have an explicit resolve operation because it does not
+        // exist in some APIs and would not be efficient with tiled GPUs anyways.
+        QRhiTexture *resolveTexture = nullptr;
+        int resolveLayer = 0; // unused for now since cubemaps cannot be multisample
+        int resolveLevel = 0;
     };
 
     QRhiTextureRenderTargetDescription()
@@ -323,30 +335,12 @@ struct Q_RHI_EXPORT QRhiTextureCopyDescription
 
 Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiTextureResolveDescription
-{
-    QRhiTextureResolveDescription() { }
-    QRhiTextureResolveDescription(QRhiTexture *src) : sourceTexture(src) { }
-    QRhiTextureResolveDescription(QRhiRenderBuffer *src) : sourceRenderBuffer(src) { }
-
-    // source is either a multisample texture or a multisample renderbuffer
-    QRhiTexture *sourceTexture = nullptr;
-    int sourceLayer = 0;
-    QRhiRenderBuffer *sourceRenderBuffer = nullptr;
-
-    int destinationLayer = 0;
-    int destinationLevel = 0;
-};
-
-Q_DECLARE_TYPEINFO(QRhiTextureResolveDescription, Q_MOVABLE_TYPE);
-
 struct Q_RHI_EXPORT QRhiReadbackDescription
 {
     QRhiReadbackDescription() { } // source is the back buffer of the swapchain of the current frame (if the swapchain supports readback)
     QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { } // source is the specified texture
-    // Note that reading back an msaa image is only supported for swapchains
-    // (by inserting an implicit resolve). For multisample textures, do an
-    // explicit resolve first.
+    // Note that reading back an msaa image is only supported for swapchains.
+    // Multisample textures cannot be read back.
 
     QRhiTexture *texture = nullptr;
     int layer = 0;
@@ -416,7 +410,7 @@ public:
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
         sRGB = 1 << 4,
-        UsedAsTransferSource = 1 << 5, // will (also) be used as the source of a readback or copy or resolve
+        UsedAsTransferSource = 1 << 5, // will (also) be used as the source of a copy or readback
         UsedWithGenerateMips = 1 << 6
     };
     Q_DECLARE_FLAGS(Flags, Flag)
@@ -923,7 +917,7 @@ public:
 
     // Sometimes committing the updates is necessary without starting a render
     // pass. Not often needed, updates should typically be passed to beginPass
-    // (or endPass, in case of readbacks or resolves) instead.
+    // (or endPass, in case of readbacks) instead.
     void resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates);
 
     void beginPass(QRhiRenderTarget *rt,
@@ -1033,7 +1027,6 @@ public:
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
     void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut
     void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc = QRhiTextureCopyDescription());
-    void resolveTexture(QRhiTexture *dst, const QRhiTextureResolveDescription &desc);
     void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
     void generateMips(QRhiTexture *tex);
 
@@ -1122,9 +1115,9 @@ public:
     // depth-stencil buffer via the window surface).
     //
     // Color is also supported. With some gfx apis (GL) this is different from
-    // textures. (cannot be sampled, but can be rendered to and used in a
-    // multisample resolve) This becomes important when doing msaa offscreen
-    // and the gfx api has no multisample textures.
+    // textures. (cannot be sampled, but can be rendered to) This becomes
+    // important when doing msaa offscreen and the gfx api has no multisample
+    // textures.
     QRhiRenderBuffer *newRenderBuffer(QRhiRenderBuffer::Type type,
                                       const QSize &pixelSize,
                                       int sampleCount = 1,

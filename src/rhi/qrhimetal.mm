@@ -148,10 +148,12 @@ struct QMetalRenderTargetData
             id<MTLTexture> tex = nil;
             int layer = 0;
             int level = 0;
+            id<MTLTexture> resolveTex = nil;
+            int resolveLayer = 0;
+            int resolveLevel = 0;
         };
         ColorAtt colorAtt[QMetalRenderPassDescriptor::MAX_COLOR_ATTACHMENTS];
         id<MTLTexture> dsTex = nil;
-        id<MTLTexture> resolveTex = nil;
         bool hasStencil = false;
     } fb;
 };
@@ -566,9 +568,8 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
         scTex = swapChainD->d->msaaTex[currentFrameSlot];
     }
 
-    swapChainD->rtWrapper.d->fb.colorAtt[0] = { scTex, 0, 0 };
+    swapChainD->rtWrapper.d->fb.colorAtt[0] = { scTex, 0, 0, resolveTex, 0, 0 };
     swapChainD->rtWrapper.d->fb.dsTex = swapChainD->ds ? swapChainD->ds->d->tex : nil;
-    swapChainD->rtWrapper.d->fb.resolveTex = resolveTex;
     swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
 
     executeDeferredReleases();
@@ -858,13 +859,12 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
         cbD->d->currentPassRpDesc.colorAttachments[i].texture = rtD->fb.colorAtt[i].tex;
         cbD->d->currentPassRpDesc.colorAttachments[i].slice = rtD->fb.colorAtt[i].layer;
         cbD->d->currentPassRpDesc.colorAttachments[i].level = rtD->fb.colorAtt[i].level;
-    }
-
-    // MSAA swapchains pass the multisample texture in colorTex and the
-    // non-multisample texture (from the drawable) in resolveTex.
-    if (rtD->fb.resolveTex) {
-        cbD->d->currentPassRpDesc.colorAttachments[0].storeAction = MTLStoreActionMultisampleResolve;
-        cbD->d->currentPassRpDesc.colorAttachments[0].resolveTexture = rtD->fb.resolveTex;
+        if (rtD->fb.colorAtt[i].resolveTex) {
+            cbD->d->currentPassRpDesc.colorAttachments[i].storeAction = MTLStoreActionMultisampleResolve;
+            cbD->d->currentPassRpDesc.colorAttachments[i].resolveTexture = rtD->fb.colorAtt[i].resolveTex;
+            cbD->d->currentPassRpDesc.colorAttachments[i].resolveSlice = rtD->fb.colorAtt[i].resolveLayer;
+            cbD->d->currentPassRpDesc.colorAttachments[i].resolveLevel = rtD->fb.colorAtt[i].resolveLevel;
+        }
     }
 
     if (rtD->dsAttCount) {
@@ -1353,15 +1353,20 @@ bool QMetalTextureRenderTarget::build()
         QMetalTexture *texD = QRHI_RES(QMetalTexture, m_desc.colorAttachments[i].texture);
         QMetalRenderBuffer *rbD = QRHI_RES(QMetalRenderBuffer, m_desc.colorAttachments[i].renderBuffer);
         Q_ASSERT(texD || rbD);
+        id<MTLTexture> dst;
         if (texD) {
-            d->fb.colorAtt[i] = { texD->d->tex, m_desc.colorAttachments[i].layer, m_desc.colorAttachments[i].level };
+            dst = texD->d->tex;
             if (i == 0)
                 d->pixelSize = texD->pixelSize();
         } else {
-            d->fb.colorAtt[i] = { rbD->d->tex, m_desc.colorAttachments[i].layer, m_desc.colorAttachments[i].level };
+            dst = rbD->d->tex;
             if (i == 0)
                 d->pixelSize = rbD->pixelSize();
         }
+        QMetalTexture *resTexD = QRHI_RES(QMetalTexture, m_desc.colorAttachments[i].resolveTexture);
+        id<MTLTexture> resDst = resTexD ? resTexD->d->tex : nil;
+        d->fb.colorAtt[i] = { dst, m_desc.colorAttachments[i].layer, m_desc.colorAttachments[i].level,
+                              resDst, m_desc.colorAttachments[i].resolveLayer, m_desc.colorAttachments[i].resolveLevel };
     }
 
     if (hasDepthStencil) {

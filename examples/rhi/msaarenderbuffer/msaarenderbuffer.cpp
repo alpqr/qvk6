@@ -112,7 +112,17 @@ void Window::customInit()
     d.rb->build();
     d.releasePool << d.rb;
 
-    d.rt = m_r->newTextureRenderTarget({ d.rb });
+    // the non-msaa texture that will be the destination in the resolve
+    d.tex = m_r->newTexture(QRhiTexture::RGBA8, d.rb->pixelSize());
+    d.releasePool << d.tex;
+    d.tex->build();
+
+    // rb is multisample, instead of writing out the msaa data into it,
+    // resolve into d.tex at the end of each render pass
+    QRhiTextureRenderTargetDescription rtDesc { d.rb };
+    rtDesc.colorAttachments[0].resolveTexture = d.tex;
+
+    d.rt = m_r->newTextureRenderTarget(rtDesc);
     d.releasePool << d.rt;
     d.rtRp = d.rt->newCompatibleRenderPassDescriptor();
     d.releasePool << d.rtRp;
@@ -149,11 +159,6 @@ void Window::customInit()
     d.triPs->setShaderResourceBindings(d.triSrb);
     d.triPs->setRenderPassDescriptor(d.rtRp);
     d.triPs->build();
-
-    // the non-msaa texture that will be the destination in the resolve
-    d.tex = m_r->newTexture(QRhiTexture::RGBA8, d.rb->pixelSize());
-    d.releasePool << d.tex;
-    d.tex->build();
 
     d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
@@ -235,11 +240,7 @@ void Window::customRender()
     cb->setViewport({ 0, 0, float(d.rb->pixelSize().width()), float(d.rb->pixelSize().height()) });
     cb->setVertexInput(0, { { d.vbuf, sizeof(vertexData) } });
     cb->draw(3);
-
-    // add the resolve (msaa renderbuffer -> non-msaa texture)
-    u = m_r->nextResourceUpdateBatch();
-    u->resolveTexture(d.tex, { d.rb });
-    cb->endPass(u);
+    cb->endPass();
 
     // onscreen (quad)
     const QSize outputSizeInPixels = m_sc->currentPixelSize();

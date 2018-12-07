@@ -2129,67 +2129,6 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         finishTransferDest(cb, dstD);
     }
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureResolve &u : ud->textureResolves) {
-        Q_ASSERT(u.dst);
-        Q_ASSERT(u.desc.sourceTexture || u.desc.sourceRenderBuffer);
-        QVkTexture *dstTexD = QRHI_RES(QVkTexture, u.dst);
-        if (dstTexD->samples > VK_SAMPLE_COUNT_1_BIT) {
-            qWarning("Cannot resolve into a multisample texture");
-            continue;
-        }
-
-        VkImageResolve region;
-        memset(&region, 0, sizeof(region));
-        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer;
-        region.srcSubresource.layerCount = 1;
-        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.dstSubresource.mipLevel = u.desc.destinationLevel;
-        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer;
-        region.dstSubresource.layerCount = 1;
-        region.extent.depth = 1;
-
-        QVkTexture *srcTexD = QRHI_RES(QVkTexture, u.desc.sourceTexture);
-        QVkRenderBuffer *srcRbD = QRHI_RES(QVkRenderBuffer, u.desc.sourceRenderBuffer);
-        QVkTexture *src;
-        if (srcTexD) {
-            if (srcTexD->vkformat != dstTexD->vkformat) {
-                qWarning("Resolve source and destination formats do not match");
-                continue;
-            }
-            if (srcTexD->samples == VK_SAMPLE_COUNT_1_BIT) {
-                qWarning("Cannot resolve a non-multisample texture");
-                continue;
-            }
-            if (srcTexD->m_pixelSize != dstTexD->m_pixelSize) {
-                qWarning("Resolve source and destination sizes do not match");
-                continue;
-            }
-            src = srcTexD;
-        } else {
-            if (srcRbD->vkformat != dstTexD->vkformat) {
-                qWarning("Resolve source and destination formats do not match");
-                continue;
-            }
-            if (srcRbD->m_pixelSize != dstTexD->m_pixelSize) {
-                qWarning("Resolve source and destination sizes do not match");
-                continue;
-            }
-            src = srcRbD->backingTexture;
-        }
-
-        region.extent.width = src->m_pixelSize.width();
-        region.extent.height = src->m_pixelSize.height();
-
-        prepareForTransferSrc(cb, src);
-        prepareForTransferDest(cb, dstTexD);
-
-        df->vkCmdResolveImage(cbD->cb, src->image, src->layout, dstTexD->image, dstTexD->layout, 1, &region);
-
-        finishTransferSrc(cb, src);
-        finishTransferDest(cb, dstTexD);
-    }
-
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
         ActiveReadback aRb;
         aRb.activeFrameSlot = currentFrameSlot;

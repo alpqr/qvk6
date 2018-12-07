@@ -702,30 +702,6 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cbD->commands.append(cmd);
     }
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureResolve &u : ud->textureResolves) {
-        Q_ASSERT(u.dst);
-        Q_ASSERT(u.desc.sourceTexture || u.desc.sourceRenderBuffer);
-        if (u.desc.sourceTexture) {
-            qWarning("Multisample textures not supported, skipping resolve");
-            continue;
-        }
-        QGles2Texture *dstTexD = QRHI_RES(QGles2Texture, u.dst);
-        QGles2RenderBuffer *srcRbD = QRHI_RES(QGles2RenderBuffer, u.desc.sourceRenderBuffer);
-        if (srcRbD->m_pixelSize != dstTexD->m_pixelSize) {
-            qWarning("Resolve source and destination sizes do not match");
-            continue;
-        }
-        QGles2CommandBuffer::Command cmd;
-        cmd.cmd = QGles2CommandBuffer::Command::BlitFromRenderbuffer;
-        cmd.args.blitFromRb.renderbuffer = srcRbD->renderbuffer;
-        cmd.args.blitFromRb.w = srcRbD->m_pixelSize.width();
-        cmd.args.blitFromRb.h = srcRbD->m_pixelSize.height();
-        cmd.args.blitFromRb.dst = dstTexD;
-        cmd.args.blitFromRb.dstLayer = u.desc.destinationLayer;
-        cmd.args.blitFromRb.dstLevel = u.desc.destinationLevel;
-        cbD->commands.append(cmd);
-    }
-
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
@@ -1453,6 +1429,30 @@ void QRhiGles2::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resource
     inPass = false;
 
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
+    if (cbD->currentTarget->type() == QRhiRenderTarget::RtTexture) {
+        QGles2TextureRenderTarget *rtTex = QRHI_RES(QGles2TextureRenderTarget, cbD->currentTarget);
+        // handle only 1 color attachment and only (msaa) renderbuffer
+        const QRhiTextureRenderTargetDescription::ColorAttachment &colorAtt(rtTex->m_desc.colorAttachments[0]);
+        if (colorAtt.resolveTexture) {
+            Q_ASSERT(colorAtt.renderBuffer);
+            QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, colorAtt.renderBuffer);
+            const QSize size = colorAtt.resolveTexture->pixelSize();
+            if (rbD->pixelSize() != size) {
+                qWarning("Resolve source (%dx%d) and target (%dx%d) size does not match",
+                         rbD->pixelSize().width(), rbD->pixelSize().height(), size.width(), size.height());
+            }
+            QGles2CommandBuffer::Command cmd;
+            cmd.cmd = QGles2CommandBuffer::Command::BlitFromRenderbuffer;
+            cmd.args.blitFromRb.renderbuffer = rbD->renderbuffer;
+            cmd.args.blitFromRb.w = size.width();
+            cmd.args.blitFromRb.h = size.height();
+            cmd.args.blitFromRb.dst = QRHI_RES(QGles2Texture, colorAtt.resolveTexture);
+            cmd.args.blitFromRb.dstLayer = colorAtt.resolveLayer;
+            cmd.args.blitFromRb.dstLevel = colorAtt.resolveLevel;
+            cbD->commands.append(cmd);
+        }
+    }
+
     cbD->currentTarget = nullptr;
 
     if (resourceUpdates)

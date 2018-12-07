@@ -821,52 +821,6 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cbD->commands.append(cmd);
     }
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureResolve &u : ud->textureResolves) {
-        Q_ASSERT(u.dst);
-        Q_ASSERT(u.desc.sourceTexture || u.desc.sourceRenderBuffer);
-        QD3D11Texture *dstTexD = QRHI_RES(QD3D11Texture, u.dst);
-        if (dstTexD->sampleDesc.Count > 1) {
-            qWarning("Cannot resolve into a multisample texture");
-            continue;
-        }
-        QD3D11Texture *srcTexD = QRHI_RES(QD3D11Texture, u.desc.sourceTexture);
-        QD3D11RenderBuffer *srcRbD = QRHI_RES(QD3D11RenderBuffer, u.desc.sourceRenderBuffer);
-        QD3D11CommandBuffer::Command cmd;
-        cmd.cmd = QD3D11CommandBuffer::Command::ResolveSubRes;
-        cmd.args.resolveSubRes.dst = dstTexD->tex;
-        cmd.args.resolveSubRes.dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel,
-                                                                u.desc.destinationLayer,
-                                                                dstTexD->mipLevelCount);
-        if (srcTexD) {
-            cmd.args.resolveSubRes.src = srcTexD->tex;
-            if (srcTexD->dxgiFormat != dstTexD->dxgiFormat) {
-                qWarning("Resolve source and destination formats do not match");
-                continue;
-            }
-            if (srcTexD->sampleDesc.Count <= 1) {
-                qWarning("Cannot resolve a non-multisample texture");
-                continue;
-            }
-            if (srcTexD->m_pixelSize != dstTexD->m_pixelSize) {
-                qWarning("Resolve source and destination sizes do not match");
-                continue;
-            }
-        } else {
-            cmd.args.resolveSubRes.src = srcRbD->tex;
-            if (srcRbD->dxgiFormat != dstTexD->dxgiFormat) {
-                qWarning("Resolve source and destination formats do not match");
-                continue;
-            }
-            if (srcRbD->m_pixelSize != dstTexD->m_pixelSize) {
-                qWarning("Resolve source and destination sizes do not match");
-                continue;
-            }
-        }
-        cmd.args.resolveSubRes.srcSubRes = D3D11CalcSubresource(0, u.desc.sourceLayer, 1);
-        cmd.args.resolveSubRes.format = dstTexD->dxgiFormat;
-        cbD->commands.append(cmd);
-    }
-
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
         ActiveReadback aRb;
         aRb.desc = u.rb;
@@ -1070,6 +1024,54 @@ void QRhiD3D11::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resource
     inPass = false;
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    if (cbD->currentTarget->type() == QRhiRenderTarget::RtTexture) {
+        QD3D11TextureRenderTarget *rtTex = QRHI_RES(QD3D11TextureRenderTarget, cbD->currentTarget);
+        for (int att = 0, attCount = rtTex->m_desc.colorAttachments.count(); att != attCount; ++att) {
+            const QRhiTextureRenderTargetDescription::ColorAttachment &colorAtt(rtTex->m_desc.colorAttachments[att]);
+            if (!colorAtt.resolveTexture)
+                continue;
+
+            QD3D11Texture *dstTexD = QRHI_RES(QD3D11Texture, colorAtt.resolveTexture);
+            QD3D11Texture *srcTexD = QRHI_RES(QD3D11Texture, colorAtt.texture);
+            QD3D11RenderBuffer *srcRbD = QRHI_RES(QD3D11RenderBuffer, colorAtt.renderBuffer);
+            Q_ASSERT(srcTexD || srcRbD);
+            QD3D11CommandBuffer::Command cmd;
+            cmd.cmd = QD3D11CommandBuffer::Command::ResolveSubRes;
+            cmd.args.resolveSubRes.dst = dstTexD->tex;
+            cmd.args.resolveSubRes.dstSubRes = D3D11CalcSubresource(colorAtt.resolveLevel,
+                                                                    colorAtt.resolveLayer,
+                                                                    dstTexD->mipLevelCount);
+            if (srcTexD) {
+                cmd.args.resolveSubRes.src = srcTexD->tex;
+                if (srcTexD->dxgiFormat != dstTexD->dxgiFormat) {
+                    qWarning("Resolve source and destination formats do not match");
+                    continue;
+                }
+                if (srcTexD->sampleDesc.Count <= 1) {
+                    qWarning("Cannot resolve a non-multisample texture");
+                    continue;
+                }
+                if (srcTexD->m_pixelSize != dstTexD->m_pixelSize) {
+                    qWarning("Resolve source and destination sizes do not match");
+                    continue;
+                }
+            } else {
+                cmd.args.resolveSubRes.src = srcRbD->tex;
+                if (srcRbD->dxgiFormat != dstTexD->dxgiFormat) {
+                    qWarning("Resolve source and destination formats do not match");
+                    continue;
+                }
+                if (srcRbD->m_pixelSize != dstTexD->m_pixelSize) {
+                    qWarning("Resolve source and destination sizes do not match");
+                    continue;
+                }
+            }
+            cmd.args.resolveSubRes.srcSubRes = D3D11CalcSubresource(0, colorAtt.layer, 1);
+            cmd.args.resolveSubRes.format = dstTexD->dxgiFormat;
+            cbD->commands.append(cmd);
+        }
+    }
+
     cbD->currentTarget = nullptr;
 
     if (resourceUpdates)

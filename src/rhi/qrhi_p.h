@@ -184,16 +184,6 @@ struct QRhiResourceUpdateBatchPrivate
         QRhiTextureCopyDescription desc;
     };
 
-    struct TextureResolve {
-        TextureResolve() { }
-        TextureResolve(QRhiTexture *dst_, const QRhiTextureResolveDescription &desc_)
-            : dst(dst_), desc(desc_)
-        { }
-
-        QRhiTexture *dst = nullptr;
-        QRhiTextureResolveDescription desc;
-    };
-
     struct TextureRead {
         TextureRead() { }
         TextureRead(const QRhiReadbackDescription &rb_, QRhiReadbackResult *result_)
@@ -226,7 +216,6 @@ struct QRhiResourceUpdateBatchPrivate
     QVector<StaticBufferUpload> staticBufferUploads;
     QVector<TextureUpload> textureUploads;
     QVector<TextureCopy> textureCopies;
-    QVector<TextureResolve> textureResolves;
     QVector<TextureRead> textureReadbacks;
     QVector<TextureMipGen> textureMipGens;
     QVector<TexturePrepare> texturePrepares;
@@ -245,7 +234,6 @@ Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate, Q_MOVABL
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::StaticBufferUpload, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureCopy, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureResolve, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureRead, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureMipGen, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TexturePrepare, Q_MOVABLE_TYPE);

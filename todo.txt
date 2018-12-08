@@ -16,6 +16,7 @@ resource import/export, what's the interop story
 
 multi window? (multi swapchain) -> trouble
 
+what if window is changed on swapchain (vk, d3d may break as of now)
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
 vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cbuffers, textures, samplers set should be batched too

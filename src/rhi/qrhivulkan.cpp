@@ -4107,12 +4107,21 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
 
 bool QVkSwapChain::ensureSurface()
 {
+    // Do nothing when already done, however window may change so check the
+    // surface is still the same. Some of the queries below are very expensive
+    // with some implementations so it is important to do the rest only once
+    // per surface.
+
     Q_ASSERT(m_window);
-    surface = QVulkanInstance::surfaceForWindow(m_window);
-    if (!surface) {
+    VkSurfaceKHR surf = QVulkanInstance::surfaceForWindow(m_window);
+    if (!surf) {
         qWarning("Failed to get surface for window");
         return false;
     }
+    if (surface == surf)
+        return true;
+
+    surface = surf;
 
     QRHI_RES_RHI(QRhiVulkan);
     if (!rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
@@ -4175,7 +4184,7 @@ bool QVkSwapChain::buildOrResize()
 
     // Can be called multiple times due to window resizes - that is not the
     // same as a simple release+build (as with other resources). Thus no
-    // release() here. See recreateSwapChain() below.
+    // release() here. See recreateSwapChain().
 
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;

@@ -279,8 +279,17 @@ bool QRhiMetal::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
 {
     Q_UNUSED(flags);
 
+#ifdef Q_OS_IOS
     if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
         return false;
+#endif
+
+#ifdef Q_OS_MACOS
+    if (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ETC2_RGBA8)
+        return false;
+    if (format >= QRhiTexture::ASTC_4x4 && format <= QRhiTexture::ASTC_12x12)
+        return false;
+#endif
 
     return true;
 }
@@ -682,7 +691,8 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             Q_ASSERT(layerDesc.mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image.sizeInBytes();
+                const qsizetype imageSizeBytes = mipDesc.image.isNull() ?
+                            mipDesc.compressedData.size() : mipDesc.image.sizeInBytes();
                 if (imageSizeBytes > 0)
                     stagingSize += aligned(imageSizeBytes, texbufAlign);
             }
@@ -698,8 +708,11 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const qsizetype fullImageSizeBytes = mipDesc.image.sizeInBytes();
-                if (fullImageSizeBytes > 0) {
+                const int dx = mipDesc.destinationTopLeft.x();
+                const int dy = mipDesc.destinationTopLeft.y();
+
+                if (!mipDesc.image.isNull()) {
+                    const qsizetype fullImageSizeBytes = mipDesc.image.sizeInBytes();
                     QImage img = mipDesc.image;
                     int w = img.width();
                     int h = img.height();
@@ -726,20 +739,41 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     } else {
                         memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
                     }
-
-                    const int dx = mipDesc.destinationTopLeft.x();
-                    const int dy = mipDesc.destinationTopLeft.y();
                     [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
                                              sourceOffset: curOfs + srcOffset
                                              sourceBytesPerRow: bpl
                                              sourceBytesPerImage: 0
                                              sourceSize: MTLSizeMake(w, h, 1)
-                                             toTexture: utexD->d->tex
-                                             destinationSlice: layer
-                                             destinationLevel: level
-                                             destinationOrigin: MTLOriginMake(dx, dy, 0)
-                                             options: MTLBlitOptionNone];
+                      toTexture: utexD->d->tex
+                      destinationSlice: layer
+                      destinationLevel: level
+                      destinationOrigin: MTLOriginMake(dx, dy, 0)
+                      options: MTLBlitOptionNone];
                     curOfs += aligned(fullImageSizeBytes, texbufAlign);
+                } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(utexD->m_format)) {
+                    int w, h;
+                    if (mipDesc.sourceSize.isEmpty()) {
+                        w = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
+                        h = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
+                    } else {
+                        w = mipDesc.sourceSize.width();
+                        h = mipDesc.sourceSize.height();
+                    }
+                    quint32 bpl = 0;
+                    QSize blockDim;
+                    compressedFormatInfo(utexD->m_format, QSize(w, h), &bpl, nullptr, &blockDim);
+                    memcpy(reinterpret_cast<char *>(mp) + curOfs, mipDesc.compressedData.constData(), mipDesc.compressedData.size());
+                    [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
+                                             sourceOffset: curOfs
+                                             sourceBytesPerRow: bpl
+                                             sourceBytesPerImage: 0
+                                             sourceSize: MTLSizeMake(w, h, 1)
+                      toTexture: utexD->d->tex
+                      destinationSlice: layer
+                      destinationLevel: level
+                      destinationOrigin: MTLOriginMake(dx, dy, 0)
+                      options: MTLBlitOptionNone];
+                    curOfs += aligned(mipDesc.compressedData.size(), texbufAlign);
                 }
             }
         }
@@ -1106,7 +1140,11 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
     case QRhiTexture::BGRA8:
         return srgb ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
     case QRhiTexture::R8:
+#ifdef Q_OS_IOS
+        return srgb ? MTLPixelFormatR8Unorm_sRGB : MTLPixelFormatR8Unorm;
+#else
         return MTLPixelFormatR8Unorm;
+#endif
     case QRhiTexture::R16:
         return MTLPixelFormatR16Unorm;
 
@@ -1114,6 +1152,95 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
         return MTLPixelFormatDepth16Unorm;
     case QRhiTexture::D32:
         return MTLPixelFormatDepth32Float;
+
+#ifdef Q_OS_MACOS
+    case QRhiTexture::BC1:
+        return srgb ? MTLPixelFormatBC1_RGBA_sRGB : MTLPixelFormatBC1_RGBA;
+    case QRhiTexture::BC2:
+        return srgb ? MTLPixelFormatBC2_RGBA_sRGB : MTLPixelFormatBC2_RGBA;
+    case QRhiTexture::BC3:
+        return srgb ? MTLPixelFormatBC3_RGBA_sRGB : MTLPixelFormatBC3_RGBA;
+    case QRhiTexture::BC4:
+        return MTLPixelFormatBC4_RUnorm;
+    case QRhiTexture::BC5:
+        qWarning("QRhiMetal does not support BC5");
+        return MTLPixelFormatRGBA8Unorm;
+    case QRhiTexture::BC6H:
+        return MTLPixelFormatBC6H_RGBUfloat;
+    case QRhiTexture::BC7:
+        return srgb ? MTLPixelFormatBC7_RGBAUnorm_sRGB : MTLPixelFormatBC7_RGBAUnorm;
+#else
+    case QRhiTexture::BC1:
+    case QRhiTexture::BC2:
+    case QRhiTexture::BC3:
+    case QRhiTexture::BC4:
+    case QRhiTexture::BC5:
+    case QRhiTexture::BC6H:
+    case QRhiTexture::BC7:
+        qWarning("QRhiMetal: BCx compression not supported on this platform");
+        return MTLPixelFormatRGBA8Unorm;
+#endif
+
+#ifdef Q_OS_IOS
+    case QRhiTexture::ETC2_RGB8:
+        return srgb ? MTLPixelFormatETC2_RGB8_sRGB : MTLPixelFormatETC2_RGB8;
+    case QRhiTexture::ETC2_RGB8A1:
+        return srgb ? MTLPixelFormatETC2_RGB8A1_sRGB : MTLPixelFormatETC2_RGB8A1;
+    case QRhiTexture::ETC2_RGBA8:
+        return srgb ? MTLPixelFormatEAC_RGBA8_sRGB : MTLPixelFormatEAC_RGBA8;
+
+    case QRhiTexture::ASTC_4x4:
+        return srgb ? MTLPixelFormatASTC_4x4_sRGB : MTLPixelFormatASTC_4x4_LDR;
+    case QRhiTexture::ASTC_5x4:
+        return srgb ? MTLPixelFormatASTC_5x4_sRGB : MTLPixelFormatASTC_5x4_LDR;
+    case QRhiTexture::ASTC_5x5:
+        return srgb ? MTLPixelFormatASTC_5x5_sRGB : MTLPixelFormatASTC_5x5_LDR;
+    case QRhiTexture::ASTC_6x5:
+        return srgb ? MTLPixelFormatASTC_6x5_sRGB : MTLPixelFormatASTC_6x5_LDR;
+    case QRhiTexture::ASTC_6x6:
+        return srgb ? MTLPixelFormatASTC_6x6_sRGB : MTLPixelFormatASTC_6x6_LDR;
+    case QRhiTexture::ASTC_8x5:
+        return srgb ? MTLPixelFormatASTC_8x5_sRGB : MTLPixelFormatASTC_8x5_LDR;
+    case QRhiTexture::ASTC_8x6:
+        return srgb ? MTLPixelFormatASTC_8x6_sRGB : MTLPixelFormatASTC_8x6_LDR;
+    case QRhiTexture::ASTC_8x8:
+        return srgb ? MTLPixelFormatASTC_8x8_sRGB : MTLPixelFormatASTC_8x8_LDR;
+    case QRhiTexture::ASTC_10x5:
+        return srgb ? MTLPixelFormatASTC_10x5_sRGB : MTLPixelFormatASTC_10x5_LDR;
+    case QRhiTexture::ASTC_10x6:
+        return srgb ? MTLPixelFormatASTC_10x6_sRGB : MTLPixelFormatASTC_10x6_LDR;
+    case QRhiTexture::ASTC_10x8:
+        return srgb ? MTLPixelFormatASTC_10x8_sRGB : MTLPixelFormatASTC_10x8_LDR;
+    case QRhiTexture::ASTC_10x10:
+        return srgb ? MTLPixelFormatASTC_10x10_sRGB : MTLPixelFormatASTC_10x10_LDR;
+    case QRhiTexture::ASTC_12x10:
+        return srgb ? MTLPixelFormatASTC_12x10_sRGB : MTLPixelFormatASTC_12x10_LDR;
+    case QRhiTexture::ASTC_12x12:
+        return srgb ? MTLPixelFormatASTC_12x12_sRGB : MTLPixelFormatASTC_12x12_LDR;
+#else
+    case QRhiTexture::ETC2_RGB8:
+    case QRhiTexture::ETC2_RGB8A1:
+    case QRhiTexture::ETC2_RGBA8:
+        qWarning("QRhiMetal: ETC2 compression not supported on this platform");
+        return MTLPixelFormatRGBA8Unorm;
+
+    case QRhiTexture::ASTC_4x4:
+    case QRhiTexture::ASTC_5x4:
+    case QRhiTexture::ASTC_5x5:
+    case QRhiTexture::ASTC_6x5:
+    case QRhiTexture::ASTC_6x6:
+    case QRhiTexture::ASTC_8x5:
+    case QRhiTexture::ASTC_8x6:
+    case QRhiTexture::ASTC_8x8:
+    case QRhiTexture::ASTC_10x5:
+    case QRhiTexture::ASTC_10x6:
+    case QRhiTexture::ASTC_10x8:
+    case QRhiTexture::ASTC_10x10:
+    case QRhiTexture::ASTC_12x10:
+    case QRhiTexture::ASTC_12x12:
+        qWarning("QRhiMetal: ASTC compression not supported on this platform");
+        return MTLPixelFormatRGBA8Unorm;
+#endif
 
     default:
         Q_UNREACHABLE();

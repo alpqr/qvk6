@@ -55,6 +55,8 @@
 #include <QBakedShader>
 #include <QRhiMetalInitParams>
 
+//#define TEST_FINISH
+
 static float vertexData[] = { // Y up (note m_proj), CCW
      0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
     -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
@@ -178,10 +180,13 @@ int main(int argc, char **argv)
         cb->endPass(u);
 
         qDebug("Submit and wait");
+#ifdef TEST_FINISH
+        r->finish();
+#else
         r->endOffscreenFrame();
-
-        // No finish() or waiting for the completed callback is needed here
-        // since the endOffscreenFrame() implies a wait for completion.
+#endif
+        // The data should be ready either because endOffscreenFrame() waits
+        // for completion or because finish() did.
         if (!rbResult.data.isEmpty()) {
             const uchar *p = reinterpret_cast<const uchar *>(rbResult.data.constData());
             QImage image(p, rbResult.pixelSize.width(), rbResult.pixelSize.height(), QImage::Format_RGBA8888);
@@ -192,6 +197,9 @@ int main(int argc, char **argv)
         } else {
             qWarning("Readback failed!");
         }
+#ifdef TEST_FINISH
+        r->endOffscreenFrame();
+#endif
     }
 
     ps->releaseAndDestroy();

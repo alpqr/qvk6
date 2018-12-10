@@ -69,7 +69,9 @@ struct QRhiMetalData
 
     id<MTLDevice> dev;
     id<MTLCommandQueue> cmdQueue;
+    QAtomicInt activeCommandBuffers;
 
+    void commitCommandBuffer(id<MTLCommandBuffer> cb);
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
                                                      const QRhiColorClearValue &colorClearValue,
                                                      const QRhiDepthStencilClearValue &depthStencilClearValue);
@@ -200,12 +202,18 @@ struct QMetalSwapChainData
     CAMetalLayer *layer = nullptr;
     id<CAMetalDrawable> curDrawable;
     dispatch_semaphore_t sem = nullptr;
-    id<MTLCommandBuffer> cb[QMTL_FRAMES_IN_FLIGHT];
     MTLRenderPassDescriptor *rp = nullptr;
     id<MTLTexture> msaaTex[QMTL_FRAMES_IN_FLIGHT];
     QRhiTexture::Format rhiColorFormat;
     MTLPixelFormat colorFormat;
 };
+
+void QRhiMetalData::commitCommandBuffer(id<MTLCommandBuffer> cb)
+{
+    activeCommandBuffers.ref();
+    [cb addCompletedHandler: ^(id<MTLCommandBuffer>) { activeCommandBuffers.deref(); }];
+    [cb commit];
+}
 
 QRhiMetal::QRhiMetal(QRhiInitParams *params)
 {
@@ -305,15 +313,13 @@ bool QRhiMetal::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
 {
     Q_UNUSED(flags);
 
-#ifdef Q_OS_IOS
-    if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
-        return false;
-#endif
-
 #ifdef Q_OS_MACOS
     if (format >= QRhiTexture::ETC2_RGB8 && format <= QRhiTexture::ETC2_RGBA8)
         return false;
     if (format >= QRhiTexture::ASTC_4x4 && format <= QRhiTexture::ASTC_12x12)
+        return false;
+#else
+    if (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
         return false;
 #endif
 
@@ -592,9 +598,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     // Do not let the command buffer mess with the refcount of objects. We do
     // have a proper render loop and will manage lifetimes similarly to other
     // backends (Vulkan).
-    swapChainD->d->cb[currentFrameSlot] = [d->cmdQueue commandBufferWithUnretainedReferences];
-
-    swapChainD->cbWrapper.d->cb = swapChainD->d->cb[currentFrameSlot];
+    swapChainD->cbWrapper.d->cb = [d->cmdQueue commandBufferWithUnretainedReferences];
 
     id<MTLTexture> scTex = swapChainD->d->curDrawable.texture;
     id<MTLTexture> resolveTex = nil;
@@ -621,14 +625,14 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 
     QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, swapChain);
 
-    [swapChainD->d->cb[currentFrameSlot] presentDrawable: swapChainD->d->curDrawable];
+    [swapChainD->cbWrapper.d->cb presentDrawable: swapChainD->d->curDrawable];
 
     __block dispatch_semaphore_t sem = swapChainD->d->sem;
-    [swapChainD->d->cb[currentFrameSlot] addCompletedHandler: ^(id<MTLCommandBuffer>) {
+    [swapChainD->cbWrapper.d->cb addCompletedHandler: ^(id<MTLCommandBuffer>) {
         dispatch_semaphore_signal(sem);
     }];
 
-    [swapChainD->d->cb[currentFrameSlot] commit];
+    d->commitCommandBuffer(swapChainD->cbWrapper.d->cb);
 
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QMTL_FRAMES_IN_FLIGHT;
     currentSwapChain = nullptr;
@@ -669,7 +673,7 @@ QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
     Q_ASSERT(inFrame);
     inFrame = false;
 
-    [d->ofr.cbWrapper.d->cb commit];
+    d->commitCommandBuffer(d->ofr.cbWrapper.d->cb);
 
     // offscreen frames wait for completion, unlike swapchain ones
     [d->ofr.cbWrapper.d->cb waitUntilCompleted];
@@ -683,6 +687,39 @@ QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
 QRhi::FrameOpResult QRhiMetal::finish()
 {
     Q_ASSERT(!inPass);
+
+    QMetalSwapChain *swapChainD = nullptr;
+    if (inFrame) {
+        // There is either a swapchain or an offscreen frame on-going.
+        // End command recording and submit what we have.
+        id<MTLCommandBuffer> cb;
+        if (d->ofr.active) {
+            Q_ASSERT(!currentSwapChain);
+            cb = d->ofr.cbWrapper.d->cb;
+        } else {
+            Q_ASSERT(currentSwapChain);
+            swapChainD = currentSwapChain;
+            cb = swapChainD->cbWrapper.d->cb;
+        }
+        d->commitCommandBuffer(cb);
+    }
+
+    // now do something until all command buffers submitted via
+    // QRhiMetalData::commitCommandBuffer() have completed
+    while (d->activeCommandBuffers.load())
+        usleep(1); // uh.. then again using finish() in perf critical code is wrong to begin with.
+
+    if (inFrame) {
+        // Allocate and begin recording on a new command buffer.
+        if (d->ofr.active)
+            d->ofr.cbWrapper.d->cb = [d->cmdQueue commandBufferWithUnretainedReferences];
+        else
+            swapChainD->cbWrapper.d->cb = [d->cmdQueue commandBufferWithUnretainedReferences];
+    }
+
+    executeDeferredReleases(true);
+
+    finishActiveReadbacks(true);
 
     return QRhi::FrameOpSuccess;
 }
@@ -1220,16 +1257,21 @@ bool QMetalRenderBuffer::build()
     if (samples > 1)
         desc.sampleCount = samples;
     desc.resourceOptions = MTLResourceStorageModePrivate;
-    desc.storageMode = MTLStorageModePrivate;
     desc.usage = MTLTextureUsageRenderTarget;
 
     switch (m_type) {
     case DepthStencil:
+#ifdef Q_OS_MACOS
+        desc.storageMode = MTLStorageModePrivate;
+#else
+        desc.storageMode = MTLResourceStorageModeMemoryless;
+#endif
         d->format = rhiD->d->dev.depth24Stencil8PixelFormatSupported
                 ? MTLPixelFormatDepth24Unorm_Stencil8 : MTLPixelFormatDepth32Float_Stencil8;
         desc.pixelFormat = d->format;
         break;
     case Color:
+        desc.storageMode = MTLStorageModePrivate;
         d->format = MTLPixelFormatRGBA8Unorm;
         desc.pixelFormat = d->format;
         break;
@@ -1295,10 +1337,10 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
     case QRhiTexture::BGRA8:
         return srgb ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
     case QRhiTexture::R8:
-#ifdef Q_OS_IOS
-        return srgb ? MTLPixelFormatR8Unorm_sRGB : MTLPixelFormatR8Unorm;
-#else
+#ifdef Q_OS_MACOS
         return MTLPixelFormatR8Unorm;
+#else
+        return srgb ? MTLPixelFormatR8Unorm_sRGB : MTLPixelFormatR8Unorm;
 #endif
     case QRhiTexture::R16:
         return MTLPixelFormatR16Unorm;
@@ -1336,7 +1378,7 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
         return MTLPixelFormatRGBA8Unorm;
 #endif
 
-#ifdef Q_OS_IOS
+#ifndef Q_OS_MACOS
     case QRhiTexture::ETC2_RGB8:
         return srgb ? MTLPixelFormatETC2_RGB8_sRGB : MTLPixelFormatETC2_RGB8;
     case QRhiTexture::ETC2_RGB8A1:

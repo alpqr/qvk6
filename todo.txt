@@ -1,4 +1,3 @@
-mtl: finish()
 gl: tex formats (texture, readback)
 gl: srgb
 
@@ -53,6 +52,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: finish()
 mtl: readback (tex, backbuffer)
 mtl: rhi without a window, offscreen frame
 mtl: compressed textures

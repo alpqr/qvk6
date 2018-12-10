@@ -4186,6 +4186,11 @@ bool QVkSwapChain::buildOrResize()
     // same as a simple release+build (as with other resources). Thus no
     // release() here. See recreateSwapChain().
 
+    // except if the window actually changes
+    if (window && window != m_window)
+        release();
+
+    window = m_window;
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;
 

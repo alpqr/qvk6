@@ -231,6 +231,7 @@ struct QMetalSwapChain : public QRhiSwapChain
 
     void chooseFormats();
 
+    QWindow *window = nullptr;
     QSize pixelSize;
     int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
     int samples = 1;

@@ -2482,7 +2482,9 @@ bool QD3D11SwapChain::buildOrResize()
     // same as a simple release+build (as with other resources). Just need to
     // resize the buffers then.
 
-    Q_ASSERT(!swapChain || window == m_window);
+    // except if the window actually changes
+    if (window && window != m_window)
+        release();
 
     window = m_window;
     m_currentPixelSize = surfacePixelSize();

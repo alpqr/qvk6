@@ -270,6 +270,7 @@ struct QVkSwapChain : public QRhiSwapChain
     static const int MAX_BUFFER_COUNT = 3;
 
     QVulkanWindow *wrapWindow = nullptr;
+    QWindow *window = nullptr;
     QSize pixelSize;
     bool supportsReadback = false;
     VkSwapchainKHR sc = VK_NULL_HANDLE;

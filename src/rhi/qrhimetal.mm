@@ -2263,6 +2263,8 @@ QRhiRenderTarget *QMetalSwapChain::currentFrameRenderTarget()
 
 QSize QMetalSwapChain::surfacePixelSize()
 {
+    // may be called before build, must not access other than m_*
+
     NSView *v = (NSView *) m_window->winId();
     if (v) {
         CAMetalLayer *layer = (CAMetalLayer *) [v layer];
@@ -2303,15 +2305,20 @@ void QMetalSwapChain::chooseFormats()
 
 bool QMetalSwapChain::buildOrResize()
 {
-    // no release(), this is intentional
-
     Q_ASSERT(m_window);
-    if (m_window->surfaceType() != QSurface::MetalSurface) {
+
+    if (window && window != m_window)
+        release();
+    // else no release(), this is intentional
+
+    window = m_window;
+
+    if (window->surfaceType() != QSurface::MetalSurface) {
         qWarning("QMetalSwapChain only supports MetalSurface windows");
         return false;
     }
 
-    NSView *v = (NSView *) m_window->winId();
+    NSView *v = (NSView *) window->winId();
     d->layer = (CAMetalLayer *) [v layer];
     Q_ASSERT(d->layer);
 

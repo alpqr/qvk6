@@ -11,7 +11,6 @@ resource import/export, what's the interop story
 
 multi window? (multi swapchain) -> trouble
 
-what if window is changed on swapchain (vk, d3d may break as of now)
 should istexformatsupported should check srgb combinations
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
 vk: rendering hangs sometimes when minimize and back on some systems?
@@ -52,6 +51,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+what if window is changed on swapchain (vk, d3d may break as of now)
 mtl: finish()
 mtl: readback (tex, backbuffer)
 mtl: rhi without a window, offscreen frame

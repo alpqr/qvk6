@@ -1,7 +1,6 @@
 mtl: rhi without a window, offscreen frame
 mtl: readback (tex, backbuffer)
 mtl: compressed textures
-mtl: srgb (tex, swapchain buf)
 
 gl: tex formats (texture, readback)
 gl: srgb
@@ -17,6 +16,7 @@ resource import/export, what's the interop story
 multi window? (multi swapchain) -> trouble
 
 what if window is changed on swapchain (vk, d3d may break as of now)
+should istexformatsupported should check srgb combinations
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
 vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cbuffers, textures, samplers set should be batched too
@@ -56,6 +56,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: srgb (tex, swapchain buf)
 change how resolve is done
 mtl: color renderbuffer
 targeting mip level in texrt

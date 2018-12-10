@@ -1097,13 +1097,14 @@ void QMetalTexture::release()
     rhiD->d->releaseQueue.append(e);
 }
 
-static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format)
+static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
 {
+    const bool srgb = flags.testFlag(QRhiTexture::sRGB);
     switch (format) {
     case QRhiTexture::RGBA8:
-        return MTLPixelFormatRGBA8Unorm;
+        return srgb ? MTLPixelFormatRGBA8Unorm_sRGB : MTLPixelFormatRGBA8Unorm;
     case QRhiTexture::BGRA8:
-        return MTLPixelFormatBGRA8Unorm;
+        return srgb ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
     case QRhiTexture::R8:
         return MTLPixelFormatR8Unorm;
     case QRhiTexture::R16:
@@ -1130,7 +1131,7 @@ bool QMetalTexture::build()
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     QRHI_RES_RHI(QRhiMetal);
-    d->format = toMetalTextureFormat(m_format);
+    d->format = toMetalTextureFormat(m_format, m_flags);
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
     if (samples > 1) {
@@ -1971,7 +1972,8 @@ void QMetalSwapChain::chooseFormats()
 {
     QRHI_RES_RHI(QRhiMetal);
     samples = rhiD->effectiveSampleCount(m_sampleCount);
-    d->colorFormat = MTLPixelFormatBGRA8Unorm;
+    // pick a format that is allowed for CAMetalLayer.pixelFormat
+    d->colorFormat = m_flags.testFlag(sRGB) ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
 }
 
 bool QMetalSwapChain::buildOrResize()
@@ -1988,6 +1990,10 @@ bool QMetalSwapChain::buildOrResize()
     d->layer = (CAMetalLayer *) [v layer];
     Q_ASSERT(d->layer);
 
+    chooseFormats();
+    if (d->colorFormat != d->layer.pixelFormat)
+        d->layer.pixelFormat = d->colorFormat;
+
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;
 
@@ -1998,8 +2004,6 @@ bool QMetalSwapChain::buildOrResize()
         d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
 
     currentFrame = 0;
-
-    chooseFormats();
 
     ds = m_depthStencil ? QRHI_RES(QMetalRenderBuffer, m_depthStencil) : nullptr;
     if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {

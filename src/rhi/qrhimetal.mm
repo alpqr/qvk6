@@ -708,8 +708,8 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const int dx = mipDesc.destinationTopLeft.x();
-                const int dy = mipDesc.destinationTopLeft.y();
+                int dx = mipDesc.destinationTopLeft.x();
+                int dy = mipDesc.destinationTopLeft.y();
 
                 if (!mipDesc.image.isNull()) {
                     const qsizetype fullImageSizeBytes = mipDesc.image.sizeInBytes();
@@ -739,6 +739,7 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     } else {
                         memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
                     }
+
                     [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
                                              sourceOffset: curOfs + srcOffset
                                              sourceBytesPerRow: bpl
@@ -749,20 +750,33 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                       destinationLevel: level
                       destinationOrigin: MTLOriginMake(dx, dy, 0)
                       options: MTLBlitOptionNone];
+
                     curOfs += aligned(fullImageSizeBytes, texbufAlign);
                 } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(utexD->m_format)) {
+                    const int subresw = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
+                    const int subresh = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
                     int w, h;
                     if (mipDesc.sourceSize.isEmpty()) {
-                        w = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
-                        h = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
+                        w = subresw;
+                        h = subresh;
                     } else {
                         w = mipDesc.sourceSize.width();
                         h = mipDesc.sourceSize.height();
                     }
+
                     quint32 bpl = 0;
                     QSize blockDim;
                     compressedFormatInfo(utexD->m_format, QSize(w, h), &bpl, nullptr, &blockDim);
+
+                    dx = aligned(dx, blockDim.width());
+                    dy = aligned(dy, blockDim.height());
+                    if (dx + w != subresw)
+                        w = aligned(w, blockDim.width());
+                    if (dy + h != subresh)
+                        h = aligned(h, blockDim.height());
+
                     memcpy(reinterpret_cast<char *>(mp) + curOfs, mipDesc.compressedData.constData(), mipDesc.compressedData.size());
+
                     [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
                                              sourceOffset: curOfs
                                              sourceBytesPerRow: bpl
@@ -773,6 +787,7 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                       destinationLevel: level
                       destinationOrigin: MTLOriginMake(dx, dy, 0)
                       options: MTLBlitOptionNone];
+
                     curOfs += aligned(mipDesc.compressedData.size(), texbufAlign);
                 }
             }

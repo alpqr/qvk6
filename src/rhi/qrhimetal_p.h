@@ -315,6 +315,7 @@ public:
     void create();
     void destroy();
     void executeDeferredReleases(bool forced = false);
+    void finishActiveReadbacks(bool forced = false);
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
     int effectiveSampleCount(int sampleCount) const;
@@ -324,6 +325,7 @@ public:
     int currentFrameSlot = 0;
     int finishedFrameCount = 0;
     bool inPass = false;
+    QMetalSwapChain *currentSwapChain = nullptr;
 
     QRhiMetalData *d = nullptr;
 };

@@ -940,7 +940,7 @@ bool QRhiVulkan::recreateSwapChain(QRhiSwapChain *swapChain)
 
     VkImageUsageFlags usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     swapChainD->supportsReadback = (surfaceCaps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT);
-    if (swapChainD->supportsReadback)
+    if (swapChainD->supportsReadback && swapChainD->m_flags.testFlag(QRhiSwapChain::UsedAsTransferSource))
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
     qDebug("Creating new swapchain of %d buffers, size %dx%d",

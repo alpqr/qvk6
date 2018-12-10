@@ -114,9 +114,14 @@ void ExampleWindow::init()
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
     m_sc->setSampleCount(m_sampleCount);
-#ifdef USE_SRGB_SWAPCHAIN
-    m_sc->setFlags(QRhiSwapChain::sRGB);
+    QRhiSwapChain::Flags scFlags = 0;
+#ifdef READBACK_SWAPCHAIN
+    scFlags |= QRhiSwapChain::UsedAsTransferSource;
 #endif
+#ifdef USE_SRGB_SWAPCHAIN
+    scFlags |= QRhiSwapChain::sRGB;
+#endif
+    m_sc->setFlags(scFlags);
 
     m_scrp = m_sc->newCompatibleRenderPassDescriptor();
     m_sc->setRenderPassDescriptor(m_scrp);

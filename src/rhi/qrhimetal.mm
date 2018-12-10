@@ -65,6 +65,8 @@ QT_BEGIN_NAMESPACE
 
 struct QRhiMetalData
 {
+    QRhiMetalData(QRhiImplementation *rhi) : ofr(rhi) { }
+
     id<MTLDevice> dev;
     id<MTLCommandQueue> cmdQueue;
 
@@ -104,7 +106,27 @@ struct QRhiMetalData
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
+
+    struct OffscreenFrame {
+        OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
+        bool active = false;
+        QMetalCommandBuffer cbWrapper;
+    } ofr;
+
+    struct ActiveReadback {
+        int activeFrameSlot = -1;
+        QRhiReadbackDescription desc;
+        QRhiReadbackResult *result;
+        id<MTLBuffer> buf;
+        quint32 bufSize;
+        QSize pixelSize;
+        QRhiTexture::Format format;
+    };
+    QVector<ActiveReadback> activeReadbacks;
 };
+
+Q_DECLARE_TYPEINFO(QRhiMetalData::DeferredReleaseEntry, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiMetalData::ActiveReadback, Q_MOVABLE_TYPE);
 
 struct QMetalBufferData
 {
@@ -143,15 +165,17 @@ struct QMetalRenderTargetData
     QSize pixelSize;
     int colorAttCount = 0;
     int dsAttCount = 0;
+
+    struct ColorAtt {
+        id<MTLTexture> tex = nil;
+        int layer = 0;
+        int level = 0;
+        id<MTLTexture> resolveTex = nil;
+        int resolveLayer = 0;
+        int resolveLevel = 0;
+    };
+
     struct {
-        struct ColorAtt {
-            id<MTLTexture> tex = nil;
-            int layer = 0;
-            int level = 0;
-            id<MTLTexture> resolveTex = nil;
-            int resolveLayer = 0;
-            int resolveLevel = 0;
-        };
         ColorAtt colorAtt[QMetalRenderPassDescriptor::MAX_COLOR_ATTACHMENTS];
         id<MTLTexture> dsTex = nil;
         bool hasStencil = false;
@@ -179,12 +203,13 @@ struct QMetalSwapChainData
     id<MTLCommandBuffer> cb[QMTL_FRAMES_IN_FLIGHT];
     MTLRenderPassDescriptor *rp = nullptr;
     id<MTLTexture> msaaTex[QMTL_FRAMES_IN_FLIGHT];
+    QRhiTexture::Format rhiColorFormat;
     MTLPixelFormat colorFormat;
 };
 
 QRhiMetal::QRhiMetal(QRhiInitParams *params)
 {
-    d = new QRhiMetalData;
+    d = new QRhiMetalData(this);
 
     QRhiMetalInitParams *metalparams = static_cast<QRhiMetalInitParams *>(params);
     importedDevice = metalparams->importExistingDevice;
@@ -220,6 +245,7 @@ void QRhiMetal::create()
 void QRhiMetal::destroy()
 {
     executeDeferredReleases(true);
+    finishActiveReadbacks(true);
 
     if (d->cmdQueue) {
         [d->cmdQueue release];
@@ -558,6 +584,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
         return QRhi::FrameOpSwapChainOutOfDate;
     }
 
+    currentSwapChain = swapChainD;
     currentFrameSlot = swapChainD->currentFrame;
     if (swapChainD->ds)
         swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
@@ -568,7 +595,6 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     swapChainD->d->cb[currentFrameSlot] = [d->cmdQueue commandBufferWithUnretainedReferences];
 
     swapChainD->cbWrapper.d->cb = swapChainD->d->cb[currentFrameSlot];
-    swapChainD->cbWrapper.resetState();
 
     id<MTLTexture> scTex = swapChainD->d->curDrawable.texture;
     id<MTLTexture> resolveTex = nil;
@@ -582,6 +608,8 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
 
     executeDeferredReleases();
+    swapChainD->cbWrapper.resetState();
+    finishActiveReadbacks();
 
     return QRhi::FrameOpSuccess;
 }
@@ -603,6 +631,7 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
     [swapChainD->d->cb[currentFrameSlot] commit];
 
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QMTL_FRAMES_IN_FLIGHT;
+    currentSwapChain = nullptr;
 
     ++finishedFrameCount;
     return QRhi::FrameOpSuccess;
@@ -610,13 +639,45 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiMetal::beginOffscreenFrame(QRhiCommandBuffer **cb)
 {
-    Q_UNUSED(cb);
-    return QRhi::FrameOpError;
+    Q_ASSERT(!inFrame);
+    inFrame = true;
+
+    // Switch to the next slot manually. Swapchains do not know about this
+    // which is good. So for example a - unusual but possible - onscreen,
+    // onscreen, offscreen, onscreen, onscreen, onscreen sequence of
+    // begin/endFrame leads to 0, 1, 0, 0, 1, 0. This works because the
+    // offscreen frame is synchronous in the sense that we wait for execution
+    // to complete in endFrame, and so no resources used in that frame are busy
+    // anymore in the next frame.
+    currentFrameSlot = (currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
+
+    d->ofr.active = true;
+    *cb = &d->ofr.cbWrapper;
+    d->ofr.cbWrapper.d->cb = [d->cmdQueue commandBufferWithUnretainedReferences];
+
+    executeDeferredReleases();
+    d->ofr.cbWrapper.resetState();
+    finishActiveReadbacks();
+
+    return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
 {
-    return QRhi::FrameOpError;
+    Q_ASSERT(d->ofr.active);
+    d->ofr.active = false;
+    Q_ASSERT(inFrame);
+    inFrame = false;
+
+    [d->ofr.cbWrapper.d->cb commit];
+
+    // offscreen frames wait for completion, unlike swapchain ones
+    [d->ofr.cbWrapper.d->cb waitUntilCompleted];
+
+    finishActiveReadbacks(true);
+
+    ++finishedFrameCount;
+    return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiMetal::finish()
@@ -827,6 +888,60 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                                   destinationOrigin: MTLOriginMake(dx, dy, 0)];
     }
 
+    for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
+        QRhiMetalData::ActiveReadback aRb;
+        aRb.activeFrameSlot = currentFrameSlot;
+        aRb.desc = u.rb;
+        aRb.result = u.result;
+
+        QMetalTexture *texD = QRHI_RES(QMetalTexture, aRb.desc.texture);
+        QMetalSwapChain *swapChainD = nullptr;
+        id<MTLTexture> src;
+        QSize srcSize;
+        if (texD) {
+            if (texD->samples > 1) {
+                qWarning("Multisample texture cannot be read back");
+                continue;
+            }
+            aRb.pixelSize = texD->m_pixelSize;
+            if (u.rb.level > 0) {
+                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level))));
+                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level))));
+            }
+            aRb.format = texD->m_format;
+            src = texD->d->tex;
+            srcSize = texD->m_pixelSize;
+        } else {
+            Q_ASSERT(currentSwapChain);
+            swapChainD = QRHI_RES(QMetalSwapChain, currentSwapChain);
+            aRb.pixelSize = swapChainD->pixelSize;
+            aRb.format = swapChainD->d->rhiColorFormat;
+            // Multisample swapchains need nothing special since resolving
+            // happens when ending a renderpass.
+            const QMetalRenderTargetData::ColorAtt &colorAtt(swapChainD->rtWrapper.d->fb.colorAtt[0]);
+            src = colorAtt.resolveTex ? colorAtt.resolveTex : colorAtt.tex;
+            srcSize = swapChainD->rtWrapper.d->pixelSize;
+        }
+
+        quint32 bpl = 0;
+        textureFormatInfo(aRb.format, aRb.pixelSize, &bpl, &aRb.bufSize);
+        aRb.buf = [d->dev newBufferWithLength: aRb.bufSize options: MTLResourceStorageModeShared];
+
+        ensureBlit();
+        [blitEnc copyFromTexture: src
+                                  sourceSlice: aRb.desc.layer
+                                  sourceLevel: aRb.desc.level
+                                  sourceOrigin: MTLOriginMake(0, 0, 0)
+                                  sourceSize: MTLSizeMake(srcSize.width(), srcSize.height(), 1)
+                                  toBuffer: aRb.buf
+                                  destinationOffset: 0
+                                  destinationBytesPerRow: bpl
+                                  destinationBytesPerImage: 0
+                                  options: MTLBlitOptionNone];
+
+        d->activeReadbacks.append(aRb);
+    }
+
     for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
         ensureBlit();
         [blitEnc generateMipmapsForTexture: QRHI_RES(QMetalTexture, u.tex)->d->tex];
@@ -972,6 +1087,31 @@ void QRhiMetal::executeDeferredReleases(bool forced)
             d->releaseQueue.removeAt(i);
         }
     }
+}
+
+void QRhiMetal::finishActiveReadbacks(bool forced)
+{
+    QVarLengthArray<std::function<void()>, 4> completedCallbacks;
+
+    for (int i = d->activeReadbacks.count() - 1; i >= 0; --i) {
+        const QRhiMetalData::ActiveReadback &aRb(d->activeReadbacks[i]);
+        if (forced || currentFrameSlot == aRb.activeFrameSlot || aRb.activeFrameSlot < 0) {
+            aRb.result->format = aRb.format;
+            aRb.result->pixelSize = aRb.pixelSize;
+            aRb.result->data.resize(aRb.bufSize);
+            void *p = [aRb.buf contents];
+            memcpy(aRb.result->data.data(), p, aRb.bufSize);
+            [aRb.buf release];
+
+            if (aRb.result->completed)
+                completedCallbacks.append(aRb.result->completed);
+
+            d->activeReadbacks.removeAt(i);
+        }
+    }
+
+    for (auto f : completedCallbacks)
+        f();
 }
 
 QMetalBuffer::QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
@@ -2116,6 +2256,7 @@ void QMetalSwapChain::chooseFormats()
     samples = rhiD->effectiveSampleCount(m_sampleCount);
     // pick a format that is allowed for CAMetalLayer.pixelFormat
     d->colorFormat = m_flags.testFlag(sRGB) ? MTLPixelFormatBGRA8Unorm_sRGB : MTLPixelFormatBGRA8Unorm;
+    d->rhiColorFormat = QRhiTexture::BGRA8;
 }
 
 bool QMetalSwapChain::buildOrResize()
@@ -2135,6 +2276,9 @@ bool QMetalSwapChain::buildOrResize()
     chooseFormats();
     if (d->colorFormat != d->layer.pixelFormat)
         d->layer.pixelFormat = d->colorFormat;
+
+    if (m_flags.testFlag(UsedAsTransferSource))
+        d->layer.framebufferOnly = NO;
 
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;

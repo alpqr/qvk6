@@ -25,5 +25,6 @@ win32 {
 
 mac {
     SUBDIRS += \
-        plainqwindow_metal
+        plainqwindow_metal \
+        offscreen_metal
 }

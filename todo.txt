@@ -1,6 +1,4 @@
-mtl: rhi without a window, offscreen frame
-mtl: readback (tex, backbuffer)
-
+mtl: finish()
 gl: tex formats (texture, readback)
 gl: srgb
 
@@ -55,6 +53,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: readback (tex, backbuffer)
+mtl: rhi without a window, offscreen frame
 mtl: compressed textures
 mtl: srgb (tex, swapchain buf)
 change how resolve is done

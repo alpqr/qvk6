@@ -835,18 +835,19 @@ Q_DECLARE_TYPEINFO(QRhiGraphicsPipeline::TargetBlend, Q_MOVABLE_TYPE);
 class Q_RHI_EXPORT QRhiSwapChain : public QRhiResource
 {
 public:
-    enum SurfaceImportFlag {
+    enum Flag {
         SurfaceHasPreMulAlpha = 1 << 0,
         SurfaceHasNonPreMulAlpha = 1 << 1,
-        sRGB = 1 << 2
+        sRGB = 1 << 2,
+        UsedAsTransferSource = 1 << 3 // will be read back
     };
-    Q_DECLARE_FLAGS(SurfaceImportFlags, SurfaceImportFlag)
+    Q_DECLARE_FLAGS(Flags, Flag)
 
     QWindow *window() const { return m_window; }
     void setWindow(QWindow *window) { m_window = window; }
 
-    SurfaceImportFlags flags() const { return m_flags; }
-    void setFlags(SurfaceImportFlags f) { m_flags = f; }
+    Flags flags() const { return m_flags; }
+    void setFlags(Flags f) { m_flags = f; }
 
     QRhiRenderBuffer *depthStencil() const { return m_depthStencil; }
     void setDepthStencil(QRhiRenderBuffer *ds) { m_depthStencil = ds; }
@@ -896,7 +897,7 @@ public:
 protected:
     QRhiSwapChain(QRhiImplementation *rhi);
     QWindow *m_window = nullptr;
-    SurfaceImportFlags m_flags;
+    Flags m_flags;
     QRhiRenderBuffer *m_depthStencil = nullptr;
     int m_sampleCount = 1;
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
@@ -905,7 +906,7 @@ protected:
     void *m_reserved;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::SurfaceImportFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::Flags)
 
 class Q_RHI_EXPORT QRhiCommandBuffer : public QRhiResource
 {
@@ -1159,8 +1160,10 @@ public:
       is to use it in completely offscreen applications, e.g. to generate image
       sequences by rendering and reading back without ever showing a window.
       Usage in on-screen applications (so beginFrame, endFrame,
-      beginOffscreenFrame, endOffscreenFrame, beginFrame, ...) is possible too but
-      it does break parallelism so should be done only infrequently.
+      beginOffscreenFrame, endOffscreenFrame, beginFrame, ...) is possible too
+      but it does reduce parallelism (offscreen frames do not let the CPU -
+      potentially - generate another frame while the GPU is still processing
+      the previous one) so should be done only infrequently.
           QRhiReadbackResult rbResult;
           QRhiCommandBuffer *cb; // not owned
           beginOffscreenFrame(&cb);

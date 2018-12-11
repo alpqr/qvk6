@@ -810,7 +810,7 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         attDesc.format = vkformat;
         attDesc.samples = samples;
         attDesc.loadOp = preserveColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.storeOp = samples > VK_SAMPLE_COUNT_1_BIT ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
+        attDesc.storeOp = colorAttachments[i].resolveTexture ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc.initialLayout = preserveColor ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;

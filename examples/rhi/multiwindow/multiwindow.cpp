@@ -600,7 +600,9 @@ int main(int argc, char **argv)
 
     QPlainTextEdit *info = new QPlainTextEdit(
                 QLatin1String("This application tests rendering with the same QRhi instance (and so the same Vulkan/Metal/D3D device or OpenGL context) "
-                              "to multiple windows via multiple QRhiSwapChain objects, from the same one thread. Some resources are reused across all windows."
+                              "to multiple windows via multiple QRhiSwapChain objects, from the same one thread. Some resources are shared across all windows."
+                              "\n\nNote that the behavior may differ depending on the underlying graphics API implementation and the number of windows.\n"
+                              "(e.g. weird OpenGL rendering speeds with multiple windows with some drivers is out of Qt's control)"
                               "\n\nUsing API: ") + graphicsApiName());
     info->setReadOnly(true);
     layout->addWidget(info);

@@ -82,13 +82,14 @@ void Window::customInit()
 
     QRhiTextureUploadDescription desc;
     QImage img = QImage(":/c.png").mirrored(); // just use the same image for all faces for now
+    auto texLayer = QRhiTextureUploadDescription::Layer({ QRhiTextureUploadDescription::Layer::MipLevel(img) });
     desc.layers
-            << QRhiTextureUploadDescription::Layer({ { img } })  // +X
-            << QRhiTextureUploadDescription::Layer({ { img } })  // -X
-            << QRhiTextureUploadDescription::Layer({ { img } })  // +Y
-            << QRhiTextureUploadDescription::Layer({ { img } })  // -Y
-            << QRhiTextureUploadDescription::Layer({ { img } })  // +Z
-            << QRhiTextureUploadDescription::Layer({ { img } }); // -Z
+            << texLayer  // +X
+            << texLayer  // -X
+            << texLayer  // +Y
+            << texLayer  // -Y
+            << texLayer  // +Z
+            << texLayer; // -Z
     d.initialUpdates->uploadTexture(d.tex, desc);
 
     d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,

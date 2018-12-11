@@ -154,6 +154,7 @@ void Window::customRender()
 
     if (d.initialUpdates) {
         u->merge(d.initialUpdates);
+        d.initialUpdates->release();
         d.initialUpdates = nullptr;
     }
 

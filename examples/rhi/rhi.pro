@@ -8,6 +8,7 @@ SUBDIRS += \
     msaatexture \
     msaarenderbuffer \
     cubemap \
+    multiwindow \
     plainqwindow_gles2 \
     offscreen_gles2
 

@@ -219,6 +219,7 @@ void Window::customRender()
     QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
     if (d.initialUpdates) {
         u->merge(d.initialUpdates);
+        d.initialUpdates->release();
         d.initialUpdates = nullptr;
     }
 

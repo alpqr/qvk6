@@ -359,7 +359,11 @@ void Window::releaseResources()
 
     releasePool.clear();
 
-    delete m_sc;
+    if (m_sc) {
+        m_sc->releaseAndDestroy(); // likely released already but be sure, it won't hurt
+        m_sc = nullptr;
+    }
+
     delete m_r;
 
 #ifndef QT_NO_OPENGL

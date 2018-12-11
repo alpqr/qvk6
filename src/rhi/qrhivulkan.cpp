@@ -164,8 +164,9 @@ QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
     if (importedDevPoolQueue) {
         physDev = vkparams->physDev;
         dev = vkparams->dev;
-        cmdPool = vkparams->cmdPool;
+        gfxQueueFamilyIdx = vkparams->gfxQueueFamilyIdx;
         gfxQueue = vkparams->gfxQueue;
+        cmdPool = vkparams->cmdPool;
     }
     maybeWindow = vkparams->window; // may be null
 
@@ -202,7 +203,9 @@ void QRhiVulkan::create()
         f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, nullptr);
         QVector<VkQueueFamilyProperties> queueFamilyProps(queueCount);
         f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, queueFamilyProps.data());
-        int gfxQueueFamilyIdx = -1;
+
+        gfxQueue = VK_NULL_HANDLE;
+        gfxQueueFamilyIdx = -1;
         int presQueueFamilyIdx = -1;
         for (int i = 0; i < queueFamilyProps.count(); ++i) {
             qDebug("queue family %d: flags=0x%x count=%d", i, queueFamilyProps[i].queueFlags, queueFamilyProps[i].queueCount);
@@ -258,20 +261,20 @@ void QRhiVulkan::create()
         err = f->vkCreateDevice(physDev, &devInfo, nullptr, &dev);
         if (err != VK_SUCCESS)
             qFatal("Failed to create device: %d", err);
+    }
 
-        df = inst->deviceFunctions(dev);
-        df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
-
+    df = inst->deviceFunctions(dev);
+    if (!cmdPool) {
         VkCommandPoolCreateInfo poolInfo;
         memset(&poolInfo, 0, sizeof(poolInfo));
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.queueFamilyIndex = gfxQueueFamilyIdx;
-        err = df->vkCreateCommandPool(dev, &poolInfo, nullptr, &cmdPool);
+        VkResult err = df->vkCreateCommandPool(dev, &poolInfo, nullptr, &cmdPool);
         if (err != VK_SUCCESS)
             qFatal("Failed to create command pool: %d", err);
     }
-
-    df = inst->deviceFunctions(dev);
+    if (gfxQueueFamilyIdx != -1 && !gfxQueue)
+        df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
 
     VmaVulkanFunctions afuncs;
     afuncs.vkGetPhysicalDeviceProperties = wrap_vkGetPhysicalDeviceProperties;
@@ -811,7 +814,7 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc.initialLayout = preserveColor ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc.finalLayout = samples > VK_SAMPLE_COUNT_1_BIT ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        attDesc.finalLayout = colorAttachments[i].resolveTexture ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         attDescs.append(attDesc);
 
         const VkAttachmentReference ref = { uint32_t(attDescs.count() - 1), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
@@ -833,7 +836,7 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         attDesc.stencilStoreOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc.finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL;
+        attDesc.finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         attDescs.append(attDesc);
     }
     VkAttachmentReference dsRef = { uint32_t(attDescs.count() - 1), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
@@ -1276,6 +1279,18 @@ QRhi::FrameOpResult QRhiVulkan::endAndSubmitCommandBuffer(VkCommandBuffer cb, Vk
     return QRhi::FrameOpSuccess;
 }
 
+void QRhiVulkan::waitCommandCompletion(int frameSlot)
+{
+    for (QVkSwapChain *sc : qAsConst(swapchains)) {
+        QVkSwapChain::ImageResources &image(sc->imageRes[sc->frameRes[frameSlot].imageIndex]);
+        if (image.cmdFenceWaitable) {
+            df->vkWaitForFences(dev, 1, &image.cmdFence, VK_TRUE, UINT64_MAX);
+            df->vkResetFences(dev, 1, &image.cmdFence);
+            image.cmdFenceWaitable = false;
+        }
+    }
+}
+
 QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 {
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
@@ -1292,8 +1307,9 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 
         // move on to next swapchain image
         VkResult err = vkAcquireNextImageKHR(dev, swapChainD->sc, UINT64_MAX,
-                                             frame.imageSem, frame.fence, &swapChainD->currentImage);
+                                             frame.imageSem, frame.fence, &frame.imageIndex);
         if (err == VK_SUCCESS || err == VK_SUBOPTIMAL_KHR) {
+            swapChainD->currentImage = frame.imageIndex;
             frame.imageSemWaitable = true;
             frame.imageAcquired = true;
             frame.fenceWaitable = true;
@@ -1308,15 +1324,18 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
         }
     }
 
-    // make sure the previous draw for the same image has finished
-    QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
-    if (image.cmdFenceWaitable) {
-        df->vkWaitForFences(dev, 1, &image.cmdFence, VK_TRUE, UINT64_MAX);
-        df->vkResetFences(dev, 1, &image.cmdFence);
-        image.cmdFenceWaitable = false;
-    }
+    // Make sure the previous commands for the same image have finished.
+    //
+    // Do this also for any other swapchain's commands with the same frame slot
+    // While this reduces concurrency, it keeps resource usage safe: swapchain
+    // A starting its frame 0, followed by swapchain B starting its own frame 0
+    // will make B wait for A's frame 0 commands, so if a resource is written
+    // in B's frame or when B checks for pending resource releases, that won't
+    // mess up A's in-flight commands (as they are not in flight anymore).
+    waitCommandCompletion(swapChainD->currentFrame);
 
     // build new draw command buffer
+    QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
     QRhi::FrameOpResult cbres = startCommandBuffer(&image.cmdBuf);
     if (cbres != QRhi::FrameOpSuccess)
         return cbres;
@@ -1421,6 +1440,10 @@ QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
     // to complete in endFrame, and so no resources used in that frame are busy
     // anymore in the next frame.
     currentFrameSlot = (currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
+    // except that this gets complicated with multiple swapchains so make sure
+    // any pending commands have finished for the frame slot we are going to use
+    if (swapchains.count() > 1)
+        waitCommandCompletion(currentFrameSlot);
 
     prepareNewFrame(&ofr.cbWrapper);
     ofr.active = true;
@@ -1557,6 +1580,11 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
     // decide if something is safe to handle now a simple "lastActiveFrameSlot
     // == currentFrameSlot" is sufficient (remember that e.g. with F==2
     // currentFrameSlot goes 0, 1, 0, 1, 0, ...)
+    //
+    // With multiple swapchains on the same QRhi things get more convoluted
+    // (and currentFrameSlot strictly alternating is not true anymore) but
+    // beginNonWrapperFrame() solves that by blocking as necessary so the rest
+    // here is safe regardless.
 
     executeDeferredReleases();
 
@@ -4035,6 +4063,7 @@ void QVkSwapChain::release()
         return;
 
     QRHI_RES_RHI(QRhiVulkan);
+    rhiD->swapchains.remove(this);
     rhiD->releaseSwapChainResources(this);
 }
 
@@ -4124,6 +4153,13 @@ bool QVkSwapChain::ensureSurface()
     surface = surf;
 
     QRHI_RES_RHI(QRhiVulkan);
+    if (rhiD->gfxQueueFamilyIdx != -1) {
+        if (!rhiD->inst->supportsPresent(rhiD->physDev, rhiD->gfxQueueFamilyIdx, m_window)) {
+            qWarning("Presenting not supported on this window");
+            return false;
+        }
+    }
+
     if (!rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR) {
         rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR>(
                     rhiD->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
@@ -4182,6 +4218,10 @@ bool QVkSwapChain::buildOrResize()
         return false;
     }
 
+    QRHI_RES_RHI(QRhiVulkan);
+    if (!window)
+        rhiD->swapchains.insert(this);
+
     // Can be called multiple times due to window resizes - that is not the
     // same as a simple release+build (as with other resources). Thus no
     // release() here. See recreateSwapChain().
@@ -4194,7 +4234,6 @@ bool QVkSwapChain::buildOrResize()
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;
 
-    QRHI_RES_RHI(QRhiVulkan);
     if (!rhiD->recreateSwapChain(this))
         return false;
 

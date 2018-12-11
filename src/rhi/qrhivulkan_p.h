@@ -303,6 +303,7 @@ struct QVkSwapChain : public QRhiSwapChain
         VkSemaphore drawSem = VK_NULL_HANDLE;
         bool imageAcquired = false;
         bool imageSemWaitable = false;
+        quint32 imageIndex = 0;
     } frameRes[QVK_FRAMES_IN_FLIGHT];
 
     quint32 currentImage = 0; // index in imageRes
@@ -412,6 +413,7 @@ public:
     QRhi::FrameOpResult startCommandBuffer(VkCommandBuffer *cb);
     QRhi::FrameOpResult endAndSubmitCommandBuffer(VkCommandBuffer cb, VkFence cmdFence,
                                                   VkSemaphore *waitSem, VkSemaphore *signalSem);
+    void waitCommandCompletion(int frameSlot);
     QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
@@ -450,6 +452,7 @@ public:
     VkPhysicalDevice physDev = VK_NULL_HANDLE;
     VkDevice dev = VK_NULL_HANDLE;
     VkCommandPool cmdPool = VK_NULL_HANDLE;
+    int gfxQueueFamilyIdx = -1;
     VkQueue gfxQueue = VK_NULL_HANDLE;
     QVkAllocator allocator;
     QVulkanFunctions *f = nullptr;
@@ -486,6 +489,7 @@ public:
     int finishedFrameCount = 0;
     bool inPass = false;
     QVkSwapChain *currentSwapChain = nullptr;
+    QSet<QVkSwapChain *> swapchains;
 
     struct OffscreenFrame {
         OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }

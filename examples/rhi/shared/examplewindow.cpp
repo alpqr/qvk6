@@ -175,8 +175,10 @@ void ExampleWindow::releaseResources()
         m_ds = nullptr;
     }
 
-    delete m_sc;
-    m_sc = nullptr;
+    if (m_sc) {
+        m_sc->releaseAndDestroy();
+        m_sc = nullptr;
+    }
 
     delete m_r;
     m_r = nullptr;

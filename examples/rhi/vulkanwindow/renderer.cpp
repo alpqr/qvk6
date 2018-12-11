@@ -97,8 +97,10 @@ void Renderer::releaseResources()
 {
     m_triRenderer.releaseResources();
 
-    delete m_sc;
-    m_sc = nullptr;
+    if (m_sc) {
+        m_sc->releaseAndDestroy();
+        m_sc = nullptr;
+    }
 
     if (m_scrp) {
         m_scrp->releaseAndDestroy();

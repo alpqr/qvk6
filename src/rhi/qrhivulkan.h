@@ -47,15 +47,17 @@ struct Q_RHI_EXPORT QRhiVulkanInitParams : public QRhiInitParams
     QVulkanInstance *inst = nullptr;
 
     bool importExistingDevice = false;
-    // all four must be given when importExistingDevice is true. ownership not taken.
+    // when importExistingDevice is true. ownership not taken.
     // leave them unset otherwise.
-    VkPhysicalDevice physDev = VK_NULL_HANDLE;
-    VkDevice dev = VK_NULL_HANDLE;
-    VkCommandPool cmdPool = VK_NULL_HANDLE;
-    VkQueue gfxQueue = VK_NULL_HANDLE;
+    VkPhysicalDevice physDev = VK_NULL_HANDLE; // required
+    VkDevice dev = VK_NULL_HANDLE; // required
+    int gfxQueueFamilyIdx = -1; // either this or gfxQueue is required [prefer this over gfxQueue]
+    VkQueue gfxQueue = VK_NULL_HANDLE; // either this or gfxQueueFamilyIdx is required [use this only when importing a QVulkanWindow]
+    VkCommandPool cmdPool = VK_NULL_HANDLE; // optional
 
     // optional, only used during init to verify if presenting is supported
-    // (when importExistingDevice is false)
+    // while choosing the graphics queue
+    // (only when importExistingDevice is false)
     QWindow *window = nullptr;
 };
 

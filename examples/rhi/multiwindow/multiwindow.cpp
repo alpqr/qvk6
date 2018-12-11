@@ -419,7 +419,10 @@ void Window::releaseResources()
 
     m_releasePool.clear();
 
-    delete m_sc;
+    if (m_sc) {
+        m_sc->releaseAndDestroy();
+        m_sc = nullptr;
+    }
 }
 
 void Window::resizeSwapChain()

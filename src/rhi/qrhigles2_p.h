@@ -304,13 +304,13 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 const void *data; // must come from retainData()
             } bufferSubData;
             struct {
-                GLenum srcTarget;
+                GLenum srcFaceTarget;
                 GLuint srcTexture;
                 int srcLevel;
                 int srcX;
                 int srcY;
-                GLenum dstTarget;
-                GLuint dstTexture;
+                QGles2Texture *dst;
+                GLenum dstFaceTarget;
                 int dstLevel;
                 int dstX;
                 int dstY;
@@ -324,7 +324,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 int level;
             } readPixels;
             struct {
-                GLenum target;
+                QGles2Texture *dst;
+                GLenum faceTarget;
                 int level;
                 int dx;
                 int dy;
@@ -335,7 +336,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 const void *data; // must come from retainImage()
             } subImage;
             struct {
-                GLenum target;
+                QGles2Texture *dst;
+                GLenum faceTarget;
                 int level;
                 GLenum glintformat;
                 int w;
@@ -344,7 +346,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 const void *data; // must come from retainData()
             } compressedImage;
             struct {
-                GLenum target;
+                QGles2Texture *dst;
+                GLenum faceTarget;
                 int level;
                 int dx;
                 int dy;

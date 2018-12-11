@@ -590,10 +590,9 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
         const bool isCompressed = isCompressedFormat(texD->m_format);
         const bool isCubeMap = texD->m_flags.testFlag(QRhiTexture::CubeMap);
-        const GLenum targetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+        const GLenum faceTargetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
         for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
             const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            f->glBindTexture(targetBase + layer, texD->texture);
             for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
                 const int dx = mipDesc.destinationTopLeft.x();
@@ -610,7 +609,8 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     if (texD->specified) {
                         QGles2CommandBuffer::Command cmd;
                         cmd.cmd = QGles2CommandBuffer::Command::CompressedSubImage;
-                        cmd.args.compressedSubImage.target = targetBase + layer;
+                        cmd.args.compressedSubImage.dst = texD;
+                        cmd.args.compressedSubImage.faceTarget = faceTargetBase + layer;
                         cmd.args.compressedSubImage.level = level;
                         cmd.args.compressedSubImage.dx = dx;
                         cmd.args.compressedSubImage.dy = dy;
@@ -623,7 +623,8 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     } else {
                         QGles2CommandBuffer::Command cmd;
                         cmd.cmd = QGles2CommandBuffer::Command::CompressedImage;
-                        cmd.args.compressedImage.target = targetBase + layer;
+                        cmd.args.compressedImage.dst = texD;
+                        cmd.args.compressedImage.faceTarget = faceTargetBase + layer;
                         cmd.args.compressedImage.level = level;
                         cmd.args.compressedImage.glintformat = texD->glintformat;
                         cmd.args.compressedImage.w = w;
@@ -647,7 +648,8 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                         }
                         img = img.copy(sx, sy, w, h);
                     }
-                    cmd.args.subImage.target = targetBase + layer;
+                    cmd.args.subImage.dst = texD;
+                    cmd.args.subImage.faceTarget = faceTargetBase + layer;
                     cmd.args.subImage.level = level;
                     cmd.args.subImage.dx = dx;
                     cmd.args.subImage.dy = dy;
@@ -676,22 +678,20 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         const float dx = u.desc.destinationTopLeft.x();
         const float dy = u.desc.destinationTopLeft.y();
 
-        const GLenum srcTargetBase = srcD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : srcD->target;
-        const GLenum srcTarget = srcTargetBase + u.desc.sourceLayer;
-        const GLenum dstTargetBase = dstD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : dstD->target;
-        const GLenum dstTarget = dstTargetBase + u.desc.destinationLayer;
+        const GLenum srcFaceTargetBase = srcD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : srcD->target;
+        const GLenum dstFaceTargetBase = dstD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : dstD->target;
 
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::CopyTex;
 
-        cmd.args.copyTex.srcTarget = srcTarget;
+        cmd.args.copyTex.srcFaceTarget = srcFaceTargetBase + u.desc.sourceLayer;
         cmd.args.copyTex.srcTexture = srcD->texture;
         cmd.args.copyTex.srcLevel = u.desc.sourceLevel;
         cmd.args.copyTex.srcX = sx;
         cmd.args.copyTex.srcY = sy;
 
-        cmd.args.copyTex.dstTarget = dstTarget;
-        cmd.args.copyTex.dstTexture = dstD->texture;
+        cmd.args.copyTex.dst = dstD;
+        cmd.args.copyTex.dstFaceTarget = dstFaceTargetBase + u.desc.destinationLayer;
         cmd.args.copyTex.dstLevel = u.desc.destinationLevel;
         cmd.args.copyTex.dstX = dx;
         cmd.args.copyTex.dstY = dy;
@@ -1094,9 +1094,9 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             f->glGenFramebuffers(1, &fbo);
             f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
             f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                      cmd.args.copyTex.srcTarget, cmd.args.copyTex.srcTexture, cmd.args.copyTex.srcLevel);
-            f->glBindTexture(cmd.args.copyTex.dstTarget, cmd.args.copyTex.dstTexture);
-            f->glCopyTexSubImage2D(cmd.args.copyTex.dstTarget, cmd.args.copyTex.dstLevel,
+                                      cmd.args.copyTex.srcFaceTarget, cmd.args.copyTex.srcTexture, cmd.args.copyTex.srcLevel);
+            f->glBindTexture(cmd.args.copyTex.dst->target, cmd.args.copyTex.dst->texture);
+            f->glCopyTexSubImage2D(cmd.args.copyTex.dstFaceTarget, cmd.args.copyTex.dstLevel,
                                    cmd.args.copyTex.dstX, cmd.args.copyTex.dstY,
                                    cmd.args.copyTex.srcX, cmd.args.copyTex.srcY,
                                    cmd.args.copyTex.w, cmd.args.copyTex.h);
@@ -1115,9 +1115,8 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 result->format = texD->m_format;
                 f->glGenFramebuffers(1, &fbo);
                 f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-                const GLenum targetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
-                const GLenum target = targetBase + cmd.args.readPixels.layer;
-                f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, texD->texture, cmd.args.readPixels.level);
+                const GLenum faceTargetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+                f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, faceTargetBase + cmd.args.readPixels.layer, texD->texture, cmd.args.readPixels.level);
             } else {
                 result->pixelSize = currentSwapChain->pixelSize;
                 result->format = QRhiTexture::RGBA8;
@@ -1136,20 +1135,23 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         }
             break;
         case QGles2CommandBuffer::Command::SubImage:
-            f->glTexSubImage2D(cmd.args.subImage.target, cmd.args.subImage.level,
+            f->glBindTexture(cmd.args.subImage.dst->target, cmd.args.subImage.dst->texture);
+            f->glTexSubImage2D(cmd.args.subImage.faceTarget, cmd.args.subImage.level,
                                cmd.args.subImage.dx, cmd.args.subImage.dy,
                                cmd.args.subImage.w, cmd.args.subImage.h,
                                cmd.args.subImage.glformat, cmd.args.subImage.gltype,
                                cmd.args.subImage.data);
             break;
         case QGles2CommandBuffer::Command::CompressedImage:
-            f->glCompressedTexImage2D(cmd.args.compressedImage.target, cmd.args.compressedImage.level,
+            f->glBindTexture(cmd.args.compressedImage.dst->target, cmd.args.compressedImage.dst->texture);
+            f->glCompressedTexImage2D(cmd.args.compressedImage.faceTarget, cmd.args.compressedImage.level,
                                       cmd.args.compressedImage.glintformat,
                                       cmd.args.compressedImage.w, cmd.args.compressedImage.h, 0,
                                       cmd.args.compressedImage.size, cmd.args.compressedImage.data);
             break;
         case QGles2CommandBuffer::Command::CompressedSubImage:
-            f->glCompressedTexSubImage2D(cmd.args.compressedSubImage.target, cmd.args.compressedSubImage.level,
+            f->glBindTexture(cmd.args.compressedSubImage.dst->target, cmd.args.compressedSubImage.dst->texture);
+            f->glCompressedTexSubImage2D(cmd.args.compressedSubImage.faceTarget, cmd.args.compressedSubImage.level,
                                          cmd.args.compressedSubImage.dx, cmd.args.compressedSubImage.dy,
                                          cmd.args.compressedSubImage.w, cmd.args.compressedSubImage.h,
                                          cmd.args.compressedSubImage.glintformat,
@@ -1164,9 +1166,8 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                                          GL_RENDERBUFFER, cmd.args.blitFromRb.renderbuffer);
             f->glBindFramebuffer(GL_DRAW_FRAMEBUFFER, fbo[1]);
             QGles2Texture *texD = cmd.args.blitFromRb.dst;
-            const GLenum targetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
-            const GLenum target = targetBase + cmd.args.blitFromRb.dstLayer;
-            f->glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target,
+            const GLenum faceTargetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+            f->glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, faceTargetBase + cmd.args.blitFromRb.dstLayer,
                                       texD->texture, cmd.args.blitFromRb.dstLevel);
             f->glBlitFramebuffer(0, 0, cmd.args.blitFromRb.w, cmd.args.blitFromRb.h,
                                  0, 0, cmd.args.blitFromRb.w, cmd.args.blitFromRb.h,
@@ -1650,20 +1651,19 @@ bool QGles2Texture::build()
     rhiD->f->glGenTextures(1, &texture);
 
     if (!isCompressed) {
+        rhiD->f->glBindTexture(target, texture);
         if (hasMipMaps || isCube) {
-            const GLenum targetBase = isCube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : target;
+            const GLenum faceTargetBase = isCube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : target;
             for (int layer = 0, layerCount = isCube ? 6 : 1; layer != layerCount; ++layer) {
-                rhiD->f->glBindTexture(targetBase + layer, texture);
                 for (int level = 0; level != mipLevelCount; ++level) {
                     const int w = qFloor(float(qMax(1, size.width() >> level)));
                     const int h = qFloor(float(qMax(1, size.height() >> level)));
-                    rhiD->f->glTexImage2D(targetBase + layer, level, glintformat,
+                    rhiD->f->glTexImage2D(faceTargetBase + layer, level, glintformat,
                                           w, h, 0,
                                           glformat, gltype, nullptr);
                 }
             }
         } else {
-            rhiD->f->glBindTexture(target, texture);
             rhiD->f->glTexImage2D(target, 0, glintformat, size.width(), size.height(), 0, glformat, gltype, nullptr);
         }
         specified = true;
@@ -1794,9 +1794,8 @@ bool QGles2TextureRenderTarget::build()
     if (texture) {
         QGles2Texture *texD = QRHI_RES(QGles2Texture, texture);
         Q_ASSERT(texD->texture && texD->specified);
-        const GLenum targetBase = texD->flags().testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
-        const GLenum target = targetBase + colorAtt.layer;
-        rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, target, texD->texture, colorAtt.level);
+        const GLenum faceTargetBase = texD->flags().testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+        rhiD->f->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, faceTargetBase + colorAtt.layer, texD->texture, colorAtt.level);
         d.pixelSize = texD->pixelSize();
     } else {
         QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, renderBuffer);

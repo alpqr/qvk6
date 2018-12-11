@@ -397,8 +397,7 @@ void QRhiD3D11::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
     cmd.cmd = QD3D11CommandBuffer::Command::Viewport;
     cmd.args.viewport.x = viewport.r.x();
     // d3d expects top-left, QRhiViewport is bottom-left
-    cmd.args.viewport.y = cbD->currentTarget->sizeInPixels().height() - (viewport.r.y() + viewport.r.w() - 1);
-    cmd.args.viewport.y = viewport.r.y();
+    cmd.args.viewport.y = cbD->currentTarget->sizeInPixels().height() - (viewport.r.y() + viewport.r.w());
     cmd.args.viewport.w = viewport.r.z();
     cmd.args.viewport.h = viewport.r.w();
     cmd.args.viewport.d0 = viewport.minDepth;
@@ -415,7 +414,7 @@ void QRhiD3D11::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
     cmd.cmd = QD3D11CommandBuffer::Command::Scissor;
     cmd.args.scissor.x = scissor.r.x();
     // d3d expects top-left, QRhiScissor is bottom-left
-    cmd.args.scissor.y = cbD->currentTarget->sizeInPixels().height() - (scissor.r.y() + scissor.r.w() - 1);
+    cmd.args.scissor.y = cbD->currentTarget->sizeInPixels().height() - (scissor.r.y() + scissor.r.w());
     cmd.args.scissor.w = scissor.r.z();
     cmd.args.scissor.h = scissor.r.w();
     cbD->commands.append(cmd);

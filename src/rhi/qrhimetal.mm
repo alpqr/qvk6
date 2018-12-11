@@ -485,7 +485,7 @@ static inline MTLViewport toMetalViewport(const QRhiViewport &viewport, const QS
     // x,y is top-left in MTLViewport but bottom-left in QRhiViewport
     MTLViewport vp;
     vp.originX = viewport.r.x();
-    vp.originY = outputSize.height() - (viewport.r.y() + viewport.r.w() - 1);
+    vp.originY = outputSize.height() - (viewport.r.y() + viewport.r.w());
     vp.width = viewport.r.z();
     vp.height = viewport.r.w();
     vp.znear = viewport.minDepth;
@@ -508,7 +508,7 @@ static inline MTLScissorRect toMetalScissor(const QRhiScissor &scissor, const QS
     // x,y is top-left in MTLScissorRect but bottom-left in QRhiScissor
     MTLScissorRect s;
     s.x = scissor.r.x();
-    s.y = outputSize.height() - (scissor.r.y() + scissor.r.w() - 1);
+    s.y = outputSize.height() - (scissor.r.y() + scissor.r.w());
     s.width = scissor.r.z();
     s.height = scissor.r.w();
     return s;

@@ -2745,7 +2745,7 @@ static inline VkViewport toVkViewport(const QRhiViewport &viewport, const QSize 
     // x,y is top-left in VkViewport but bottom-left in QRhiViewport
     VkViewport vp;
     vp.x = viewport.r.x();
-    vp.y = outputSize.height() - (viewport.r.y() + viewport.r.w() - 1);
+    vp.y = outputSize.height() - (viewport.r.y() + viewport.r.w());
     vp.width = viewport.r.z();
     vp.height = viewport.r.w();
     vp.minDepth = viewport.minDepth;
@@ -2758,7 +2758,7 @@ static inline VkRect2D toVkScissor(const QRhiScissor &scissor, const QSize &outp
     // x,y is top-left in VkRect2D but bottom-left in QRhiScissor
     VkRect2D s;
     s.offset.x = scissor.r.x();
-    s.offset.y = outputSize.height() - (scissor.r.y() + scissor.r.w() - 1);
+    s.offset.y = outputSize.height() - (scissor.r.y() + scissor.r.w());
     s.extent.width = scissor.r.z();
     s.extent.height = scissor.r.w();
     return s;

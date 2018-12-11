@@ -332,7 +332,7 @@ void Window::resizeSwapChain()
     m_elapsedCount = 0;
 
     m_proj = m_r->clipSpaceCorrMatrix();
-    m_proj.perspective(45.0f, outputSize.width() / (float) outputSize.height(), 0.01f, 100.0f);
+    m_proj.perspective(45.0f, outputSize.width() / (float) outputSize.height(), 0.01f, 1000.0f);
     m_proj.translate(0, 0, -4);
 }
 

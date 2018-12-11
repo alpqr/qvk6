@@ -1,16 +1,8 @@
+multi window? (multi swapchain) -> trouble
+resource import/export, what's the interop story
+advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
-
-test cubemap
-test cubemap face as target
-test cubemap face readback
-
-advanced blend modes
-
-resource import/export, what's the interop story
-
-multi window? (multi swapchain) -> trouble
-
 should istexformatsupported should check srgb combinations
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
 vk: rendering hangs sometimes when minimize and back on some systems?
@@ -31,6 +23,8 @@ gl: ubuf structs, arrays
 gl: target QOpenGLWindow/Widget?
 compute?
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
+test cubemap face as target
+test cubemap face readback
 
 optional:
 threading options? secondary command lists?
@@ -51,6 +45,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+test cubemap
 what if window is changed on swapchain (vk, d3d may break as of now)
 mtl: finish()
 mtl: readback (tex, backbuffer)

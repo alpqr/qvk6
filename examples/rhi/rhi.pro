@@ -7,6 +7,7 @@ SUBDIRS += \
     texuploads \
     msaatexture \
     msaarenderbuffer \
+    cubemap \
     plainqwindow_gles2 \
     offscreen_gles2
 

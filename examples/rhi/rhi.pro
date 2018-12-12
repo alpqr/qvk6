@@ -9,6 +9,7 @@ SUBDIRS += \
     msaarenderbuffer \
     cubemap \
     multiwindow \
+    multiwindow_threaded \
     plainqwindow_gles2 \
     offscreen_gles2
 

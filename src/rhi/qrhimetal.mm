@@ -569,10 +569,10 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
 
     QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, swapChain);
 
-    // This is messed up since for this swapchain we want to wait for the
+    // This is a bit messed up since for this swapchain we want to wait for the
     // commands+present to complete, while for others just for the commands
-    // (for this same frame slot), just like with Vulkan, but not sure how to
-    // do that. So wait for everything for now.
+    // (for this same frame slot) but not sure how to do that in a sane way so
+    // wait for full cb completion for now.
     for (QMetalSwapChain *sc : qAsConst(swapchains)) {
         dispatch_semaphore_t sem = sc->d->sem[swapChainD->currentFrame];
         dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);

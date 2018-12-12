@@ -1324,7 +1324,9 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
         }
     }
 
-    // Make sure the previous commands for the same image have finished.
+    // Make sure the previous commands for the same image have finished. (note
+    // that this is based on the fence from the command buffer submit, nothing
+    // to do with the Present)
     //
     // Do this also for any other swapchain's commands with the same frame slot
     // While this reduces concurrency, it keeps resource usage safe: swapchain

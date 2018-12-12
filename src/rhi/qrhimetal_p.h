@@ -327,6 +327,7 @@ public:
     int finishedFrameCount = 0;
     bool inPass = false;
     QMetalSwapChain *currentSwapChain = nullptr;
+    QSet<QMetalSwapChain *> swapchains;
 
     QRhiMetalData *d = nullptr;
 };

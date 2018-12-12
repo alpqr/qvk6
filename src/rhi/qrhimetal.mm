@@ -37,7 +37,6 @@
 #include "qrhimetal_p.h"
 #include <QGuiApplication>
 #include <QWindow>
-#include <QElapsedTimer>
 #include <qmath.h>
 #include <QBakedShader>
 #include <AppKit/AppKit.h>
@@ -69,9 +68,7 @@ struct QRhiMetalData
 
     id<MTLDevice> dev;
     id<MTLCommandQueue> cmdQueue;
-    QAtomicInt activeCommandBuffers;
 
-    void commitCommandBuffer(id<MTLCommandBuffer> cb);
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
                                                      const QRhiColorClearValue &colorClearValue,
                                                      const QRhiDepthStencilClearValue &depthStencilClearValue);
@@ -201,19 +198,12 @@ struct QMetalSwapChainData
 {
     CAMetalLayer *layer = nullptr;
     id<CAMetalDrawable> curDrawable;
-    dispatch_semaphore_t sem = nullptr;
+    dispatch_semaphore_t sem[QMTL_FRAMES_IN_FLIGHT];
     MTLRenderPassDescriptor *rp = nullptr;
     id<MTLTexture> msaaTex[QMTL_FRAMES_IN_FLIGHT];
     QRhiTexture::Format rhiColorFormat;
     MTLPixelFormat colorFormat;
 };
-
-void QRhiMetalData::commitCommandBuffer(id<MTLCommandBuffer> cb)
-{
-    activeCommandBuffers.ref();
-    [cb addCompletedHandler: ^(id<MTLCommandBuffer>) { activeCommandBuffers.deref(); }];
-    [cb commit];
-}
 
 QRhiMetal::QRhiMetal(QRhiInitParams *params)
 {
@@ -579,10 +569,16 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
 
     QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, swapChain);
 
-//    static QElapsedTimer t;
-//    qDebug() << t.restart();
-
-    dispatch_semaphore_wait(swapChainD->d->sem, DISPATCH_TIME_FOREVER);
+    // This is messed up since for this swapchain we want to wait for the
+    // commands+present to complete, while for others just for the commands
+    // (for this same frame slot), just like with Vulkan, but not sure how to
+    // do that. So wait for everything for now.
+    for (QMetalSwapChain *sc : qAsConst(swapchains)) {
+        dispatch_semaphore_t sem = sc->d->sem[swapChainD->currentFrame];
+        dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+        if (sc != swapChainD)
+            dispatch_semaphore_signal(sem);
+    }
 
     swapChainD->d->curDrawable = [swapChainD->d->layer nextDrawable];
     if (!swapChainD->d->curDrawable) {
@@ -627,12 +623,12 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 
     [swapChainD->cbWrapper.d->cb presentDrawable: swapChainD->d->curDrawable];
 
-    __block dispatch_semaphore_t sem = swapChainD->d->sem;
+    __block int thisFrame = currentFrameSlot;
     [swapChainD->cbWrapper.d->cb addCompletedHandler: ^(id<MTLCommandBuffer>) {
-        dispatch_semaphore_signal(sem);
+        dispatch_semaphore_signal(swapChainD->d->sem[thisFrame]);
     }];
 
-    d->commitCommandBuffer(swapChainD->cbWrapper.d->cb);
+    [swapChainD->cbWrapper.d->cb commit];
 
     swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QMTL_FRAMES_IN_FLIGHT;
     currentSwapChain = nullptr;
@@ -646,14 +642,14 @@ QRhi::FrameOpResult QRhiMetal::beginOffscreenFrame(QRhiCommandBuffer **cb)
     Q_ASSERT(!inFrame);
     inFrame = true;
 
-    // Switch to the next slot manually. Swapchains do not know about this
-    // which is good. So for example a - unusual but possible - onscreen,
-    // onscreen, offscreen, onscreen, onscreen, onscreen sequence of
-    // begin/endFrame leads to 0, 1, 0, 0, 1, 0. This works because the
-    // offscreen frame is synchronous in the sense that we wait for execution
-    // to complete in endFrame, and so no resources used in that frame are busy
-    // anymore in the next frame.
     currentFrameSlot = (currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
+    if (swapchains.count() > 1) {
+        for (QMetalSwapChain *sc : qAsConst(swapchains)) {
+            dispatch_semaphore_t sem = sc->d->sem[currentFrameSlot];
+            dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+            dispatch_semaphore_signal(sem);
+        }
+    }
 
     d->ofr.active = true;
     *cb = &d->ofr.cbWrapper;
@@ -673,7 +669,7 @@ QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
     Q_ASSERT(inFrame);
     inFrame = false;
 
-    d->commitCommandBuffer(d->ofr.cbWrapper.d->cb);
+    [d->ofr.cbWrapper.d->cb commit];
 
     // offscreen frames wait for completion, unlike swapchain ones
     [d->ofr.cbWrapper.d->cb waitUntilCompleted];
@@ -690,27 +686,32 @@ QRhi::FrameOpResult QRhiMetal::finish()
 
     QMetalSwapChain *swapChainD = nullptr;
     if (inFrame) {
-        // There is either a swapchain or an offscreen frame on-going.
-        // End command recording and submit what we have.
         id<MTLCommandBuffer> cb;
         if (d->ofr.active) {
             Q_ASSERT(!currentSwapChain);
             cb = d->ofr.cbWrapper.d->cb;
+            [cb commit];
+            [cb waitUntilCompleted];
         } else {
             Q_ASSERT(currentSwapChain);
             swapChainD = currentSwapChain;
             cb = swapChainD->cbWrapper.d->cb;
+            [cb commit];
         }
-        d->commitCommandBuffer(cb);
     }
 
-    // now do something until all command buffers submitted via
-    // QRhiMetalData::commitCommandBuffer() have completed
-    while (d->activeCommandBuffers.load())
-        usleep(1); // uh.. then again using finish() in perf critical code is wrong to begin with.
+    for (QMetalSwapChain *sc : qAsConst(swapchains)) {
+        for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+            dispatch_semaphore_t sem = sc->d->sem[i];
+            // wait+signal is the general pattern to ensure the commands for a
+            // given frame slot have completed (if sem is 1, we go 0 then 1; if
+            // sem is 0 we go -1, block, completion increments to 0, then us to 1)
+            dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+            dispatch_semaphore_signal(sem);
+        }
+    }
 
     if (inFrame) {
-        // Allocate and begin recording on a new command buffer.
         if (d->ofr.active)
             d->ofr.cbWrapper.d->cb = [d->cmdQueue commandBufferWithUnretainedReferences];
         else
@@ -2229,8 +2230,10 @@ QMetalSwapChain::QMetalSwapChain(QRhiImplementation *rhi)
       cbWrapper(rhi),
       d(new QMetalSwapChainData)
 {
-    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+        d->sem[i] = nullptr;
         d->msaaTex[i] = nil;
+    }
 }
 
 QMetalSwapChain::~QMetalSwapChain()
@@ -2240,15 +2243,26 @@ QMetalSwapChain::~QMetalSwapChain()
 
 void QMetalSwapChain::release()
 {
-    d->layer = nullptr;
-    if (d->sem) {
-        dispatch_release(d->sem);
-        d->sem = nullptr;
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+        if (d->sem[i]) {
+            // the semaphores cannot be released if they do not have the initial value
+            dispatch_semaphore_wait(d->sem[i], DISPATCH_TIME_FOREVER);
+            dispatch_semaphore_signal(d->sem[i]);
+
+            dispatch_release(d->sem[i]);
+            d->sem[i] = nullptr;
+        }
     }
+
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
         [d->msaaTex[i] release];
         d->msaaTex[i] = nil;
     }
+
+    d->layer = nullptr;
+
+    QRHI_RES_RHI(QRhiMetal);
+    rhiD->swapchains.remove(this);
 }
 
 QRhiCommandBuffer *QMetalSwapChain::currentFrameCommandBuffer()
@@ -2311,6 +2325,10 @@ bool QMetalSwapChain::buildOrResize()
         release();
     // else no release(), this is intentional
 
+    QRHI_RES_RHI(QRhiMetal);
+    if (!window)
+        rhiD->swapchains.insert(this);
+
     window = m_window;
 
     if (window->surfaceType() != QSurface::MetalSurface) {
@@ -2332,11 +2350,12 @@ bool QMetalSwapChain::buildOrResize()
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;
 
-    QRHI_RES_RHI(QRhiMetal);
     [d->layer setDevice: rhiD->d->dev];
 
-    if (!d->sem)
-        d->sem = dispatch_semaphore_create(QMTL_FRAMES_IN_FLIGHT);
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
+        if (!d->sem[i])
+            d->sem[i] = dispatch_semaphore_create(1);
+    }
 
     currentFrame = 0;
 

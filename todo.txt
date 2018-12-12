@@ -1,6 +1,5 @@
 resource import/export, what's the interop story
 vk: shouldn't just qFatal
-mtl: multiwindow
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -46,6 +45,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: multiwindow
 multi window? (multi swapchain) -> trouble
 test cubemap
 what if window is changed on swapchain (vk, d3d may break as of now)

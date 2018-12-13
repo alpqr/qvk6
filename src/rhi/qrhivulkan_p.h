@@ -316,7 +316,9 @@ class QRhiVulkan : public QRhiImplementation
 {
 public:
     QRhiVulkan(QRhiInitParams *params);
-    ~QRhiVulkan();
+
+    bool create() override;
+    void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
@@ -382,8 +384,6 @@ public:
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
 
-    void create();
-    void destroy();
     VkResult createDescriptorPool(VkDescriptorPool *pool);
     bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *result, int *resultPoolIndex);
     uint32_t chooseTransientImageMemType(VkImage img, uint32_t startIndex);

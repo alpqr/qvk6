@@ -415,7 +415,9 @@ class QRhiD3D11 : public QRhiImplementation
 {
 public:
     QRhiD3D11(QRhiInitParams *params);
-    ~QRhiD3D11();
+
+    bool create() override;
+    void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
@@ -481,8 +483,6 @@ public:
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
 
-    void create();
-    void destroy();
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);

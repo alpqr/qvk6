@@ -356,54 +356,51 @@ QRhi::QRhi()
 
 QRhi::~QRhi()
 {
-    delete d;
+    if (d) {
+        d->destroy();
+        delete d;
+    }
 }
 
 QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
 {
+    QScopedPointer<QRhi> r(new QRhi);
+
     switch (impl) {
     case Vulkan:
-    {
 #if QT_CONFIG(vulkan)
-        QRhi *r = new QRhi;
         r->d = new QRhiVulkan(params);
-        return r;
+        break;
 #else
         qWarning("This build of Qt has no Vulkan support");
         break;
 #endif
-    }
     case OpenGLES2:
-    {
-        QRhi *r = new QRhi;
         r->d = new QRhiGles2(params);
-        return r;
-    }
+        break;
     case D3D11:
-    {
 #ifdef Q_OS_WIN
-        QRhi *r = new QRhi;
         r->d = new QRhiD3D11(params);
-        return r;
+        break;
 #else
         qWarning("This platform has no Direct3D 11 support");
         break;
 #endif
-    }
     case Metal:
-    {
 #ifdef Q_OS_DARWIN
-        QRhi *r = new QRhi;
         r->d = new QRhiMetal(params);
-        return r;
+        break;
 #else
         qWarning("This platform has no Metal support");
         break;
 #endif
-    }
     default:
         break;
     }
+
+    if (r->d && r->d->create())
+        return r.take();
+
     return nullptr;
 }
 

@@ -249,6 +249,9 @@ public:
     QRhiMetal(QRhiInitParams *params);
     ~QRhiMetal();
 
+    bool create() override;
+    void destroy() override;
+
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
     QRhiBuffer *createBuffer(QRhiBuffer::Type type,
@@ -313,8 +316,6 @@ public:
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
 
-    void create();
-    void destroy();
     void executeDeferredReleases(bool forced = false);
     void finishActiveReadbacks(bool forced = false);
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);

@@ -430,7 +430,9 @@ class QRhiGles2 : public QRhiImplementation
 {
 public:
     QRhiGles2(QRhiInitParams *params);
-    ~QRhiGles2();
+
+    bool create() override;
+    void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
@@ -497,8 +499,6 @@ public:
     bool isFeatureSupported(QRhi::Feature feature) const override;
 
     bool ensureContext(QSurface *surface = nullptr) const;
-    void create();
-    void destroy();
     void executeDeferredReleases();
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);

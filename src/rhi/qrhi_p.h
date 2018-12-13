@@ -61,6 +61,9 @@ class QRhiImplementation
 public:
     virtual ~QRhiImplementation();
 
+    virtual bool create() = 0;
+    virtual void destroy() = 0;
+
     virtual QRhiGraphicsPipeline *createGraphicsPipeline() = 0;
     virtual QRhiShaderResourceBindings *createShaderResourceBindings() = 0;
     virtual QRhiBuffer *createBuffer(QRhiBuffer::Type type,

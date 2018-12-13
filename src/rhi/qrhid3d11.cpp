@@ -75,11 +75,6 @@ QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
     create();
 }
 
-QRhiD3D11::~QRhiD3D11()
-{
-    destroy();
-}
-
 static QString comErrorMessage(HRESULT hr)
 {
 #ifndef Q_OS_WINRT
@@ -98,7 +93,7 @@ static inline uint aligned(uint v, uint byteAlign)
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
 
-void QRhiD3D11::create()
+bool QRhiD3D11::create()
 {
     uint flags = 0;
     if (debugLayer)
@@ -107,7 +102,7 @@ void QRhiD3D11::create()
     HRESULT hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgiFactory));
     if (FAILED(hr)) {
         qWarning("Failed to create DXGI factory: %s", qPrintable(comErrorMessage(hr)));
-        return;
+        return false;
     }
 
     if (!importedDevice) {
@@ -130,7 +125,7 @@ void QRhiD3D11::create()
         }
         if (!adapterToUse) {
             qWarning("No adapter");
-            return;
+            return false;
         }
 
         ID3D11DeviceContext *ctx = nullptr;
@@ -140,18 +135,20 @@ void QRhiD3D11::create()
         adapterToUse->Release();
         if (FAILED(hr)) {
             qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
-            return;
+            return false;
         }
         if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
             ctx->Release();
         } else {
             qWarning("ID3D11DeviceContext1 not supported");
-            return;
+            return false;
         }
     } else {
         Q_ASSERT(dev && context);
         featureLevel = dev->GetFeatureLevel();
     }
+
+    return true;
 }
 
 void QRhiD3D11::destroy()

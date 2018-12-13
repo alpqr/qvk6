@@ -69,11 +69,6 @@ QRhiGles2::QRhiGles2(QRhiInitParams *params)
     create();
 }
 
-QRhiGles2::~QRhiGles2()
-{
-    destroy();
-}
-
 bool QRhiGles2::ensureContext(QSurface *surface) const
 {
     bool nativeWindowGone = false;
@@ -98,13 +93,13 @@ bool QRhiGles2::ensureContext(QSurface *surface) const
     return true;
 }
 
-void QRhiGles2::create()
+bool QRhiGles2::create()
 {
     Q_ASSERT(ctx);
     Q_ASSERT(fallbackSurface);
 
     if (!ensureContext(maybeWindow ? maybeWindow : fallbackSurface)) // see 'window' discussion in QRhiGles2InitParams comments
-        return;
+        return false;
 
     f = static_cast<QOpenGLExtensions *>(ctx->extraFunctions());
 
@@ -122,6 +117,8 @@ void QRhiGles2::create()
 
     caps.msaaRenderBuffer = f->hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample)
             && f->hasOpenGLExtension(QOpenGLExtensions::FramebufferBlit);
+
+    return true;
 }
 
 void QRhiGles2::destroy()

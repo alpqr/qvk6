@@ -169,16 +169,9 @@ QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
         cmdPool = vkparams->cmdPool;
     }
     maybeWindow = vkparams->window; // may be null
-
-    create();
 }
 
-QRhiVulkan::~QRhiVulkan()
-{
-    destroy();
-}
-
-void QRhiVulkan::create()
+bool QRhiVulkan::create()
 {
     Q_ASSERT(inst);
 
@@ -190,14 +183,18 @@ void QRhiVulkan::create()
         uint32_t devCount = 0;
         f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, nullptr);
         qDebug("%d physical devices", devCount);
-        if (!devCount)
-            qFatal("No physical devices");
+        if (!devCount) {
+            qWarning("No physical devices");
+            return false;
+        }
 
         // Just pick the first physical device for now.
         devCount = 1;
         VkResult err = f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, &physDev);
-        if (err != VK_SUCCESS)
-            qFatal("Failed to enumerate physical devices: %d", err);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to enumerate physical devices: %d", err);
+            return false;
+        }
 
         uint32_t queueCount = 0;
         f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, nullptr);
@@ -222,10 +219,14 @@ void QRhiVulkan::create()
             // ###
             qWarning("No graphics queue that can present. This is not supported atm.");
         }
-        if (gfxQueueFamilyIdx == -1)
-            qFatal("No graphics queue family found");
-        if (presQueueFamilyIdx == -1)
-            qFatal("No present queue family found");
+        if (gfxQueueFamilyIdx == -1) {
+            qWarning("No graphics queue family found");
+            return false;
+        }
+        if (presQueueFamilyIdx == -1) {
+            qWarning("No present queue family found");
+            return false;
+        }
 
         VkDeviceQueueCreateInfo queueInfo[2];
         const float prio[] = { 0 };
@@ -259,8 +260,10 @@ void QRhiVulkan::create()
         devInfo.ppEnabledExtensionNames = devExts.constData();
 
         err = f->vkCreateDevice(physDev, &devInfo, nullptr, &dev);
-        if (err != VK_SUCCESS)
-            qFatal("Failed to create device: %d", err);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create device: %d", err);
+            return false;
+        }
     }
 
     df = inst->deviceFunctions(dev);
@@ -270,8 +273,10 @@ void QRhiVulkan::create()
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.queueFamilyIndex = gfxQueueFamilyIdx;
         VkResult err = df->vkCreateCommandPool(dev, &poolInfo, nullptr, &cmdPool);
-        if (err != VK_SUCCESS)
-            qFatal("Failed to create command pool: %d", err);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create command pool: %d", err);
+            return false;
+        }
     }
     if (gfxQueueFamilyIdx != -1 && !gfxQueue)
         df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
@@ -312,7 +317,7 @@ void QRhiVulkan::create()
     VkResult err = vmaCreateAllocator(&allocatorInfo, &vmaallocator);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create allocator: %d", err);
-        return;
+        return false;
     }
     allocator = vmaallocator;
 
@@ -322,6 +327,8 @@ void QRhiVulkan::create()
         descriptorPools.append(pool);
     else
         qWarning("Failed to create initial descriptor pool: %d", err);
+
+    return true;
 }
 
 void QRhiVulkan::destroy()

@@ -1049,6 +1049,8 @@ struct Q_RHI_EXPORT QRhiInitParams
 {
 };
 
+// A QRhi instance can be created and used on any thread but all usage must be
+// limited to that one single thread.
 class Q_RHI_EXPORT QRhi
 {
 public:

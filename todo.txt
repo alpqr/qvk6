@@ -1,5 +1,5 @@
 resource import/export, what's the interop story
-vk: shouldn't just qFatal
+multiwindow_threaded should demo pulling out the device and importing to another rhi
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -32,6 +32,7 @@ copy/transfer queue?
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 tessellation?
 indirect draw?
+vk: msaa texture or msaa color renderbuffer could be lazy/transient when only used with resolve
 vk: subpasses?
 more tex: 3d, array?
 vk compressed tex: could it consume a complete ktx without any memcpys?
@@ -45,6 +46,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: shouldn't just qFatal
 mtl: multiwindow
 multi window? (multi swapchain) -> trouble
 test cubemap

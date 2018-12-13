@@ -221,7 +221,6 @@ QRhiMetal::QRhiMetal(QRhiInitParams *params)
 
 QRhiMetal::~QRhiMetal()
 {
-    destroy();
     delete d;
 }
 
@@ -230,7 +229,7 @@ static inline uint aligned(uint v, uint byteAlign)
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
 
-void QRhiMetal::create()
+bool QRhiMetal::create()
 {
     if (!importedDevice)
         d->dev = MTLCreateSystemDefaultDevice();
@@ -238,6 +237,8 @@ void QRhiMetal::create()
     qDebug("Metal device: %s", qPrintable(QString::fromNSString([d->dev name])));
 
     d->cmdQueue = [d->dev newCommandQueue];
+
+    return true;
 }
 
 void QRhiMetal::destroy()

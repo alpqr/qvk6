@@ -423,12 +423,14 @@ void Renderer::renderEvent(QEvent *e)
     case SurfaceCleanupEvent::TYPE: // when the QWindow is closed, before QPlatformWindow goes away
         thread->mutex.lock();
         qDebug() << "renderer" << this << "for window" << window << "is destroying swapchain";
+        thread->pendingRender = false;
         releaseSwapChain();
         thread->cond.wakeOne();
         thread->mutex.unlock();
         break;
     case CloseEvent::TYPE: // when destroying the window+renderer (NB not the same as hitting X on the window, that's just QWindow close)
         qDebug() << "renderer" << this << "for window" << window << "is shutting down";
+        thread->pendingRender = false;
         thread->active = false;
         thread->stopEventProcessing = true;
         releaseResources();

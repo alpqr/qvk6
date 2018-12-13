@@ -271,7 +271,7 @@ struct Renderer
     void init();
     void releaseSwapChain();
     void releaseResources();
-    void render(bool newlyExposed);
+    void render(bool newlyExposed, bool wakeBeforePresent);
 
     QColor m_bgColor;
     int m_rotationAxis;
@@ -299,7 +299,7 @@ void Thread::run()
     while (active) {
         if (pendingRender) {
             pendingRender = false;
-            renderer->render(pendingRenderIsNewExpose);
+            renderer->render(pendingRenderIsNewExpose, false);
         }
 
         while (eventQueue.hasMoreEvents()) {
@@ -365,6 +365,8 @@ void Renderer::createRhi()
     if (r)
         return;
 
+    qDebug() << "renderer" << this << "creating rhi";
+
 #ifndef QT_NO_OPENGL
     if (graphicsApi == OpenGL) {
         QRhiGles2InitParams params;
@@ -404,6 +406,7 @@ void Renderer::createRhi()
 
 void Renderer::destroyRhi()
 {
+    qDebug() << "renderer" << this << "destroying rhi";
     delete r;
     r = nullptr;
 }
@@ -442,9 +445,7 @@ void Renderer::renderEvent(QEvent *e)
     case SyncSurfaceSizeEvent::TYPE:
         thread->mutex.lock();
         thread->pendingRender = false;
-        render(false);
-        thread->cond.wakeOne();
-        thread->mutex.unlock();
+        render(false, true);
         break;
     default:
         break;
@@ -553,7 +554,7 @@ void Renderer::releaseResources()
     }
 }
 
-void Renderer::render(bool newlyExposed)
+void Renderer::render(bool newlyExposed, bool wakeBeforePresent)
 {
     // This function handles both resizing and rendering. Resizes have some
     // complications due to the threaded model (check exposeEvent and
@@ -614,6 +615,12 @@ void Renderer::render(bool newlyExposed)
     cb->draw(36);
 
     cb->endPass();
+
+    // make sure the main/gui thread is not blocked when issuing the Present (or equivalent)
+    if (wakeBeforePresent) {
+        thread->cond.wakeOne();
+        thread->mutex.unlock();
+    }
 
     r->endFrame(m_sc);
 }
@@ -767,7 +774,7 @@ void createWindow()
 {
     static QColor colors[] = { Qt::red, Qt::green, Qt::blue, Qt::yellow, Qt::cyan, Qt::gray };
     const int n = windows.count();
-    Window *w = new Window(QString::asprintf("Window+Thread #%d", n));
+    Window *w = new Window(QString::asprintf("Window+Thread #%d (%s)", n, qPrintable(graphicsApiName())));
     Renderer *renderer = new Renderer(w, colors[n % 6], n % 3);;
     QObject::connect(w, &Window::initRequested, w, [renderer] {
         renderer->sendInit();

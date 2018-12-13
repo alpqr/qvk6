@@ -71,8 +71,6 @@ QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
             importedDevice = false;
         }
     }
-
-    create();
 }
 
 static QString comErrorMessage(HRESULT hr)

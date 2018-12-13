@@ -65,8 +65,6 @@ QRhiGles2::QRhiGles2(QRhiInitParams *params)
     ctx = glparams->context;
     maybeWindow = glparams->window; // may be null
     fallbackSurface = glparams->fallbackSurface;
-
-    create();
 }
 
 bool QRhiGles2::ensureContext(QSurface *surface) const

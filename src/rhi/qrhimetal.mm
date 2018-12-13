@@ -215,8 +215,6 @@ QRhiMetal::QRhiMetal(QRhiInitParams *params)
         d->dev = (id<MTLDevice>) metalparams->dev;
         [d->dev retain];
     }
-
-    create();
 }
 
 QRhiMetal::~QRhiMetal()

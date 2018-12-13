@@ -61,8 +61,6 @@
 #include <QQueue>
 #include <QEvent>
 #include <QCommandLineParser>
-#include <QWindow>
-#include <QPlatformSurfaceEvent>
 #include <QElapsedTimer>
 
 #include <QBakedShader>
@@ -87,6 +85,8 @@
 #include <QRhiMetalInitParams>
 #endif
 
+#include "window.h"
+
 #include "../shared/cube.h"
 
 static QBakedShader getShader(const QString &name)
@@ -97,14 +97,6 @@ static QBakedShader getShader(const QString &name)
 
     return QBakedShader();
 }
-
-enum GraphicsApi
-{
-    OpenGL,
-    Vulkan,
-    D3D11,
-    Metal
-};
 
 static GraphicsApi graphicsApi;
 
@@ -663,105 +655,6 @@ void Renderer::sendSyncSurfaceSize()
     thread->mutex.unlock();
 }
 
-class Window : public QWindow
-{
-    Q_OBJECT
-
-public:
-    Window(const QString &title);
-    ~Window();
-
-    void exposeEvent(QExposeEvent *) override;
-    bool event(QEvent *) override;
-
-signals:
-    void initRequested();
-    void renderRequested(bool newlyExposed);
-    void surfaceGoingAway();
-    void syncSurfaceSizeRequested();
-
-protected:
-    bool m_running = false;
-    bool m_notExposed = true;
-};
-
-Window::Window(const QString &title)
-{
-    switch (graphicsApi) {
-    case OpenGL:
-        setSurfaceType(OpenGLSurface);
-        break;
-    case Vulkan:
-        setSurfaceType(VulkanSurface);
-        setVulkanInstance(instance);
-        break;
-    case D3D11:
-        setSurfaceType(OpenGLSurface); // not a typo
-        break;
-    case Metal:
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 12, 0))
-        setSurfaceType(MetalSurface);
-#endif
-        break;
-    default:
-        break;
-    }
-
-    resize(800, 600);
-    setTitle(title);
-}
-
-Window::~Window()
-{
-}
-
-void Window::exposeEvent(QExposeEvent *)
-{
-    if (isExposed()) {
-        if (!m_running) {
-            // initialize and start rendering when the window becomes usable for graphics purposes
-            m_running = true;
-            m_notExposed = false;
-            emit initRequested();
-            emit renderRequested(true);
-        } else {
-            // continue when exposed again
-            if (m_notExposed) {
-                m_notExposed = false;
-                emit renderRequested(true);
-            } else {
-                // resize generates exposes - this is very important here (unlike in a single-threaded renderer)
-                emit syncSurfaceSizeRequested();
-            }
-        }
-    } else {
-        // stop pushing frames when not exposed (on some platforms this is essential, optional on others)
-        if (m_running)
-            m_notExposed = true;
-    }
-}
-
-bool Window::event(QEvent *e)
-{
-    switch (e->type()) {
-    case QEvent::UpdateRequest:
-        if (!m_notExposed)
-            emit renderRequested(false);
-        break;
-
-    case QEvent::PlatformSurface:
-        // this is the proper time to tear down the swapchain (while the native window and surface are still around)
-        if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
-            emit surfaceGoingAway();
-        break;
-
-    default:
-        break;
-    }
-
-    return QWindow::event(e);
-}
-
 struct WindowAndRenderer
 {
     QWindow *window;
@@ -774,7 +667,7 @@ void createWindow()
 {
     static QColor colors[] = { Qt::red, Qt::green, Qt::blue, Qt::yellow, Qt::cyan, Qt::gray };
     const int n = windows.count();
-    Window *w = new Window(QString::asprintf("Window+Thread #%d (%s)", n, qPrintable(graphicsApiName())));
+    Window *w = new Window(QString::asprintf("Window+Thread #%d (%s)", n, qPrintable(graphicsApiName())), graphicsApi);
     Renderer *renderer = new Renderer(w, colors[n % 6], n % 3);;
     QObject::connect(w, &Window::initRequested, w, [renderer] {
         renderer->sendInit();
@@ -912,5 +805,3 @@ int main(int argc, char **argv)
 
     return result;
 }
-
-#include "multiwindow_threaded.moc"

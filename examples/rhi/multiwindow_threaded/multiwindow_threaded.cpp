@@ -201,11 +201,11 @@ public:
     { }
 };
 
-class RenderEvent : public RenderThreadEvent
+class RequestRenderEvent : public RenderThreadEvent
 {
 public:
     static const QEvent::Type TYPE = QEvent::Type(QEvent::User + 2);
-    RenderEvent(bool newlyExposed_) : RenderThreadEvent(TYPE), newlyExposed(newlyExposed_)
+    RequestRenderEvent(bool newlyExposed_) : RenderThreadEvent(TYPE), newlyExposed(newlyExposed_)
     { }
     bool newlyExposed;
 };
@@ -226,6 +226,14 @@ public:
     { }
 };
 
+class SyncSurfaceSizeEvent : public RenderThreadEvent
+{
+public:
+    static const QEvent::Type TYPE = QEvent::Type(QEvent::User + 5);
+    SyncSurfaceSizeEvent() : RenderThreadEvent(TYPE)
+    { }
+};
+
 struct Renderer
 {
     // ctor and dtor and send* are called main thread, rest on the render thread
@@ -236,6 +244,7 @@ struct Renderer
     void sendInit();
     void sendRender(bool newlyExposed);
     void sendSurfaceGoingAway();
+    void sendSyncSurfaceSize();
 
     QWindow *window;
     Thread *thread;
@@ -385,9 +394,9 @@ void Renderer::renderEvent(QEvent *e)
         createRhi();
         init();
         break;
-    case RenderEvent::TYPE:
+    case RequestRenderEvent::TYPE:
         thread->pendingRender = true;
-        thread->pendingRenderIsNewExpose = static_cast<RenderEvent *>(e)->newlyExposed;
+        thread->pendingRenderIsNewExpose = static_cast<RequestRenderEvent *>(e)->newlyExposed;
         break;
     case SurfaceCleanupEvent::TYPE: // when the QWindow is closed, before QPlatformWindow goes away
         thread->mutex.lock();
@@ -402,6 +411,13 @@ void Renderer::renderEvent(QEvent *e)
         thread->stopEventProcessing = true;
         releaseResources();
         destroyRhi();
+        break;
+    case SyncSurfaceSizeEvent::TYPE:
+        thread->mutex.lock();
+        thread->pendingRender = false;
+        render(false);
+        thread->cond.wakeOne();
+        thread->mutex.unlock();
         break;
     default:
         break;
@@ -446,6 +462,10 @@ void Renderer::releaseResources()
 
 void Renderer::render(bool newlyExposed)
 {
+    // This function handles both resizing and rendering. Resizes have some
+    // complications due to the threaded model (check exposeEvent and
+    // sendSyncSurfaceSize) but don't have to worry about that in here.
+
     auto buildOrResizeSwapChain = [this] {
         qDebug() << "renderer" << this << "build or resize swapchain for window" << window;
         const QSize outputSize = m_sc->surfacePixelSize();
@@ -487,7 +507,7 @@ void Renderer::sendInit()
 
 void Renderer::sendRender(bool newlyExposed)
 { // main thread
-    RenderEvent *e = new RenderEvent(newlyExposed);
+    RequestRenderEvent *e = new RequestRenderEvent(newlyExposed);
     thread->eventQueue.addEvent(e);
 }
 
@@ -501,6 +521,18 @@ void Renderer::sendSurfaceGoingAway()
 
     thread->eventQueue.addEvent(e);
 
+    thread->cond.wait(&thread->mutex);
+    thread->mutex.unlock();
+}
+
+void Renderer::sendSyncSurfaceSize()
+{ // main thread
+    SyncSurfaceSizeEvent *e = new SyncSurfaceSizeEvent;
+    // must block to prevent surface size mess. the render thread will do a
+    // full rendering round before it unlocks which is good since it can thus
+    // pick up and the surface (window) size atomically.
+    thread->mutex.lock();
+    thread->eventQueue.addEvent(e);
     thread->cond.wait(&thread->mutex);
     thread->mutex.unlock();
 }
@@ -520,6 +552,7 @@ signals:
     void initRequested();
     void renderRequested(bool newlyExposed);
     void surfaceGoingAway();
+    void syncSurfaceSizeRequested();
 
 protected:
     QColor m_bgColor;
@@ -563,22 +596,27 @@ Window::~Window()
 
 void Window::exposeEvent(QExposeEvent *)
 {
-    // initialize and start rendering when the window becomes usable for graphics purposes
-    if (isExposed() && !m_running) {
-        m_running = true;
-        m_notExposed = false;
-        emit initRequested();
-        emit renderRequested(true);
-    }
-
-    // stop pushing frames when not exposed (on some platforms this is essential, optional on others)
-    if (!isExposed() && m_running)
-        m_notExposed = true;
-
-    // continue when exposed again
-    if (isExposed() && m_running && m_notExposed) {
-        m_notExposed = false;
-        emit renderRequested(true);
+    if (isExposed()) {
+        if (!m_running) {
+            // initialize and start rendering when the window becomes usable for graphics purposes
+            m_running = true;
+            m_notExposed = false;
+            emit initRequested();
+            emit renderRequested(true);
+        } else {
+            // continue when exposed again
+            if (m_notExposed) {
+                m_notExposed = false;
+                emit renderRequested(true);
+            } else {
+                // resize generates exposes - this is very important here (unlike in a single-threaded renderer)
+                emit syncSurfaceSizeRequested();
+            }
+        }
+    } else {
+        // stop pushing frames when not exposed (on some platforms this is essential, optional on others)
+        if (m_running)
+            m_notExposed = true;
     }
 }
 
@@ -626,6 +664,9 @@ void createWindow()
     });
     QObject::connect(w, &Window::surfaceGoingAway, w, [renderer] {
         renderer->sendSurfaceGoingAway();
+    });
+    QObject::connect(w, &Window::syncSurfaceSizeRequested, w, [renderer] {
+        renderer->sendSyncSurfaceSize();
     });
     windows.append({ w, renderer });
     w->show();
@@ -711,8 +752,7 @@ int main(int argc, char **argv)
 
     QPlainTextEdit *info = new QPlainTextEdit(
                 QLatin1String("This application tests rendering on a separate thread per window, with dedicated QRhi instances. " // ### still sharing the same graphics device where applicable
-                              "No resources are shared across windows here. (so no synchronization mess) "
-                              "\n\nNote that this is only safe with D3D/DXGI if the main (gui) thread is not blocked when issuing the Present."
+                              "No resources are shared across windows here. "
                               "\n\nThis is the same concept as the Qt Quick Scenegraph's threaded render loop. This should allow rendering to the different windows "
                               "without unintentionally throttling each other's threads."
                               "\n\nUsing API: ") + graphicsApiName());

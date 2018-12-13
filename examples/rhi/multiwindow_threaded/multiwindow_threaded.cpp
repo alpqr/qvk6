@@ -87,6 +87,17 @@
 #include <QRhiMetalInitParams>
 #endif
 
+#include "../shared/cube.h"
+
+static QBakedShader getShader(const QString &name)
+{
+    QFile f(name);
+    if (f.open(QIODevice::ReadOnly))
+        return QBakedShader::fromSerialized(f.readAll());
+
+    return QBakedShader();
+}
+
 enum GraphicsApi
 {
     OpenGL,
@@ -238,7 +249,7 @@ struct Renderer
 {
     // ctor and dtor and send* are called main thread, rest on the render thread
 
-    Renderer(QWindow *w);
+    Renderer(QWindow *w, const QColor &bgColor, int rotationAxis);
     ~Renderer();
 
     void sendInit();
@@ -262,11 +273,25 @@ struct Renderer
     void releaseResources();
     void render(bool newlyExposed);
 
+    QColor m_bgColor;
+    int m_rotationAxis;
+
     QVector<QRhiResource *> m_releasePool;
     bool m_hasSwapChain = false;
     QRhiSwapChain *m_sc = nullptr;
     QRhiRenderBuffer *m_ds = nullptr;
     QRhiRenderPassDescriptor *m_rp = nullptr;
+
+    QRhiBuffer *m_vbuf = nullptr;
+    QRhiBuffer *m_ubuf = nullptr;
+    QRhiTexture *m_tex = nullptr;
+    QRhiSampler *m_sampler = nullptr;
+    QRhiShaderResourceBindings *m_srb = nullptr;
+    QRhiGraphicsPipeline *m_ps = nullptr;
+    QRhiResourceUpdateBatch *m_initialUpdates = nullptr;
+
+    QMatrix4x4 m_proj;
+    float m_rotation = 0;
 };
 
 void Thread::run()
@@ -301,8 +326,10 @@ void Thread::run()
 #endif
 }
 
-Renderer::Renderer(QWindow *w)
-    : window(w)
+Renderer::Renderer(QWindow *w, const QColor &bgColor, int rotationAxis)
+    : window(w),
+      m_bgColor(bgColor),
+      m_rotationAxis(rotationAxis)
 { // main thread
     thread = new Thread(this);
 
@@ -437,6 +464,72 @@ void Renderer::init()
     m_rp = m_sc->newCompatibleRenderPassDescriptor();
     m_releasePool << m_rp;
     m_sc->setRenderPassDescriptor(m_rp);
+
+    m_vbuf = r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
+    m_releasePool << m_vbuf;
+    m_vbuf->build();
+
+    m_ubuf = r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
+    m_releasePool << m_ubuf;
+    m_ubuf->build();
+
+    QImage image = QImage(QLatin1String(":/qt256.png")).convertToFormat(QImage::Format_RGBA8888);
+    m_tex = r->newTexture(QRhiTexture::RGBA8, image.size());
+    m_releasePool << m_tex;
+    m_tex->build();
+
+    m_sampler = r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    m_releasePool << m_sampler;
+    m_sampler->build();
+
+    m_srb = r->newShaderResourceBindings();
+    m_releasePool << m_srb;
+    m_srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf),
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_tex, m_sampler)
+    });
+    m_srb->build();
+
+    m_ps = r->newGraphicsPipeline();
+    m_releasePool << m_ps;
+
+    m_ps->setDepthTest(true);
+    m_ps->setDepthWrite(true);
+    m_ps->setDepthOp(QRhiGraphicsPipeline::Less);
+
+    m_ps->setCullMode(QRhiGraphicsPipeline::Back);
+    m_ps->setFrontFace(QRhiGraphicsPipeline::CCW);
+
+    m_ps->setShaderStages({
+        { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/texture.vert.qsb")) },
+        { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/texture.frag.qsb")) }
+    });
+
+    QRhiVertexInputLayout inputLayout;
+    inputLayout.bindings = {
+        { 3 * sizeof(float) },
+        { 2 * sizeof(float) }
+    };
+    inputLayout.attributes = {
+        { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
+        { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
+    };
+
+    m_ps->setVertexInputLayout(inputLayout);
+    m_ps->setShaderResourceBindings(m_srb);
+    m_ps->setRenderPassDescriptor(m_rp);
+
+    m_ps->build();
+
+    m_initialUpdates = r->nextResourceUpdateBatch();
+
+    m_initialUpdates->uploadStaticBuffer(m_vbuf, cube);
+
+    qint32 flip = 0;
+    m_initialUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &flip);
+
+    m_initialUpdates->uploadTexture(m_tex, image);
 }
 
 void Renderer::releaseSwapChain()
@@ -473,6 +566,9 @@ void Renderer::render(bool newlyExposed)
         m_ds->setPixelSize(outputSize);
         m_ds->build();
         m_hasSwapChain = m_sc->buildOrResize();
+        m_proj = r->clipSpaceCorrMatrix();
+        m_proj.perspective(45.0f, outputSize.width() / (float) outputSize.height(), 0.01f, 100.0f);
+        m_proj.translate(0, 0, -4);
     };
 
     if (newlyExposed || m_sc->currentPixelSize() != m_sc->surfacePixelSize())
@@ -492,8 +588,31 @@ void Renderer::render(bool newlyExposed)
         return;
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
+    const QSize outputSize = m_sc->currentPixelSize();
 
-    cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 });
+    QRhiResourceUpdateBatch *u = r->nextResourceUpdateBatch();
+    if (m_initialUpdates) {
+        u->merge(m_initialUpdates);
+        m_initialUpdates->release();
+        m_initialUpdates = nullptr;
+    }
+
+    m_rotation += 1.0f;
+    QMatrix4x4 mvp = m_proj;
+    mvp.scale(0.5f);
+    mvp.rotate(m_rotation, m_rotationAxis == 0 ? 1 : 0, m_rotationAxis == 1 ? 1 : 0, m_rotationAxis == 2 ? 1 : 0);
+    u->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
+
+    cb->beginPass(m_sc->currentFrameRenderTarget(),
+                  { float(m_bgColor.redF()), float(m_bgColor.greenF()), float(m_bgColor.blueF()), 1.0f },
+                  { 1.0f, 0 },
+                  u);
+
+    cb->setGraphicsPipeline(m_ps);
+    cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+    cb->setVertexInput(0, { { m_vbuf, 0 }, { m_vbuf, 36 * 3 * sizeof(float) } });
+    cb->draw(36);
+
     cb->endPass();
 
     r->endFrame(m_sc);
@@ -542,7 +661,7 @@ class Window : public QWindow
     Q_OBJECT
 
 public:
-    Window(const QString &title, const QColor &bgColor, int axis);
+    Window(const QString &title);
     ~Window();
 
     void exposeEvent(QExposeEvent *) override;
@@ -555,16 +674,11 @@ signals:
     void syncSurfaceSizeRequested();
 
 protected:
-    QColor m_bgColor;
-    int m_rotationAxis = 0;
-
     bool m_running = false;
     bool m_notExposed = true;
 };
 
-Window::Window(const QString &title, const QColor &bgColor, int axis)
-    : m_bgColor(bgColor),
-      m_rotationAxis(axis)
+Window::Window(const QString &title)
 {
     switch (graphicsApi) {
     case OpenGL:
@@ -653,8 +767,8 @@ void createWindow()
 {
     static QColor colors[] = { Qt::red, Qt::green, Qt::blue, Qt::yellow, Qt::cyan, Qt::gray };
     const int n = windows.count();
-    Window *w = new Window(QString::asprintf("Window #%d", n), colors[n % 6], n % 3);
-    Renderer *renderer = new Renderer(w);
+    Window *w = new Window(QString::asprintf("Window+Thread #%d", n));
+    Renderer *renderer = new Renderer(w, colors[n % 6], n % 3);;
     QObject::connect(w, &Window::initRequested, w, [renderer] {
         renderer->sendInit();
     });
@@ -758,7 +872,7 @@ int main(int argc, char **argv)
                               "\n\nUsing API: ") + graphicsApiName());
     info->setReadOnly(true);
     layout->addWidget(info);
-    QLabel *label = new QLabel(QLatin1String("Window count: 0"));
+    QLabel *label = new QLabel(QLatin1String("Window and thread count: 0"));
     layout->addWidget(label);
     QPushButton *btn = new QPushButton(QLatin1String("New window"));
     QObject::connect(btn, &QPushButton::clicked, btn, [label, &winCount] {

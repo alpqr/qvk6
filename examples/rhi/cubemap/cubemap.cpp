@@ -81,7 +81,7 @@ void Window::customInit()
     d.initialUpdates->uploadStaticBuffer(d.vbuf, cube);
 
     QRhiTextureUploadDescription desc;
-    QImage img = QImage(":/c.png").mirrored(); // just use the same image for all faces for now
+    QImage img = QImage(":/c.png").mirrored().convertToFormat(QImage::Format_RGBA8888); // just use the same image for all faces for now
     auto texLayer = QRhiTextureUploadDescription::Layer({ QRhiTextureUploadDescription::Layer::MipLevel(img) });
     desc.layers
             << texLayer  // +X

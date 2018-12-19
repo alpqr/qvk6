@@ -44,11 +44,15 @@
 #include "qtrhiglobal_p.h"
 #include "qrhiimgui.h"
 
+#include "imgui.h"
+
 QT_BEGIN_NAMESPACE
 
 class QRhiImguiPrivate
 {
 public:
+    QRhiImguiPrivate();
+    ~QRhiImguiPrivate();
 };
 
 QT_END_NAMESPACE

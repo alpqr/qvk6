@@ -48,4 +48,14 @@ QRhiImgui::~QRhiImgui()
     delete d;
 }
 
+QRhiImguiPrivate::QRhiImguiPrivate()
+{
+    ImGui::CreateContext();
+}
+
+QRhiImguiPrivate::~QRhiImguiPrivate()
+{
+    ImGui::DestroyContext();
+}
+
 QT_END_NAMESPACE

@@ -46,3 +46,16 @@ mac {
 }
 
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)
+
+INCLUDEPATH += $$PWD/../3rdparty/imgui
+STATICLIBS = qtrhi-imgui
+for(libname, STATICLIBS) {
+    staticlib = $$[QT_HOST_LIBS]/$${QMAKE_PREFIX_STATICLIB}$$qtLibraryTarget($$libname).$${QMAKE_EXTENSION_STATICLIB}
+    LIBS_PRIVATE += $$staticlib
+    PRE_TARGETDEPS += $$staticlib
+}
+SOURCES += \
+    qrhiimgui.cpp
+HEADERS += \
+    qrhiimgui.h \
+    qrhiimgui_p.h

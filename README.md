@@ -1,4 +1,4 @@
-![](https://git.qt.io/laagocs/qtrhi/raw/master/rhi2.png)
+![](https://github.com/alpqr/qvk6/blob/master/rhi2.png)
 
 Experiments for a Rendering Hardware Interface abstraction for future Qt (QtRhi)
 ========================================================================
@@ -37,20 +37,22 @@ The latter is what the RHI uses, and expects applications to provide QBakedShade
 In action
 =========
 
+Needs Qt 5.12. Tested on Windows 10 with MSVC2015 and 2017, Ubuntu 16.04, and macOS 10.13.
+
 Screenshots from the test application demonstrating basic drawing, pipeline
 state (blending, depth), indexed drawing, texturing, and rendering into a
 texture. All using the same code and the same two sets of vertex and fragment
 shaders, with the only difference being in the QWindow setup.
 
-![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_d3d.png)
-![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_gl.png)
-![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_vk.png)
-![](https://git.qt.io/laagocs/qtrhi/raw/master/screenshot_mtl.png)
+![](https://github.com/alpqr/qvk6/blob/master/screenshot_d3d.png)
+![](https://github.com/alpqr/qvk6/blob/master/screenshot_gl.png)
+![](https://github.com/alpqr/qvk6/blob/master/screenshot_vk.png)
+![](https://github.com/alpqr/qvk6/blob/master/screenshot_mtl.png)
 
 Additionally, check
-https://git.qt.io/laagocs/qtrhi/raw/master/examples/rhi/hellominimalcrossgfxtriangle/hellominimalcrossgfxtriangle.cpp
+https://github.com/alpqr/qvk6/blob/master/examples/rhi/hellominimalcrossgfxtriangle/hellominimalcrossgfxtriangle.cpp
 for a single-source, cross-API example of drawing a triangle.
 
-The https://git.qt.io/laagocs/qtrhi/tree/master/examples/rhi/multiwindow_threaded demo, it being a minimal reimplementation of
+The https://github.com/alpqr/qvk6/tree/master/examples/rhi/multiwindow_threaded demo, it being a minimal reimplementation of
 QSGThreadedRenderLoop, represents a milestone in the sense that it proves that implementing the traditional threaded Qt Quick
 rendering model is possible with QRhi as well.

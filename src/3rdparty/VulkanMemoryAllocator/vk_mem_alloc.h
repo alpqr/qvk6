@@ -29,7 +29,7 @@ extern "C" {
 
 /** \mainpage Vulkan Memory Allocator
 
-<b>Version 2.1.0-beta.1</b> (2018-08-27)
+<b>Version 2.1.0</b> (2018-09-10)
 
 Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All rights reserved. \n
 License: MIT
@@ -125,7 +125,7 @@ It may be a good idea to create dedicated CPP file just for this purpose.
 
 Please note that this library includes header `<vulkan/vulkan.h>`, which in turn
 includes `<windows.h>` on Windows. If you need some specific macros defined
-before including these headers (like `NOMINMAX`, `WIN32_LEAN_AND_MEAN`, or
+before including these headers (like `WIN32_LEAN_AND_MEAN` or
 `WINVER` for Windows, `VK_USE_PLATFORM_WIN32_KHR` for Vulkan), you must define
 them before every `#include` of this library.
 
@@ -1345,6 +1345,7 @@ The library uses following algorithm for allocation, in order:
 
 Features deliberately excluded from the scope of this library:
 
+- Sparse resources.
 - Data transfer - issuing commands that transfer data between buffers or images, any usage of
   `VkCommandList` or `VkQueue` and related synchronization is responsibility of the user.
 - Allocations for imported/exported external memory. They tend to require
@@ -1356,7 +1357,25 @@ Features deliberately excluded from the scope of this library:
 
 */
 
+/*
+Define this macro to 0/1 to disable/enable support for recording functionality,
+available through VmaAllocatorCreateInfo::pRecordSettings.
+*/
+#ifndef VMA_RECORDING_ENABLED
+    #ifdef _WIN32
+        #define VMA_RECORDING_ENABLED 1
+    #else
+        #define VMA_RECORDING_ENABLED 0
+    #endif
+#endif
+
+#define NOMINMAX // For Windows.h
+
 #include <vulkan/vulkan.h>
+
+#if VMA_RECORDING_ENABLED
+    #include <Windows.h>
+#endif
 
 #if !defined(VMA_DEDICATED_ALLOCATION)
     #if VK_KHR_get_memory_requirements2 && VK_KHR_dedicated_allocation
@@ -1477,18 +1496,6 @@ typedef enum VmaRecordFlagBits {
     VMA_RECORD_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
 } VmaRecordFlagBits;
 typedef VkFlags VmaRecordFlags;
-
-/*
-Define this macro to 0/1 to disable/enable support for recording functionality,
-available through VmaAllocatorCreateInfo::pRecordSettings.
-*/
-#ifndef VMA_RECORDING_ENABLED
-    #ifdef _WIN32
-        #define VMA_RECORDING_ENABLED 1
-    #else
-        #define VMA_RECORDING_ENABLED 0
-    #endif
-#endif
 
 /// Parameters for recording calls to VMA functions. To be used in VmaAllocatorCreateInfo::pRecordSettings.
 typedef struct VmaRecordSettings
@@ -3060,13 +3067,9 @@ static void VmaWriteMagicValue(void* pData, VkDeviceSize offset)
 {
     uint32_t* pDst = (uint32_t*)((char*)pData + offset);
     const size_t numberCount = VMA_DEBUG_MARGIN / sizeof(uint32_t);
-    // This condition is to silence clang compiler error: "comparison of unsigned expression < 0 is always false"
-    if(numberCount > 0)
+    for(size_t i = 0; i < numberCount; ++i, ++pDst)
     {
-        for(size_t i = 0; i < numberCount; ++i, ++pDst)
-        {
-            *pDst = VMA_CORRUPTION_DETECTION_MAGIC_VALUE;
-        }
+        *pDst = VMA_CORRUPTION_DETECTION_MAGIC_VALUE;
     }
 }
 
@@ -3074,15 +3077,11 @@ static bool VmaValidateMagicValue(const void* pData, VkDeviceSize offset)
 {
     const uint32_t* pSrc = (const uint32_t*)((const char*)pData + offset);
     const size_t numberCount = VMA_DEBUG_MARGIN / sizeof(uint32_t);
-    // This condition is to silence clang compiler error: "comparison of unsigned expression < 0 is always false"
-    if(numberCount > 0)
+    for(size_t i = 0; i < numberCount; ++i, ++pSrc)
     {
-        for(size_t i = 0; i < numberCount; ++i, ++pSrc)
+        if(*pSrc != VMA_CORRUPTION_DETECTION_MAGIC_VALUE)
         {
-            if(*pSrc != VMA_CORRUPTION_DETECTION_MAGIC_VALUE)
-            {
-                return false;
-            }
+            return false;
         }
     }
     return true;
@@ -9087,7 +9086,7 @@ void VmaBlockMetadata_Linear::CleanupAfterFree()
 ////////////////////////////////////////////////////////////////////////////////
 // class VmaDeviceMemoryBlock
 
-VmaDeviceMemoryBlock::VmaDeviceMemoryBlock(VmaAllocator) :
+VmaDeviceMemoryBlock::VmaDeviceMemoryBlock(VmaAllocator ) :
     m_pMetadata(VMA_NULL),
     m_MemoryTypeIndex(UINT32_MAX),
     m_Id(0),
@@ -9380,8 +9379,8 @@ VmaBlockVector::VmaBlockVector(
     m_IsCustomPool(isCustomPool),
     m_ExplicitBlockSize(explicitBlockSize),
     m_LinearAlgorithm(linearAlgorithm),
-    m_Blocks(VmaStlAllocator<VmaDeviceMemoryBlock*>(hAllocator->GetAllocationCallbacks())),
     m_HasEmptyBlock(false),
+    m_Blocks(VmaStlAllocator<VmaDeviceMemoryBlock*>(hAllocator->GetAllocationCallbacks())),
     m_pDefragmentator(VMA_NULL),
     m_NextBlockId(0)
 {

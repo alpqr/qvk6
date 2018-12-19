@@ -1,5 +1,6 @@
 %modules = ( # path to module name map
     "QtRhi" => "$basedir/src/rhi",
+    "QtShaderTools" => "$basedir/src/shadertools",
 );
 %moduleheaders = ( # restrict the module headers to those found in relative path
 );

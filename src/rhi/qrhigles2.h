@@ -53,12 +53,12 @@ struct Q_RHI_EXPORT QRhiGles2InitParams : public QRhiInitParams
     // happen if the first makeCurrent is with a QOffscreenSurface (which may
     // be an invisible window, which then triggers something on multi-adapter
     // systems especially). So while this is optional, apps are encouraged to
-    // pass in the window for which the "swapchain" will be built.
+    // pass in a window for which a swapchain will be built.
     QWindow *window = nullptr;
 
     // Why doesn't the RHI create a QOffscreenSurface on its own? Because that
     // must be done on the gui/main thread while the RHI in principle can operate
-    // on any (one) thread.
+    // on any (one) thread. Ownership not taken.
     QOffscreenSurface *fallbackSurface = nullptr;
 };
 

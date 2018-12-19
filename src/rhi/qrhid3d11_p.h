@@ -46,6 +46,7 @@
 #include <QShaderDescription>
 #include <QWindow>
 
+#include <d3d11_1.h>
 #include <dxgi1_3.h>
 
 QT_BEGIN_NAMESPACE
@@ -60,29 +61,39 @@ struct QD3D11Buffer : public QRhiBuffer
     QByteArray dynBuf;
     bool hasPendingDynamicUpdates = false;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11RenderBuffer : public QRhiRenderBuffer
 {
     QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                       int sampleCount, QRhiRenderBuffer::Hints hints);
+                       int sampleCount, QRhiRenderBuffer::Flags flags);
     void release() override;
     bool build() override;
+    QRhiTexture::Format backingFormat() const override;
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11DepthStencilView *dsv = nullptr;
+    ID3D11RenderTargetView *rtv = nullptr;
+    DXGI_FORMAT dxgiFormat;
+    DXGI_SAMPLE_DESC sampleDesc;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11Texture : public QRhiTexture
 {
-    QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
+    QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                  int sampleCount, Flags flags);
     void release() override;
     bool build() override;
 
     ID3D11Texture2D *tex = nullptr;
     ID3D11ShaderResourceView *srv = nullptr;
+    DXGI_FORMAT dxgiFormat;
     uint mipLevelCount = 0;
+    DXGI_SAMPLE_DESC sampleDesc;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11Sampler : public QRhiSampler
@@ -94,26 +105,31 @@ struct QD3D11Sampler : public QRhiSampler
 
     ID3D11SamplerState *samplerState = nullptr;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
-struct QD3D11RenderPass : public QRhiRenderPass
+struct QD3D11RenderPassDescriptor : public QRhiRenderPassDescriptor
 {
-    QD3D11RenderPass(QRhiImplementation *rhi);
+    QD3D11RenderPassDescriptor(QRhiImplementation *rhi);
     void release() override;
+};
+
+struct QD3D11RenderTargetData
+{
+    QD3D11RenderTargetData(QRhiImplementation *)
+    {
+        for (int i = 0; i < MAX_COLOR_ATTACHMENTS; ++i)
+            rtv[i] = nullptr;
+    }
+
+    QD3D11RenderPassDescriptor *rp = nullptr;
+    QSize pixelSize;
+    int colorAttCount = 0;
+    int dsAttCount = 0;
 
     static const int MAX_COLOR_ATTACHMENTS = 8;
     ID3D11RenderTargetView *rtv[MAX_COLOR_ATTACHMENTS];
     ID3D11DepthStencilView *dsv = nullptr;
-};
-
-struct QD3D11BasicRenderTargetData
-{
-    QD3D11BasicRenderTargetData(QRhiImplementation *rhi) : rp(rhi) { }
-
-    QD3D11RenderPass rp;
-    QSize pixelSize;
-    int colorAttCount = 0;
-    int dsAttCount = 0;
 };
 
 struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
@@ -122,63 +138,27 @@ struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
-    QD3D11BasicRenderTargetData d;
+    QD3D11RenderTargetData d;
 };
 
 struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
 {
     QD3D11TextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
     void release() override;
-    Type type() const override;
-    bool build() override;
-    QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
-    QD3D11BasicRenderTargetData d;
-    ID3D11RenderTargetView *rtv[QD3D11RenderPass::MAX_COLOR_ATTACHMENTS];
+    Type type() const override;
+    QSize sizeInPixels() const override;
+
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
+    bool build() override;
+
+    QD3D11RenderTargetData d;
+    bool ownsRtv[QD3D11RenderTargetData::MAX_COLOR_ATTACHMENTS];
+    ID3D11RenderTargetView *rtv[QD3D11RenderTargetData::MAX_COLOR_ATTACHMENTS];
     bool ownsDsv = false;
     ID3D11DepthStencilView *dsv = nullptr;
-};
-
-template<typename T>
-struct QD3D11BatchedBindings
-{
-    void feed(int binding, T resource) { // binding must be strictly increasing
-        if (curBinding == -1 || binding > curBinding + 1) {
-            finish();
-            curBatch.startBinding = binding;
-            curBatch.resources.clear();
-            curBatch.resources.append(resource);
-        } else {
-            Q_ASSERT(binding == curBinding + 1);
-            curBatch.resources.append(resource);
-        }
-        curBinding = binding;
-    }
-
-    void finish() {
-        if (!curBatch.resources.isEmpty())
-            batches.append(curBatch);
-    }
-
-    void clear() {
-        batches.clear();
-        curBatch.resources.clear();
-        curBinding = -1;
-    }
-
-    struct Batch {
-        uint startBinding;
-        QVarLengthArray<T, 4> resources;
-    };
-
-    QVarLengthArray<Batch, 4> batches; // sorted by startBinding
-
-private:
-    Batch curBatch;
-    int curBinding = -1;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
@@ -187,7 +167,7 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     void release() override;
     bool build() override;
 
-    QVector<Binding> sortedBindings;
+    QVector<QRhiShaderResourceBinding> sortedBindings;
     uint generation = 0;
 
     // Keep track of the generation number of each referenced QRhi* to be able
@@ -207,20 +187,24 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     };
     QVector<BoundResourceData> boundResourceData;
 
-    QD3D11BatchedBindings<ID3D11Buffer *> vsubufs;
-    QD3D11BatchedBindings<UINT> vsubufoffsets;
-    QD3D11BatchedBindings<UINT> vsubufsizes;
+    QRhiBatchedBindings<ID3D11Buffer *> vsubufs;
+    QRhiBatchedBindings<UINT> vsubufoffsets;
+    QRhiBatchedBindings<UINT> vsubufsizes;
 
-    QD3D11BatchedBindings<ID3D11Buffer *> fsubufs;
-    QD3D11BatchedBindings<UINT> fsubufoffsets;
-    QD3D11BatchedBindings<UINT> fsubufsizes;
+    QRhiBatchedBindings<ID3D11Buffer *> fsubufs;
+    QRhiBatchedBindings<UINT> fsubufoffsets;
+    QRhiBatchedBindings<UINT> fsubufsizes;
 
-    QD3D11BatchedBindings<ID3D11SamplerState *> vssamplers;
-    QD3D11BatchedBindings<ID3D11ShaderResourceView *> vsshaderresources;
+    QRhiBatchedBindings<ID3D11SamplerState *> vssamplers;
+    QRhiBatchedBindings<ID3D11ShaderResourceView *> vsshaderresources;
 
-    QD3D11BatchedBindings<ID3D11SamplerState *> fssamplers;
-    QD3D11BatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
+    QRhiBatchedBindings<ID3D11SamplerState *> fssamplers;
+    QRhiBatchedBindings<ID3D11ShaderResourceView *> fsshaderresources;
+
+    friend class QRhiD3D11;
 };
+
+Q_DECLARE_TYPEINFO(QD3D11ShaderResourceBindings::BoundResourceData, Q_MOVABLE_TYPE);
 
 struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
 {
@@ -236,6 +220,7 @@ struct QD3D11GraphicsPipeline : public QRhiGraphicsPipeline
     D3D11_PRIMITIVE_TOPOLOGY d3dTopology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
     ID3D11RasterizerState *rastState = nullptr;
     uint generation = 0;
+    friend class QRhiD3D11;
 };
 
 struct QD3D11SwapChain;
@@ -245,6 +230,9 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QD3D11CommandBuffer(QRhiImplementation *rhi);
     void release() override;
 
+    // Technically it's not like we really need to queue up the commands, but
+    // have it this way since it helps keeping things concise and may become
+    // essential if "command buffers" become application creatable some day.
     struct Command {
         enum Cmd {
             SetRenderTarget,
@@ -257,7 +245,11 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             StencilRef,
             BlendConstants,
             Draw,
-            DrawIndexed
+            DrawIndexed,
+            UpdateSubRes,
+            CopySubRes,
+            ResolveSubRes,
+            GenMip
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
@@ -319,6 +311,34 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
                 qint32 vertexOffset;
                 quint32 firstInstance;
             } drawIndexed;
+            struct {
+                ID3D11Resource *dst;
+                UINT dstSubRes;
+                bool hasDstBox;
+                D3D11_BOX dstBox;
+                const void *src; // must come from retain*()
+                UINT srcRowPitch;
+            } updateSubRes;
+            struct {
+                ID3D11Resource *dst;
+                UINT dstSubRes;
+                UINT dstX;
+                UINT dstY;
+                ID3D11Resource *src;
+                UINT srcSubRes;
+                bool hasSrcBox;
+                D3D11_BOX srcBox;
+            } copySubRes;
+            struct {
+                ID3D11Resource *dst;
+                UINT dstSubRes;
+                ID3D11Resource *src;
+                UINT srcSubRes;
+                DXGI_FORMAT format;
+            } resolveSubRes;
+            struct {
+                QD3D11Texture *tex;
+            } genMip;
         } args;
     };
 
@@ -329,8 +349,25 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
 
-    void resetState() {
+    QVector<QByteArray> dataRetainPool;
+    QVector<QImage> imageRetainPool;
+
+    // relies heavily on implicit sharing (no copies of the actual data will be made)
+    const uchar *retainData(const QByteArray &data) {
+        dataRetainPool.append(data);
+        return reinterpret_cast<const uchar *>(dataRetainPool.constLast().constData());
+    }
+    const uchar *retainImage(const QImage &image) {
+        imageRetainPool.append(image);
+        return imageRetainPool.constLast().constBits();
+    }
+    void resetCommands() {
         commands.clear();
+        dataRetainPool.clear();
+        imageRetainPool.clear();
+    }
+    void resetState() {
+        resetCommands();
         currentTarget = nullptr;
         currentPipeline = nullptr;
         currentPipelineGeneration = 0;
@@ -339,6 +376,8 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     }
 };
 
+Q_DECLARE_TYPEINFO(QD3D11CommandBuffer::Command, Q_MOVABLE_TYPE);
+
 struct QD3D11SwapChain : public QRhiSwapChain
 {
     QD3D11SwapChain(QRhiImplementation *rhi);
@@ -346,23 +385,28 @@ struct QD3D11SwapChain : public QRhiSwapChain
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
-    const QRhiRenderPass *defaultRenderPass() const override;
-    QSize requestedSizeInPixels() const override;
-    QSize effectiveSizeInPixels() const override;
 
-    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-               QRhiRenderBuffer *depthStencil, int sampleCount) override;
+    QSize surfacePixelSize() override;
 
-    bool build(QObject *target) override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
+    bool buildOrResize();
+
+    void releaseBuffers();
+    bool newColorBuffer(const QSize &size, DXGI_FORMAT format, DXGI_SAMPLE_DESC sampleDesc,
+                        ID3D11Texture2D **tex, ID3D11RenderTargetView **rtv) const;
 
     QWindow *window = nullptr;
     QSize pixelSize;
     QD3D11ReferenceRenderTarget rt;
     QD3D11CommandBuffer cb;
+    DXGI_FORMAT colorFormat;
     IDXGISwapChain1 *swapChain = nullptr;
     static const int BUFFER_COUNT = 2;
     ID3D11Texture2D *tex[BUFFER_COUNT];
     ID3D11RenderTargetView *rtv[BUFFER_COUNT];
+    ID3D11Texture2D *msaaTex[BUFFER_COUNT];
+    ID3D11RenderTargetView *msaaRtv[BUFFER_COUNT];
+    DXGI_SAMPLE_DESC sampleDesc;
     int currentFrame = 0;
     QD3D11RenderBuffer *ds = nullptr;
 };
@@ -371,7 +415,9 @@ class QRhiD3D11 : public QRhiImplementation
 {
 public:
     QRhiD3D11(QRhiInitParams *params);
-    ~QRhiD3D11();
+
+    bool create() override;
+    void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
@@ -381,9 +427,10 @@ public:
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
-                                         QRhiRenderBuffer::Hints hints) override;
+                                         QRhiRenderBuffer::Flags flags) override;
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
+                               int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
@@ -395,22 +442,27 @@ public:
     QRhiSwapChain *createSwapChain() override;
     QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
+    QRhi::FrameOpResult endOffscreenFrame() override;
+    QRhi::FrameOpResult finish() override;
 
-    void beginPass(QRhiRenderTarget *rt,
-                   QRhiCommandBuffer *cb,
+    void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
+
+    void beginPass(QRhiCommandBuffer *cb,
+                   QRhiRenderTarget *rt,
                    const QRhiColorClearValue &colorClearValue,
                    const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
-    void endPass(QRhiCommandBuffer *cb) override;
+    void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
                              QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
-                        int startBinding, const QVector<QRhi::VertexInput> &bindings,
+                        int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
                         QRhiBuffer *indexBuf, quint32 indexOffset,
-                        QRhi::IndexFormat indexFormat) override;
+                        QRhiCommandBuffer::IndexFormat indexFormat) override;
 
     void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) override;
     void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) override;
@@ -428,24 +480,24 @@ public:
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
+    bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
+    bool isFeatureSupported(QRhi::Feature feature) const override;
 
-    void create();
-    void destroy();
-    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD);
+    DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;
+    void finishActiveReadbacks();
 
     bool debugLayer = false;
     bool importedDevice = false;
     ID3D11Device *dev = nullptr;
     ID3D11DeviceContext1 *context = nullptr;
     D3D_FEATURE_LEVEL featureLevel;
-    IDXGIFactory2 *dxgiFactory;
+    IDXGIFactory2 *dxgiFactory = nullptr;
 
-    static const int FRAMES_IN_FLIGHT = QD3D11SwapChain::BUFFER_COUNT;
-    int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1
     bool inFrame = false;
     int finishedFrameCount = 0;
     bool inPass = false;
@@ -453,8 +505,27 @@ public:
     struct {
         int vsLastActiveSrvBinding = 0;
         int fsLastActiveSrvBinding = 0;
+        QD3D11SwapChain *currentSwapChain = nullptr;
     } contextState;
+
+    struct OffscreenFrame {
+        OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
+        bool active = false;
+        QD3D11CommandBuffer cbWrapper;
+    } ofr;
+
+    struct ActiveReadback {
+        QRhiReadbackDescription desc;
+        QRhiReadbackResult *result;
+        ID3D11Texture2D *stagingTex;
+        quint32 bufSize;
+        QSize pixelSize;
+        QRhiTexture::Format format;
+    };
+    QVector<ActiveReadback> activeReadbacks;
 };
+
+Q_DECLARE_TYPEINFO(QRhiD3D11::ActiveReadback, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

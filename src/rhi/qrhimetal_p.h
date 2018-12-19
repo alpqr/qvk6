@@ -63,77 +63,104 @@ struct QMetalBuffer : public QRhiBuffer
     QMetalBufferData *d;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
+
+struct QMetalRenderBufferData;
 
 struct QMetalRenderBuffer : public QRhiRenderBuffer
 {
     QMetalRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
-                       int sampleCount, QRhiRenderBuffer::Hints hints);
+                       int sampleCount, QRhiRenderBuffer::Flags flags);
+    ~QMetalRenderBuffer();
     void release() override;
     bool build() override;
+    QRhiTexture::Format backingFormat() const override;
+
+    QMetalRenderBufferData *d;
+    int samples = 1;
+    uint generation = 0;
+    int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
+
+struct QMetalTextureData;
 
 struct QMetalTexture : public QRhiTexture
 {
-    QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize, Flags flags);
+    QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
+                  int sampleCount, Flags flags);
+    ~QMetalTexture();
     void release() override;
     bool build() override;
 
+    QMetalTextureData *d;
+    int mipLevelCount = 0;
+    int samples = 1;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
+
+struct QMetalSamplerData;
 
 struct QMetalSampler : public QRhiSampler
 {
     QMetalSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
                   AddressMode u, AddressMode v, AddressMode w);
+    ~QMetalSampler();
     void release() override;
     bool build() override;
 
+    QMetalSamplerData *d;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
 
-struct QMetalRenderPassData;
-
-struct QMetalRenderPass : public QRhiRenderPass
+struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
 {
-    QMetalRenderPass(QRhiImplementation *rhi);
+    QMetalRenderPassDescriptor(QRhiImplementation *rhi);
     void release() override;
 
     // there is no MTLRenderPassDescriptor here as one will be created for each pass in beginPass()
+
+    // but the things needed for the render pipeline descriptor have to be provided
+    static const int MAX_COLOR_ATTACHMENTS = 8;
+    int colorAttachmentCount = 0;
+    bool hasDepthStencil = false;
+    int colorFormat[MAX_COLOR_ATTACHMENTS];
+    int dsFormat;
 };
 
-struct QMetalBasicRenderTargetData
-{
-    QMetalBasicRenderTargetData(QRhiImplementation *rhi) : rp(rhi) { }
-
-    QMetalRenderPass rp;
-    QSize pixelSize;
-    int attCount;
-};
+struct QMetalRenderTargetData;
 
 struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
 {
     QMetalReferenceRenderTarget(QRhiImplementation *rhi);
+    ~QMetalReferenceRenderTarget();
     void release() override;
+
     Type type() const override;
     QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
-    QMetalBasicRenderTargetData d;
+    QMetalRenderTargetData *d;
 };
 
 struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
 {
     QMetalTextureRenderTarget(QRhiImplementation *rhi, const QRhiTextureRenderTargetDescription &desc, Flags flags);
+    ~QMetalTextureRenderTarget();
     void release() override;
-    Type type() const override;
-    bool build() override;
-    QSize sizeInPixels() const override;
-    const QRhiRenderPass *renderPass() const override;
 
-    QMetalBasicRenderTargetData d;
+    Type type() const override;
+    QSize sizeInPixels() const override;
+
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
+    bool build() override;
+
+    QMetalRenderTargetData *d;
+    friend class QRhiMetal;
 };
 
 struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
@@ -142,9 +169,10 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
     void release() override;
     bool build() override;
 
-    QVector<Binding> sortedBindings;
+    QVector<QRhiShaderResourceBinding> sortedBindings;
     int maxBinding = -1;
     uint generation = 0;
+    friend class QRhiMetal;
 };
 
 struct QMetalGraphicsPipelineData;
@@ -159,6 +187,7 @@ struct QMetalGraphicsPipeline : public QRhiGraphicsPipeline
     QMetalGraphicsPipelineData *d;
     uint generation = 0;
     int lastActiveFrameSlot = -1;
+    friend class QRhiMetal;
 };
 
 struct QMetalCommandBufferData;
@@ -172,21 +201,16 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
 
     QMetalCommandBufferData *d = nullptr;
 
-    QMetalSwapChain *currentSwapChain;
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
+    QRhiBuffer *currentIndexBuffer;
+    quint32 currentIndexOffset;
+    QRhiCommandBuffer::IndexFormat currentIndexFormat;
 
-    void resetState() {
-        currentSwapChain = nullptr;
-        currentTarget = nullptr;
-        currentPipeline = nullptr;
-        currentPipelineGeneration = 0;
-        currentSrb = nullptr;
-        currentSrbGeneration = 0;
-    }
+    void resetState();
 };
 
 struct QMetalSwapChainData;
@@ -199,20 +223,18 @@ struct QMetalSwapChain : public QRhiSwapChain
 
     QRhiCommandBuffer *currentFrameCommandBuffer() override;
     QRhiRenderTarget *currentFrameRenderTarget() override;
-    const QRhiRenderPass *defaultRenderPass() const override;
-    QSize requestedSizeInPixels() const override;
-    QSize effectiveSizeInPixels() const override;
+    QSize surfacePixelSize() override;
 
-    bool build(QWindow *window, const QSize &requestedPixelSize, SurfaceImportFlags flags,
-               QRhiRenderBuffer *depthStencil, int sampleCount) override;
+    QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
 
-    bool build(QObject *target) override;
+    bool buildOrResize() override;
+
+    void chooseFormats();
 
     QWindow *window = nullptr;
-    QSize requestedPixelSize;
-    QSize effectivePixelSize;
-
+    QSize pixelSize;
     int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
+    int samples = 1;
     QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;
     QMetalRenderBuffer *ds = nullptr;
@@ -227,6 +249,9 @@ public:
     QRhiMetal(QRhiInitParams *params);
     ~QRhiMetal();
 
+    bool create() override;
+    void destroy() override;
+
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
     QRhiShaderResourceBindings *createShaderResourceBindings() override;
     QRhiBuffer *createBuffer(QRhiBuffer::Type type,
@@ -235,9 +260,10 @@ public:
     QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                          const QSize &pixelSize,
                                          int sampleCount,
-                                         QRhiRenderBuffer::Hints hints) override;
+                                         QRhiRenderBuffer::Flags flags) override;
     QRhiTexture *createTexture(QRhiTexture::Format format,
                                const QSize &pixelSize,
+                               int sampleCount,
                                QRhiTexture::Flags flags) override;
     QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                QRhiSampler::Filter mipmapMode,
@@ -249,22 +275,27 @@ public:
     QRhiSwapChain *createSwapChain() override;
     QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
     QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
+    QRhi::FrameOpResult endOffscreenFrame() override;
+    QRhi::FrameOpResult finish() override;
 
-    void beginPass(QRhiRenderTarget *rt,
-                   QRhiCommandBuffer *cb,
+    void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
+
+    void beginPass(QRhiCommandBuffer *cb,
+                   QRhiRenderTarget *rt,
                    const QRhiColorClearValue &colorClearValue,
                    const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates) override;
-    void endPass(QRhiCommandBuffer *cb) override;
+    void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
                              QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
-                        int startBinding, const QVector<QRhi::VertexInput> &bindings,
+                        int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
                         QRhiBuffer *indexBuf, quint32 indexOffset,
-                        QRhi::IndexFormat indexFormat) override;
+                        QRhiCommandBuffer::IndexFormat indexFormat) override;
 
     void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) override;
     void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) override;
@@ -282,19 +313,22 @@ public:
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
+    bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
+    bool isFeatureSupported(QRhi::Feature feature) const override;
 
-    void create();
-    void destroy();
     void executeDeferredReleases(bool forced = false);
-    void commitResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void finishActiveReadbacks(bool forced = false);
+    void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
+    int effectiveSampleCount(int sampleCount) const;
 
     bool importedDevice = false;
     bool inFrame = false;
-    QMetalSwapChain *currentFrameSwapChain = nullptr;
     int currentFrameSlot = 0;
     int finishedFrameCount = 0;
     bool inPass = false;
+    QMetalSwapChain *currentSwapChain = nullptr;
+    QSet<QMetalSwapChain *> swapchains;
 
     QRhiMetalData *d = nullptr;
 };

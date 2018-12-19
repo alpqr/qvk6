@@ -50,10 +50,19 @@ QT_BEGIN_NAMESPACE
 #define QRHI_RES(t, x) static_cast<t *>(x)
 #define QRHI_RES_RHI(t) t *rhiD = static_cast<t *>(rhi)
 
+class QRhiReferenceRenderTarget : public QRhiRenderTarget
+{
+protected:
+    QRhiReferenceRenderTarget(QRhiImplementation *rhi);
+};
+
 class QRhiImplementation
 {
 public:
     virtual ~QRhiImplementation();
+
+    virtual bool create() = 0;
+    virtual void destroy() = 0;
 
     virtual QRhiGraphicsPipeline *createGraphicsPipeline() = 0;
     virtual QRhiShaderResourceBindings *createShaderResourceBindings() = 0;
@@ -63,9 +72,10 @@ public:
     virtual QRhiRenderBuffer *createRenderBuffer(QRhiRenderBuffer::Type type,
                                                  const QSize &pixelSize,
                                                  int sampleCount,
-                                                 QRhiRenderBuffer::Hints hints) = 0;
+                                                 QRhiRenderBuffer::Flags flags) = 0;
     virtual QRhiTexture *createTexture(QRhiTexture::Format format,
                                        const QSize &pixelSize,
+                                       int sampleCount,
                                        QRhiTexture::Flags flags) = 0;
     virtual QRhiSampler *createSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                                        QRhiSampler::Filter mipmapMode,
@@ -77,22 +87,27 @@ public:
     virtual QRhiSwapChain *createSwapChain() = 0;
     virtual QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) = 0;
     virtual QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) = 0;
+    virtual QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) = 0;
+    virtual QRhi::FrameOpResult endOffscreenFrame() = 0;
+    virtual QRhi::FrameOpResult finish() = 0;
 
-    virtual void beginPass(QRhiRenderTarget *rt,
-                           QRhiCommandBuffer *cb,
+    virtual void resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) = 0;
+
+    virtual void beginPass(QRhiCommandBuffer *cb,
+                           QRhiRenderTarget *rt,
                            const QRhiColorClearValue &colorClearValue,
                            const QRhiDepthStencilClearValue &depthStencilClearValue,
                            QRhiResourceUpdateBatch *resourceUpdates) = 0;
-    virtual void endPass(QRhiCommandBuffer *cb) = 0;
+    virtual void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) = 0;
 
     virtual void setGraphicsPipeline(QRhiCommandBuffer *cb,
                                      QRhiGraphicsPipeline *ps,
                                      QRhiShaderResourceBindings *srb = nullptr) = 0;
 
     virtual void setVertexInput(QRhiCommandBuffer *cb,
-                                int startBinding, const QVector<QRhi::VertexInput> &bindings,
+                                int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
                                 QRhiBuffer *indexBuf, quint32 indexOffset,
-                                QRhi::IndexFormat indexFormat) = 0;
+                                QRhiCommandBuffer::IndexFormat indexFormat) = 0;
 
     virtual void setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport) = 0;
     virtual void setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor) = 0;
@@ -109,9 +124,22 @@ public:
     virtual int ubufAlignment() const = 0;
     virtual bool isYUpInFramebuffer() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
+    virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
+    virtual bool isFeatureSupported(QRhi::Feature) const = 0;
 
+    bool isCompressedFormat(QRhiTexture::Format format) const;
+    void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
+                              quint32 *bpl, quint32 *byteSize,
+                              QSize *blockDim) const;
+    void textureFormatInfo(QRhiTexture::Format format, const QSize &size,
+                           quint32 *bpl, quint32 *byteSize) const;
+
+protected:
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
+
+    friend class QRhi;
+    friend struct QRhiResourceUpdateBatchPrivate;
 };
 
 struct QRhiResourceUpdateBatchPrivate
@@ -129,33 +157,78 @@ struct QRhiResourceUpdateBatchPrivate
 
     struct StaticBufferUpload {
         StaticBufferUpload() { }
-        StaticBufferUpload(QRhiBuffer *buf_, const void *data_)
-            : buf(buf_), data(reinterpret_cast<const char *>(data_), buf_->size)
+        StaticBufferUpload(QRhiBuffer *buf_, int offset_, int size_, const void *data_)
+            : buf(buf_), offset(offset_), data(reinterpret_cast<const char *>(data_), size_ ? size_ : buf_->size())
         { }
 
         QRhiBuffer *buf = nullptr;
+        int offset = 0;
         QByteArray data;
     };
 
     struct TextureUpload {
         TextureUpload() { }
-        TextureUpload(QRhiTexture *tex_, const QRhiResourceUpdateBatch::TextureUploadDescription &desc_)
+        TextureUpload(QRhiTexture *tex_, const QRhiTextureUploadDescription &desc_)
             : tex(tex_), desc(desc_)
         { }
 
         QRhiTexture *tex = nullptr;
-        QRhiResourceUpdateBatch::TextureUploadDescription desc;
+        QRhiTextureUploadDescription desc;
+    };
+
+    struct TextureCopy {
+        TextureCopy() { }
+        TextureCopy(QRhiTexture *dst_, QRhiTexture *src_, const QRhiTextureCopyDescription &desc_)
+            : dst(dst_), src(src_), desc(desc_)
+        { }
+
+        QRhiTexture *dst = nullptr;
+        QRhiTexture *src = nullptr;
+        QRhiTextureCopyDescription desc;
+    };
+
+    struct TextureRead {
+        TextureRead() { }
+        TextureRead(const QRhiReadbackDescription &rb_, QRhiReadbackResult *result_)
+            : rb(rb_), result(result_)
+        { }
+
+        QRhiReadbackDescription rb;
+        QRhiReadbackResult *result;
+    };
+
+    struct TextureMipGen {
+        TextureMipGen() { }
+        TextureMipGen(QRhiTexture *tex_) : tex(tex_)
+        { }
+
+        QRhiTexture *tex = nullptr;
+    };
+
+    struct TexturePrepare {
+        TexturePrepare() { }
+        TexturePrepare(QRhiTexture *tex_, QRhiResourceUpdateBatch::TexturePrepareFlags flags_)
+            : tex(tex_), flags(flags_)
+        { }
+
+        QRhiTexture *tex = nullptr;
+        QRhiResourceUpdateBatch::TexturePrepareFlags flags;
     };
 
     QVector<DynamicBufferUpdate> dynamicBufferUpdates;
     QVector<StaticBufferUpload> staticBufferUploads;
     QVector<TextureUpload> textureUploads;
+    QVector<TextureCopy> textureCopies;
+    QVector<TextureRead> textureReadbacks;
+    QVector<TextureMipGen> textureMipGens;
+    QVector<TexturePrepare> texturePrepares;
 
     QRhiResourceUpdateBatch *q = nullptr;
     QRhiImplementation *rhi = nullptr;
     int poolIndex = -1;
 
     void free();
+    void merge(QRhiResourceUpdateBatchPrivate *other);
 
     static QRhiResourceUpdateBatchPrivate *get(QRhiResourceUpdateBatch *b) { return b->d; }
 };
@@ -163,6 +236,49 @@ struct QRhiResourceUpdateBatchPrivate
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::StaticBufferUpload, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureCopy, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureRead, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureMipGen, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TexturePrepare, Q_MOVABLE_TYPE);
+
+template<typename T>
+struct QRhiBatchedBindings
+{
+    void feed(int binding, T resource) { // binding must be strictly increasing
+        if (curBinding == -1 || binding > curBinding + 1) {
+            finish();
+            curBatch.startBinding = binding;
+            curBatch.resources.clear();
+            curBatch.resources.append(resource);
+        } else {
+            Q_ASSERT(binding == curBinding + 1);
+            curBatch.resources.append(resource);
+        }
+        curBinding = binding;
+    }
+
+    void finish() {
+        if (!curBatch.resources.isEmpty())
+            batches.append(curBatch);
+    }
+
+    void clear() {
+        batches.clear();
+        curBatch.resources.clear();
+        curBinding = -1;
+    }
+
+    struct Batch {
+        uint startBinding;
+        QVarLengthArray<T, 4> resources;
+    };
+
+    QVarLengthArray<Batch, 4> batches; // sorted by startBinding
+
+private:
+    Batch curBatch;
+    int curBinding = -1;
+};
 
 QT_END_NAMESPACE
 

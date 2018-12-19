@@ -1,42 +1,149 @@
+resource import/export, what's the interop story
+multiwindow_threaded should demo pulling out the device and importing to another rhi
+advanced blend modes
+gl: tex formats (texture, readback)
+gl: srgb
+should istexformatsupported should check srgb combinations
+vk: image in wrong layout when beginFrame-endFrame without a pass in it
+vk: rendering hangs sometimes when minimize and back on some systems?
+mtl: cbuffers, textures, samplers set should be batched too
+cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
+what does image copy do for compressed formats?
+figure sg out for minimizing viewport/scissor cmds
+vk: test FrameOpDeviceLost somehow
+d3d device loss?
+more what-if-resource-rebuilt cases
+anisotropic
+gl: more ubuf types
+more QImage->tex formats
+if tex adjust its size (e.g. npot on gl), should QImage get scaled automatically?
+d3d, gl, mtl: cache shader sources?
+resize to 0 width or height fails (vk)
+gl: ubuf structs, arrays
+gl: target QOpenGLWindow/Widget?
+compute?
+vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
+test cubemap face as target
+test cubemap face readback
+
+optional:
+threading options? secondary command lists?
+copy/transfer queue?
+d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
+tessellation?
+indirect draw?
+vk: msaa texture or msaa color renderbuffer could be lazy/transient when only used with resolve
+vk: subpasses?
+more tex: 3d, array?
+vk compressed tex: could it consume a complete ktx without any memcpys?
+multi mip/layer copy? (fewer barriers...)
+multi-buffer (region) readback?
+depth readback?
+copy image depth?
+
+shadertools:
+dxc for d3d as an alternative to fxc?
+hlsl -> dxc -> spirv -> spirv-cross hmmm...
+
++++ done
+vk: shouldn't just qFatal
+mtl: multiwindow
+multi window? (multi swapchain) -> trouble
+test cubemap
+what if window is changed on swapchain (vk, d3d may break as of now)
+mtl: finish()
+mtl: readback (tex, backbuffer)
+mtl: rhi without a window, offscreen frame
+mtl: compressed textures
+mtl: srgb (tex, swapchain buf)
+change how resolve is done
+mtl: color renderbuffer
+targeting mip level in texrt
+mtl: targeting cubemap faces
+mtl: cubemaps
+mtl: msaa tex+rt
+clear window vs surface/layer size mess
+mtl: msaa (onscreen)
+mtl: buffer upload with offset/size
+mtl: texcopy
+mtl: tex upload with pos
+mtl: mipmap generation
+vk, d3d, gl: mipmap gen
+msaa swapchain readback
+d3d: resolveimage (color)
+vk: resolveimage (color)
+gl: resolveimage (color)
+vk: color renderbuffer
+d3d: color renderbuffer
+gl: color renderbuffer
+vk: msaa tex+rt
+gl: buffer upload with offset/size
+d3d: buffer upload with offset/size
+vk: buffer upload with offset/size
+buffer upload with offset
+resourceUpdate (run updates without begin/endPass)
+resourceUpdates in endPass
+d3d: msaa tex+rt
+multisample texture (and tex rt) (no readback)
+gl: compressed textures
+vk, gl: texcopy
+move cb api into QRhiCommandBuffer
+d3d: texcopy
+copyimage (color, with rect?, no resolve or transforms here)
+vk, d3d, gl: tex upload with pos
+res upd batch combine
+gl: offscreen frame, readback
+d3d: readback
+d3d: offscreen frame
+vk: read back the backbuffer
+vk: readback size/formats
+vk: readback
+vk: implement finish()
+some wait-gpu stuff for waiting for readback results inside a begin-endFrame f.ex.
+readback api
+rhi without a window, fully offscreen
+vk: compressed textures (etc2, astc, bc)
+vk: srgb (tex, swapchain buf)
+d3d: srgb support (texture, swapchain buf)
+d3d: support for compressed textures (bc)
+d3d: msaa (onscreen)
+bytecode for metal
+bytecode (fxc) for d3d
+vk: im.layout transition missing when no upload, no render to (or is the case invalid?)
+vk, d3d: verify no-color-just-depth again
+preservecolor applies to which att. (all -> fix mtl)
+mtl: depth tex
+mtl: mrt
+mtl: texture rt
+mtl: batch better in setVertexBuffers
+spirv-cross error reporting (must enable exceptions and catch all in shadertools, no other way)
+mtl: should currentPassEncoder & co. be in the cb data instead?
+mtl: drop texture staging buf when !ChangesFrequently
+mtl: stagingBuffer should be per frame to be safe
+vk: per frame staging buffers
+mtl: mipmap upload
+mtl: indexed draw
+mtl: basic texture
+texture ChangesInfrequently -> ChangesFrequently
+mtl: depth-stencil
 mtl: buffer logic is borked
 mtl: fix Dynamic for non-uniform buffers
 mtl: forcing immut. to Shared should not need multiple backing buffers
-mtl: shader lang. version
-mtl: textures
-cubemap face as target
-test cubemap
-mipmap gen (?)
-figure sg out for minimizing viewport/scissor cmds
-d3d device loss
-more what-if-resource-rebuilt cases
-tex/QImage formats
-anisotropic
-compressed textures
-adopt texture, buffer, ...
-more tex: 3d, array
-test FrameOpDeviceLost somehow
-mtl: msaa (onscreen)
-gl: more ubuf types
-gl: reduce state, reduce texparam
-gl: tex size stuff (npot etc.)
-d3d: msaa (onscreen)
-d3d, gl, mtl: cache shader sources?
-resize to 0 width or height fails (vk)
+d3d: very basic adapter selection
+what's up with instance step rate
+remove geometry shader from enum
+hlsl version config to qsb
+msl version config to qsb
+version to qsb data stream
 upgrade vkmemalloc
-gl: ubuf structs, arrays
-gl: target QOpenGLWindow ...
-msaa offscreen (msaa texture? renderbuffer?)
-blitframebuffer?
-vk: subpasses?
-other shader types? (gs?)
-
-qtshaderstack17:
-hlsl version to qsb
-msl version to qsb (?)
-bytecode (fxc/dxc) for d3d?
-bytecode for metal?
-
-+++ done
+mtl: shader lang. version
+rename res pattern to new-build-release (from create-build-release)?
+make rp dep in ps less invasive (rethink how QRhiRenderPass is handled)
+review swapchain param handling
+gl: offscreensurface ownership not taken (fix examples)
+d3d: why rtv/dsv in rp -> should be in rtD
+new "minimal" example
+cubemap face as target
 test mrt
 vk: mrt
 d3d: mrt

@@ -39,8 +39,8 @@
 
 #include <QtRhi/qrhi.h>
 
-#ifdef Q_OS_WIN
-#include <d3d11_1.h>
+// no d3d includes here, to prevent precompiled header mess (due to this being
+// a public header)
 
 QT_BEGIN_NAMESPACE
 
@@ -51,12 +51,10 @@ struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
     bool importExistingDevice = false;
     // both must be given when importExistingDevice is true. ownership not taken.
     // leave them unset otherwise.
-    ID3D11Device *dev = nullptr;
-    ID3D11DeviceContext *context = nullptr;
+    void *dev = nullptr;
+    void *context = nullptr;
 };
 
 QT_END_NAMESPACE
-
-#endif // Q_OS_WIN
 
 #endif

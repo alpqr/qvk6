@@ -1728,6 +1728,11 @@ QSize QGles2ReferenceRenderTarget::sizeInPixels() const
     return d.pixelSize;
 }
 
+float QGles2ReferenceRenderTarget::devicePixelRatio() const
+{
+    return d.dpr;
+}
+
 QGles2TextureRenderTarget::QGles2TextureRenderTarget(QRhiImplementation *rhi,
                                                      const QRhiTextureRenderTargetDescription &desc,
                                                      Flags flags)
@@ -1797,6 +1802,7 @@ bool QGles2TextureRenderTarget::build()
         rhiD->f->glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbD->renderbuffer);
         d.pixelSize = rbD->pixelSize();
     }
+    d.dpr = 1;
 
     if (m_desc.depthStencilBuffer) {
         QGles2RenderBuffer *rbD = QRHI_RES(QGles2RenderBuffer, m_desc.depthStencilBuffer);
@@ -1822,6 +1828,11 @@ QRhiRenderTarget::Type QGles2TextureRenderTarget::type() const
 QSize QGles2TextureRenderTarget::sizeInPixels() const
 {
     return d.pixelSize;
+}
+
+float QGles2TextureRenderTarget::devicePixelRatio() const
+{
+    return d.dpr;
 }
 
 QGles2ShaderResourceBindings::QGles2ShaderResourceBindings(QRhiImplementation *rhi)
@@ -2058,6 +2069,7 @@ bool QGles2SwapChain::buildOrResize()
 
     rt.d.rp = QRHI_RES(QGles2RenderPassDescriptor, m_renderPassDesc);
     rt.d.pixelSize = pixelSize;
+    rt.d.dpr = m_window->devicePixelRatio();
     rt.d.attCount = m_depthStencil ? 2 : 1;
 
     return true;

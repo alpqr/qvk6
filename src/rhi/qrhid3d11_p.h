@@ -124,6 +124,7 @@ struct QD3D11RenderTargetData
 
     QD3D11RenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
+    float dpr = 1;
     int colorAttCount = 0;
     int dsAttCount = 0;
 
@@ -138,6 +139,7 @@ struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QD3D11RenderTargetData d;
 };
@@ -149,6 +151,7 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;

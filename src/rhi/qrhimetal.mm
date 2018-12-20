@@ -162,6 +162,7 @@ struct QMetalCommandBufferData
 struct QMetalRenderTargetData
 {
     QSize pixelSize;
+    float dpr = 1;
     int colorAttCount = 0;
     int dsAttCount = 0;
 
@@ -1629,6 +1630,11 @@ QSize QMetalReferenceRenderTarget::sizeInPixels() const
     return d->pixelSize;
 }
 
+float QMetalReferenceRenderTarget::devicePixelRatio() const
+{
+    return d->dpr;
+}
+
 QMetalTextureRenderTarget::QMetalTextureRenderTarget(QRhiImplementation *rhi,
                                                      const QRhiTextureRenderTargetDescription &desc,
                                                      Flags flags)
@@ -1693,6 +1699,7 @@ bool QMetalTextureRenderTarget::build()
         d->fb.colorAtt[i] = { dst, m_desc.colorAttachments[i].layer, m_desc.colorAttachments[i].level,
                               resDst, m_desc.colorAttachments[i].resolveLayer, m_desc.colorAttachments[i].resolveLevel };
     }
+    d->dpr = 1;
 
     if (hasDepthStencil) {
         if (m_desc.depthTexture) {
@@ -1722,6 +1729,11 @@ QRhiRenderTarget::Type QMetalTextureRenderTarget::type() const
 QSize QMetalTextureRenderTarget::sizeInPixels() const
 {
     return d->pixelSize;
+}
+
+float QMetalTextureRenderTarget::devicePixelRatio() const
+{
+    return d->dpr;
 }
 
 QMetalShaderResourceBindings::QMetalShaderResourceBindings(QRhiImplementation *rhi)
@@ -2370,6 +2382,7 @@ bool QMetalSwapChain::buildOrResize()
     }
 
     rtWrapper.d->pixelSize = pixelSize;
+    rtWrapper.d->dpr = window->devicePixelRatio();
     rtWrapper.d->colorAttCount = 1;
     rtWrapper.d->dsAttCount = ds ? 1 : 0;
 

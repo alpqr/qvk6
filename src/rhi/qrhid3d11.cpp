@@ -477,7 +477,6 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     contextState.currentSwapChain = swapChainD;
     swapChainD->cb.resetState();
 
-    swapChainD->rt.d.pixelSize = swapChainD->pixelSize;
     swapChainD->rt.d.rtv[0] = swapChainD->sampleDesc.Count > 1 ?
                 swapChainD->msaaRtv[swapChainD->currentFrame] : swapChainD->rtv[swapChainD->currentFrame];
     swapChainD->rt.d.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
@@ -1769,6 +1768,11 @@ QSize QD3D11ReferenceRenderTarget::sizeInPixels() const
     return d.pixelSize;
 }
 
+float QD3D11ReferenceRenderTarget::devicePixelRatio() const
+{
+    return d.dpr;
+}
+
 QD3D11TextureRenderTarget::QD3D11TextureRenderTarget(QRhiImplementation *rhi,
                                                      const QRhiTextureRenderTargetDescription &desc,
                                                      Flags flags)
@@ -1858,6 +1862,7 @@ bool QD3D11TextureRenderTarget::build()
             Q_UNREACHABLE();
         }
     }
+    d.dpr = 1;
 
     if (hasDepthStencil) {
         if (m_desc.depthTexture) {
@@ -1903,6 +1908,11 @@ QRhiRenderTarget::Type QD3D11TextureRenderTarget::type() const
 QSize QD3D11TextureRenderTarget::sizeInPixels() const
 {
     return d.pixelSize;
+}
+
+float QD3D11TextureRenderTarget::devicePixelRatio() const
+{
+    return d.dpr;
 }
 
 QD3D11ShaderResourceBindings::QD3D11ShaderResourceBindings(QRhiImplementation *rhi)
@@ -2567,6 +2577,7 @@ bool QD3D11SwapChain::buildOrResize()
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
     rtD->d.rp = QRHI_RES(QD3D11RenderPassDescriptor, m_renderPassDesc);
     rtD->d.pixelSize = pixelSize;
+    rtD->d.dpr = window->devicePixelRatio();
     rtD->d.colorAttCount = 1;
     rtD->d.dsAttCount = m_depthStencil ? 1 : 0;
 

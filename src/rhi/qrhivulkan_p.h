@@ -146,6 +146,7 @@ struct QVkRenderTargetData
     VkFramebuffer fb = VK_NULL_HANDLE;
     QVkRenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
+    float dpr = 1;
     int colorAttCount = 0;
     int dsAttCount = 0;
     int resolveAttCount = 0;
@@ -158,6 +159,7 @@ struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QVkRenderTargetData d;
 };
@@ -169,6 +171,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;

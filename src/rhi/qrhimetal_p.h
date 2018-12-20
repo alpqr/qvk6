@@ -143,6 +143,7 @@ struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QMetalRenderTargetData *d;
 };
@@ -155,6 +156,7 @@ struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;

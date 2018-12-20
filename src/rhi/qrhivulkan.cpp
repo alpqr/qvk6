@@ -1188,6 +1188,7 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
 
     swapChainD->rtWrapper.d.fb = w->currentFramebuffer();
     swapChainD->m_currentPixelSize = swapChainD->pixelSize = swapChainD->rtWrapper.d.pixelSize = w->swapChainImageSize();
+    swapChainD->rtWrapper.d.dpr = w->devicePixelRatio();
 
     currentFrameSlot = w->currentFrame();
     currentSwapChain = swapChainD;
@@ -3574,6 +3575,11 @@ QSize QVkReferenceRenderTarget::sizeInPixels() const
     return d.pixelSize;
 }
 
+float QVkReferenceRenderTarget::devicePixelRatio() const
+{
+    return d.dpr;
+}
+
 QVkTextureRenderTarget::QVkTextureRenderTarget(QRhiImplementation *rhi,
                                                const QRhiTextureRenderTargetDescription &desc,
                                                Flags flags)
@@ -3679,6 +3685,7 @@ bool QVkTextureRenderTarget::build()
             Q_UNREACHABLE();
         }
     }
+    d.dpr = 1;
 
     if (hasDepthStencil) {
         d.dsAttCount = 1;
@@ -3755,6 +3762,11 @@ QRhiRenderTarget::Type QVkTextureRenderTarget::type() const
 QSize QVkTextureRenderTarget::sizeInPixels() const
 {
     return d.pixelSize;
+}
+
+float QVkTextureRenderTarget::devicePixelRatio() const
+{
+    return d.dpr;
 }
 
 QVkShaderResourceBindings::QVkShaderResourceBindings(QRhiImplementation *rhi)
@@ -4218,6 +4230,7 @@ bool QVkSwapChain::buildOrResize()
             rtWrapper.d.rp = QRHI_RES(QVkRenderPassDescriptor, m_renderPassDesc);
             Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);
             m_currentPixelSize = pixelSize = rtWrapper.d.pixelSize = vkw->swapChainImageSize();
+            rtWrapper.d.dpr = vkw->devicePixelRatio();
             rtWrapper.d.colorAttCount = 1;
             rtWrapper.d.dsAttCount = 1;
             rtWrapper.d.resolveAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
@@ -4263,6 +4276,7 @@ bool QVkSwapChain::buildOrResize()
     Q_ASSERT(rtWrapper.d.rp && rtWrapper.d.rp->rp);
 
     rtWrapper.d.pixelSize = pixelSize;
+    rtWrapper.d.dpr = window->devicePixelRatio();
     rtWrapper.d.colorAttCount = 1;
     if (m_depthStencil) {
         rtWrapper.d.dsAttCount = 1;

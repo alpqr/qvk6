@@ -588,6 +588,7 @@ public:
 
     virtual Type type() const = 0;
     virtual QSize sizeInPixels() const = 0;
+    virtual float devicePixelRatio() const = 0;
 
     QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_renderPassDesc; }
     void setRenderPassDescriptor(QRhiRenderPassDescriptor *desc) { m_renderPassDesc = desc; }

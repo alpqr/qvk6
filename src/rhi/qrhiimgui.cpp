@@ -45,7 +45,84 @@ QRhiImgui::QRhiImgui()
 
 QRhiImgui::~QRhiImgui()
 {
+    releaseResources();
     delete d;
+}
+
+void QRhiImgui::setFrameFunc(FrameFunc f)
+{
+    d->frame = f;
+}
+
+void QRhiImgui::demoWindow()
+{
+    ImGui::ShowDemoWindow(&d->showDemoWindow);
+}
+
+bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt)
+{
+    ImGuiIO &io(ImGui::GetIO());
+
+    if (d->textures.isEmpty()) {
+        unsigned char *pixels;
+        int w, h;
+        io.Fonts->GetTexDataAsRGBA32(&pixels, &w, &h);
+        const QImage wrapperImg((const uchar *) pixels, w, h, QImage::Format_RGBA8888);
+        d->textures.append(wrapperImg.copy());
+        io.Fonts->SetTexID(reinterpret_cast<ImTextureID>(quintptr(d->textures.count() - 1)));
+    }
+
+    const QSize outputSize = rt->sizeInPixels();
+    const float dpr = rt->devicePixelRatio();
+    io.DisplaySize.x = outputSize.width() / dpr;
+    io.DisplaySize.y = outputSize.height() / dpr;
+    io.DisplayFramebufferScale = ImVec2(dpr, dpr);
+
+    ImGui::NewFrame();
+    if (d->frame)
+        d->frame();
+    ImGui::Render();
+
+    ImDrawData *draw = ImGui::GetDrawData();
+    draw->ScaleClipRects(ImVec2(dpr, dpr));
+
+    for (int n = 0; n < draw->CmdListsCount; ++n) {
+        const ImDrawList *cmdList = draw->CmdLists[n];
+        const ImDrawIdx *indexBufOffset = nullptr;
+
+//        e.vbuf = QByteArray((const char *) cmdList->VtxBuffer.Data, cmdList->VtxBuffer.Size * sizeof(ImDrawVert));
+//        e.ibuf = QByteArray((const char *) cmdList->IdxBuffer.Data, cmdList->IdxBuffer.Size * sizeof(ImDrawIdx));
+
+        for (int i = 0; i < cmdList->CmdBuffer.Size; ++i) {
+            const ImDrawCmd *cmd = &cmdList->CmdBuffer[i];
+            if (!cmd->UserCallback) {
+//                ImGuiRenderer::FrameDesc::Cmd qcmd;
+//                qcmd.elemCount = cmd->ElemCount;
+//                qcmd.indexOffset = indexBufOffset;
+
+//                qcmd.scissorPixelBottomLeft = QPointF(cmd->ClipRect.x, io.DisplaySize.y * m_dpr - cmd->ClipRect.w);
+//                qcmd.scissorPixelSize = QSizeF(cmd->ClipRect.z - cmd->ClipRect.x, cmd->ClipRect.w - cmd->ClipRect.y);
+
+//                qcmd.textureIndex = uint(reinterpret_cast<quintptr>(cmd->TextureId));
+
+//                e.cmds.append(qcmd);
+            } else {
+                cmd->UserCallback(cmdList, cmd);
+            }
+            indexBufOffset += cmd->ElemCount;
+        }
+    }
+
+    return true;
+}
+
+void QRhiImgui::releaseResources()
+{
+}
+
+QRhiImgui::FrameFunc QRhiImgui::frameFunc() const
+{
+    return d->frame;
 }
 
 QRhiImguiPrivate::QRhiImguiPrivate()

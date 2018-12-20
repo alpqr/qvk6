@@ -53,6 +53,10 @@ class QRhiImguiPrivate
 public:
     QRhiImguiPrivate();
     ~QRhiImguiPrivate();
+
+    QRhiImgui::FrameFunc frame = nullptr;
+    bool showDemoWindow = true;
+    QVector<QImage> textures;
 };
 
 QT_END_NAMESPACE

@@ -37,7 +37,8 @@
 #ifndef QRHIIMGUI_H
 #define QRHIIMGUI_H
 
-#include <QtRhi/qtrhiglobal.h>
+#include <QtRhi/qrhi.h>
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 
@@ -48,6 +49,14 @@ class Q_RHI_EXPORT QRhiImgui
 public:
     QRhiImgui();
     ~QRhiImgui();
+
+    typedef std::function<void()> FrameFunc;
+    void setFrameFunc(FrameFunc f);
+    FrameFunc frameFunc() const;
+    void demoWindow();
+
+    bool imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt);
+    void releaseResources();
 
 private:
     Q_DISABLE_COPY(QRhiImgui)

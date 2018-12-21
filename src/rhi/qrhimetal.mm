@@ -294,9 +294,16 @@ bool QRhiMetal::isYUpInFramebuffer() const
 
 QMatrix4x4 QRhiMetal::clipSpaceCorrMatrix() const
 {
-    // ### ?
-
-    return QMatrix4x4(); // identity
+    // depth range 0..1
+    static QMatrix4x4 m;
+    if (m.isIdentity()) {
+        // NB the ctor takes row-major
+        m = QMatrix4x4(1.0f, 0.0f, 0.0f, 0.0f,
+                       0.0f, 1.0f, 0.0f, 0.0f,
+                       0.0f, 0.0f, 0.5f, 0.5f,
+                       0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    return m;
 }
 
 bool QRhiMetal::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const
@@ -1189,7 +1196,8 @@ bool QMetalBuffer::build()
     if (d->buf[0])
         release();
 
-    const int roundedSize = m_usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(m_size, 256) : m_size;
+    const int nonZeroSize = m_size <= 0 ? 256 : m_size;
+    const int roundedSize = m_usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(nonZeroSize, 256) : nonZeroSize;
 
     d->managed = false;
     MTLResourceOptions opts = MTLResourceStorageModeShared;

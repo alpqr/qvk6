@@ -3210,10 +3210,12 @@ bool QVkBuffer::build()
     if (buffers[0])
         release();
 
+    const int nonZeroSize = m_size <= 0 ? 256 : m_size;
+
     VkBufferCreateInfo bufferInfo;
     memset(&bufferInfo, 0, sizeof(bufferInfo));
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = m_size;
+    bufferInfo.size = nonZeroSize;
     bufferInfo.usage = toVkBufferUsage(m_usage);
 
     VmaAllocationCreateInfo allocInfo;

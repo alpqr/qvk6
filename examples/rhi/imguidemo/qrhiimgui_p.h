@@ -41,7 +41,6 @@
 // We mean it.
 //
 
-#include "qtrhiglobal_p.h"
 #include "qrhiimgui.h"
 
 #include "imgui.h"
@@ -56,7 +55,22 @@ public:
 
     QRhiImgui::FrameFunc frame = nullptr;
     bool showDemoWindow = true;
-    QVector<QImage> textures;
+
+    QRhi *rhi = nullptr;
+
+    struct Texture {
+        QImage image;
+        QRhiTexture *tex = nullptr;
+        QRhiShaderResourceBindings *srb = nullptr;
+    };
+    QVector<Texture> textures;
+
+    QRhiBuffer *vbuf = nullptr;
+    QRhiBuffer *ibuf = nullptr;
+    QRhiBuffer *ubuf = nullptr;
+    QRhiGraphicsPipeline *ps = nullptr;
+    QRhiSampler *sampler = nullptr;
+    QVector<QRhiResource *> releasePool;
 };
 
 QT_END_NAMESPACE

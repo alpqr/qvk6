@@ -1,3 +1,5 @@
+beginpass without clear
+mtl: reduce set*
 resource import/export, what's the interop story
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 advanced blend modes

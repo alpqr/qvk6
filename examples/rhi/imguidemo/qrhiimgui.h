@@ -55,8 +55,9 @@ public:
     FrameFunc frameFunc() const;
     void demoWindow();
 
-    bool imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt);
+    void initialize(QRhi *rhi);
     void releaseResources();
+    bool imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp);
 
 private:
     Q_DISABLE_COPY(QRhiImgui)

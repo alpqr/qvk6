@@ -2,5 +2,7 @@
 <qresource>
   <file alias="color.vert.qsb">../shared/color.vert.qsb</file>
   <file alias="color.frag.qsb">../shared/color.frag.qsb</file>
+  <file>imgui.vert.qsb</file>
+  <file>imgui.frag.qsb</file>
 </qresource>
 </RCC>

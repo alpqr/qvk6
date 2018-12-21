@@ -97,8 +97,11 @@ Q_DECLARE_TYPEINFO(QRhiDepthStencilClearValue, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiViewport
 {
-    QRhiViewport() { }
-    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says
+    QRhiViewport()
+        : r(0, 0, 1280, 720), minDepth(0), maxDepth(1)
+    { }
+    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says.
+    // Depth range defaults to 0..1. See clipSpaceCorrMatrix().
     QRhiViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
         : r(x, y, w, h), minDepth(minDepth_), maxDepth(maxDepth_)
     { }

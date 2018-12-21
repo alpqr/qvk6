@@ -1396,9 +1396,12 @@ bool QD3D11Buffer::build()
     if (buffer)
         release();
 
+    const int nonZeroSize = m_size <= 0 ? 256 : m_size;
+    const int roundedSize = m_usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(nonZeroSize, 256) : nonZeroSize;
+
     D3D11_BUFFER_DESC desc;
     memset(&desc, 0, sizeof(desc));
-    desc.ByteWidth = m_usage.testFlag(QRhiBuffer::UniformBuffer) ? aligned(m_size, 256) : m_size;
+    desc.ByteWidth = roundedSize;
     desc.Usage = m_type == Dynamic ? D3D11_USAGE_DYNAMIC : D3D11_USAGE_DEFAULT;
     desc.BindFlags = toD3DBufferUsage(m_usage);
     desc.CPUAccessFlags = m_type == Dynamic ? D3D11_CPU_ACCESS_WRITE : 0;

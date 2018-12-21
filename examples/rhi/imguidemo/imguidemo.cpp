@@ -49,7 +49,7 @@
 ****************************************************************************/
 
 #include "../shared/examplefw.h"
-#include <QRhiImgui>
+#include "qrhiimgui.h"
 
 static float vertexData[] = {
      0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
@@ -116,6 +116,11 @@ void Window::customInit()
     d.ps->setRenderPassDescriptor(m_rp);
 
     d.ps->build();
+
+    d.imgui.initialize(m_r);
+    d.imgui.setFrameFunc([] {
+        d.imgui.demoWindow();
+    });
 }
 
 void Window::customRelease()
@@ -152,5 +157,5 @@ void Window::customRender()
     cb->draw(36);
     cb->endPass();
 
-    d.imgui.imguiPass(cb, rt);
+    d.imgui.imguiPass(cb, rt, m_rp);
 }

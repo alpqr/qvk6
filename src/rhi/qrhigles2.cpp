@@ -975,6 +975,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                     const int stride = psD->m_vertexInputLayout.bindings[a.binding].stride;
                     int size = 1;
                     GLenum type = GL_FLOAT;
+                    bool normalize = false;
                     switch (a.format) {
                     case QRhiVertexInputLayout::Attribute::Float4:
                         type = GL_FLOAT;
@@ -994,21 +995,24 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                         break;
                     case QRhiVertexInputLayout::Attribute::UNormByte4:
                         type = GL_UNSIGNED_BYTE;
+                        normalize = true;
                         size = 4;
                         break;
                     case QRhiVertexInputLayout::Attribute::UNormByte2:
                         type = GL_UNSIGNED_BYTE;
+                        normalize = true;
                         size = 2;
                         break;
                     case QRhiVertexInputLayout::Attribute::UNormByte:
                         type = GL_UNSIGNED_BYTE;
+                        normalize = true;
                         size = 1;
                         break;
                     default:
                         break;
                     }
                     quint32 ofs = a.offset + cmd.args.bindVertexBuffer.offset;
-                    f->glVertexAttribPointer(a.location, size, type, GL_FALSE, stride,
+                    f->glVertexAttribPointer(a.location, size, type, normalize, stride,
                                              reinterpret_cast<const GLvoid *>(quintptr(ofs)));
                     f->glEnableVertexAttribArray(a.location);
                 }

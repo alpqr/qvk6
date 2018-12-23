@@ -17,6 +17,6 @@ out gl_PerVertex { vec4 gl_Position; };
 void main()
 {
     v_texcoord = texcoord;
-    v_color = color / vec4(255.0);
+    v_color = color;
     gl_Position = ubuf.mvp * vec4(position.xy, 0.0, 1.0);
 }

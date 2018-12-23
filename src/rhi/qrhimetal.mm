@@ -1836,12 +1836,12 @@ static inline MTLVertexFormat toMetalAttributeFormat(QRhiVertexInputLayout::Attr
     case QRhiVertexInputLayout::Attribute::Float:
         return MTLVertexFormatFloat;
     case QRhiVertexInputLayout::Attribute::UNormByte4:
-        return MTLVertexFormatUChar4;
+        return MTLVertexFormatUChar4Normalized;
     case QRhiVertexInputLayout::Attribute::UNormByte2:
-        return MTLVertexFormatUChar2;
+        return MTLVertexFormatUChar2Normalized;
     case QRhiVertexInputLayout::Attribute::UNormByte:
         if (@available(macOS 10.13, iOS 11.0, *))
-            return MTLVertexFormatUChar;
+            return MTLVertexFormatUCharNormalized;
         else
             Q_UNREACHABLE();
     default:

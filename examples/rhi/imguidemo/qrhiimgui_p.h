@@ -95,7 +95,10 @@ public:
     QRhiGraphicsPipeline *ps = nullptr;
     QRhiSampler *sampler = nullptr;
     QVector<QRhiResource *> releasePool;
+    QSizeF lastDisplaySize;
     QSizeF lastOutputSize;
+    QVarLengthArray<quint32, 4> vbufOffsets;
+    QVarLengthArray<quint32, 4> ibufOffsets;
 
     QRhiImGuiInputEventFilter *inputEventFilter = nullptr;
     QObject *inputEventSource = nullptr;

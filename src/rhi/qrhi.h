@@ -606,6 +606,8 @@ class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
 public:
     enum Flag {
+        // the load-not-clear request is baked into the resources under the rpd
+        // with some backends so it cannot be more dynamic than this
         PreserveColorContents = 1 << 0,
         PreserveDepthStencilContents = 1 << 1
     };

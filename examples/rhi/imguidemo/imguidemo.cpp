@@ -151,12 +151,15 @@ void Window::customRender()
     mvp.rotate(d.rotation, 0, 1, 0);
     u->updateDynamicBuffer(d.ubuf, 0, 64, mvp.constData());
 
+    d.imgui.prepareFrame(rt, m_rp, u);
+
     cb->beginPass(rt, { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
+
     cb->setGraphicsPipeline(d.ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     cb->setVertexInput(0, { { d.vbuf, 0 } });
     cb->draw(36);
-    cb->endPass();
 
-    d.imgui.imguiPass(cb, rt, m_rp);
+    d.imgui.queueFrame(cb);
+    cb->endPass();
 }

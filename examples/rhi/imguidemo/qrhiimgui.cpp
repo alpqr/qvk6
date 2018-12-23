@@ -71,7 +71,8 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp)
+bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
+                             QRhiResourceUpdateBatch *dstResourceUpdates)
 {
     ImGuiIO &io(ImGui::GetIO());
 
@@ -102,7 +103,6 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
     ImDrawData *draw = ImGui::GetDrawData();
     draw->ScaleClipRects(ImVec2(dpr, dpr));
 
-    QRhiResourceUpdateBatch *resUpd = d->rhi->nextResourceUpdateBatch();
     if (!d->ubuf) {
         d->ubuf = d->rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
         d->releasePool << d->ubuf;
@@ -110,14 +110,15 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
             return false;
 
         float opacity = 1.0f;
-        resUpd->updateDynamicBuffer(d->ubuf, 64, 4, &opacity);
+        dstResourceUpdates->updateDynamicBuffer(d->ubuf, 64, 4, &opacity);
     }
 
-    if (d->lastOutputSize.width() != io.DisplaySize.x || d->lastOutputSize.height() != io.DisplaySize.y) {
+    if (d->lastDisplaySize.width() != io.DisplaySize.x || d->lastDisplaySize.height() != io.DisplaySize.y) {
         QMatrix4x4 mvp = d->rhi->clipSpaceCorrMatrix();
         mvp.ortho(0, io.DisplaySize.x, io.DisplaySize.y, 0, 1, -1);
-        resUpd->updateDynamicBuffer(d->ubuf, 0, 64, mvp.constData());
-        d->lastOutputSize = QSizeF(io.DisplaySize.x, io.DisplaySize.y);
+        dstResourceUpdates->updateDynamicBuffer(d->ubuf, 0, 64, mvp.constData());
+        d->lastDisplaySize = QSizeF(io.DisplaySize.x, io.DisplaySize.y); // without dpr
+        d->lastOutputSize = outputSize; // with dpr
     }
 
     if (!d->sampler) {
@@ -133,7 +134,7 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
             t.tex = d->rhi->newTexture(QRhiTexture::RGBA8, t.image.size());
             if (!t.tex->build())
                 return false;
-            resUpd->uploadTexture(t.tex, t.image);
+            dstResourceUpdates->uploadTexture(t.tex, t.image);
         }
         if (!t.srb) {
             t.srb = d->rhi->newShaderResourceBindings();
@@ -195,17 +196,17 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
     // switched to uint in imconfig.h to avoid trouble with 4 byte offset alignment reqs
     Q_ASSERT(sizeof(ImDrawIdx) == 4);
 
-    QVarLengthArray<quint32, 4> vbufOffsets(draw->CmdListsCount);
-    QVarLengthArray<quint32, 4> ibufOffsets(draw->CmdListsCount);
+    d->vbufOffsets.resize(draw->CmdListsCount);
+    d->ibufOffsets.resize(draw->CmdListsCount);
     int totalVbufSize = 0;
     int totalIbufSize = 0;
     for (int n = 0; n < draw->CmdListsCount; ++n) {
         const ImDrawList *cmdList = draw->CmdLists[n];
         const int vbufSize = cmdList->VtxBuffer.Size * sizeof(ImDrawVert);
-        vbufOffsets[n] = totalVbufSize;
+        d->vbufOffsets[n] = totalVbufSize;
         totalVbufSize += vbufSize;
         const int ibufSize = cmdList->IdxBuffer.Size * sizeof(ImDrawIdx);
-        ibufOffsets[n] = totalIbufSize;
+        d->ibufOffsets[n] = totalIbufSize;
         totalIbufSize += ibufSize;
     }
 
@@ -237,13 +238,19 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
     for (int n = 0; n < draw->CmdListsCount; ++n) {
         const ImDrawList *cmdList = draw->CmdLists[n];
         const int vbufSize = cmdList->VtxBuffer.Size * sizeof(ImDrawVert);
-        resUpd->updateDynamicBuffer(d->vbuf, vbufOffsets[n], vbufSize, cmdList->VtxBuffer.Data);
+        dstResourceUpdates->updateDynamicBuffer(d->vbuf, d->vbufOffsets[n], vbufSize, cmdList->VtxBuffer.Data);
         const int ibufSize = cmdList->IdxBuffer.Size * sizeof(ImDrawIdx);
-        resUpd->updateDynamicBuffer(d->ibuf, ibufOffsets[n], ibufSize, cmdList->IdxBuffer.Data);
+        dstResourceUpdates->updateDynamicBuffer(d->ibuf, d->ibufOffsets[n], ibufSize, cmdList->IdxBuffer.Data);
     }
 
-    cb->beginPass(rt, { 0, 0, 0, 1 }, { 1, 0 }, resUpd);
-    cb->setViewport({ 0, 0, float(outputSize.width()), float(outputSize.height()) });
+    return true;
+}
+
+void QRhiImgui::queueFrame(QRhiCommandBuffer *cb)
+{
+    ImGuiIO &io(ImGui::GetIO());
+    ImDrawData *draw = ImGui::GetDrawData();
+    cb->setViewport({ 0, 0, float(d->lastOutputSize.width()), float(d->lastOutputSize.height()) });
 
     for (int n = 0; n < draw->CmdListsCount; ++n) {
         const ImDrawList *cmdList = draw->CmdLists[n];
@@ -252,14 +259,14 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
         for (int i = 0; i < cmdList->CmdBuffer.Size; ++i) {
             const ImDrawCmd *cmd = &cmdList->CmdBuffer[i];
             if (!cmd->UserCallback) {
-                const QPointF scissorPixelBottomLeft = QPointF(cmd->ClipRect.x, outputSize.height() - cmd->ClipRect.w);
+                const QPointF scissorPixelBottomLeft = QPointF(cmd->ClipRect.x, d->lastOutputSize.height() - cmd->ClipRect.w);
                 const QSizeF scissorPixelSize = QSizeF(cmd->ClipRect.z - cmd->ClipRect.x, cmd->ClipRect.w - cmd->ClipRect.y);
                 const int textureIndex = int(reinterpret_cast<qintptr>(cmd->TextureId));
                 cb->setGraphicsPipeline(d->ps, d->textures[textureIndex].srb);
                 cb->setScissor({ int(scissorPixelBottomLeft.x()), int(scissorPixelBottomLeft.y()),
                                  int(scissorPixelSize.width()), int(scissorPixelSize.height()) });
-                cb->setVertexInput(0, { { d->vbuf, vbufOffsets[n] } },
-                                   d->ibuf, ibufOffsets[n] + quintptr(indexBufOffset), QRhiCommandBuffer::IndexUInt32);
+                cb->setVertexInput(0, { { d->vbuf, d->vbufOffsets[n] } },
+                                   d->ibuf, d->ibufOffsets[n] + quintptr(indexBufOffset), QRhiCommandBuffer::IndexUInt32);
                 cb->drawIndexed(cmd->ElemCount);
             } else {
                 cmd->UserCallback(cmdList, cmd);
@@ -267,10 +274,6 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
             indexBufOffset += cmd->ElemCount;
         }
     }
-
-    cb->endPass();
-
-    return true;
 }
 
 void QRhiImgui::initialize(QRhi *rhi)

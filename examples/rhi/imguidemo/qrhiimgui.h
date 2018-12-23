@@ -55,11 +55,17 @@ public:
     FrameFunc frameFunc() const;
     void demoWindow();
 
+    void setInputEventSource(QObject *src);
+
     void initialize(QRhi *rhi);
     void releaseResources();
-    bool imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp);
 
-    void setInputEventSource(QObject *src);
+    // We could have chosen to provide a single function that queues an entire
+    // pass, but that would be inflexible and (in some cases) less performant.
+    // Instead, make it possible to combine with some other pass.
+    bool prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
+                      QRhiResourceUpdateBatch *dstResourceUpdates);
+    void queueFrame(QRhiCommandBuffer *cb);
 
 private:
     Q_DISABLE_COPY(QRhiImgui)

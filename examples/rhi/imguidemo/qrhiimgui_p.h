@@ -47,11 +47,35 @@
 
 QT_BEGIN_NAMESPACE
 
+#define FIRSTSPECKEY (0x01000000)
+#define LASTSPECKEY (0x01000017)
+#define MAPSPECKEY(k) ((k) - FIRSTSPECKEY + 256)
+
+class QRhiImGuiInputEventFilter : public QObject
+{
+public:
+    QRhiImGuiInputEventFilter()
+    {
+        memset(keyDown, 0, sizeof(keyDown));
+    }
+
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+    QPointF mousePos;
+    Qt::MouseButtons mouseButtonsDown = Qt::NoButton;
+    float mouseWheel = 0;
+    Qt::KeyboardModifiers modifiers = Qt::NoModifier;
+    bool keyDown[256 + (LASTSPECKEY - FIRSTSPECKEY + 1)];
+    QString keyText;
+};
+
 class QRhiImguiPrivate
 {
 public:
     QRhiImguiPrivate();
     ~QRhiImguiPrivate();
+
+    void updateInput();
 
     QRhiImgui::FrameFunc frame = nullptr;
     bool showDemoWindow = true;
@@ -71,6 +95,10 @@ public:
     QRhiGraphicsPipeline *ps = nullptr;
     QRhiSampler *sampler = nullptr;
     QVector<QRhiResource *> releasePool;
+
+    QRhiImGuiInputEventFilter *inputEventFilter = nullptr;
+    QObject *inputEventSource = nullptr;
+    bool inputInitialized = false;
 };
 
 QT_END_NAMESPACE

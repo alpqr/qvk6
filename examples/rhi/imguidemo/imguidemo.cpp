@@ -118,6 +118,7 @@ void Window::customInit()
     d.ps->build();
 
     d.imgui.initialize(m_r);
+    d.imgui.setInputEventSource(this);
     d.imgui.setFrameFunc([] {
         d.imgui.demoWindow();
     });

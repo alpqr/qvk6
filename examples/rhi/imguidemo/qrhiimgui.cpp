@@ -36,6 +36,8 @@
 
 #include "qrhiimgui_p.h"
 #include <QFile>
+#include <QMouseEvent>
+#include <QKeyEvent>
 
 QT_BEGIN_NAMESPACE
 
@@ -89,6 +91,8 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
     io.DisplaySize.x = outputSize.width() / dpr;
     io.DisplaySize.y = outputSize.height() / dpr;
     io.DisplayFramebufferScale = ImVec2(dpr, dpr);
+
+    d->updateInput();
 
     ImGui::NewFrame();
     if (d->frame)
@@ -288,11 +292,29 @@ void QRhiImgui::releaseResources()
     d->vbuf = d->ibuf = d->ubuf = nullptr;
     d->ps = nullptr;
     d->sampler = nullptr;
+
+    delete d->inputEventFilter;
+    d->inputEventFilter = nullptr;
 }
 
 QRhiImgui::FrameFunc QRhiImgui::frameFunc() const
 {
     return d->frame;
+}
+
+void QRhiImgui::setInputEventSource(QObject *src)
+{
+    if (d->inputEventSource && d->inputEventFilter)
+        d->inputEventSource->removeEventFilter(d->inputEventFilter);
+
+    d->inputEventSource = src;
+
+    if (!d->inputEventFilter) {
+        d->inputEventFilter = new QRhiImGuiInputEventFilter;
+        d->inputInitialized = false;
+    }
+
+    d->inputEventSource->installEventFilter(d->inputEventFilter);
 }
 
 QRhiImguiPrivate::QRhiImguiPrivate()
@@ -303,6 +325,110 @@ QRhiImguiPrivate::QRhiImguiPrivate()
 QRhiImguiPrivate::~QRhiImguiPrivate()
 {
     ImGui::DestroyContext();
+}
+
+bool QRhiImGuiInputEventFilter::eventFilter(QObject *, QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseMove:
+    case QEvent::MouseButtonRelease:
+    {
+        QMouseEvent *me = static_cast<QMouseEvent *>(event);
+        mousePos = me->pos();
+        mouseButtonsDown = me->buttons();
+        modifiers = me->modifiers();
+    }
+        break;
+
+    case QEvent::Wheel:
+    {
+        QWheelEvent *we = static_cast<QWheelEvent *>(event);
+        mouseWheel += we->angleDelta().y() / 120.0f;
+    }
+        break;
+
+    case QEvent::KeyPress:
+    case QEvent::KeyRelease:
+    {
+        const bool down = event->type() == QEvent::KeyPress;
+        QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+        modifiers = ke->modifiers();
+        if (down)
+            keyText.append(ke->text());
+        int k = ke->key();
+        if (k <= 0xFF)
+            keyDown[k] = down;
+        else if (k >= FIRSTSPECKEY && k <= LASTSPECKEY)
+            keyDown[MAPSPECKEY(k)] = down;
+    }
+        break;
+
+    default:
+        break;
+    }
+
+    return false;
+}
+
+void QRhiImguiPrivate::updateInput()
+{
+    if (!inputEventFilter)
+        return;
+
+    ImGuiIO &io = ImGui::GetIO();
+
+    if (!inputInitialized) {
+        inputInitialized = true;
+
+        io.KeyMap[ImGuiKey_Tab] = MAPSPECKEY(Qt::Key_Tab);
+        io.KeyMap[ImGuiKey_LeftArrow] = MAPSPECKEY(Qt::Key_Left);
+        io.KeyMap[ImGuiKey_RightArrow] = MAPSPECKEY(Qt::Key_Right);
+        io.KeyMap[ImGuiKey_UpArrow] = MAPSPECKEY(Qt::Key_Up);
+        io.KeyMap[ImGuiKey_DownArrow] = MAPSPECKEY(Qt::Key_Down);
+        io.KeyMap[ImGuiKey_PageUp] = MAPSPECKEY(Qt::Key_PageUp);
+        io.KeyMap[ImGuiKey_PageDown] = MAPSPECKEY(Qt::Key_PageDown);
+        io.KeyMap[ImGuiKey_Home] = MAPSPECKEY(Qt::Key_Home);
+        io.KeyMap[ImGuiKey_End] = MAPSPECKEY(Qt::Key_End);
+        io.KeyMap[ImGuiKey_Delete] = MAPSPECKEY(Qt::Key_Delete);
+        io.KeyMap[ImGuiKey_Backspace] = MAPSPECKEY(Qt::Key_Backspace);
+        io.KeyMap[ImGuiKey_Enter] = MAPSPECKEY(Qt::Key_Return);
+        io.KeyMap[ImGuiKey_Escape] = MAPSPECKEY(Qt::Key_Escape);
+
+        io.KeyMap[ImGuiKey_A] = Qt::Key_A;
+        io.KeyMap[ImGuiKey_C] = Qt::Key_C;
+        io.KeyMap[ImGuiKey_V] = Qt::Key_V;
+        io.KeyMap[ImGuiKey_X] = Qt::Key_X;
+        io.KeyMap[ImGuiKey_Y] = Qt::Key_Y;
+        io.KeyMap[ImGuiKey_Z] = Qt::Key_Z;
+    }
+
+    QRhiImGuiInputEventFilter *w = inputEventFilter;
+
+    io.MousePos = ImVec2(w->mousePos.x(), w->mousePos.y());
+
+    io.MouseDown[0] = w->mouseButtonsDown.testFlag(Qt::LeftButton);
+    io.MouseDown[1] = w->mouseButtonsDown.testFlag(Qt::RightButton);
+    io.MouseDown[2] = w->mouseButtonsDown.testFlag(Qt::MiddleButton);
+
+    io.MouseWheel = w->mouseWheel;
+    w->mouseWheel = 0;
+
+    io.KeyCtrl = w->modifiers.testFlag(Qt::ControlModifier);
+    io.KeyShift = w->modifiers.testFlag(Qt::ShiftModifier);
+    io.KeyAlt = w->modifiers.testFlag(Qt::AltModifier);
+    io.KeySuper = w->modifiers.testFlag(Qt::MetaModifier);
+
+    memcpy(io.KeysDown, w->keyDown, sizeof(w->keyDown));
+
+    if (!w->keyText.isEmpty()) {
+        for (const QChar &c : w->keyText) {
+            ImWchar u = c.unicode();
+            if (u)
+                io.AddInputCharacter(u);
+        }
+        w->keyText.clear();
+    }
 }
 
 QT_END_NAMESPACE

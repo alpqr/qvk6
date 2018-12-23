@@ -59,6 +59,8 @@ public:
     void releaseResources();
     bool imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp);
 
+    void setInputEventSource(QObject *src);
+
 private:
     Q_DISABLE_COPY(QRhiImgui)
     QRhiImguiPrivate *d = nullptr;

@@ -795,6 +795,7 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
 bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
                                            const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
                                            bool preserveColor,
+                                           bool preserveDs,
                                            QRhiRenderBuffer *depthStencilBuffer,
                                            QRhiTexture *depthTexture)
 {
@@ -834,14 +835,16 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
                                                : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->vkformat;
         const VkSampleCountFlagBits samples = depthTexture ? QRHI_RES(QVkTexture, depthTexture)->samples
                                                            : QRHI_RES(QVkRenderBuffer, depthStencilBuffer)->samples;
+        const VkAttachmentLoadOp loadOp = preserveDs ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+        const VkAttachmentStoreOp storeOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
         VkAttachmentDescription attDesc;
         memset(&attDesc, 0, sizeof(attDesc));
         attDesc.format = dsFormat;
         attDesc.samples = samples;
-        attDesc.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.storeOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.stencilStoreOp = depthTexture ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attDesc.loadOp = loadOp;
+        attDesc.storeOp = storeOp;
+        attDesc.stencilLoadOp = loadOp;
+        attDesc.stencilStoreOp = storeOp;
         attDesc.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attDesc.finalLayout = depthTexture ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         attDescs.append(attDesc);
@@ -3625,6 +3628,7 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
     if (!rhiD->createOffscreenRenderPass(&rp->rp,
                                          m_desc.colorAttachments,
                                          m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
+                                         m_flags.testFlag(QRhiTextureRenderTarget::PreserveDepthStencilContents),
                                          m_desc.depthStencilBuffer,
                                          m_desc.depthTexture))
     {

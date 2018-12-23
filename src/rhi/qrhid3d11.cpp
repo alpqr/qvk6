@@ -978,10 +978,12 @@ void QRhiD3D11::beginPass(QRhiCommandBuffer *cb,
 
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     bool needsColorClear = true;
+    bool needsDsClear = true;
     QD3D11RenderTargetData *rtD = rtData(rt);
     if (rt->type() == QRhiRenderTarget::RtTexture) {
         QD3D11TextureRenderTarget *rtTex = QRHI_RES(QD3D11TextureRenderTarget, rt);
         needsColorClear = !rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
+        needsDsClear = !rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveDepthStencilContents);
     }
 
     cbD->currentTarget = rt;
@@ -995,12 +997,10 @@ void QRhiD3D11::beginPass(QRhiCommandBuffer *cb,
     clearCmd.cmd = QD3D11CommandBuffer::Command::Clear;
     clearCmd.args.clear.rt = rt;
     clearCmd.args.clear.mask = 0;
-    if (!rtD->colorAttCount)
-        needsColorClear = false;
-    if (rtD->dsAttCount)
-        clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Depth | QD3D11CommandBuffer::Command::Stencil;
-    if (needsColorClear)
+    if (rtD->colorAttCount && needsColorClear)
         clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Color;
+    if (rtD->dsAttCount && needsDsClear)
+        clearCmd.args.clear.mask |= QD3D11CommandBuffer::Command::Depth | QD3D11CommandBuffer::Command::Stencil;
 
     memcpy(clearCmd.args.clear.c, &colorClearValue.rgba, sizeof(float) * 4);
     clearCmd.args.clear.d = depthStencilClearValue.d;

@@ -406,6 +406,7 @@ public:
     bool createOffscreenRenderPass(VkRenderPass *rp,
                                    const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
                                    bool preserveColor,
+                                   bool preserveDs,
                                    QRhiRenderBuffer *depthStencilBuffer,
                                    QRhiTexture *depthTexture);
     bool ensurePipelineCache();

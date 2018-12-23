@@ -1377,6 +1377,7 @@ void QRhiGles2::beginPass(QRhiCommandBuffer *cb,
 
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     bool needsColorClear = true;
+    bool needsDsClear = true;
     QGles2BasicRenderTargetData *rtD = nullptr;
     QGles2CommandBuffer::Command fbCmd;
     fbCmd.cmd = QGles2CommandBuffer::Command::BindFramebuffer;
@@ -1390,6 +1391,7 @@ void QRhiGles2::beginPass(QRhiCommandBuffer *cb,
         QGles2TextureRenderTarget *rtTex = QRHI_RES(QGles2TextureRenderTarget, rt);
         rtD = &rtTex->d;
         needsColorClear = !rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents);
+        needsDsClear = !rtTex->m_flags.testFlag(QRhiTextureRenderTarget::PreserveDepthStencilContents);
         fbCmd.args.bindFramebuffer.rt = rtTex;
     }
         break;
@@ -1405,10 +1407,10 @@ void QRhiGles2::beginPass(QRhiCommandBuffer *cb,
     QGles2CommandBuffer::Command clearCmd;
     clearCmd.cmd = QGles2CommandBuffer::Command::Clear;
     clearCmd.args.clear.mask = 0;
-    if (rtD->attCount > 1)
-        clearCmd.args.clear.mask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
-    if (needsColorClear)
+    if (rtD->attCount > 0 && needsColorClear)
         clearCmd.args.clear.mask |= GL_COLOR_BUFFER_BIT;
+    if (rtD->attCount > 1 && needsDsClear)
+        clearCmd.args.clear.mask |= GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT;
 
     memcpy(clearCmd.args.clear.c, &colorClearValue.rgba, sizeof(float) * 4);
     clearCmd.args.clear.d = depthStencilClearValue.d;

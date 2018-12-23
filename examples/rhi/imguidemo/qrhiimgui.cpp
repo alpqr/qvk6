@@ -113,9 +113,12 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
         resUpd->updateDynamicBuffer(d->ubuf, 64, 4, &opacity);
     }
 
-    QMatrix4x4 mvp = d->rhi->clipSpaceCorrMatrix();
-    mvp.ortho(0, io.DisplaySize.x, io.DisplaySize.y, 0, 1, -1);
-    resUpd->updateDynamicBuffer(d->ubuf, 0, 64, mvp.constData());
+    if (d->lastOutputSize.width() != io.DisplaySize.x || d->lastOutputSize.height() != io.DisplaySize.y) {
+        QMatrix4x4 mvp = d->rhi->clipSpaceCorrMatrix();
+        mvp.ortho(0, io.DisplaySize.x, io.DisplaySize.y, 0, 1, -1);
+        resUpd->updateDynamicBuffer(d->ubuf, 0, 64, mvp.constData());
+        d->lastOutputSize = QSizeF(io.DisplaySize.x, io.DisplaySize.y);
+    }
 
     if (!d->sampler) {
         d->sampler = d->rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
@@ -273,6 +276,7 @@ bool QRhiImgui::imguiPass(QRhiCommandBuffer *cb, QRhiRenderTarget *rt, QRhiRende
 void QRhiImgui::initialize(QRhi *rhi)
 {
     d->rhi = rhi;
+    d->lastOutputSize = QSizeF();
 }
 
 void QRhiImgui::releaseResources()

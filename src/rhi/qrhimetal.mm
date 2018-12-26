@@ -145,6 +145,7 @@ struct QMetalTextureData
     MTLPixelFormat format;
     id<MTLTexture> tex = nil;
     id<MTLBuffer> stagingBuf[QMTL_FRAMES_IN_FLIGHT];
+    bool owns = true;
 };
 
 struct QMetalSamplerData
@@ -236,6 +237,9 @@ bool QRhiMetal::create()
     qDebug("Metal device: %s", qPrintable(QString::fromNSString([d->dev name])));
 
     d->cmdQueue = [d->dev newCommandQueue];
+
+    nativeHandlesStruct.dev = d->dev;
+    nativeHandlesStruct.cmdQueue = d->cmdQueue;
 
     return true;
 }
@@ -334,6 +338,11 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         Q_UNREACHABLE();
         return false;
     }
+}
+
+QRhiNativeHandles *QRhiMetal::nativeHandles()
+{
+    return &nativeHandlesStruct;
 }
 
 QRhiRenderBuffer *QRhiMetal::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
@@ -1331,14 +1340,17 @@ void QMetalTexture::release()
 
     e.texture.texture = d->tex;
     d->tex = nil;
+    nativeHandlesStruct.texture = nullptr;
 
     for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i) {
         e.texture.stagingBuffers[i] = d->stagingBuf[i];
         d->stagingBuf[i] = nil;
     }
 
-    QRHI_RES_RHI(QRhiMetal);
-    rhiD->d->releaseQueue.append(e);
+    if (d->owns) {
+        QRHI_RES_RHI(QRhiMetal);
+        rhiD->d->releaseQueue.append(e);
+    }
 }
 
 static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
@@ -1501,6 +1513,40 @@ bool QMetalTexture::build()
 
     d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
     [desc release];
+
+    d->owns = true;
+    nativeHandlesStruct.texture = d->tex;
+
+    lastActiveFrameSlot = -1;
+    generation += 1;
+    return true;
+}
+
+QRhiNativeHandles *QMetalTexture::nativeHandles()
+{
+    return &nativeHandlesStruct;
+}
+
+bool QMetalTexture::buildFrom(QRhiNativeHandles *src)
+{
+    QRhiMetalTextureNativeHandles *h = static_cast<QRhiMetalTextureNativeHandles *>(src);
+    if (!h || !h->texture)
+        return false;
+
+    if (d->tex)
+        release();
+
+    QRHI_RES_RHI(QRhiMetal);
+    d->format = toMetalTextureFormat(m_format, m_flags);
+    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
+    const bool hasMipMaps = m_flags.testFlag(MipMapped);
+    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    samples = rhiD->effectiveSampleCount(m_sampleCount);
+
+    d->tex = (id<MTLTexture>) h->texture;
+
+    d->owns = false;
+    nativeHandlesStruct.texture = d->tex;
 
     lastActiveFrameSlot = -1;
     generation += 1;

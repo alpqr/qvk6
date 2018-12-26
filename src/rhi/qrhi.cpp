@@ -85,6 +85,17 @@ QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &p
 {
 }
 
+QRhiNativeHandles *QRhiTexture::nativeHandles()
+{
+    return nullptr;
+}
+
+bool QRhiTexture::buildFrom(QRhiNativeHandles *src)
+{
+    Q_UNUSED(src);
+    return false;
+}
+
 QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
                          Filter magFilter_, Filter minFilter_, Filter mipmapMode_,
                          AddressMode u_, AddressMode v_, AddressMode w_)
@@ -627,6 +638,11 @@ bool QRhi::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Fla
 bool QRhi::isFeatureSupported(QRhi::Feature feature) const
 {
     return d->isFeatureSupported(feature);
+}
+
+QRhiNativeHandles *QRhi::nativeHandles()
+{
+    return d->nativeHandles();
 }
 
 QRhiGraphicsPipeline *QRhi::newGraphicsPipeline()

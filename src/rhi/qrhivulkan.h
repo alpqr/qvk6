@@ -54,11 +54,22 @@ struct Q_RHI_EXPORT QRhiVulkanInitParams : public QRhiInitParams
     int gfxQueueFamilyIdx = -1; // either this or gfxQueue is required [prefer this over gfxQueue]
     VkQueue gfxQueue = VK_NULL_HANDLE; // either this or gfxQueueFamilyIdx is required [use this only when importing a QVulkanWindow]
     VkCommandPool cmdPool = VK_NULL_HANDLE; // optional
+    void *vmemAllocator = nullptr; // optional
 
     // optional, only used during init to verify if presenting is supported
     // while choosing the graphics queue
     // (only when importExistingDevice is false)
     QWindow *window = nullptr;
+};
+
+struct Q_RHI_EXPORT QRhiVulkanNativeHandles : public QRhiNativeHandles
+{
+    VkPhysicalDevice physDev;
+    VkDevice dev;
+    int gfxQueueFamilyIdx;
+    VkQueue gfxQueue;
+    VkCommandPool cmdPool;
+    void *vmemAllocator;
 };
 
 QT_END_NAMESPACE

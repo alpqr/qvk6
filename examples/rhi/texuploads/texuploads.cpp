@@ -59,25 +59,30 @@ struct {
     QRhiSampler *sampler = nullptr;
     QRhiShaderResourceBindings *srb = nullptr;
     QRhiGraphicsPipeline *ps = nullptr;
+    QVector<QRhiResource *> releasePool;
 
     float rotation = 0;
     QRhiResourceUpdateBatch *initialUpdates = nullptr;
     int frameCount = 0;
     QImage customImage;
     QRhiTexture *newTex = nullptr;
+    QRhiTexture *importedTex = nullptr;
     int testStage = 0;
 } d;
 
 void Window::customInit()
 {
     d.vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
+    d.releasePool << d.vbuf;
     d.vbuf->build();
 
     d.ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    d.releasePool << d.ubuf;
     d.ubuf->build();
 
     QImage baseImage(QLatin1String(":/qt256.png"));
     d.tex = m_r->newTexture(QRhiTexture::RGBA8, baseImage.size(), 1, QRhiTexture::UsedAsTransferSource);
+    d.releasePool << d.tex;
     d.tex->build();
 
     // As an alternative to what some of the other examples do, prepare an
@@ -90,9 +95,11 @@ void Window::customInit()
 
     d.sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                 QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    d.releasePool << d.sampler;
     d.sampler->build();
 
     d.srb = m_r->newShaderResourceBindings();
+    d.releasePool << d.srb;
     d.srb->setBindings({
         QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, d.ubuf),
         QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, d.tex, d.sampler)
@@ -100,6 +107,7 @@ void Window::customInit()
     d.srb->build();
 
     d.ps = m_r->newGraphicsPipeline();
+    d.releasePool << d.ps;
 
     d.ps->setDepthTest(true);
     d.ps->setDepthWrite(true);
@@ -147,40 +155,10 @@ void Window::customInit()
 
 void Window::customRelease()
 {
-    if (d.ps) {
-        d.ps->releaseAndDestroy();
-        d.ps = nullptr;
-    }
+    for (QRhiResource *r : d.releasePool)
+        r->releaseAndDestroy();
 
-    if (d.srb) {
-        d.srb->releaseAndDestroy();
-        d.srb = nullptr;
-    }
-
-    if (d.ubuf) {
-        d.ubuf->releaseAndDestroy();
-        d.ubuf = nullptr;
-    }
-
-    if (d.vbuf) {
-        d.vbuf->releaseAndDestroy();
-        d.vbuf = nullptr;
-    }
-
-    if (d.sampler) {
-        d.sampler->releaseAndDestroy();
-        d.sampler = nullptr;
-    }
-
-    if (d.tex) {
-        d.tex->releaseAndDestroy();
-        d.tex = nullptr;
-    }
-
-    if (d.newTex) {
-        d.newTex->releaseAndDestroy();
-        d.newTex = nullptr;
-    }
+    d.releasePool.clear();
 }
 
 void Window::customRender()
@@ -224,6 +202,7 @@ void Window::customRender()
         if (d.testStage == 2) {
             const QSize sz = d.tex->pixelSize();
             d.newTex = m_r->newTexture(QRhiTexture::RGBA8, sz);
+            d.releasePool << d.newTex;
             d.newTex->build();
 
             QImage empty(sz.width(), sz.height(), QImage::Format_RGBA8888);
@@ -268,6 +247,40 @@ void Window::customRender()
             layer.mipImages.append(mipDesc);
             desc.layers.append(layer);
             u->uploadTexture(d.newTex, desc);
+        }
+
+        // Exercise texture object export/import.
+        if (d.testStage == 6) {
+            QRhiNativeHandles *h = d.tex->nativeHandles();
+            if (h) {
+#ifdef Q_OS_DARWIN
+                if (graphicsApi == Metal) {
+                    qDebug() << "Metal texture: " << static_cast<QRhiMetalTextureNativeHandles *>(h)->texture;
+                    // Now could cast to id<MTLTexture> and do something with
+                    // it, keeping in mind that copy operations are only done
+                    // in beginPass, while rendering into a texture may only
+                    // have proper results in current_frame + 2, or after a
+                    // finish(). The QRhiTexture still owns the native object.
+                }
+#endif
+                // omit for other backends, the idea is the same
+
+                d.importedTex = m_r->newTexture(QRhiTexture::RGBA8, d.tex->pixelSize());
+                d.releasePool << d.importedTex;
+                if (!d.importedTex->buildFrom(h))
+                    qWarning("Texture import failed");
+
+                // now d.tex and d.importedTex use the same MTLTexture
+                // underneath (owned by d.tex)
+
+                // switch to showing d.importedTex
+                auto bindings = d.srb->bindings();
+                bindings[1].stex.tex = d.importedTex;
+                d.srb->setBindings(bindings);
+                d.srb->build();
+            } else {
+                qWarning("Accessing native texture object is not supported");
+            }
         }
     }
 

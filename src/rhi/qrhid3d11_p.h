@@ -485,6 +485,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    QRhiNativeHandles *nativeHandles() override;
 
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
@@ -500,6 +501,7 @@ public:
     ID3D11DeviceContext1 *context = nullptr;
     D3D_FEATURE_LEVEL featureLevel;
     IDXGIFactory2 *dxgiFactory = nullptr;
+    QRhiD3D11NativeHandles nativeHandlesStruct;
 
     bool inFrame = false;
     int finishedFrameCount = 0;

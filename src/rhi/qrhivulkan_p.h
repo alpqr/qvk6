@@ -386,6 +386,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    QRhiNativeHandles *nativeHandles() override;
 
     VkResult createDescriptorPool(VkDescriptorPool *pool);
     bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *result, int *resultPoolIndex);
@@ -458,7 +459,7 @@ public:
     VkCommandPool cmdPool = VK_NULL_HANDLE;
     int gfxQueueFamilyIdx = -1;
     VkQueue gfxQueue = VK_NULL_HANDLE;
-    QVkAllocator allocator;
+    QVkAllocator allocator = nullptr;
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;
     VkPhysicalDeviceProperties physDevProperties;
@@ -494,6 +495,7 @@ public:
     bool inPass = false;
     QVkSwapChain *currentSwapChain = nullptr;
     QSet<QVkSwapChain *> swapchains;
+    QRhiVulkanNativeHandles nativeHandlesStruct;
 
     struct OffscreenFrame {
         OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }

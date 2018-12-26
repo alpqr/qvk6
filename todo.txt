@@ -1,7 +1,7 @@
-beginpass without clear
-mtl: reduce set*
-resource import/export, what's the interop story
+texture export
+texture import
 multiwindow_threaded should demo pulling out the device and importing to another rhi
+mtl: reduce set*
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -31,6 +31,7 @@ test cubemap face readback
 optional:
 threading options? secondary command lists?
 copy/transfer queue?
+vkmemalloc block size config?
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 tessellation?
 indirect draw?
@@ -48,6 +49,9 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: texture import/export
+rhi native handle getter (device, ...)
+imgui example
 vk: shouldn't just qFatal
 mtl: multiwindow
 multi window? (multi swapchain) -> trouble

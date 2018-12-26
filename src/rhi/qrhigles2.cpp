@@ -116,6 +116,8 @@ bool QRhiGles2::create()
     caps.msaaRenderBuffer = f->hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample)
             && f->hasOpenGLExtension(QOpenGLExtensions::FramebufferBlit);
 
+    nativeHandlesStruct.context = ctx;
+
     return true;
 }
 
@@ -262,6 +264,11 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         Q_UNREACHABLE();
         return false;
     }
+}
+
+QRhiNativeHandles *QRhiGles2::nativeHandles()
+{
+    return &nativeHandlesStruct;
 }
 
 QRhiRenderBuffer *QRhiGles2::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,

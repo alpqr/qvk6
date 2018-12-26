@@ -352,10 +352,15 @@ struct Q_RHI_EXPORT QRhiReadbackDescription
 
 Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);
 
+struct Q_RHI_EXPORT QRhiNativeHandles
+{
+};
+
 class Q_RHI_EXPORT QRhiResource
 {
 public:
     virtual ~QRhiResource();
+
     virtual void release() = 0;
     void releaseAndDestroy();
 
@@ -470,6 +475,16 @@ public:
     void setSampleCount(int s) { m_sampleCount = s; }
 
     virtual bool build() = 0;
+
+    // Returns a ptr to a QRhi<backend>TextureNativeHandles struct.
+    // Ownership of the native objects is not transfered.
+    virtual QRhiNativeHandles *nativeHandles();
+
+    // Calling this instead of build() allows importing an existing native
+    // texture object (must belong to the same device or a sharing context).
+    // Note that format, pixelSize, etc. must still be set correctly (typically
+    // via QRhi::newTexture()). Ownership of the native resource is not taken.
+    virtual bool buildFrom(QRhiNativeHandles *src);
 
 protected:
     QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
@@ -1219,6 +1234,10 @@ public:
 
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags = QRhiTexture::Flags()) const;
     bool isFeatureSupported(QRhi::Feature feature) const;
+
+    // Returns a ptr to a QRhi<backend>NativeHandles struct.
+    // Ownership of the native objects is not transfered.
+    QRhiNativeHandles *nativeHandles();
 
 protected:
     QRhi();

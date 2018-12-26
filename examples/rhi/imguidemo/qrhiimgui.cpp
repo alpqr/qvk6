@@ -248,7 +248,6 @@ bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
 
 void QRhiImgui::queueFrame(QRhiCommandBuffer *cb)
 {
-    ImGuiIO &io(ImGui::GetIO());
     ImDrawData *draw = ImGui::GetDrawData();
     cb->setViewport({ 0, 0, float(d->lastOutputSize.width()), float(d->lastOutputSize.height()) });
 

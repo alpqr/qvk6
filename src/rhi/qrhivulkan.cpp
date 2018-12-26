@@ -167,6 +167,7 @@ QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
         gfxQueueFamilyIdx = vkparams->gfxQueueFamilyIdx;
         gfxQueue = vkparams->gfxQueue;
         cmdPool = vkparams->cmdPool;
+        allocator = vkparams->vmemAllocator;
     }
     maybeWindow = vkparams->window; // may be null
 }
@@ -281,24 +282,6 @@ bool QRhiVulkan::create()
     if (gfxQueueFamilyIdx != -1 && !gfxQueue)
         df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
 
-    VmaVulkanFunctions afuncs;
-    afuncs.vkGetPhysicalDeviceProperties = wrap_vkGetPhysicalDeviceProperties;
-    afuncs.vkGetPhysicalDeviceMemoryProperties = wrap_vkGetPhysicalDeviceMemoryProperties;
-    afuncs.vkAllocateMemory = wrap_vkAllocateMemory;
-    afuncs.vkFreeMemory = wrap_vkFreeMemory;
-    afuncs.vkMapMemory = wrap_vkMapMemory;
-    afuncs.vkUnmapMemory = wrap_vkUnmapMemory;
-    afuncs.vkFlushMappedMemoryRanges = wrap_vkFlushMappedMemoryRanges;
-    afuncs.vkInvalidateMappedMemoryRanges = wrap_vkInvalidateMappedMemoryRanges;
-    afuncs.vkBindBufferMemory = wrap_vkBindBufferMemory;
-    afuncs.vkBindImageMemory = wrap_vkBindImageMemory;
-    afuncs.vkGetBufferMemoryRequirements = wrap_vkGetBufferMemoryRequirements;
-    afuncs.vkGetImageMemoryRequirements = wrap_vkGetImageMemoryRequirements;
-    afuncs.vkCreateBuffer = wrap_vkCreateBuffer;
-    afuncs.vkDestroyBuffer = wrap_vkDestroyBuffer;
-    afuncs.vkCreateImage = wrap_vkCreateImage;
-    afuncs.vkDestroyImage = wrap_vkDestroyImage;
-
     f->vkGetPhysicalDeviceProperties(physDev, &physDevProperties);
     ubufAlign = physDevProperties.limits.minUniformBufferOffsetAlignment;
     texbufAlign = physDevProperties.limits.optimalBufferCopyOffsetAlignment;
@@ -308,25 +291,52 @@ bool QRhiVulkan::create()
            VK_VERSION_MINOR(physDevProperties.driverVersion),
            VK_VERSION_PATCH(physDevProperties.driverVersion));
 
-    VmaAllocatorCreateInfo allocatorInfo;
-    memset(&allocatorInfo, 0, sizeof(allocatorInfo));
-    allocatorInfo.physicalDevice = physDev;
-    allocatorInfo.device = dev;
-    allocatorInfo.pVulkanFunctions = &afuncs;
-    VmaAllocator vmaallocator;
-    VkResult err = vmaCreateAllocator(&allocatorInfo, &vmaallocator);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to create allocator: %d", err);
-        return false;
+    if (!allocator) {
+        VmaVulkanFunctions afuncs;
+        afuncs.vkGetPhysicalDeviceProperties = wrap_vkGetPhysicalDeviceProperties;
+        afuncs.vkGetPhysicalDeviceMemoryProperties = wrap_vkGetPhysicalDeviceMemoryProperties;
+        afuncs.vkAllocateMemory = wrap_vkAllocateMemory;
+        afuncs.vkFreeMemory = wrap_vkFreeMemory;
+        afuncs.vkMapMemory = wrap_vkMapMemory;
+        afuncs.vkUnmapMemory = wrap_vkUnmapMemory;
+        afuncs.vkFlushMappedMemoryRanges = wrap_vkFlushMappedMemoryRanges;
+        afuncs.vkInvalidateMappedMemoryRanges = wrap_vkInvalidateMappedMemoryRanges;
+        afuncs.vkBindBufferMemory = wrap_vkBindBufferMemory;
+        afuncs.vkBindImageMemory = wrap_vkBindImageMemory;
+        afuncs.vkGetBufferMemoryRequirements = wrap_vkGetBufferMemoryRequirements;
+        afuncs.vkGetImageMemoryRequirements = wrap_vkGetImageMemoryRequirements;
+        afuncs.vkCreateBuffer = wrap_vkCreateBuffer;
+        afuncs.vkDestroyBuffer = wrap_vkDestroyBuffer;
+        afuncs.vkCreateImage = wrap_vkCreateImage;
+        afuncs.vkDestroyImage = wrap_vkDestroyImage;
+
+        VmaAllocatorCreateInfo allocatorInfo;
+        memset(&allocatorInfo, 0, sizeof(allocatorInfo));
+        allocatorInfo.physicalDevice = physDev;
+        allocatorInfo.device = dev;
+        allocatorInfo.pVulkanFunctions = &afuncs;
+        VmaAllocator vmaallocator;
+        VkResult err = vmaCreateAllocator(&allocatorInfo, &vmaallocator);
+        if (err != VK_SUCCESS) {
+            qWarning("Failed to create allocator: %d", err);
+            return false;
+        }
+        allocator = vmaallocator;
     }
-    allocator = vmaallocator;
 
     VkDescriptorPool pool;
-    err = createDescriptorPool(&pool);
+    VkResult err = createDescriptorPool(&pool);
     if (err == VK_SUCCESS)
         descriptorPools.append(pool);
     else
         qWarning("Failed to create initial descriptor pool: %d", err);
+
+    nativeHandlesStruct.physDev = physDev;
+    nativeHandlesStruct.dev = dev;
+    nativeHandlesStruct.gfxQueueFamilyIdx = gfxQueueFamilyIdx;
+    nativeHandlesStruct.gfxQueue = gfxQueue;
+    nativeHandlesStruct.cmdPool = cmdPool;
+    nativeHandlesStruct.vmemAllocator = allocator;
 
     return true;
 }
@@ -361,9 +371,8 @@ void QRhiVulkan::destroy()
 
     descriptorPools.clear();
 
-    vmaDestroyAllocator(toVmaAllocator(allocator));
-
     if (!importedDevPoolQueue) {
+        vmaDestroyAllocator(toVmaAllocator(allocator));
         if (cmdPool) {
             df->vkDestroyCommandPool(dev, cmdPool, nullptr);
             cmdPool = VK_NULL_HANDLE;
@@ -2626,6 +2635,11 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         Q_UNREACHABLE();
         return false;
     }
+}
+
+QRhiNativeHandles *QRhiVulkan::nativeHandles()
+{
+    return &nativeHandlesStruct;
 }
 
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,

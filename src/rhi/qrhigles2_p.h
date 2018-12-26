@@ -500,6 +500,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    QRhiNativeHandles *nativeHandles() override;
 
     bool ensureContext(QSurface *surface = nullptr) const;
     void executeDeferredReleases();
@@ -523,6 +524,7 @@ public:
     bool inPass = false;
     QGles2SwapChain *currentSwapChain = nullptr;
     QVector<GLint> supportedCompressedFormats;
+    QRhiGles2NativeHandles nativeHandlesStruct;
 
     struct DeferredReleaseEntry {
         enum Type {

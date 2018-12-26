@@ -55,6 +55,12 @@ struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
     void *context = nullptr;
 };
 
+struct Q_RHI_EXPORT QRhiD3D11NativeHandles : public QRhiNativeHandles
+{
+    void *dev;
+    void *context;
+};
+
 QT_END_NAMESPACE
 
 #endif

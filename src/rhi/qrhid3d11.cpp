@@ -146,6 +146,9 @@ bool QRhiD3D11::create()
         featureLevel = dev->GetFeatureLevel();
     }
 
+    nativeHandlesStruct.dev = dev;
+    nativeHandlesStruct.context = context;
+
     return true;
 }
 
@@ -250,6 +253,11 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         Q_UNREACHABLE();
         return false;
     }
+}
+
+QRhiNativeHandles *QRhiD3D11::nativeHandles()
+{
+    return &nativeHandlesStruct;
 }
 
 QRhiRenderBuffer *QRhiD3D11::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,

@@ -93,8 +93,10 @@ struct QMetalTexture : public QRhiTexture
     ~QMetalTexture();
     void release() override;
     bool build() override;
-    QRhiNativeHandles *nativeHandles() override;
     bool buildFrom(QRhiNativeHandles *src) override;
+    QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
 
     QMetalTextureData *d;
     QRhiMetalTextureNativeHandles nativeHandlesStruct;

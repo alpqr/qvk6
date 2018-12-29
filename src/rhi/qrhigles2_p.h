@@ -91,13 +91,20 @@ struct QGles2Texture : public QRhiTexture
                   int sampleCount, Flags flags);
     void release() override;
     bool build() override;
+    bool buildFrom(QRhiNativeHandles *src) override;
+    QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
 
     GLuint texture = 0;
+    bool owns = true;
     GLenum target;
     GLenum glintformat;
     GLenum glformat;
     GLenum gltype;
     bool specified = false;
+    int mipLevelCount = 0;
+    QRhiGles2TextureNativeHandles nativeHandlesStruct;
 
     uint generation = 0;
     friend class QRhiGles2;

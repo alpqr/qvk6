@@ -1609,9 +1609,12 @@ void QGles2Texture::release()
 
     texture = 0;
     specified = false;
+    nativeHandlesStruct.texture = 0;
 
-    QRHI_RES_RHI(QRhiGles2);
-    rhiD->releaseQueue.append(e);
+    if (owns) {
+        QRHI_RES_RHI(QRhiGles2);
+        rhiD->releaseQueue.append(e);
+    }
 }
 
 static inline bool isPowerOfTwo(int x)
@@ -1620,7 +1623,7 @@ static inline bool isPowerOfTwo(int x)
     return x == (x & -x);
 }
 
-bool QGles2Texture::build()
+bool QGles2Texture::prepareBuild(QSize *adjustedSize)
 {
     QRHI_RES_RHI(QRhiGles2);
 
@@ -1639,7 +1642,6 @@ bool QGles2Texture::build()
 
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
-    const int mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
     const bool isCompressed = rhiD->isCompressedFormat(m_format);
 
     // ### more formats
@@ -1647,6 +1649,7 @@ bool QGles2Texture::build()
     glintformat = GL_RGBA;
     glformat = GL_RGBA;
     gltype = GL_UNSIGNED_BYTE;
+    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
 
     if (isCompressed) {
         glintformat = toGlCompressedTextureFormat(m_format, m_flags);
@@ -1656,8 +1659,25 @@ bool QGles2Texture::build()
         }
     }
 
+    if (adjustedSize)
+        *adjustedSize = size;
+
+    return true;
+}
+
+bool QGles2Texture::build()
+{
+    QRHI_RES_RHI(QRhiGles2);
+
+    QSize size;
+    if (!prepareBuild(&size))
+        return false;
+
     rhiD->f->glGenTextures(1, &texture);
 
+    const bool isCube = m_flags.testFlag(CubeMap);
+    const bool hasMipMaps = m_flags.testFlag(MipMapped);
+    const bool isCompressed = rhiD->isCompressedFormat(m_format);
     if (!isCompressed) {
         rhiD->f->glBindTexture(target, texture);
         if (hasMipMaps || isCube) {
@@ -1682,8 +1702,35 @@ bool QGles2Texture::build()
         specified = false;
     }
 
+    owns = true;
+    nativeHandlesStruct.texture = texture;
+
     generation += 1;
     return true;
+}
+
+bool QGles2Texture::buildFrom(QRhiNativeHandles *src)
+{
+    QRhiGles2TextureNativeHandles *h = static_cast<QRhiGles2TextureNativeHandles *>(src);
+    if (!h || !h->texture)
+        return false;
+
+    if (!prepareBuild())
+        return false;
+
+    texture = h->texture;
+    specified = true;
+
+    owns = false;
+    nativeHandlesStruct.texture = texture;
+
+    generation += 1;
+    return true;
+}
+
+QRhiNativeHandles *QGles2Texture::nativeHandles()
+{
+    return &nativeHandlesStruct;
 }
 
 QGles2Sampler::QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,

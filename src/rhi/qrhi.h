@@ -69,8 +69,8 @@ struct QRhiResourceUpdateBatchPrivate;
 //   1. new*() does not create underlying graphics resources. build() does.
 //   2. Except: new*Descriptor() implicitly "builds". (no build() for QRhiRenderPassDescriptor f.ex.)
 //   3. release() schedules graphics resources for destruction. The C++ object is reusable immediately via build(), or can be destroyed.
-//   4. build() on an already built object calls release() implicitly. Except swapchains. (buildOrResize - special semantics)
-//   5. Ownership of resources imported via QRhi*InitParams is not taken.
+//   4. build() on an already built object calls release() implicitly. Except swapchains. (buildOrResize() - special semantics)
+//   5. Ownership of resources imported (QRhi*InitParams or buildFrom()) or exported (nativeHandles()) is never taken or given away.
 //
 // Other:
 //   1. QRhiResourceUpdateBatch manages no graphics resources underneath. beginPass() implicitly calls release() on the batch.

@@ -1470,8 +1470,10 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
     }
 }
 
-bool QMetalTexture::build()
+bool QMetalTexture::prepareBuild(QSize *adjustedSize)
 {
+    QRHI_RES_RHI(QRhiMetal);
+
     if (d->tex)
         release();
 
@@ -1479,7 +1481,6 @@ bool QMetalTexture::build()
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
-    QRHI_RES_RHI(QRhiMetal);
     d->format = toMetalTextureFormat(m_format, m_flags);
     mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
@@ -1494,8 +1495,23 @@ bool QMetalTexture::build()
         }
     }
 
+    if (adjustedSize)
+        *adjustedSize = size;
+
+    return true;
+}
+
+bool QMetalTexture::build()
+{
+    QRHI_RES_RHI(QRhiMetal);
+
+    QSize size;
+    if (!prepareBuild(&size))
+        return false;
+
     MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
-    if (isCube)
+
+    if (m_flags.testFlag(CubeMap))
         desc.textureType = MTLTextureTypeCube;
     else
         desc.textureType = samples > 1 ? MTLTextureType2DMultisample : MTLTextureType2D;
@@ -1522,26 +1538,14 @@ bool QMetalTexture::build()
     return true;
 }
 
-QRhiNativeHandles *QMetalTexture::nativeHandles()
-{
-    return &nativeHandlesStruct;
-}
-
 bool QMetalTexture::buildFrom(QRhiNativeHandles *src)
 {
     QRhiMetalTextureNativeHandles *h = static_cast<QRhiMetalTextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
 
-    if (d->tex)
-        release();
-
-    QRHI_RES_RHI(QRhiMetal);
-    d->format = toMetalTextureFormat(m_format, m_flags);
-    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
-    const bool hasMipMaps = m_flags.testFlag(MipMapped);
-    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
-    samples = rhiD->effectiveSampleCount(m_sampleCount);
+    if (!prepareBuild())
+        return false;
 
     d->tex = (id<MTLTexture>) h->texture;
 
@@ -1551,6 +1555,11 @@ bool QMetalTexture::buildFrom(QRhiNativeHandles *src)
     lastActiveFrameSlot = -1;
     generation += 1;
     return true;
+}
+
+QRhiNativeHandles *QMetalTexture::nativeHandles()
+{
+    return &nativeHandlesStruct;
 }
 
 QMetalSampler::QMetalSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,

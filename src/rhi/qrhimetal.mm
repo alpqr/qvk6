@@ -340,7 +340,7 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
     }
 }
 
-QRhiNativeHandles *QRhiMetal::nativeHandles()
+const QRhiNativeHandles *QRhiMetal::nativeHandles()
 {
     return &nativeHandlesStruct;
 }
@@ -1536,9 +1536,9 @@ bool QMetalTexture::build()
     return true;
 }
 
-bool QMetalTexture::buildFrom(QRhiNativeHandles *src)
+bool QMetalTexture::buildFrom(const QRhiNativeHandles *src)
 {
-    QRhiMetalTextureNativeHandles *h = static_cast<QRhiMetalTextureNativeHandles *>(src);
+    const QRhiMetalTextureNativeHandles *h = static_cast<const QRhiMetalTextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
 
@@ -1555,7 +1555,7 @@ bool QMetalTexture::buildFrom(QRhiNativeHandles *src)
     return true;
 }
 
-QRhiNativeHandles *QMetalTexture::nativeHandles()
+const QRhiNativeHandles *QMetalTexture::nativeHandles()
 {
     return &nativeHandlesStruct;
 }

@@ -93,8 +93,8 @@ struct QMetalTexture : public QRhiTexture
     ~QMetalTexture();
     void release() override;
     bool build() override;
-    bool buildFrom(QRhiNativeHandles *src) override;
-    QRhiNativeHandles *nativeHandles() override;
+    bool buildFrom(const QRhiNativeHandles *src) override;
+    const QRhiNativeHandles *nativeHandles() override;
 
     bool prepareBuild(QSize *adjustedSize = nullptr);
 
@@ -322,7 +322,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
-    QRhiNativeHandles *nativeHandles() override;
+    const QRhiNativeHandles *nativeHandles() override;
 
     void executeDeferredReleases(bool forced = false);
     void finishActiveReadbacks(bool forced = false);

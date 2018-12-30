@@ -266,7 +266,7 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
     }
 }
 
-QRhiNativeHandles *QRhiGles2::nativeHandles()
+const QRhiNativeHandles *QRhiGles2::nativeHandles()
 {
     return &nativeHandlesStruct;
 }
@@ -1709,9 +1709,9 @@ bool QGles2Texture::build()
     return true;
 }
 
-bool QGles2Texture::buildFrom(QRhiNativeHandles *src)
+bool QGles2Texture::buildFrom(const QRhiNativeHandles *src)
 {
-    QRhiGles2TextureNativeHandles *h = static_cast<QRhiGles2TextureNativeHandles *>(src);
+    const QRhiGles2TextureNativeHandles *h = static_cast<const QRhiGles2TextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
 
@@ -1728,7 +1728,7 @@ bool QGles2Texture::buildFrom(QRhiNativeHandles *src)
     return true;
 }
 
-QRhiNativeHandles *QGles2Texture::nativeHandles()
+const QRhiNativeHandles *QGles2Texture::nativeHandles()
 {
     return &nativeHandlesStruct;
 }

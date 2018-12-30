@@ -41,9 +41,17 @@
 
 QT_BEGIN_NAMESPACE
 
+class QRhiProfilerPrivate;
+
 class Q_RHI_EXPORT QRhiProfiler
 {
 public:
+    QRhiProfiler();
+    ~QRhiProfiler();
+
+private:
+    QRhiProfilerPrivate *d;
+    friend class QRhiProfilerPrivate;
 };
 
 QT_END_NAMESPACE

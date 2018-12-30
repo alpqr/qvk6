@@ -2637,7 +2637,7 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
     }
 }
 
-QRhiNativeHandles *QRhiVulkan::nativeHandles()
+const QRhiNativeHandles *QRhiVulkan::nativeHandles()
 {
     return &nativeHandlesStruct;
 }
@@ -3531,9 +3531,9 @@ bool QVkTexture::build()
     return true;
 }
 
-bool QVkTexture::buildFrom(QRhiNativeHandles *src)
+bool QVkTexture::buildFrom(const QRhiNativeHandles *src)
 {
-    QRhiVulkanTextureNativeHandles *h = static_cast<QRhiVulkanTextureNativeHandles *>(src);
+    const QRhiVulkanTextureNativeHandles *h = static_cast<const QRhiVulkanTextureNativeHandles *>(src);
     if (!h || !h->image)
         return false;
 
@@ -3550,7 +3550,7 @@ bool QVkTexture::buildFrom(QRhiNativeHandles *src)
     return true;
 }
 
-QRhiNativeHandles *QVkTexture::nativeHandles()
+const QRhiNativeHandles *QVkTexture::nativeHandles()
 {
     nativeHandlesStruct.layout = layout;
     return &nativeHandlesStruct;

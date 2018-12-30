@@ -46,6 +46,12 @@
 
 QT_BEGIN_NAMESPACE
 
+class QRhiProfilerPrivate
+{
+public:
+    static QRhiProfilerPrivate *get(QRhiProfiler *p) { return p->d; }
+};
+
 QT_END_NAMESPACE
 
 #endif

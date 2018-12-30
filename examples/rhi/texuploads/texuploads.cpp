@@ -251,11 +251,11 @@ void Window::customRender()
 
         // Exercise texture object export/import.
         if (d.testStage == 6) {
-            QRhiNativeHandles *h = d.tex->nativeHandles();
+            const QRhiNativeHandles *h = d.tex->nativeHandles();
             if (h) {
 #ifdef Q_OS_DARWIN
                 if (graphicsApi == Metal) {
-                    qDebug() << "Metal texture: " << static_cast<QRhiMetalTextureNativeHandles *>(h)->texture;
+                    qDebug() << "Metal texture: " << static_cast<const QRhiMetalTextureNativeHandles *>(h)->texture;
                     // Now could cast to id<MTLTexture> and do something with
                     // it, keeping in mind that copy operations are only done
                     // in beginPass, while rendering into a texture may only

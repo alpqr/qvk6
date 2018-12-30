@@ -38,4 +38,14 @@
 
 QT_BEGIN_NAMESPACE
 
+QRhiProfiler::QRhiProfiler()
+    : d(new QRhiProfilerPrivate)
+{
+}
+
+QRhiProfiler::~QRhiProfiler()
+{
+    delete d;
+}
+
 QT_END_NAMESPACE

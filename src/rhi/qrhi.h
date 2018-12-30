@@ -58,6 +58,7 @@ class QRhiSampler;
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 struct QRhiResourceUpdateBatchPrivate;
+class QRhiProfiler;
 
 // C++ object ownership rules:
 //   1. new*() and create() return value owned by the caller.
@@ -478,13 +479,13 @@ public:
 
     // Returns a ptr to a QRhi<backend>TextureNativeHandles struct.
     // Ownership of the native objects is not transfered.
-    virtual QRhiNativeHandles *nativeHandles();
+    virtual const QRhiNativeHandles *nativeHandles();
 
     // Calling this instead of build() allows importing an existing native
     // texture object (must belong to the same device or a sharing context).
     // Note that format, pixelSize, etc. must still be set correctly (typically
     // via QRhi::newTexture()). Ownership of the native resource is not taken.
-    virtual bool buildFrom(QRhiNativeHandles *src);
+    virtual bool buildFrom(const QRhiNativeHandles *src);
 
 protected:
     QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
@@ -1237,7 +1238,9 @@ public:
 
     // Returns a ptr to a QRhi<backend>NativeHandles struct.
     // Ownership of the native objects is not transfered.
-    QRhiNativeHandles *nativeHandles();
+    const QRhiNativeHandles *nativeHandles();
+
+    const QRhiProfiler *profiler() const;
 
 protected:
     QRhi();

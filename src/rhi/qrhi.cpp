@@ -85,12 +85,12 @@ QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &p
 {
 }
 
-QRhiNativeHandles *QRhiTexture::nativeHandles()
+const QRhiNativeHandles *QRhiTexture::nativeHandles()
 {
     return nullptr;
 }
 
-bool QRhiTexture::buildFrom(QRhiNativeHandles *src)
+bool QRhiTexture::buildFrom(const QRhiNativeHandles *src)
 {
     Q_UNUSED(src);
     return false;
@@ -640,9 +640,14 @@ bool QRhi::isFeatureSupported(QRhi::Feature feature) const
     return d->isFeatureSupported(feature);
 }
 
-QRhiNativeHandles *QRhi::nativeHandles()
+const QRhiNativeHandles *QRhi::nativeHandles()
 {
     return d->nativeHandles();
+}
+
+const QRhiProfiler *QRhi::profiler() const
+{
+    return &d->profiler;
 }
 
 QRhiGraphicsPipeline *QRhi::newGraphicsPipeline()

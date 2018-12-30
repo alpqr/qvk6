@@ -255,7 +255,7 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
     }
 }
 
-QRhiNativeHandles *QRhiD3D11::nativeHandles()
+const QRhiNativeHandles *QRhiD3D11::nativeHandles()
 {
     return &nativeHandlesStruct;
 }

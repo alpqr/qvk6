@@ -43,6 +43,7 @@
 
 #include "qtrhiglobal_p.h"
 #include "qrhi.h"
+#include "qrhiprofiler_p.h"
 #include <QBitArray>
 
 QT_BEGIN_NAMESPACE
@@ -126,7 +127,7 @@ public:
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
     virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
     virtual bool isFeatureSupported(QRhi::Feature) const = 0;
-    virtual QRhiNativeHandles *nativeHandles() = 0;
+    virtual const QRhiNativeHandles *nativeHandles() = 0;
 
     bool isCompressedFormat(QRhiTexture::Format format) const;
     void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
@@ -138,6 +139,7 @@ public:
 protected:
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
+    QRhiProfiler profiler;
 
     friend class QRhi;
     friend struct QRhiResourceUpdateBatchPrivate;

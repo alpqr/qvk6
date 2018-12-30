@@ -1,5 +1,5 @@
-texture export
-texture import
+d3d: texture import/export
+add a basic resource info (profiler) api
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
 advanced blend modes

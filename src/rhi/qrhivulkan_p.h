@@ -103,12 +103,19 @@ struct QVkTexture : public QRhiTexture
                int sampleCount, Flags flags);
     void release() override;
     bool build() override;
+    bool buildFrom(QRhiNativeHandles *src) override;
+    QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
+    bool finishBuild();
 
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     QVkAlloc imageAlloc = nullptr;
     VkBuffer stagingBuffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
+    bool owns = true;
+    QRhiVulkanTextureNativeHandles nativeHandlesStruct;
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     VkFormat vkformat;
     uint mipLevelCount = 0;

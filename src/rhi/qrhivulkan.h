@@ -72,6 +72,12 @@ struct Q_RHI_EXPORT QRhiVulkanNativeHandles : public QRhiNativeHandles
     void *vmemAllocator;
 };
 
+struct Q_RHI_EXPORT QRhiVulkanTextureNativeHandles : public QRhiNativeHandles
+{
+    VkImage image = VK_NULL_HANDLE;
+    VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+};
+
 QT_END_NAMESPACE
 
 #endif

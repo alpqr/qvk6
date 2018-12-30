@@ -1338,7 +1338,7 @@ void QMetalTexture::release()
     e.type = QRhiMetalData::DeferredReleaseEntry::Texture;
     e.lastActiveFrameSlot = lastActiveFrameSlot;
 
-    e.texture.texture = d->tex;
+    e.texture.texture = d->owns ? d->tex : nil;
     d->tex = nil;
     nativeHandlesStruct.texture = nullptr;
 
@@ -1347,10 +1347,8 @@ void QMetalTexture::release()
         d->stagingBuf[i] = nil;
     }
 
-    if (d->owns) {
-        QRHI_RES_RHI(QRhiMetal);
-        rhiD->d->releaseQueue.append(e);
-    }
+    QRHI_RES_RHI(QRhiMetal);
+    rhiD->d->releaseQueue.append(e);
 }
 
 static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)

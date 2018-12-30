@@ -3378,9 +3378,9 @@ void QVkTexture::release()
     e.type = QRhiVulkan::DeferredReleaseEntry::Texture;
     e.lastActiveFrameSlot = lastActiveFrameSlot;
 
-    e.texture.image = image;
+    e.texture.image = owns ? image : VK_NULL_HANDLE;
     e.texture.imageView = imageView;
-    e.texture.allocation = imageAlloc;
+    e.texture.allocation = owns ? imageAlloc : nullptr;
 
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         e.texture.stagingBuffers[i] = stagingBuffers[i];
@@ -3393,12 +3393,13 @@ void QVkTexture::release()
     image = VK_NULL_HANDLE;
     imageView = VK_NULL_HANDLE;
     imageAlloc = nullptr;
+    nativeHandlesStruct.image = VK_NULL_HANDLE;
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
 }
 
-bool QVkTexture::build()
+bool QVkTexture::prepareBuild(QSize *adjustedSize)
 {
     if (image)
         release();
@@ -3414,7 +3415,6 @@ bool QVkTexture::build()
     }
 
     const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
-    const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
@@ -3430,6 +3430,59 @@ bool QVkTexture::build()
             return false;
         }
     }
+
+    if (adjustedSize)
+        *adjustedSize = size;
+
+    return true;
+}
+
+bool QVkTexture::finishBuild()
+{
+    QRHI_RES_RHI(QRhiVulkan);
+
+    const bool isDepth = isDepthTextureFormat(m_format);
+    const bool isCube = m_flags.testFlag(CubeMap);
+
+    VkImageViewCreateInfo viewInfo;
+    memset(&viewInfo, 0, sizeof(viewInfo));
+    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewInfo.image = image;
+    viewInfo.viewType = isCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.format = vkformat;
+    viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+    viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+    viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+    viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+    viewInfo.subresourceRange.aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+    viewInfo.subresourceRange.levelCount = mipLevelCount;
+    viewInfo.subresourceRange.layerCount = isCube ? 6 : 1;
+
+    VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &imageView);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create image view: %d", err);
+        return false;
+    }
+
+    nativeHandlesStruct.image = image;
+
+    lastActiveFrameSlot = -1;
+    generation += 1;
+
+    return true;
+}
+
+bool QVkTexture::build()
+{
+    QRHI_RES_RHI(QRhiVulkan);
+
+    QSize size;
+    if (!prepareBuild(&size))
+        return false;
+
+    const bool isRenderTarget = m_flags.testFlag(QRhiTexture::RenderTarget);
+    const bool isDepth = isDepthTextureFormat(m_format);
+    const bool isCube = m_flags.testFlag(CubeMap);
 
     VkImageCreateInfo imageInfo;
     memset(&imageInfo, 0, sizeof(imageInfo));
@@ -3447,7 +3500,7 @@ bool QVkTexture::build()
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
 
     imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    if (m_flags.testFlag(QRhiTexture::RenderTarget)) {
+    if (isRenderTarget) {
         if (isDepth)
             imageInfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
         else
@@ -3470,30 +3523,37 @@ bool QVkTexture::build()
     }
     imageAlloc = allocation;
 
-    VkImageViewCreateInfo viewInfo;
-    memset(&viewInfo, 0, sizeof(viewInfo));
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = image;
-    viewInfo.viewType = isCube ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = vkformat;
-    viewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-    viewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-    viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-    viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-    viewInfo.subresourceRange.aspectMask = isDepth ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.levelCount = mipLevelCount;
-    viewInfo.subresourceRange.layerCount = isCube ? 6 : 1;
-
-    err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &imageView);
-    if (err != VK_SUCCESS) {
-        qWarning("Failed to create image view: %d", err);
+    if (!finishBuild())
         return false;
-    }
 
+    owns = true;
     layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
-    lastActiveFrameSlot = -1;
-    generation += 1;
     return true;
+}
+
+bool QVkTexture::buildFrom(QRhiNativeHandles *src)
+{
+    QRhiVulkanTextureNativeHandles *h = static_cast<QRhiVulkanTextureNativeHandles *>(src);
+    if (!h || !h->image)
+        return false;
+
+    if (!prepareBuild())
+        return false;
+
+    image = h->image;
+
+    if (!finishBuild())
+        return false;
+
+    owns = false;
+    layout = h->layout;
+    return true;
+}
+
+QRhiNativeHandles *QVkTexture::nativeHandles()
+{
+    nativeHandlesStruct.layout = layout;
+    return &nativeHandlesStruct;
 }
 
 QVkSampler::QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,

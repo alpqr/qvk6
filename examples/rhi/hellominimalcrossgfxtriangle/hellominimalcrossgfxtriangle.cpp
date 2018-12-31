@@ -293,7 +293,7 @@ void Window::init()
     m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
                                 QSize(), // no need to set the size yet
                                 1,
-                                QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+                                QRhiRenderBuffer::UsedWithSwapChainOnly);
     releasePool << m_ds;
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);

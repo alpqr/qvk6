@@ -91,11 +91,13 @@ static inline uint aligned(uint v, uint byteAlign)
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
 
-bool QRhiD3D11::create()
+bool QRhiD3D11::create(QRhi::Flags flags)
 {
-    uint flags = 0;
+    Q_UNUSED(flags);
+
+    uint devFlags = 0;
     if (debugLayer)
-        flags |= D3D11_CREATE_DEVICE_DEBUG;
+        devFlags |= D3D11_CREATE_DEVICE_DEBUG;
 
     HRESULT hr = CreateDXGIFactory2(0, IID_IDXGIFactory2, reinterpret_cast<void **>(&dxgiFactory));
     if (FAILED(hr)) {
@@ -127,7 +129,7 @@ bool QRhiD3D11::create()
         }
 
         ID3D11DeviceContext *ctx = nullptr;
-        HRESULT hr = D3D11CreateDevice(adapterToUse, D3D_DRIVER_TYPE_UNKNOWN, nullptr, flags,
+        HRESULT hr = D3D11CreateDevice(adapterToUse, D3D_DRIVER_TYPE_UNKNOWN, nullptr, devFlags,
                                        nullptr, 0, D3D11_SDK_VERSION,
                                        &dev, &featureLevel, &ctx);
         adapterToUse->Release();
@@ -1385,6 +1387,9 @@ void QD3D11Buffer::release()
 
     buffer->Release();
     buffer = nullptr;
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseBuffer(this));
 }
 
 static inline uint toD3DBufferUsage(QRhiBuffer::UsageFlags usage)
@@ -1425,6 +1430,9 @@ bool QD3D11Buffer::build()
         dynBuf.resize(m_size);
         hasPendingDynamicUpdates = false;
     }
+
+    QRHI_PROF;
+    QRHI_PROF_F(newBuffer(this, roundedSize, 1, m_type == Dynamic ? 1 : 0));
 
     generation += 1;
     return true;

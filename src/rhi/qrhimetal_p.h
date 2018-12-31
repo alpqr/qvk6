@@ -256,7 +256,7 @@ public:
     QRhiMetal(QRhiInitParams *params);
     ~QRhiMetal();
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;

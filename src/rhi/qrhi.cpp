@@ -193,6 +193,11 @@ QRhiImplementation::~QRhiImplementation()
     qDeleteAll(resUpdPool);
 }
 
+void QRhiImplementation::sendVMemStatsToProfiler()
+{
+    // nothing to do in the default implementation
+}
+
 bool QRhiImplementation::isCompressedFormat(QRhiTexture::Format format) const
 {
     return (format >= QRhiTexture::BC1 && format <= QRhiTexture::BC7)
@@ -373,7 +378,7 @@ QRhi::~QRhi()
     }
 }
 
-QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
+QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
 {
     QScopedPointer<QRhi> r(new QRhi);
 
@@ -409,8 +414,15 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
         break;
     }
 
-    if (r->d && r->d->create())
-        return r.take();
+    if (r->d) {
+        if (flags.testFlag(EnableProfiling)) {
+            QRhiProfilerPrivate *profD = QRhiProfilerPrivate::get(&r->d->profiler);
+            profD->rhi = r.data();
+            profD->rhiD = r->d;
+        }
+        if (r->d->create(flags))
+            return r.take();
+    }
 
     return nullptr;
 }

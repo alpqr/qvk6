@@ -441,7 +441,7 @@ class QRhiGles2 : public QRhiImplementation
 public:
     QRhiGles2(QRhiInitParams *params);
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;

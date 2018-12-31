@@ -327,7 +327,7 @@ class QRhiVulkan : public QRhiImplementation
 public:
     QRhiVulkan(QRhiInitParams *params);
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
@@ -394,6 +394,7 @@ public:
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
     const QRhiNativeHandles *nativeHandles() override;
+    void sendVMemStatsToProfiler() override;
 
     VkResult createDescriptorPool(VkDescriptorPool *pool);
     bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *result, int *resultPoolIndex);

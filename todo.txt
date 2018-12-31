@@ -1,5 +1,6 @@
 d3d: texture import/export
 add a basic resource info (profiler) api
+debug markers, object names, etc.
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
 advanced blend modes

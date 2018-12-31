@@ -419,7 +419,7 @@ class QRhiD3D11 : public QRhiImplementation
 public:
     QRhiD3D11(QRhiInitParams *params);
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;

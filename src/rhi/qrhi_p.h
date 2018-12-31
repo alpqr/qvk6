@@ -50,6 +50,8 @@ QT_BEGIN_NAMESPACE
 
 #define QRHI_RES(t, x) static_cast<t *>(x)
 #define QRHI_RES_RHI(t) t *rhiD = static_cast<t *>(rhi)
+#define QRHI_PROF QRhiProfilerPrivate *rhiP = rhi->profilerPrivateOrNull()
+#define QRHI_PROF_F(f) for (bool qrhip_enabled = rhiP != nullptr; qrhip_enabled; qrhip_enabled = false) rhiP->f
 
 class QRhiReferenceRenderTarget : public QRhiRenderTarget
 {
@@ -62,7 +64,7 @@ class QRhiImplementation
 public:
     virtual ~QRhiImplementation();
 
-    virtual bool create() = 0;
+    virtual bool create(QRhi::Flags flags) = 0;
     virtual void destroy() = 0;
 
     virtual QRhiGraphicsPipeline *createGraphicsPipeline() = 0;
@@ -129,12 +131,20 @@ public:
     virtual bool isFeatureSupported(QRhi::Feature) const = 0;
     virtual const QRhiNativeHandles *nativeHandles() = 0;
 
+    virtual void sendVMemStatsToProfiler();
+
     bool isCompressedFormat(QRhiTexture::Format format) const;
     void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
                               quint32 *bpl, quint32 *byteSize,
                               QSize *blockDim) const;
     void textureFormatInfo(QRhiTexture::Format format, const QSize &size,
                            quint32 *bpl, quint32 *byteSize) const;
+
+    QRhiProfilerPrivate *profilerPrivateOrNull()
+    {
+        QRhiProfilerPrivate *p = QRhiProfilerPrivate::get(&profiler);
+        return p->rhi ? p : nullptr;
+    }
 
 protected:
     QVector<QRhiResourceUpdateBatch *> resUpdPool;

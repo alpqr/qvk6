@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhiprofiler_p.h"
+#include "qrhi_p.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -46,6 +47,76 @@ QRhiProfiler::QRhiProfiler()
 QRhiProfiler::~QRhiProfiler()
 {
     delete d;
+}
+
+const QRhiProfilerStream *QRhiProfiler::stream() const
+{
+    return nullptr; // ###
+}
+
+void QRhiProfiler::addVMemAllocatorStats()
+{
+    if (d->rhiD)
+        d->rhiD->sendVMemStatsToProfiler();
+}
+
+void QRhiProfilerPrivate::newBuffer(QRhiBuffer *buf, size_t realSize, int backingGpuBufCount, int backingCpuBufCount)
+{
+}
+
+void QRhiProfilerPrivate::releaseBuffer(QRhiBuffer *buf)
+{
+}
+
+void QRhiProfilerPrivate::newBufferStagingArea(QRhiBuffer *buf, int slot, size_t size)
+{
+}
+
+void QRhiProfilerPrivate::releaseBufferStagingArea(QRhiBuffer *buf, int slot)
+{
+}
+
+void QRhiProfilerPrivate::newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking)
+{
+    // calc approx size
+}
+
+void QRhiProfilerPrivate::releaseRenderBuffer(QRhiRenderBuffer *rb)
+{
+}
+
+void QRhiProfilerPrivate::newTexture(QRhiTexture *tex, bool owns, int mipCount, int layerCount, int sampleCount)
+{
+//    size_t approxSize = 0;
+//    for (int i = 0; i < mipLevelCount; ++i) {
+//        quint32 byteSize = 0;
+//        rhiD->textureFormatInfo(m_format, size, nullptr, &byteSize);
+//        approxSize += byteSize;
+//    }
+//    const int layerCount = isCube ? 6 : 1;
+//    approxSize *= layerCount;
+
+}
+
+void QRhiProfilerPrivate::releaseTexture(QRhiTexture *tex)
+{
+}
+
+void QRhiProfilerPrivate::newTextureStagingArea(QRhiTexture *tex, int slot, size_t size)
+{
+}
+
+void QRhiProfilerPrivate::releaseTextureStagingArea(QRhiTexture *tex, int slot)
+{
+}
+
+void QRhiProfilerPrivate::resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int sampleCount)
+{
+    // calc approx size
+}
+
+void QRhiProfilerPrivate::releaseSwapChain(QRhiSwapChain *sc)
+{
 }
 
 QT_END_NAMESPACE

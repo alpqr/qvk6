@@ -91,8 +91,9 @@ bool QRhiGles2::ensureContext(QSurface *surface) const
     return true;
 }
 
-bool QRhiGles2::create()
+bool QRhiGles2::create(QRhi::Flags flags)
 {
+    Q_UNUSED(flags);
     Q_ASSERT(ctx);
     Q_ASSERT(fallbackSurface);
 
@@ -1487,11 +1488,15 @@ void QGles2Buffer::release()
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseBuffer(this));
 }
 
 bool QGles2Buffer::build()
 {
     QRHI_RES_RHI(QRhiGles2);
+    QRHI_PROF;
 
     if (buffer)
         release();
@@ -1499,6 +1504,7 @@ bool QGles2Buffer::build()
     if (m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
         // special since we do not support uniform blocks in this backend
         ubuf.resize(m_size);
+        QRHI_PROF_F(newBuffer(this, m_size, 0, 1));
         return true;
     }
 
@@ -1514,6 +1520,7 @@ bool QGles2Buffer::build()
     rhiD->f->glBindBuffer(target, buffer);
     rhiD->f->glBufferData(target, m_size, nullptr, m_type == Dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
 
+    QRHI_PROF_F(newBuffer(this, m_size, 1, 0));
     return true;
 }
 
@@ -1546,11 +1553,11 @@ bool QGles2RenderBuffer::build()
     if (renderbuffer)
         release();
 
-    if (m_flags.testFlag(ToBeUsedWithSwapChainOnly)) {
+    if (m_flags.testFlag(UsedWithSwapChainOnly)) {
         if (m_type == DepthStencil)
             return true;
 
-        qWarning("RenderBuffer: ToBeUsedWithSwapChainOnly is meaningless in combination with Color");
+        qWarning("RenderBuffer: UsedWithSwapChainOnly is meaningless in combination with Color");
     }
 
     if (!rhiD->ensureContext())

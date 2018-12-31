@@ -50,6 +50,25 @@ class QRhiProfilerPrivate
 {
 public:
     static QRhiProfilerPrivate *get(QRhiProfiler *p) { return p->d; }
+
+    void newBuffer(QRhiBuffer *buf, size_t realSize, int backingGpuBufCount, int backingCpuBufCount);
+    void releaseBuffer(QRhiBuffer *buf);
+    void newBufferStagingArea(QRhiBuffer *buf, int slot, size_t size);
+    void releaseBufferStagingArea(QRhiBuffer *buf, int slot);
+
+    void newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking);
+    void releaseRenderBuffer(QRhiRenderBuffer *rb);
+
+    void newTexture(QRhiTexture *tex, bool owns, int mipCount, int layerCount, int sampleCount);
+    void releaseTexture(QRhiTexture *tex);
+    void newTextureStagingArea(QRhiTexture *tex, int slot, size_t size);
+    void releaseTextureStagingArea(QRhiTexture *tex, int slot);
+
+    void resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int sampleCount);
+    void releaseSwapChain(QRhiSwapChain *sc);
+
+    QRhi *rhi = nullptr;
+    QRhiImplementation *rhiD = nullptr;
 };
 
 QT_END_NAMESPACE

@@ -37,17 +37,22 @@
 #ifndef QRHIPROFILER_H
 #define QRHIPROFILER_H
 
-#include <QtRhi/qtrhiglobal.h>
+#include <QtRhi/qrhi.h>
 
 QT_BEGIN_NAMESPACE
 
 class QRhiProfilerPrivate;
+class QRhiProfilerStream;
 
 class Q_RHI_EXPORT QRhiProfiler
 {
 public:
     QRhiProfiler();
     ~QRhiProfiler();
+
+    const QRhiProfilerStream *stream() const;
+
+    void addVMemAllocatorStats();
 
 private:
     QRhiProfilerPrivate *d;

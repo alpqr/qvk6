@@ -172,8 +172,9 @@ QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
     maybeWindow = vkparams->window; // may be null
 }
 
-bool QRhiVulkan::create()
+bool QRhiVulkan::create(QRhi::Flags flags)
 {
+    Q_UNUSED(flags);
     Q_ASSERT(inst);
 
     globalVulkanInstance = inst; // assume this will not change during the lifetime of the entire application
@@ -1947,6 +1948,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
 {
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
@@ -1976,6 +1978,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                                            &bufD->stagingBuffers[currentFrameSlot], &allocation, nullptr);
             if (err == VK_SUCCESS) {
                 bufD->stagingAllocations[currentFrameSlot] = allocation;
+                QRHI_PROF_F(newBufferStagingArea(bufD, currentFrameSlot, bufD->m_size));
             } else {
                 qWarning("Failed to create staging buffer of size %d: %d", bufD->m_size, err);
                 continue;
@@ -2012,6 +2015,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             bufD->stagingBuffers[currentFrameSlot] = VK_NULL_HANDLE;
             bufD->stagingAllocations[currentFrameSlot] = nullptr;
             releaseQueue.append(e);
+            QRHI_PROF_F(releaseBufferStagingArea(bufD, currentFrameSlot));
         }
     }
 
@@ -2642,6 +2646,13 @@ const QRhiNativeHandles *QRhiVulkan::nativeHandles()
     return &nativeHandlesStruct;
 }
 
+void QRhiVulkan::sendVMemStatsToProfiler()
+{
+    VmaStats stats;
+    vmaCalculateStats(toVmaAllocator(allocator), &stats);
+    // ###
+}
+
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,
                                                  int sampleCount, QRhiRenderBuffer::Flags flags)
 {
@@ -3220,6 +3231,9 @@ void QVkBuffer::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseBuffer(this));
 }
 
 bool QVkBuffer::build()
@@ -3261,14 +3275,17 @@ bool QVkBuffer::build()
         }
     }
 
-    if (err == VK_SUCCESS) {
-        lastActiveFrameSlot = -1;
-        generation += 1;
-        return true;
-    } else {
+    if (err != VK_SUCCESS) {
         qWarning("Failed to create buffer: %d", err);
         return false;
     }
+
+    QRHI_PROF;
+    QRHI_PROF_F(newBuffer(this, nonZeroSize, m_type != Dynamic ? 1 : QVK_FRAMES_IN_FLIGHT, 0));
+
+    lastActiveFrameSlot = -1;
+    generation += 1;
+    return true;
 }
 
 QVkRenderBuffer::QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,

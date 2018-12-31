@@ -558,7 +558,7 @@ public:
     };
 
     enum Flag {
-        ToBeUsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
+        UsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -1084,6 +1084,11 @@ public:
         Metal
     };
 
+    enum Flag {
+        EnableProfiling = 1 << 0
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
     enum FrameOpResult {
         FrameOpSuccess = 0,
         FrameOpError,
@@ -1098,7 +1103,7 @@ public:
 
     ~QRhi();
 
-    static QRhi *create(Implementation impl, QRhiInitParams *params);
+    static QRhi *create(Implementation impl, QRhiInitParams *params, Flags flags = Flags());
 
     /*
        The underlying graphics resources are created when calling build() and
@@ -1249,6 +1254,8 @@ private:
     Q_DISABLE_COPY(QRhi)
     QRhiImplementation *d = nullptr;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::Flags)
 
 QT_END_NAMESPACE
 

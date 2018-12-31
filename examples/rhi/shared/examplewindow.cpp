@@ -110,7 +110,7 @@ void ExampleWindow::init()
     m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
                                 QSize(), // no need to set the size yet
                                 m_sampleCount,
-                                QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+                                QRhiRenderBuffer::UsedWithSwapChainOnly);
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
     m_sc->setSampleCount(m_sampleCount);

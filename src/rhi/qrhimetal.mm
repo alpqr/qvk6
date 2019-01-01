@@ -1323,7 +1323,7 @@ bool QMetalRenderBuffer::build()
     [desc release];
 
     QRHI_PROF;
-    QRHI_PROF_F(newRenderBuffer(this, transientBacking, true));
+    QRHI_PROF_F(newRenderBuffer(this, transientBacking, false));
 
     lastActiveFrameSlot = -1;
     generation += 1;

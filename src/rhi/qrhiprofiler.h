@@ -42,15 +42,32 @@
 QT_BEGIN_NAMESPACE
 
 class QRhiProfilerPrivate;
-class QRhiProfilerStream;
+class QIODevice;
 
 class Q_RHI_EXPORT QRhiProfiler
 {
 public:
+    enum StreamOp {
+        NewBuffer = 1,
+        ReleaseBuffer,
+        NewBufferStagingArea,
+        ReleaseBufferStagingArea,
+        NewRenderBuffer,
+        ReleaseRenderBuffer,
+        NewTexture,
+        ReleaseTexture,
+        NewTextureStagingArea,
+        ReleaseTextureStagingArea,
+        ResizeSwapChain,
+        ReleaseSwapChain
+    };
+
     QRhiProfiler();
     ~QRhiProfiler();
 
-    const QRhiProfilerStream *stream() const;
+    void setOutputDevice(QIODevice *device);
+
+    void flush();
 
     void addVMemAllocatorStats();
 

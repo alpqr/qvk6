@@ -1,5 +1,7 @@
 d3d: texture import/export
-add a basic resource info (profiler) api
+prof api
+vk, d3d, gl: tex and other prof
+vk: memalloc stats to prof
 debug markers, object names, etc.
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
@@ -50,6 +52,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: buf/tex/rb/sc prof
 mtl, gl, vk: texture import/export
 rhi native handle getter (device, ...)
 imgui example

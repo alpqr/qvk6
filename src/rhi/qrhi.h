@@ -1245,7 +1245,7 @@ public:
     // Ownership of the native objects is not transfered.
     const QRhiNativeHandles *nativeHandles();
 
-    const QRhiProfiler *profiler() const;
+    QRhiProfiler *profiler();
 
 protected:
     QRhi();

@@ -46,14 +46,18 @@
 
 QT_BEGIN_NAMESPACE
 
+class QCborStreamWriter;
+
 class QRhiProfilerPrivate
 {
 public:
     static QRhiProfilerPrivate *get(QRhiProfiler *p) { return p->d; }
 
-    void newBuffer(QRhiBuffer *buf, size_t realSize, int backingGpuBufCount, int backingCpuBufCount);
+    ~QRhiProfilerPrivate();
+
+    void newBuffer(QRhiBuffer *buf, quint32 realSize, int backingGpuBufCount, int backingCpuBufCount);
     void releaseBuffer(QRhiBuffer *buf);
-    void newBufferStagingArea(QRhiBuffer *buf, int slot, size_t size);
+    void newBufferStagingArea(QRhiBuffer *buf, int slot, quint32 size);
     void releaseBufferStagingArea(QRhiBuffer *buf, int slot);
 
     void newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking);
@@ -61,14 +65,20 @@ public:
 
     void newTexture(QRhiTexture *tex, bool owns, int mipCount, int layerCount, int sampleCount);
     void releaseTexture(QRhiTexture *tex);
-    void newTextureStagingArea(QRhiTexture *tex, int slot, size_t size);
+    void newTextureStagingArea(QRhiTexture *tex, int slot, quint32 size);
     void releaseTextureStagingArea(QRhiTexture *tex, int slot);
 
     void resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int sampleCount);
     void releaseSwapChain(QRhiSwapChain *sc);
 
+    bool ensureStream();
+    void flushStream();
+
     QRhi *rhi = nullptr;
     QRhiImplementation *rhiD = nullptr;
+    QIODevice *outputDevice = nullptr;
+    QCborStreamWriter *writer = nullptr;
+    bool active = false;
 };
 
 QT_END_NAMESPACE

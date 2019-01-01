@@ -366,6 +366,21 @@ void QRhiImplementation::textureFormatInfo(QRhiTexture::Format format, const QSi
         *byteSize = size.width() * size.height() * bpc;
 }
 
+quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format, const QSize &baseSize,
+                                                     int mipCount, int layerCount)
+{
+    quint32 approxSize = 0;
+    for (int level = 0; level < mipCount; ++level) {
+        quint32 byteSize = 0;
+        const QSize size(qFloor(float(qMax(1, baseSize.width() >> level))),
+                         qFloor(float(qMax(1, baseSize.height() >> level))));
+        textureFormatInfo(format, size, nullptr, &byteSize);
+        approxSize += byteSize;
+    }
+    approxSize *= layerCount;
+    return approxSize;
+}
+
 QRhi::QRhi()
 {
 }
@@ -657,7 +672,7 @@ const QRhiNativeHandles *QRhi::nativeHandles()
     return d->nativeHandles();
 }
 
-const QRhiProfiler *QRhi::profiler() const
+QRhiProfiler *QRhi::profiler()
 {
     return &d->profiler;
 }

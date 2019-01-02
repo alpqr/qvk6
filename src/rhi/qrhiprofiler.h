@@ -65,7 +65,7 @@ public:
     QRhiProfiler();
     ~QRhiProfiler();
 
-    void setOutputDevice(QIODevice *device);
+    void setDevice(QIODevice *device);
 
     void flush();
 

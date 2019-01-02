@@ -366,6 +366,7 @@ void QRhiImplementation::textureFormatInfo(QRhiTexture::Format format, const QSi
         *byteSize = size.width() * size.height() * bpc;
 }
 
+// Approximate because it excludes subresource alignment or multisampling.
 quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format, const QSize &baseSize,
                                                      int mipCount, int layerCount)
 {

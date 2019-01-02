@@ -1323,7 +1323,7 @@ bool QMetalRenderBuffer::build()
     [desc release];
 
     QRHI_PROF;
-    QRHI_PROF_F(newRenderBuffer(this, transientBacking, false));
+    QRHI_PROF_F(newRenderBuffer(this, transientBacking, false, samples));
 
     lastActiveFrameSlot = -1;
     generation += 1;
@@ -2504,7 +2504,7 @@ bool QMetalSwapChain::buildOrResize()
     }
 
     QRHI_PROF;
-    QRHI_PROF_F(resizeSwapChain(this, QMTL_FRAMES_IN_FLIGHT, samples));
+    QRHI_PROF_F(resizeSwapChain(this, QMTL_FRAMES_IN_FLIGHT, samples > 1 ? QMTL_FRAMES_IN_FLIGHT : 0, samples));
 
     return true;
 }

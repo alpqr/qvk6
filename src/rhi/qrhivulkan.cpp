@@ -2762,7 +2762,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
 
     if (hasDynamicBufferInSrb || srbUpdate || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
         df->vkCmdBindDescriptorSets(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
-                                       &srbD->descSets[descSetIdx], 0, nullptr);
+                                    &srbD->descSets[descSetIdx], 0, nullptr);
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
     }

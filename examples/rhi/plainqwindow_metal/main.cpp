@@ -80,7 +80,7 @@ void MetalWindow::init()
                        );
 
 #ifdef PROFILE
-    m_r->profiler()->setOutputDevice(&profOut);
+    m_r->profiler()->setDevice(&profOut);
 #endif
 
     //setSampleCount(4); // enable 4x MSAA (except for the render-to-texture pass)

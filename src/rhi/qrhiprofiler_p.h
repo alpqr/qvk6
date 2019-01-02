@@ -43,6 +43,7 @@
 
 #include "qtrhiglobal_p.h"
 #include "qrhiprofiler.h"
+#include <QElapsedTimer>
 
 QT_BEGIN_NAMESPACE
 
@@ -60,7 +61,7 @@ public:
     void newBufferStagingArea(QRhiBuffer *buf, int slot, quint32 size);
     void releaseBufferStagingArea(QRhiBuffer *buf, int slot);
 
-    void newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking);
+    void newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking, int sampleCount);
     void releaseRenderBuffer(QRhiRenderBuffer *rb);
 
     void newTexture(QRhiTexture *tex, bool owns, int mipCount, int layerCount, int sampleCount);
@@ -68,7 +69,7 @@ public:
     void newTextureStagingArea(QRhiTexture *tex, int slot, quint32 size);
     void releaseTextureStagingArea(QRhiTexture *tex, int slot);
 
-    void resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int sampleCount);
+    void resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int msaaBufferCount, int sampleCount);
     void releaseSwapChain(QRhiSwapChain *sc);
 
     bool ensureStream();
@@ -79,6 +80,7 @@ public:
     QIODevice *outputDevice = nullptr;
     QCborStreamWriter *writer = nullptr;
     bool active = false;
+    QElapsedTimer ts;
 };
 
 QT_END_NAMESPACE

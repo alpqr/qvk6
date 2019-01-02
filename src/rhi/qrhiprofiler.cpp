@@ -43,6 +43,7 @@ QT_BEGIN_NAMESPACE
 QRhiProfiler::QRhiProfiler()
     : d(new QRhiProfilerPrivate)
 {
+    d->ts.start();
 }
 
 QRhiProfiler::~QRhiProfiler()
@@ -50,7 +51,7 @@ QRhiProfiler::~QRhiProfiler()
     delete d;
 }
 
-void QRhiProfiler::setOutputDevice(QIODevice *device)
+void QRhiProfiler::setDevice(QIODevice *device)
 {
     d->outputDevice = device;
 }
@@ -102,6 +103,8 @@ void QRhiProfilerPrivate::flushStream()
 }
 
 #define WRITE_PAIR(a, b) writer->append(a); writer->append(b)
+#define WRITE_OP(op) WRITE_PAIR(QLatin1String("op"), QRhiProfiler::op)
+#define WRITE_TIMESTAMP WRITE_PAIR(QLatin1String("timestamp"), ts.elapsed())
 
 void QRhiProfilerPrivate::newBuffer(QRhiBuffer *buf, quint32 realSize, int backingGpuBufCount, int backingCpuBufCount)
 {
@@ -109,7 +112,8 @@ void QRhiProfilerPrivate::newBuffer(QRhiBuffer *buf, quint32 realSize, int backi
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::NewBuffer);
+    WRITE_OP(NewBuffer);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
     WRITE_PAIR(QLatin1String("type"), buf->type());
     WRITE_PAIR(QLatin1String("usage"), buf->usage());
@@ -126,7 +130,8 @@ void QRhiProfilerPrivate::releaseBuffer(QRhiBuffer *buf)
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::ReleaseBuffer);
+    WRITE_OP(ReleaseBuffer);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
     writer->endMap();
 }
@@ -137,7 +142,8 @@ void QRhiProfilerPrivate::newBufferStagingArea(QRhiBuffer *buf, int slot, quint3
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::NewBufferStagingArea);
+    WRITE_OP(NewBufferStagingArea);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
     WRITE_PAIR(QLatin1String("slot"), slot);
     WRITE_PAIR(QLatin1String("size"), size);
@@ -150,29 +156,35 @@ void QRhiProfilerPrivate::releaseBufferStagingArea(QRhiBuffer *buf, int slot)
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::ReleaseBufferStagingArea);
+    WRITE_OP(ReleaseBufferStagingArea);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
     WRITE_PAIR(QLatin1String("slot"), slot);
     writer->endMap();
 }
 
-void QRhiProfilerPrivate::newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking)
+void QRhiProfilerPrivate::newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking, int sampleCount)
 {
     if (!ensureStream())
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::NewRenderBuffer);
+    WRITE_OP(NewRenderBuffer);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("renderbuffer"), quint64(quintptr(rb)));
+
     const QRhiRenderBuffer::Type type = rb->type();
     const QSize sz = rb->pixelSize();
     // just make up something, ds is likely D24S8 while color is RGBA8 or similar
     const QRhiTexture::Format assumedFormat = type == QRhiRenderBuffer::DepthStencil ? QRhiTexture::D32 : QRhiTexture::RGBA8;
-    const quint32 byteSize = rhiD->approxByteSizeForTexture(assumedFormat, sz, 1, 1);
+    quint32 byteSize = rhiD->approxByteSizeForTexture(assumedFormat, sz, 1, 1);
+    if (sampleCount > 1)
+        byteSize *= sampleCount;
+
     WRITE_PAIR(QLatin1String("type"), type);
     WRITE_PAIR(QLatin1String("width"), sz.width());
     WRITE_PAIR(QLatin1String("height"), sz.height());
-    WRITE_PAIR(QLatin1String("sample_count"), rb->sampleCount());
+    WRITE_PAIR(QLatin1String("effective_sample_count"), sampleCount);
     WRITE_PAIR(QLatin1String("transient_backing"), transientBacking);
     WRITE_PAIR(QLatin1String("winsys_backing"), winSysBacking);
     WRITE_PAIR(QLatin1String("approx_byte_size"), byteSize);
@@ -185,7 +197,8 @@ void QRhiProfilerPrivate::releaseRenderBuffer(QRhiRenderBuffer *rb)
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::ReleaseRenderBuffer);
+    WRITE_OP(ReleaseRenderBuffer);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("renderbuffer"), quint64(quintptr(rb)));
     writer->endMap();
 }
@@ -196,11 +209,16 @@ void QRhiProfilerPrivate::newTexture(QRhiTexture *tex, bool owns, int mipCount, 
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::NewTexture);
+    WRITE_OP(NewTexture);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
+
     const QRhiTexture::Format format = tex->format();
     const QSize sz = tex->pixelSize();
-    const quint32 byteSize = rhiD->approxByteSizeForTexture(format, sz, mipCount, layerCount);
+    quint32 byteSize = rhiD->approxByteSizeForTexture(format, sz, mipCount, layerCount);
+    if (sampleCount > 1)
+        byteSize *= sampleCount;
+
     WRITE_PAIR(QLatin1String("width"), sz.width());
     WRITE_PAIR(QLatin1String("height"), sz.height());
     WRITE_PAIR(QLatin1String("format"), format);
@@ -218,7 +236,8 @@ void QRhiProfilerPrivate::releaseTexture(QRhiTexture *tex)
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::ReleaseTexture);
+    WRITE_OP(ReleaseTexture);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
     writer->endMap();
 }
@@ -229,7 +248,8 @@ void QRhiProfilerPrivate::newTextureStagingArea(QRhiTexture *tex, int slot, quin
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::NewTextureStagingArea);
+    WRITE_OP(NewTextureStagingArea);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
     WRITE_PAIR(QLatin1String("slot"), slot);
     WRITE_PAIR(QLatin1String("size"), size);
@@ -242,25 +262,31 @@ void QRhiProfilerPrivate::releaseTextureStagingArea(QRhiTexture *tex, int slot)
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::ReleaseTextureStagingArea);
+    WRITE_OP(ReleaseTextureStagingArea);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
     WRITE_PAIR(QLatin1String("slot"), slot);
     writer->endMap();
 }
 
-void QRhiProfilerPrivate::resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int sampleCount)
+void QRhiProfilerPrivate::resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int msaaBufferCount, int sampleCount)
 {
     if (!ensureStream())
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::ResizeSwapChain);
+    WRITE_OP(ResizeSwapChain);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
+
     const QSize sz = sc->currentPixelSize();
-    const quint32 byteSize = rhiD->approxByteSizeForTexture(QRhiTexture::BGRA8, sz, 1, 1) * bufferCount;
+    quint32 byteSize = rhiD->approxByteSizeForTexture(QRhiTexture::BGRA8, sz, 1, 1);
+    byteSize = byteSize * bufferCount + byteSize * msaaBufferCount * sampleCount;
+
     WRITE_PAIR(QLatin1String("width"), sz.width());
     WRITE_PAIR(QLatin1String("height"), sz.height());
     WRITE_PAIR(QLatin1String("buffer_count"), bufferCount);
+    WRITE_PAIR(QLatin1String("msaa_buffer_count"), msaaBufferCount);
     WRITE_PAIR(QLatin1String("effective_sample_count"), sampleCount);
     WRITE_PAIR(QLatin1String("approx_total_byte_size"), byteSize);
     writer->endMap();
@@ -272,7 +298,8 @@ void QRhiProfilerPrivate::releaseSwapChain(QRhiSwapChain *sc)
         return;
 
     writer->startMap();
-    WRITE_PAIR(QLatin1String("op"), QRhiProfiler::ReleaseSwapChain);
+    WRITE_OP(ReleaseSwapChain);
+    WRITE_TIMESTAMP;
     WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
     writer->endMap();
 }

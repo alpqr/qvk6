@@ -580,6 +580,46 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
       baseInstance: firstInstance];
 }
 
+void QRhiMetal::debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name)
+{
+    if (!debugMarkers)
+        return;
+
+    NSString *str = [NSString stringWithUTF8String: name.constData()];
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+    if (inPass) {
+        [cbD->d->currentPassEncoder pushDebugGroup: str];
+    } else {
+        if (@available(macOS 10.13, iOS 11.0, *))
+            [cbD->d->cb pushDebugGroup: str];
+    }
+}
+
+void QRhiMetal::debugMarkEnd(QRhiCommandBuffer *cb)
+{
+    if (!debugMarkers)
+        return;
+
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+    if (inPass) {
+        [cbD->d->currentPassEncoder popDebugGroup];
+    } else {
+        if (@available(macOS 10.13, iOS 11.0, *))
+            [cbD->d->cb popDebugGroup];
+    }
+}
+
+void QRhiMetal::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
+{
+    if (!debugMarkers)
+        return;
+
+    if (inPass) {
+        QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+        [cbD->d->currentPassEncoder insertDebugSignpost: [NSString stringWithUTF8String: msg.constData()]];
+    }
+}
+
 QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
 {
     Q_ASSERT(!inFrame);
@@ -791,9 +831,12 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     }
 
     id<MTLBlitCommandEncoder> blitEnc = nil;
-    auto ensureBlit = [&blitEnc, cbD] {
-        if (!blitEnc)
+    auto ensureBlit = [&blitEnc, cbD, this] {
+        if (!blitEnc) {
             blitEnc = [cbD->d->cb blitCommandEncoder];
+            if (debugMarkers)
+                [blitEnc pushDebugGroup: @"Texture upload/copy"];
+        }
     };
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
@@ -1007,8 +1050,11 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         [blitEnc generateMipmapsForTexture: QRHI_RES(QMetalTexture, u.tex)->d->tex];
     }
 
-    if (blitEnc)
+    if (blitEnc) {
+        if (debugMarkers)
+            [blitEnc popDebugGroup];
         [blitEnc endEncoding];
+    }
 
     ud->free();
 }

@@ -446,6 +446,7 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
             profD->rhi = r.data();
             profD->rhiD = r->d;
         }
+        r->d->debugMarkers = flags.testFlag(EnableDebugMarkers);
         if (r->d->create(flags))
             return r.take();
     }
@@ -638,6 +639,21 @@ void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
                                     qint32 vertexOffset, quint32 firstInstance)
 {
     rhi->drawIndexed(this, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+void QRhiCommandBuffer::debugMarkBegin(const QByteArray &name)
+{
+    rhi->debugMarkBegin(this, name);
+}
+
+void QRhiCommandBuffer::debugMarkEnd()
+{
+    rhi->debugMarkEnd(this);
+}
+
+void QRhiCommandBuffer::debugMarkMsg(const QByteArray &msg)
+{
+    rhi->debugMarkMsg(this, msg);
 }
 
 int QRhi::ubufAligned(int v) const

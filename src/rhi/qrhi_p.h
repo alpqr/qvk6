@@ -123,6 +123,10 @@ public:
                              quint32 instanceCount, quint32 firstIndex,
                              qint32 vertexOffset, quint32 firstInstance) = 0;
 
+    virtual void debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name) = 0;
+    virtual void debugMarkEnd(QRhiCommandBuffer *cb) = 0;
+    virtual void debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg) = 0;
+
     virtual QVector<int> supportedSampleCounts() const = 0;
     virtual int ubufAlignment() const = 0;
     virtual bool isYUpInFramebuffer() const = 0;
@@ -152,6 +156,7 @@ protected:
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
     QRhiProfiler profiler;
+    bool debugMarkers = false;
 
     friend class QRhi;
     friend struct QRhiResourceUpdateBatchPrivate;

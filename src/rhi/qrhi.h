@@ -992,6 +992,14 @@ public:
                      qint32 vertexOffset = 0,
                      quint32 firstInstance = 0);
 
+    // Ignored when EnableDebugMarkers is not set.
+    // May be silently ignored with some backends.
+    void debugMarkBegin(const QByteArray &name);
+    void debugMarkEnd();
+    // With some backends debugMarkMsg is only supported inside a pass and is
+    // ignored when called outside a begin/endPass.
+    void debugMarkMsg(const QByteArray &msg);
+
 protected:
     QRhiCommandBuffer(QRhiImplementation *rhi);
     void *m_reserved;

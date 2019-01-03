@@ -501,6 +501,10 @@ public:
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
 
+    void debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name) override;
+    void debugMarkEnd(QRhiCommandBuffer *cb) override;
+    void debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg) override;
+
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;

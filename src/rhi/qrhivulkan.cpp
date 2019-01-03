@@ -2648,9 +2648,14 @@ const QRhiNativeHandles *QRhiVulkan::nativeHandles()
 
 void QRhiVulkan::sendVMemStatsToProfiler()
 {
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    if (!rhiP)
+        return;
+
     VmaStats stats;
     vmaCalculateStats(toVmaAllocator(allocator), &stats);
-    // ###
+    QRHI_PROF_F(vmemStat(stats.total.blockCount, stats.total.allocationCount,
+                         stats.total.usedBytes, stats.total.unusedBytes));
 }
 
 QRhiRenderBuffer *QRhiVulkan::createRenderBuffer(QRhiRenderBuffer::Type type, const QSize &pixelSize,

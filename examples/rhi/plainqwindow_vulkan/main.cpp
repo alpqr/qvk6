@@ -53,6 +53,14 @@
 #include <QRhiVulkanInitParams>
 #include "examplewindow.h"
 
+#define PROFILE
+
+#ifdef PROFILE
+#include <QRhiProfiler>
+#include <QFile>
+QFile profOut;
+#endif
+
 class VWindow : public ExampleWindow
 {
 public:
@@ -69,7 +77,16 @@ void VWindow::init()
     params.inst = vulkanInstance();
     params.importExistingDevice = false;
     params.window = this;
-    m_r = QRhi::create(QRhi::Vulkan, &params);
+
+    QRhi::Flags flags = QRhi::EnableDebugMarkers;
+#ifdef PROFILE
+    flags |= QRhi::EnableProfiling;
+#endif
+    m_r = QRhi::create(QRhi::Vulkan, &params, flags);
+
+#ifdef PROFILE
+    m_r->profiler()->setDevice(&profOut);
+#endif
 
     //setSampleCount(4); // enable 4x MSAA (except for the render-to-texture pass)
 
@@ -100,6 +117,10 @@ int main(int argc, char **argv)
 
     VWindow w;
     if (inst.create()) {
+#ifdef PROFILE
+        profOut.setFileName("rhiprof.cbor");
+        profOut.open(QIODevice::WriteOnly);
+#endif
         w.setVulkanInstance(&inst);
         w.resize(1280, 720);
         w.setTitle(QLatin1String("Vulkan"));

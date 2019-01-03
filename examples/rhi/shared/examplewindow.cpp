@@ -50,6 +50,7 @@
 
 #include "examplewindow.h"
 #include <QFileInfo>
+#include <QRhiProfiler>
 
 //#define USE_SRGB_SWAPCHAIN
 //#define READBACK_SWAPCHAIN
@@ -151,6 +152,10 @@ void ExampleWindow::init()
         m_liveTexCubeRenderer.initResources(m_scrp);
         m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
     }
+
+    // Put the gpu mem allocator statistics to the profiling stream after doing
+    // all the init. (where applicable)
+    m_r->profiler()->addVMemAllocatorStats();
 }
 
 void ExampleWindow::releaseResources()

@@ -72,6 +72,8 @@ public:
     void resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int msaaBufferCount, int sampleCount);
     void releaseSwapChain(QRhiSwapChain *sc);
 
+    void vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize);
+
     bool ensureStream();
     void flushStream();
 

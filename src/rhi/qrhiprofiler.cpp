@@ -304,4 +304,19 @@ void QRhiProfilerPrivate::releaseSwapChain(QRhiSwapChain *sc)
     writer->endMap();
 }
 
+void QRhiProfilerPrivate::vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize)
+{
+    if (!ensureStream())
+        return;
+
+    writer->startMap();
+    WRITE_OP(VMemAllocStats);
+    WRITE_TIMESTAMP;
+    WRITE_PAIR(QLatin1String("realAllocCount"), realAllocCount);
+    WRITE_PAIR(QLatin1String("subAllocCount"), subAllocCount);
+    WRITE_PAIR(QLatin1String("totalSize"), totalSize);
+    WRITE_PAIR(QLatin1String("unusedSize"), unusedSize);
+    writer->endMap();
+}
+
 QT_END_NAMESPACE

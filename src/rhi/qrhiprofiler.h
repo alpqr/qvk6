@@ -59,7 +59,8 @@ public:
         NewTextureStagingArea,
         ReleaseTextureStagingArea,
         ResizeSwapChain,
-        ReleaseSwapChain
+        ReleaseSwapChain,
+        VMemAllocStats
     };
 
     QRhiProfiler();

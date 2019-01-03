@@ -65,6 +65,16 @@ void QRhiResource::releaseAndDestroy()
     delete this;
 }
 
+QByteArray QRhiResource::name() const
+{
+    return objectName;
+}
+
+void QRhiResource::setName(const QByteArray &name)
+{
+    objectName = name;
+}
+
 QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
     : QRhiResource(rhi),
       m_type(type_), m_usage(usage_), m_size(size_)

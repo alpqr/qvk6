@@ -365,10 +365,16 @@ public:
     virtual void release() = 0;
     void releaseAndDestroy();
 
+    // May be ignored unless EnableDebugMarkers is set.
+    // May also be ignored for some objects, depending on the backend.
+    QByteArray name() const;
+    void setName(const QByteArray &name);
+
 protected:
-    QRhiImplementation *rhi = nullptr;
     QRhiResource(QRhiImplementation *rhi_);
     Q_DISABLE_COPY(QRhiResource)
+    QRhiImplementation *rhi = nullptr;
+    QByteArray objectName;
 };
 
 class Q_RHI_EXPORT QRhiBuffer : public QRhiResource
@@ -1085,7 +1091,8 @@ public:
     };
 
     enum Flag {
-        EnableProfiling = 1 << 0
+        EnableProfiling = 1 << 0,
+        EnableDebugMarkers = 1 << 1
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 

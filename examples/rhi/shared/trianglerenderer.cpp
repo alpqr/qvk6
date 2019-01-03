@@ -76,10 +76,12 @@ void TriangleRenderer::initResources(QRhiRenderPassDescriptor *rp)
 #else
     m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
 #endif
+    m_vbuf->setName(QByteArrayLiteral("Triangle vbuf"));
     m_vbuf->build();
     m_vbufReady = false;
 
     m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    m_ubuf->setName(QByteArrayLiteral("Triangle ubuf"));
     m_ubuf->build();
 
     m_srb = m_r->newShaderResourceBindings();

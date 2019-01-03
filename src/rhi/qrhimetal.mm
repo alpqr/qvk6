@@ -1237,6 +1237,8 @@ bool QMetalBuffer::build()
         if (i == 0 || m_type != Immutable) {
             d->buf[i] = [rhiD->d->dev newBufferWithLength: roundedSize options: opts];
             d->pendingUpdates[i].reserve(16);
+            if (!objectName.isEmpty())
+                d->buf[i].label = [NSString stringWithUTF8String: objectName.constData()];
         }
     }
 
@@ -1321,6 +1323,9 @@ bool QMetalRenderBuffer::build()
 
     d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
     [desc release];
+
+    if (!objectName.isEmpty())
+        d->tex.label = [NSString stringWithUTF8String: objectName.constData()];
 
     QRHI_PROF;
     QRHI_PROF_F(newRenderBuffer(this, transientBacking, false, samples));
@@ -1551,6 +1556,9 @@ bool QMetalTexture::build()
 
     d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
     [desc release];
+
+    if (!objectName.isEmpty())
+        d->tex.label = [NSString stringWithUTF8String: objectName.constData()];
 
     d->owns = true;
     nativeHandlesStruct.texture = d->tex;

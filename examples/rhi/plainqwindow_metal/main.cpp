@@ -73,11 +73,11 @@ private:
 void MetalWindow::init()
 {
     QRhiMetalInitParams params;
-    m_r = QRhi::create(QRhi::Metal, &params
+    QRhi::Flags flags = QRhi::EnableDebugMarkers;
 #ifdef PROFILE
-                       , QRhi::EnableProfiling
+    flags |= QRhi::EnableProfiling;
 #endif
-                       );
+    m_r = QRhi::create(QRhi::Metal, &params, flags);
 
 #ifdef PROFILE
     m_r->profiler()->setDevice(&profOut);

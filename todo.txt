@@ -2,7 +2,9 @@ d3d: texture import/export
 prof api
 vk, d3d, gl: tex and other prof
 vk: memalloc stats to prof
-debug markers, object names, etc.
+vk, d3d, gl: debug: object names
+debug: markers (begin, end, msg)
+max texture size?
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
 advanced blend modes
@@ -52,6 +54,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: debug: object names
 mtl: buf/tex/rb/sc prof
 mtl, gl, vk: texture import/export
 rhi native handle getter (device, ...)

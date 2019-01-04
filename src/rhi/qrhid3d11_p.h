@@ -86,12 +86,19 @@ struct QD3D11Texture : public QRhiTexture
                   int sampleCount, Flags flags);
     void release() override;
     bool build() override;
+    bool buildFrom(const QRhiNativeHandles *src) override;
+    const QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
+    bool finishBuild();
 
     ID3D11Texture2D *tex = nullptr;
+    bool owns = true;
     ID3D11ShaderResourceView *srv = nullptr;
     DXGI_FORMAT dxgiFormat;
     uint mipLevelCount = 0;
     DXGI_SAMPLE_DESC sampleDesc;
+    QRhiD3D11TextureNativeHandles nativeHandlesStruct;
     uint generation = 0;
     friend class QRhiD3D11;
 };

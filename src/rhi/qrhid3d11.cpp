@@ -1571,7 +1571,9 @@ void QD3D11Texture::release()
         srv = nullptr;
     }
 
-    tex->Release();
+    if (owns)
+        tex->Release();
+
     tex = nullptr;
 }
 
@@ -1601,12 +1603,13 @@ static inline DXGI_FORMAT toD3DDepthTextureDSVFormat(QRhiTexture::Format format)
     }
 }
 
-bool QD3D11Texture::build()
+bool QD3D11Texture::prepareBuild(QSize *adjustedSize)
 {
+    QRHI_RES_RHI(QRhiD3D11);
+
     if (tex)
         release();
 
-    QRHI_RES_RHI(QRhiD3D11);
     const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
@@ -1629,6 +1632,56 @@ bool QD3D11Texture::build()
         qWarning("Depth texture cannot have mipmaps");
         return false;
     }
+
+    if (adjustedSize)
+        *adjustedSize = size;
+
+    return true;
+}
+
+bool QD3D11Texture::finishBuild()
+{
+    QRHI_RES_RHI(QRhiD3D11);
+    const bool isDepth = isDepthTextureFormat(m_format);
+    const bool isCube = m_flags.testFlag(CubeMap);
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
+    memset(&srvDesc, 0, sizeof(srvDesc));
+    srvDesc.Format = isDepth ? toD3DDepthTextureSRVFormat(m_format) : dxgiFormat;
+    if (isCube) {
+        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
+        srvDesc.TextureCube.MipLevels = mipLevelCount;
+    } else {
+        if (sampleDesc.Count > 1) {
+            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
+        } else {
+            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            srvDesc.Texture2D.MipLevels = mipLevelCount;
+        }
+    }
+
+    HRESULT hr = rhiD->dev->CreateShaderResourceView(tex, &srvDesc, &srv);
+    if (FAILED(hr)) {
+        qWarning("Failed to create srv: %s", qPrintable(comErrorMessage(hr)));
+        return false;
+    }
+
+    nativeHandlesStruct.texture = tex;
+
+    generation += 1;
+    return true;
+}
+
+bool QD3D11Texture::build()
+{
+    QRHI_RES_RHI(QRhiD3D11);
+
+    QSize size;
+    if (!prepareBuild(&size))
+        return false;
+
+    const bool isDepth = isDepthTextureFormat(m_format);
+    const bool isCube = m_flags.testFlag(CubeMap);
 
     uint bindFlags = D3D11_BIND_SHADER_RESOURCE;
     uint miscFlags = isCube ? D3D11_RESOURCE_MISC_TEXTURECUBE : 0;
@@ -1665,29 +1718,34 @@ bool QD3D11Texture::build()
         return false;
     }
 
-    D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
-    memset(&srvDesc, 0, sizeof(srvDesc));
-    srvDesc.Format = isDepth ? toD3DDepthTextureSRVFormat(m_format) : desc.Format;
-    if (isCube) {
-        srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURECUBE;
-        srvDesc.TextureCube.MipLevels = desc.MipLevels;
-    } else {
-        if (sampleDesc.Count > 1) {
-            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2DMS;
-        } else {
-            srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-            srvDesc.Texture2D.MipLevels = desc.MipLevels;
-        }
-    }
-
-    hr = rhiD->dev->CreateShaderResourceView(tex, &srvDesc, &srv);
-    if (FAILED(hr)) {
-        qWarning("Failed to create srv: %s", qPrintable(comErrorMessage(hr)));
+    if (!finishBuild())
         return false;
-    }
 
-    generation += 1;
+    owns = true;
     return true;
+}
+
+bool QD3D11Texture::buildFrom(const QRhiNativeHandles *src)
+{
+    const QRhiD3D11TextureNativeHandles *h = static_cast<const QRhiD3D11TextureNativeHandles *>(src);
+    if (!h || !h->texture)
+        return false;
+
+    if (!prepareBuild())
+        return false;
+
+    tex = static_cast<ID3D11Texture2D *>(h->texture);
+
+    if (!finishBuild())
+        return false;
+
+    owns = false;
+    return true;
+}
+
+const QRhiNativeHandles *QD3D11Texture::nativeHandles()
+{
+    return &nativeHandlesStruct;
 }
 
 QD3D11Sampler::QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,

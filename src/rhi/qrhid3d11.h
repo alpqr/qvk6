@@ -61,6 +61,11 @@ struct Q_RHI_EXPORT QRhiD3D11NativeHandles : public QRhiNativeHandles
     void *context;
 };
 
+struct Q_RHI_EXPORT QRhiD3D11TextureNativeHandles : public QRhiNativeHandles
+{
+    void *texture = nullptr; // ID3D11Texture2D
+};
+
 QT_END_NAMESPACE
 
 #endif

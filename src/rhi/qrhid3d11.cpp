@@ -148,6 +148,11 @@ bool QRhiD3D11::create(QRhi::Flags flags)
         featureLevel = dev->GetFeatureLevel();
     }
 
+    if (debugMarkers) {
+        if (FAILED(context->QueryInterface(IID_ID3DUserDefinedAnnotation, reinterpret_cast<void **>(&annotations))))
+            annotations = nullptr;
+    }
+
     nativeHandlesStruct.dev = dev;
     nativeHandlesStruct.context = context;
 
@@ -157,6 +162,11 @@ bool QRhiD3D11::create(QRhi::Flags flags)
 void QRhiD3D11::destroy()
 {
     finishActiveReadbacks();
+
+    if (annotations) {
+        annotations->Release();
+        annotations = nullptr;
+    }
 
     if (!importedDevice) {
         if (context) {
@@ -480,28 +490,39 @@ void QRhiD3D11::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 
 void QRhiD3D11::debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name)
 {
-    if (!debugMarkers)
+    if (!debugMarkers || !annotations)
         return;
 
-    Q_UNUSED(cb);
-    Q_UNUSED(name);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::DebugMarkBegin;
+    strncpy(cmd.args.debugMark.s, name.constData(), sizeof(cmd.args.debugMark.s));
+    cmd.args.debugMark.s[sizeof(cmd.args.debugMark.s) - 1] = '\0';
+    cbD->commands.append(cmd);
 }
 
 void QRhiD3D11::debugMarkEnd(QRhiCommandBuffer *cb)
 {
-    if (!debugMarkers)
+    if (!debugMarkers || !annotations)
         return;
 
-    Q_UNUSED(cb);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::DebugMarkEnd;
+    cbD->commands.append(cmd);
 }
 
 void QRhiD3D11::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
 {
-    if (!debugMarkers)
+    if (!debugMarkers || !annotations)
         return;
 
-    Q_UNUSED(cb);
-    Q_UNUSED(msg);
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    QD3D11CommandBuffer::Command cmd;
+    cmd.cmd = QD3D11CommandBuffer::Command::DebugMarkMsg;
+    strncpy(cmd.args.debugMark.s, msg.constData(), sizeof(cmd.args.debugMark.s));
+    cmd.args.debugMark.s[sizeof(cmd.args.debugMark.s) - 1] = '\0';
+    cbD->commands.append(cmd);
 }
 
 QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
@@ -1393,6 +1414,15 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
         case QD3D11CommandBuffer::Command::GenMip:
             context->GenerateMips(cmd.args.genMip.tex->srv);
             break;
+        case QD3D11CommandBuffer::Command::DebugMarkBegin:
+            annotations->BeginEvent(reinterpret_cast<LPCWSTR>(QString::fromLatin1(cmd.args.debugMark.s).utf16()));
+            break;
+        case QD3D11CommandBuffer::Command::DebugMarkEnd:
+            annotations->EndEvent();
+            break;
+        case QD3D11CommandBuffer::Command::DebugMarkMsg:
+            annotations->SetMarker(reinterpret_cast<LPCWSTR>(QString::fromLatin1(cmd.args.debugMark.s).utf16()));
+            break;
         default:
             break;
         }
@@ -1457,6 +1487,9 @@ bool QD3D11Buffer::build()
         hasPendingDynamicUpdates = false;
     }
 
+    if (!objectName.isEmpty())
+        buffer->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
+
     QRHI_PROF;
     QRHI_PROF_F(newBuffer(this, roundedSize, 1, m_type == Dynamic ? 1 : 0));
 
@@ -1515,6 +1548,8 @@ bool QD3D11RenderBuffer::build()
             qWarning("Failed to create color renderbuffer: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
+        if (!objectName.isEmpty())
+            tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
         memset(&rtvDesc, 0, sizeof(rtvDesc));
         rtvDesc.Format = dxgiFormat; rtvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
@@ -1534,6 +1569,8 @@ bool QD3D11RenderBuffer::build()
             qWarning("Failed to create depth-stencil buffer: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
+        if (!objectName.isEmpty())
+            tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
         memset(&dsvDesc, 0, sizeof(dsvDesc));
         dsvDesc.Format = dxgiFormat;
@@ -1720,6 +1757,9 @@ bool QD3D11Texture::build()
 
     if (!finishBuild())
         return false;
+
+    if (!objectName.isEmpty())
+        tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
 
     owns = true;
     return true;

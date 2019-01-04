@@ -259,7 +259,10 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             UpdateSubRes,
             CopySubRes,
             ResolveSubRes,
-            GenMip
+            GenMip,
+            DebugMarkBegin,
+            DebugMarkEnd,
+            DebugMarkMsg
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
@@ -349,6 +352,9 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             struct {
                 QD3D11Texture *tex;
             } genMip;
+            struct {
+                char s[64];
+            } debugMark;
         } args;
     };
 
@@ -511,6 +517,7 @@ public:
     ID3D11Device *dev = nullptr;
     ID3D11DeviceContext1 *context = nullptr;
     D3D_FEATURE_LEVEL featureLevel;
+    ID3DUserDefinedAnnotation *annotations = nullptr;
     IDXGIFactory2 *dxgiFactory = nullptr;
     QRhiD3D11NativeHandles nativeHandlesStruct;
 

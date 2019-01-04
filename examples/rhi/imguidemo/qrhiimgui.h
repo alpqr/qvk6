@@ -44,7 +44,7 @@ QT_BEGIN_NAMESPACE
 
 class QRhiImguiPrivate;
 
-class Q_RHI_EXPORT QRhiImgui
+class QRhiImgui
 {
 public:
     QRhiImgui();

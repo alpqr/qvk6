@@ -5,13 +5,11 @@ QT += shadertools rhi
 SOURCES = \
     main.cpp \
     renderer.cpp \
-    ../shared/trianglerenderer.cpp
+    trianglerenderer.cpp
 
 HEADERS = \
     renderer.h \
-    ../shared/trianglerenderer.h
-
-INCLUDEPATH += ../shared
+    trianglerenderer.h
 
 RESOURCES = vulkanwindow.qrc
 

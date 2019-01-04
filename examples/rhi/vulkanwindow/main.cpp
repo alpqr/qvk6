@@ -52,6 +52,10 @@
 #include <QLoggingCategory>
 #include "renderer.h"
 
+// Demonstrates targeting a QVulkanWindow with a QRhi. This is limited in the
+// sense that going forward some QRhi features may not be available in such a
+// setup. Remains to be seen how useful this is in practice.
+
 class VulkanWindow : public QVulkanWindow
 {
 public:

@@ -48,14 +48,15 @@
 **
 ****************************************************************************/
 
-#include "texturedcuberenderer.h"
+#include "trianglerenderer.h"
 #include <QFile>
 #include <QBakedShader>
 
-#include "cube.h"
-
-const bool MIPMAP = true;
-const bool AUTOGENMIPMAP = true;
+static float vertexData[] = { // Y up (note m_proj), CCW
+     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,   0.0f, 0.0f,
+    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,   0.0f, 1.0f,
+     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f,   1.0f, 1.0f
+};
 
 static QBakedShader getShader(const QString &name)
 {
@@ -66,56 +67,34 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
+void TriangleRenderer::initResources(QRhiRenderPassDescriptor *rp)
 {
-    m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
+    m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+    m_vbuf->setName(QByteArrayLiteral("Triangle vbuf"));
     m_vbuf->build();
     m_vbufReady = false;
 
-    m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
+    m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    m_ubuf->setName(QByteArrayLiteral("Triangle ubuf"));
     m_ubuf->build();
-
-    m_image = QImage(QLatin1String(":/qt256.png")).convertToFormat(QImage::Format_RGBA8888);
-    QRhiTexture::Flags texFlags = 0;
-    if (MIPMAP)
-        texFlags |= QRhiTexture::MipMapped;
-    if (AUTOGENMIPMAP)
-        texFlags |= QRhiTexture::UsedWithGenerateMips;
-    m_tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), 1, texFlags);
-    m_tex->build();
-
-    m_sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, MIPMAP ? QRhiSampler::Linear : QRhiSampler::None,
-                                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
-    m_sampler->build();
 
     m_srb = m_r->newShaderResourceBindings();
     m_srb->setBindings({
-        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf),
-        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, m_tex, m_sampler)
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, m_ubuf)
     });
     m_srb->build();
 
     m_ps = m_r->newGraphicsPipeline();
 
-    // No blending but the texture has alpha which we do not want to write out.
-    // Be nice. (would not matter for an onscreen window but makes a difference
-    // when reading back and saving into image files f.ex.)
-    QRhiGraphicsPipeline::TargetBlend blend;
-    blend.colorWrite = QRhiGraphicsPipeline::R | QRhiGraphicsPipeline::G | QRhiGraphicsPipeline::B;
-    m_ps->setTargetBlends({ blend });
-
-    m_ps->setDepthTest(true);
-    m_ps->setDepthWrite(true);
-    m_ps->setDepthOp(QRhiGraphicsPipeline::Less);
-
-    m_ps->setCullMode(QRhiGraphicsPipeline::Back);
-    m_ps->setFrontFace(QRhiGraphicsPipeline::CCW);
+    QRhiGraphicsPipeline::TargetBlend premulAlphaBlend; // convenient defaults...
+    premulAlphaBlend.enable = true;
+    m_ps->setTargetBlends({ premulAlphaBlend });
 
     m_ps->setSampleCount(m_sampleCount);
 
-    QBakedShader vs = getShader(QLatin1String(":/texture.vert.qsb"));
+    QBakedShader vs = getShader(QLatin1String(":/color.vert.qsb"));
     Q_ASSERT(vs.isValid());
-    QBakedShader fs = getShader(QLatin1String(":/texture.frag.qsb"));
+    QBakedShader fs = getShader(QLatin1String(":/color.frag.qsb"));
     Q_ASSERT(fs.isValid());
     m_ps->setShaderStages({
         { QRhiGraphicsShaderStage::Vertex, vs },
@@ -124,12 +103,11 @@ void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 
     QRhiVertexInputLayout inputLayout;
     inputLayout.bindings = {
-        { 3 * sizeof(float) },
-        { 2 * sizeof(float) }
+        { 7 * sizeof(float) }
     };
     inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
-        { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
+        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
     };
 
     m_ps->setVertexInputLayout(inputLayout);
@@ -139,14 +117,14 @@ void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
     m_ps->build();
 }
 
-void TexturedCubeRenderer::resize(const QSize &pixelSize)
+void TriangleRenderer::resize(const QSize &pixelSize)
 {
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
 }
 
-void TexturedCubeRenderer::releaseResources()
+void TriangleRenderer::releaseResources()
 {
     if (m_ps) {
         m_ps->releaseAndDestroy();
@@ -156,16 +134,6 @@ void TexturedCubeRenderer::releaseResources()
     if (m_srb) {
         m_srb->releaseAndDestroy();
         m_srb = nullptr;
-    }
-
-    if (m_sampler) {
-        m_sampler->releaseAndDestroy();
-        m_sampler = nullptr;
-    }
-
-    if (m_tex) {
-        m_tex->releaseAndDestroy();
-        m_tex = nullptr;
     }
 
     if (m_ubuf) {
@@ -179,49 +147,30 @@ void TexturedCubeRenderer::releaseResources()
     }
 }
 
-void TexturedCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
+void TriangleRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     if (!m_vbufReady) {
         m_vbufReady = true;
-        resourceUpdates->uploadStaticBuffer(m_vbuf, cube);
-        qint32 flip = 0;
-        resourceUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &flip);
-    }
-
-    if (!m_image.isNull()) {
-        if (MIPMAP) {
-            QRhiTextureUploadDescription desc;
-            desc.layers.append(QRhiTextureUploadDescription::Layer());
-            if (!AUTOGENMIPMAP) {
-                // the ghetto mipmap generator...
-                for (int i = 0, ie = m_r->mipLevelsForSize(m_image.size()); i != ie; ++i) {
-                    QImage image = m_image.scaled(m_r->sizeForMipLevel(i, m_image.size()));
-                    desc.layers[0].mipImages.push_back({ image });
-                }
-            } else {
-                desc.layers[0].mipImages.push_back({ m_image });
-            }
-            resourceUpdates->uploadTexture(m_tex, desc);
-            if (AUTOGENMIPMAP)
-                resourceUpdates->generateMips(m_tex);
-        } else {
-            resourceUpdates->uploadTexture(m_tex, m_image);
-        }
-        m_image = QImage();
+        resourceUpdates->uploadStaticBuffer(m_vbuf, vertexData);
     }
 
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
-    mvp.translate(m_translation);
-    mvp.scale(0.5f);
     mvp.rotate(m_rotation, 0, 1, 0);
     resourceUpdates->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
+
+    m_opacity += m_opacityDir * 0.005f;
+    if (m_opacity < 0.0f || m_opacity > 1.0f) {
+        m_opacityDir *= -1;
+        m_opacity = qBound(0.0f, m_opacity, 1.0f);
+    }
+    resourceUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &m_opacity);
 }
 
-void TexturedCubeRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
+void TriangleRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
     cb->setGraphicsPipeline(m_ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
-    cb->setVertexInput(0, { { m_vbuf, 0 }, { m_vbuf, 36 * 3 * sizeof(float) } });
-    cb->draw(36);
+    cb->setVertexInput(0, { { m_vbuf, 0 } });
+    cb->draw(3);
 }

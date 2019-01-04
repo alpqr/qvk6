@@ -3,7 +3,6 @@ vk, d3d, gl: tex and other prof
 vk, gl: debug: object names
 vk, gl: debug: markers (begin, end, msg)
 max texture size stuff
-plainqwindow examples should be reorganized into one (using examplefw)
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
 advanced blend modes
@@ -53,6 +52,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+plainqwindow examples should be reorganized into one (using examplefw)
 d3d: debug markers, object names
 d3d: texture import/export
 vk: memalloc stats to prof

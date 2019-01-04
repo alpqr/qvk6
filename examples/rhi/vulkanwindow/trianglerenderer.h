@@ -48,60 +48,37 @@
 **
 ****************************************************************************/
 
-#include <QGuiApplication>
-#include <QRhiMetalInitParams>
-#include "examplewindow.h"
+#ifndef TRIANGLERENDERER_H
+#define TRIANGLERENDERER_H
 
-#define PROFILE
+#include <QRhi>
 
-#ifdef PROFILE
-#include <QRhiProfiler>
-#include <QFile>
-QFile profOut;
-#endif
-
-class MetalWindow : public ExampleWindow
+class TriangleRenderer
 {
 public:
-    MetalWindow() { setSurfaceType(MetalSurface); }
-    ~MetalWindow() { releaseResources(); }
+    void setRhi(QRhi *r) { m_r = r; }
+    void setSampleCount(int samples) { m_sampleCount = samples; }
+    int sampleCount() const { return m_sampleCount; }
+    void initResources(QRhiRenderPassDescriptor *rp);
+    void releaseResources();
+    void resize(const QSize &pixelSize);
+    void queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates);
+    void queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels);
 
 private:
-    void init() override;
+    QRhi *m_r;
+
+    QRhiBuffer *m_vbuf = nullptr;
+    bool m_vbufReady = false;
+    QRhiBuffer *m_ubuf = nullptr;
+    QRhiShaderResourceBindings *m_srb = nullptr;
+    QRhiGraphicsPipeline *m_ps = nullptr;
+
+    QMatrix4x4 m_proj;
+    float m_rotation = 0;
+    float m_opacity = 1;
+    int m_opacityDir = -1;
+    int m_sampleCount = 1; // no MSAA by default
 };
 
-void MetalWindow::init()
-{
-    QRhiMetalInitParams params;
-    QRhi::Flags flags = QRhi::EnableDebugMarkers;
-#ifdef PROFILE
-    flags |= QRhi::EnableProfiling;
 #endif
-    m_r = QRhi::create(QRhi::Metal, &params, flags);
-
-#ifdef PROFILE
-    m_r->profiler()->setDevice(&profOut);
-#endif
-
-    //setSampleCount(4); // enable 4x MSAA (except for the render-to-texture pass)
-
-    ExampleWindow::init();
-}
-
-int main(int argc, char **argv)
-{
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
-    QGuiApplication app(argc, argv);
-
-#ifdef PROFILE
-    profOut.setFileName("rhiprof.cbor");
-    profOut.open(QIODevice::WriteOnly);
-#endif
-
-    MetalWindow w;
-    w.resize(1280, 720);
-    w.setTitle(QLatin1String("Metal"));
-    w.show();
-
-    return app.exec();
-}

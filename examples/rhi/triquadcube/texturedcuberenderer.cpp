@@ -48,20 +48,14 @@
 **
 ****************************************************************************/
 
-#include "triangleoncuberenderer.h"
+#include "texturedcuberenderer.h"
 #include <QFile>
 #include <QBakedShader>
 
-// toggle to test the preserved content (no clear) path
-const bool IMAGE_UNDER_OFFSCREEN_RENDERING = false;
-const bool UPLOAD_UNDERLAY_ON_EVERY_FRAME = false;
+#include "../shared/cube.h"
 
-const bool DS_ATT = false; // have a depth-stencil attachment for the offscreen pass
-
-const bool DEPTH_TEXTURE = false; // offscreen pass uses a depth texture (verify with renderdoc etc., ignore valid.layer about ps slot 0)
-const bool MRT = false; // two textures, the second is just cleared as the shader does not write anything (valid.layer may warn but for testing that's ok)
-
-#include "cube.h"
+const bool MIPMAP = true;
+const bool AUTOGENMIPMAP = true;
 
 static QBakedShader getShader(const QString &name)
 {
@@ -72,44 +66,29 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
-static const QSize OFFSCREEN_SIZE(512, 512);
-
-void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
+void TexturedCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 {
     m_vbuf = m_r->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(cube));
+    m_vbuf->setName(QByteArrayLiteral("Cube vbuf (textured)"));
     m_vbuf->build();
     m_vbufReady = false;
 
     m_ubuf = m_r->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
+    m_ubuf->setName(QByteArrayLiteral("Cube ubuf (textured)"));
     m_ubuf->build();
 
-    if (IMAGE_UNDER_OFFSCREEN_RENDERING) {
-        m_image = QImage(QLatin1String(":/qt256.png")).scaled(OFFSCREEN_SIZE).convertToFormat(QImage::Format_RGBA8888);
-        if (m_r->isYUpInFramebuffer())
-            m_image = m_image.mirrored(); // just cause we'll flip texcoord Y when y up so accomodate our static background image as well
-    }
-
-    m_tex = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
+    m_image = QImage(QLatin1String(":/qt256.png")).convertToFormat(QImage::Format_RGBA8888);
+    QRhiTexture::Flags texFlags = 0;
+    if (MIPMAP)
+        texFlags |= QRhiTexture::MipMapped;
+    if (AUTOGENMIPMAP)
+        texFlags |= QRhiTexture::UsedWithGenerateMips;
+    m_tex = m_r->newTexture(QRhiTexture::RGBA8, QSize(m_image.width(), m_image.height()), 1, texFlags);
+    m_tex->setName(QByteArrayLiteral("Qt texture"));
     m_tex->build();
 
-    if (MRT) {
-        m_tex2 = m_r->newTexture(QRhiTexture::RGBA8, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
-        m_tex2->build();
-    }
-
-    if (DS_ATT) {
-        m_offscreenTriangle.setDepthWrite(true);
-        m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil, m_tex->pixelSize());
-        m_ds->build();
-    }
-
-    if (DEPTH_TEXTURE) {
-        m_offscreenTriangle.setDepthWrite(true);
-        m_depthTex = m_r->newTexture(QRhiTexture::D32, OFFSCREEN_SIZE, 1, QRhiTexture::RenderTarget);
-        m_depthTex->build();
-    }
-
-    m_sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None, QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    m_sampler = m_r->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, MIPMAP ? QRhiSampler::Linear : QRhiSampler::None,
+                                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
     m_sampler->build();
 
     m_srb = m_r->newShaderResourceBindings();
@@ -120,6 +99,13 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
     m_srb->build();
 
     m_ps = m_r->newGraphicsPipeline();
+
+    // No blending but the texture has alpha which we do not want to write out.
+    // Be nice. (would not matter for an onscreen window but makes a difference
+    // when reading back and saving into image files f.ex.)
+    QRhiGraphicsPipeline::TargetBlend blend;
+    blend.colorWrite = QRhiGraphicsPipeline::R | QRhiGraphicsPipeline::G | QRhiGraphicsPipeline::B;
+    m_ps->setTargetBlends({ blend });
 
     m_ps->setDepthTest(true);
     m_ps->setDepthWrite(true);
@@ -154,50 +140,17 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
     m_ps->setRenderPassDescriptor(rp);
 
     m_ps->build();
-
-    QRhiTextureRenderTarget::Flags rtFlags = 0;
-    if (IMAGE_UNDER_OFFSCREEN_RENDERING)
-        rtFlags |= QRhiTextureRenderTarget::PreserveColorContents;
-
-    if (DEPTH_TEXTURE) {
-        QRhiTextureRenderTargetDescription desc;
-        desc.depthTexture = m_depthTex;
-        m_rt = m_r->newTextureRenderTarget(desc, rtFlags);
-    } else {
-        QRhiTextureRenderTargetDescription desc { m_tex };
-        if (DS_ATT)
-            desc.depthStencilBuffer = m_ds;
-        if (MRT) {
-            m_offscreenTriangle.setColorAttCount(2);
-            desc.colorAttachments.append(m_tex2);
-        }
-        m_rt = m_r->newTextureRenderTarget(desc, rtFlags);
-    }
-
-    m_rp = m_rt->newCompatibleRenderPassDescriptor();
-    m_rt->setRenderPassDescriptor(m_rp);
-
-    m_rt->build();
-
-    m_offscreenTriangle.setRhi(m_r);
-    m_offscreenTriangle.initResources(m_rp);
-    m_offscreenTriangle.setScale(2);
-    // m_tex and the offscreen triangle are never multisample
 }
 
-void TriangleOnCubeRenderer::resize(const QSize &pixelSize)
+void TexturedCubeRenderer::resize(const QSize &pixelSize)
 {
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, pixelSize.width() / (float) pixelSize.height(), 0.01f, 100.0f);
     m_proj.translate(0, 0, -4);
-
-    m_offscreenTriangle.resize(pixelSize);
 }
 
-void TriangleOnCubeRenderer::releaseResources()
+void TexturedCubeRenderer::releaseResources()
 {
-    m_offscreenTriangle.releaseResources();
-
     if (m_ps) {
         m_ps->releaseAndDestroy();
         m_ps = nullptr;
@@ -208,39 +161,14 @@ void TriangleOnCubeRenderer::releaseResources()
         m_srb = nullptr;
     }
 
-    if (m_rt) {
-        m_rt->releaseAndDestroy();
-        m_rt = nullptr;
-    }
-
-    if (m_rp) {
-        m_rp->releaseAndDestroy();
-        m_rp = nullptr;
-    }
-
     if (m_sampler) {
         m_sampler->releaseAndDestroy();
         m_sampler = nullptr;
     }
 
-    if (m_depthTex) {
-        m_depthTex->releaseAndDestroy();
-        m_depthTex = nullptr;
-    }
-
-    if (m_tex2) {
-        m_tex2->releaseAndDestroy();
-        m_tex2 = nullptr;
-    }
-
     if (m_tex) {
         m_tex->releaseAndDestroy();
         m_tex = nullptr;
-    }
-
-    if (m_ds) {
-        m_ds->releaseAndDestroy();
-        m_ds = nullptr;
     }
 
     if (m_ubuf) {
@@ -254,45 +182,46 @@ void TriangleOnCubeRenderer::releaseResources()
     }
 }
 
-void TriangleOnCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
+void TexturedCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates)
 {
     if (!m_vbufReady) {
         m_vbufReady = true;
         resourceUpdates->uploadStaticBuffer(m_vbuf, cube);
-        qint32 flip = m_r->isYUpInFramebuffer() ? 1 : 0;
+        qint32 flip = 0;
         resourceUpdates->updateDynamicBuffer(m_ubuf, 64, 4, &flip);
+    }
+
+    if (!m_image.isNull()) {
+        if (MIPMAP) {
+            QRhiTextureUploadDescription desc;
+            desc.layers.append(QRhiTextureUploadDescription::Layer());
+            if (!AUTOGENMIPMAP) {
+                // the ghetto mipmap generator...
+                for (int i = 0, ie = m_r->mipLevelsForSize(m_image.size()); i != ie; ++i) {
+                    QImage image = m_image.scaled(m_r->sizeForMipLevel(i, m_image.size()));
+                    desc.layers[0].mipImages.push_back({ image });
+                }
+            } else {
+                desc.layers[0].mipImages.push_back({ m_image });
+            }
+            resourceUpdates->uploadTexture(m_tex, desc);
+            if (AUTOGENMIPMAP)
+                resourceUpdates->generateMips(m_tex);
+        } else {
+            resourceUpdates->uploadTexture(m_tex, m_image);
+        }
+        m_image = QImage();
     }
 
     m_rotation += 1.0f;
     QMatrix4x4 mvp = m_proj;
     mvp.translate(m_translation);
     mvp.scale(0.5f);
-    mvp.rotate(m_rotation, 1, 0, 0);
+    mvp.rotate(m_rotation, 0, 1, 0);
     resourceUpdates->updateDynamicBuffer(m_ubuf, 0, 64, mvp.constData());
-
-    if (DEPTH_TEXTURE) {
-        // m_tex is basically undefined here, be nice and transition the layout properly at least
-        resourceUpdates->prepareTextureForUse(m_tex, QRhiResourceUpdateBatch::TextureRead);
-    }
 }
 
-void TriangleOnCubeRenderer::queueOffscreenPass(QRhiCommandBuffer *cb)
-{
-    QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
-    m_offscreenTriangle.queueResourceUpdates(u);
-
-    if (IMAGE_UNDER_OFFSCREEN_RENDERING && !m_image.isNull()) {
-        u->uploadTexture(m_tex, m_image);
-        if (!UPLOAD_UNDERLAY_ON_EVERY_FRAME)
-            m_image = QImage();
-    }
-
-    cb->beginPass(m_rt, { 0.0f, 0.4f, 0.7f, 1.0f }, { 1.0f, 0 }, u);
-    m_offscreenTriangle.queueDraw(cb, OFFSCREEN_SIZE);
-    cb->endPass();
-}
-
-void TriangleOnCubeRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
+void TexturedCubeRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeInPixels)
 {
     cb->setGraphicsPipeline(m_ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));

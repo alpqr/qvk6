@@ -116,6 +116,11 @@ QString graphicsApiName()
     return QString();
 }
 
+QRhi::Flags rhiFlags = 0;
+int sampleCount = 1;
+QRhiSwapChain::Flags scFlags = 0;
+void (*preInitFunc)() = nullptr;
+
 class Window : public QWindow
 {
 public:
@@ -244,7 +249,7 @@ void Window::init()
         params.context = m_context;
         params.window = this;
         params.fallbackSurface = m_fallbackSurface;
-        m_r = QRhi::create(QRhi::OpenGLES2, &params);
+        m_r = QRhi::create(QRhi::OpenGLES2, &params, rhiFlags);
     }
 #endif
 
@@ -253,7 +258,7 @@ void Window::init()
         QRhiVulkanInitParams params;
         params.inst = vulkanInstance();
         params.window = this;
-        m_r = QRhi::create(QRhi::Vulkan, &params);
+        m_r = QRhi::create(QRhi::Vulkan, &params, rhiFlags);
     }
 #endif
 
@@ -261,14 +266,14 @@ void Window::init()
     if (graphicsApi == D3D11) {
         QRhiD3D11InitParams params;
         params.enableDebugLayer = true;
-        m_r = QRhi::create(QRhi::D3D11, &params);
+        m_r = QRhi::create(QRhi::D3D11, &params, rhiFlags);
     }
 #endif
 
 #ifdef Q_OS_DARWIN
     if (graphicsApi == Metal) {
         QRhiMetalInitParams params;
-        m_r = QRhi::create(QRhi::Metal, &params);
+        m_r = QRhi::create(QRhi::Metal, &params, rhiFlags);
     }
 #endif
 
@@ -281,10 +286,12 @@ void Window::init()
     // allow depth-stencil, although we do not actually enable depth test/write for the triangle
     m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
                                 QSize(), // no need to set the size yet
-                                1,
+                                sampleCount,
                                 QRhiRenderBuffer::UsedWithSwapChainOnly);
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
+    m_sc->setSampleCount(sampleCount);
+    m_sc->setFlags(scFlags);
     m_rp = m_sc->newCompatibleRenderPassDescriptor();
     m_sc->setRenderPassDescriptor(m_rp);
 
@@ -459,6 +466,11 @@ int main(int argc, char **argv)
             graphicsApi = OpenGL;
         }
     }
+#endif
+
+#ifdef EXAMPLEFW_PREINIT
+    void preInit();
+    preInit();
 #endif
 
     // Create and show the window.

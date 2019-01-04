@@ -158,7 +158,7 @@ void Window::customRender()
     cb->setGraphicsPipeline(d.ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
     cb->setVertexInput(0, { { d.vbuf, 0 } });
-    cb->draw(36);
+    cb->draw(3);
 
     d.imgui.queueFrame(cb);
     cb->endPass();

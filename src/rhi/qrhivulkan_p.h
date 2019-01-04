@@ -103,12 +103,19 @@ struct QVkTexture : public QRhiTexture
                int sampleCount, Flags flags);
     void release() override;
     bool build() override;
+    bool buildFrom(const QRhiNativeHandles *src) override;
+    const QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
+    bool finishBuild();
 
     VkImage image = VK_NULL_HANDLE;
     VkImageView imageView = VK_NULL_HANDLE;
     QVkAlloc imageAlloc = nullptr;
     VkBuffer stagingBuffers[QVK_FRAMES_IN_FLIGHT];
     QVkAlloc stagingAllocations[QVK_FRAMES_IN_FLIGHT];
+    bool owns = true;
+    QRhiVulkanTextureNativeHandles nativeHandlesStruct;
     VkImageLayout layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     VkFormat vkformat;
     uint mipLevelCount = 0;
@@ -146,6 +153,7 @@ struct QVkRenderTargetData
     VkFramebuffer fb = VK_NULL_HANDLE;
     QVkRenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
+    float dpr = 1;
     int colorAttCount = 0;
     int dsAttCount = 0;
     int resolveAttCount = 0;
@@ -158,6 +166,7 @@ struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QVkRenderTargetData d;
 };
@@ -169,6 +178,7 @@ struct QVkTextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
@@ -317,7 +327,7 @@ class QRhiVulkan : public QRhiImplementation
 public:
     QRhiVulkan(QRhiInitParams *params);
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
@@ -377,12 +387,18 @@ public:
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
 
+    void debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name) override;
+    void debugMarkEnd(QRhiCommandBuffer *cb) override;
+    void debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg) override;
+
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    const QRhiNativeHandles *nativeHandles() override;
+    void sendVMemStatsToProfiler() override;
 
     VkResult createDescriptorPool(VkDescriptorPool *pool);
     bool allocateDescriptorSet(VkDescriptorSetAllocateInfo *allocInfo, VkDescriptorSet *result, int *resultPoolIndex);
@@ -403,6 +419,7 @@ public:
     bool createOffscreenRenderPass(VkRenderPass *rp,
                                    const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
                                    bool preserveColor,
+                                   bool preserveDs,
                                    QRhiRenderBuffer *depthStencilBuffer,
                                    QRhiTexture *depthTexture);
     bool ensurePipelineCache();
@@ -454,7 +471,7 @@ public:
     VkCommandPool cmdPool = VK_NULL_HANDLE;
     int gfxQueueFamilyIdx = -1;
     VkQueue gfxQueue = VK_NULL_HANDLE;
-    QVkAllocator allocator;
+    QVkAllocator allocator = nullptr;
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;
     VkPhysicalDeviceProperties physDevProperties;
@@ -490,6 +507,7 @@ public:
     bool inPass = false;
     QVkSwapChain *currentSwapChain = nullptr;
     QSet<QVkSwapChain *> swapchains;
+    QRhiVulkanNativeHandles nativeHandlesStruct;
 
     struct OffscreenFrame {
         OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }

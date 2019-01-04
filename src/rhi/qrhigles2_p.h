@@ -91,13 +91,20 @@ struct QGles2Texture : public QRhiTexture
                   int sampleCount, Flags flags);
     void release() override;
     bool build() override;
+    bool buildFrom(const QRhiNativeHandles *src) override;
+    const QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
 
     GLuint texture = 0;
+    bool owns = true;
     GLenum target;
     GLenum glintformat;
     GLenum glformat;
     GLenum gltype;
     bool specified = false;
+    int mipLevelCount = 0;
+    QRhiGles2TextureNativeHandles nativeHandlesStruct;
 
     uint generation = 0;
     friend class QRhiGles2;
@@ -132,7 +139,8 @@ struct QGles2BasicRenderTargetData
 
     QGles2RenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
-    int attCount;
+    float dpr = 1;
+    int attCount = 0;
 };
 
 struct QGles2ReferenceRenderTarget : public QRhiReferenceRenderTarget
@@ -141,6 +149,7 @@ struct QGles2ReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QGles2BasicRenderTargetData d;
 };
@@ -152,6 +161,7 @@ struct QGles2TextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
@@ -431,7 +441,7 @@ class QRhiGles2 : public QRhiImplementation
 public:
     QRhiGles2(QRhiInitParams *params);
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
@@ -491,12 +501,17 @@ public:
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
 
+    void debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name) override;
+    void debugMarkEnd(QRhiCommandBuffer *cb) override;
+    void debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg) override;
+
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    const QRhiNativeHandles *nativeHandles() override;
 
     bool ensureContext(QSurface *surface = nullptr) const;
     void executeDeferredReleases();
@@ -520,6 +535,7 @@ public:
     bool inPass = false;
     QGles2SwapChain *currentSwapChain = nullptr;
     QVector<GLint> supportedCompressedFormats;
+    QRhiGles2NativeHandles nativeHandlesStruct;
 
     struct DeferredReleaseEntry {
         enum Type {

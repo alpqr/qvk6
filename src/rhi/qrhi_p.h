@@ -43,12 +43,15 @@
 
 #include "qtrhiglobal_p.h"
 #include "qrhi.h"
+#include "qrhiprofiler_p.h"
 #include <QBitArray>
 
 QT_BEGIN_NAMESPACE
 
 #define QRHI_RES(t, x) static_cast<t *>(x)
 #define QRHI_RES_RHI(t) t *rhiD = static_cast<t *>(rhi)
+#define QRHI_PROF QRhiProfilerPrivate *rhiP = rhi->profilerPrivateOrNull()
+#define QRHI_PROF_F(f) for (bool qrhip_enabled = rhiP != nullptr; qrhip_enabled; qrhip_enabled = false) rhiP->f
 
 class QRhiReferenceRenderTarget : public QRhiRenderTarget
 {
@@ -61,7 +64,7 @@ class QRhiImplementation
 public:
     virtual ~QRhiImplementation();
 
-    virtual bool create() = 0;
+    virtual bool create(QRhi::Flags flags) = 0;
     virtual void destroy() = 0;
 
     virtual QRhiGraphicsPipeline *createGraphicsPipeline() = 0;
@@ -120,12 +123,19 @@ public:
                              quint32 instanceCount, quint32 firstIndex,
                              qint32 vertexOffset, quint32 firstInstance) = 0;
 
+    virtual void debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name) = 0;
+    virtual void debugMarkEnd(QRhiCommandBuffer *cb) = 0;
+    virtual void debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg) = 0;
+
     virtual QVector<int> supportedSampleCounts() const = 0;
     virtual int ubufAlignment() const = 0;
     virtual bool isYUpInFramebuffer() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
     virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
     virtual bool isFeatureSupported(QRhi::Feature) const = 0;
+    virtual const QRhiNativeHandles *nativeHandles() = 0;
+
+    virtual void sendVMemStatsToProfiler();
 
     bool isCompressedFormat(QRhiTexture::Format format) const;
     void compressedFormatInfo(QRhiTexture::Format format, const QSize &size,
@@ -133,10 +143,20 @@ public:
                               QSize *blockDim) const;
     void textureFormatInfo(QRhiTexture::Format format, const QSize &size,
                            quint32 *bpl, quint32 *byteSize) const;
+    quint32 approxByteSizeForTexture(QRhiTexture::Format format, const QSize &baseSize,
+                                     int mipCount, int layerCount);
+
+    QRhiProfilerPrivate *profilerPrivateOrNull()
+    {
+        QRhiProfilerPrivate *p = QRhiProfilerPrivate::get(&profiler);
+        return p->rhi ? p : nullptr;
+    }
 
 protected:
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
+    QRhiProfiler profiler;
+    bool debugMarkers = false;
 
     friend class QRhi;
     friend struct QRhiResourceUpdateBatchPrivate;

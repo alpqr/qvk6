@@ -34,36 +34,42 @@
 **
 ****************************************************************************/
 
-#ifndef QRHID3D11_H
-#define QRHID3D11_H
+#ifndef QRHIIMGUI_H
+#define QRHIIMGUI_H
 
 #include <QtRhi/qrhi.h>
-
-// no d3d includes here, to prevent precompiled header mess (due to this being
-// a public header)
+#include <functional>
 
 QT_BEGIN_NAMESPACE
 
-struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
-{
-    bool enableDebugLayer = false;
+class QRhiImguiPrivate;
 
-    bool importExistingDevice = false;
-    // both must be given when importExistingDevice is true. ownership not taken.
-    // leave them unset otherwise.
-    void *dev = nullptr;
-    void *context = nullptr;
-};
-
-struct Q_RHI_EXPORT QRhiD3D11NativeHandles : public QRhiNativeHandles
+class QRhiImgui
 {
-    void *dev;
-    void *context;
-};
+public:
+    QRhiImgui();
+    ~QRhiImgui();
 
-struct Q_RHI_EXPORT QRhiD3D11TextureNativeHandles : public QRhiNativeHandles
-{
-    void *texture = nullptr; // ID3D11Texture2D
+    typedef std::function<void()> FrameFunc;
+    void setFrameFunc(FrameFunc f);
+    FrameFunc frameFunc() const;
+    void demoWindow();
+
+    void setInputEventSource(QObject *src);
+
+    void initialize(QRhi *rhi);
+    void releaseResources();
+
+    // We could have chosen to provide a single function that queues an entire
+    // pass, but that would be inflexible and (in some cases) less performant.
+    // Instead, make it possible to combine with some other pass.
+    bool prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
+                      QRhiResourceUpdateBatch *dstResourceUpdates);
+    void queueFrame(QRhiCommandBuffer *cb);
+
+private:
+    Q_DISABLE_COPY(QRhiImgui)
+    QRhiImguiPrivate *d = nullptr;
 };
 
 QT_END_NAMESPACE

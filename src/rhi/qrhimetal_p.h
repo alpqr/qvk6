@@ -93,8 +93,13 @@ struct QMetalTexture : public QRhiTexture
     ~QMetalTexture();
     void release() override;
     bool build() override;
+    bool buildFrom(const QRhiNativeHandles *src) override;
+    const QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
 
     QMetalTextureData *d;
+    QRhiMetalTextureNativeHandles nativeHandlesStruct;
     int mipLevelCount = 0;
     int samples = 1;
     uint generation = 0;
@@ -143,6 +148,7 @@ struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QMetalRenderTargetData *d;
 };
@@ -155,6 +161,7 @@ struct QMetalTextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
@@ -249,7 +256,7 @@ public:
     QRhiMetal(QRhiInitParams *params);
     ~QRhiMetal();
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
@@ -309,12 +316,17 @@ public:
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
 
+    void debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name) override;
+    void debugMarkEnd(QRhiCommandBuffer *cb) override;
+    void debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg) override;
+
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    const QRhiNativeHandles *nativeHandles() override;
 
     void executeDeferredReleases(bool forced = false);
     void finishActiveReadbacks(bool forced = false);
@@ -329,6 +341,7 @@ public:
     bool inPass = false;
     QMetalSwapChain *currentSwapChain = nullptr;
     QSet<QMetalSwapChain *> swapchains;
+    QRhiMetalNativeHandles nativeHandlesStruct;
 
     QRhiMetalData *d = nullptr;
 };

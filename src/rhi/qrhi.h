@@ -58,6 +58,7 @@ class QRhiSampler;
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 struct QRhiResourceUpdateBatchPrivate;
+class QRhiProfiler;
 
 // C++ object ownership rules:
 //   1. new*() and create() return value owned by the caller.
@@ -69,8 +70,8 @@ struct QRhiResourceUpdateBatchPrivate;
 //   1. new*() does not create underlying graphics resources. build() does.
 //   2. Except: new*Descriptor() implicitly "builds". (no build() for QRhiRenderPassDescriptor f.ex.)
 //   3. release() schedules graphics resources for destruction. The C++ object is reusable immediately via build(), or can be destroyed.
-//   4. build() on an already built object calls release() implicitly. Except swapchains. (buildOrResize - special semantics)
-//   5. Ownership of resources imported via QRhi*InitParams is not taken.
+//   4. build() on an already built object calls release() implicitly. Except swapchains. (buildOrResize() - special semantics)
+//   5. Ownership of resources imported (QRhi*InitParams or buildFrom()) or exported (nativeHandles()) is never taken or given away.
 //
 // Other:
 //   1. QRhiResourceUpdateBatch manages no graphics resources underneath. beginPass() implicitly calls release() on the batch.
@@ -97,8 +98,11 @@ Q_DECLARE_TYPEINFO(QRhiDepthStencilClearValue, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiViewport
 {
-    QRhiViewport() { }
-    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says
+    QRhiViewport()
+        : r(0, 0, 1280, 720), minDepth(0), maxDepth(1)
+    { }
+    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says.
+    // Depth range defaults to 0..1. See clipSpaceCorrMatrix().
     QRhiViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
         : r(x, y, w, h), minDepth(minDepth_), maxDepth(maxDepth_)
     { }
@@ -349,17 +353,28 @@ struct Q_RHI_EXPORT QRhiReadbackDescription
 
 Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);
 
+struct Q_RHI_EXPORT QRhiNativeHandles
+{
+};
+
 class Q_RHI_EXPORT QRhiResource
 {
 public:
     virtual ~QRhiResource();
+
     virtual void release() = 0;
     void releaseAndDestroy();
 
+    // May be ignored unless EnableDebugMarkers is set.
+    // May also be ignored for some objects, depending on the backend.
+    QByteArray name() const;
+    void setName(const QByteArray &name);
+
 protected:
-    QRhiImplementation *rhi = nullptr;
     QRhiResource(QRhiImplementation *rhi_);
     Q_DISABLE_COPY(QRhiResource)
+    QRhiImplementation *rhi = nullptr;
+    QByteArray objectName;
 };
 
 class Q_RHI_EXPORT QRhiBuffer : public QRhiResource
@@ -468,6 +483,16 @@ public:
 
     virtual bool build() = 0;
 
+    // Returns a ptr to a QRhi<backend>TextureNativeHandles struct.
+    // Ownership of the native objects is not transfered.
+    virtual const QRhiNativeHandles *nativeHandles();
+
+    // Calling this instead of build() allows importing an existing native
+    // texture object (must belong to the same device or a sharing context).
+    // Note that format, pixelSize, etc. must still be set correctly (typically
+    // via QRhi::newTexture()). Ownership of the native resource is not taken.
+    virtual bool buildFrom(const QRhiNativeHandles *src);
+
 protected:
     QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
                 int sampleCount_, Flags flags_);
@@ -539,7 +564,7 @@ public:
     };
 
     enum Flag {
-        ToBeUsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
+        UsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -588,6 +613,7 @@ public:
 
     virtual Type type() const = 0;
     virtual QSize sizeInPixels() const = 0;
+    virtual float devicePixelRatio() const = 0;
 
     QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_renderPassDesc; }
     void setRenderPassDescriptor(QRhiRenderPassDescriptor *desc) { m_renderPassDesc = desc; }
@@ -602,7 +628,10 @@ class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
 public:
     enum Flag {
-        PreserveColorContents = 1 << 0
+        // the load-not-clear request is baked into the resources under the rpd
+        // with some backends so it cannot be more dynamic than this
+        PreserveColorContents = 1 << 0,
+        PreserveDepthStencilContents = 1 << 1
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -963,6 +992,14 @@ public:
                      qint32 vertexOffset = 0,
                      quint32 firstInstance = 0);
 
+    // Ignored when EnableDebugMarkers is not set.
+    // May be silently ignored with some backends.
+    void debugMarkBegin(const QByteArray &name);
+    void debugMarkEnd();
+    // With some backends debugMarkMsg is only supported inside a pass and is
+    // ignored when called outside a begin/endPass.
+    void debugMarkMsg(const QByteArray &msg);
+
 protected:
     QRhiCommandBuffer(QRhiImplementation *rhi);
     void *m_reserved;
@@ -1061,6 +1098,12 @@ public:
         Metal
     };
 
+    enum Flag {
+        EnableProfiling = 1 << 0,
+        EnableDebugMarkers = 1 << 1
+    };
+    Q_DECLARE_FLAGS(Flags, Flag)
+
     enum FrameOpResult {
         FrameOpSuccess = 0,
         FrameOpError,
@@ -1075,7 +1118,7 @@ public:
 
     ~QRhi();
 
-    static QRhi *create(Implementation impl, QRhiInitParams *params);
+    static QRhi *create(Implementation impl, QRhiInitParams *params, Flags flags = Flags());
 
     /*
        The underlying graphics resources are created when calling build() and
@@ -1213,6 +1256,12 @@ public:
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags = QRhiTexture::Flags()) const;
     bool isFeatureSupported(QRhi::Feature feature) const;
 
+    // Returns a ptr to a QRhi<backend>NativeHandles struct.
+    // Ownership of the native objects is not transfered.
+    const QRhiNativeHandles *nativeHandles();
+
+    QRhiProfiler *profiler();
+
 protected:
     QRhi();
 
@@ -1220,6 +1269,8 @@ private:
     Q_DISABLE_COPY(QRhi)
     QRhiImplementation *d = nullptr;
 };
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::Flags)
 
 QT_END_NAMESPACE
 

@@ -52,6 +52,14 @@
 #include <QRhiMetalInitParams>
 #include "examplewindow.h"
 
+#define PROFILE
+
+#ifdef PROFILE
+#include <QRhiProfiler>
+#include <QFile>
+QFile profOut;
+#endif
+
 class MetalWindow : public ExampleWindow
 {
 public:
@@ -65,7 +73,15 @@ private:
 void MetalWindow::init()
 {
     QRhiMetalInitParams params;
-    m_r = QRhi::create(QRhi::Metal, &params);
+    QRhi::Flags flags = QRhi::EnableDebugMarkers;
+#ifdef PROFILE
+    flags |= QRhi::EnableProfiling;
+#endif
+    m_r = QRhi::create(QRhi::Metal, &params, flags);
+
+#ifdef PROFILE
+    m_r->profiler()->setDevice(&profOut);
+#endif
 
     //setSampleCount(4); // enable 4x MSAA (except for the render-to-texture pass)
 
@@ -76,6 +92,11 @@ int main(int argc, char **argv)
 {
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
+
+#ifdef PROFILE
+    profOut.setFileName("rhiprof.cbor");
+    profOut.open(QIODevice::WriteOnly);
+#endif
 
     MetalWindow w;
     w.resize(1280, 720);

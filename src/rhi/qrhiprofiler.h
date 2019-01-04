@@ -34,36 +34,47 @@
 **
 ****************************************************************************/
 
-#ifndef QRHID3D11_H
-#define QRHID3D11_H
+#ifndef QRHIPROFILER_H
+#define QRHIPROFILER_H
 
 #include <QtRhi/qrhi.h>
 
-// no d3d includes here, to prevent precompiled header mess (due to this being
-// a public header)
-
 QT_BEGIN_NAMESPACE
 
-struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
-{
-    bool enableDebugLayer = false;
+class QRhiProfilerPrivate;
+class QIODevice;
 
-    bool importExistingDevice = false;
-    // both must be given when importExistingDevice is true. ownership not taken.
-    // leave them unset otherwise.
-    void *dev = nullptr;
-    void *context = nullptr;
-};
-
-struct Q_RHI_EXPORT QRhiD3D11NativeHandles : public QRhiNativeHandles
+class Q_RHI_EXPORT QRhiProfiler
 {
-    void *dev;
-    void *context;
-};
+public:
+    enum StreamOp {
+        NewBuffer = 1,
+        ReleaseBuffer,
+        NewBufferStagingArea,
+        ReleaseBufferStagingArea,
+        NewRenderBuffer,
+        ReleaseRenderBuffer,
+        NewTexture,
+        ReleaseTexture,
+        NewTextureStagingArea,
+        ReleaseTextureStagingArea,
+        ResizeSwapChain,
+        ReleaseSwapChain,
+        VMemAllocStats
+    };
 
-struct Q_RHI_EXPORT QRhiD3D11TextureNativeHandles : public QRhiNativeHandles
-{
-    void *texture = nullptr; // ID3D11Texture2D
+    QRhiProfiler();
+    ~QRhiProfiler();
+
+    void setDevice(QIODevice *device);
+
+    void flush();
+
+    void addVMemAllocatorStats();
+
+private:
+    QRhiProfilerPrivate *d;
+    friend class QRhiProfilerPrivate;
 };
 
 QT_END_NAMESPACE

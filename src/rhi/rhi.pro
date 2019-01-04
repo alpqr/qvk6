@@ -10,11 +10,15 @@ HEADERS += \
     qtrhiglobal.h \
     qtrhiglobal_p.h \
     qrhi.h \
+    qrhi_p.h \
+    qrhiprofiler.h \
+    qrhiprofiler_p.h \
     qrhigles2.h \
     qrhigles2_p.h
 
 SOURCES += \
     qrhi.cpp \
+    qrhiprofiler.cpp \
     qrhigles2.cpp
 
 qtConfig(vulkan) {

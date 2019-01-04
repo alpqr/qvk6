@@ -86,12 +86,19 @@ struct QD3D11Texture : public QRhiTexture
                   int sampleCount, Flags flags);
     void release() override;
     bool build() override;
+    bool buildFrom(const QRhiNativeHandles *src) override;
+    const QRhiNativeHandles *nativeHandles() override;
+
+    bool prepareBuild(QSize *adjustedSize = nullptr);
+    bool finishBuild();
 
     ID3D11Texture2D *tex = nullptr;
+    bool owns = true;
     ID3D11ShaderResourceView *srv = nullptr;
     DXGI_FORMAT dxgiFormat;
     uint mipLevelCount = 0;
     DXGI_SAMPLE_DESC sampleDesc;
+    QRhiD3D11TextureNativeHandles nativeHandlesStruct;
     uint generation = 0;
     friend class QRhiD3D11;
 };
@@ -124,6 +131,7 @@ struct QD3D11RenderTargetData
 
     QD3D11RenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
+    float dpr = 1;
     int colorAttCount = 0;
     int dsAttCount = 0;
 
@@ -138,6 +146,7 @@ struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
     void release() override;
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QD3D11RenderTargetData d;
 };
@@ -149,6 +158,7 @@ struct QD3D11TextureRenderTarget : public QRhiTextureRenderTarget
 
     Type type() const override;
     QSize sizeInPixels() const override;
+    float devicePixelRatio() const override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
@@ -416,7 +426,7 @@ class QRhiD3D11 : public QRhiImplementation
 public:
     QRhiD3D11(QRhiInitParams *params);
 
-    bool create() override;
+    bool create(QRhi::Flags flags) override;
     void destroy() override;
 
     QRhiGraphicsPipeline *createGraphicsPipeline() override;
@@ -476,12 +486,17 @@ public:
                      quint32 instanceCount, quint32 firstIndex,
                      qint32 vertexOffset, quint32 firstInstance) override;
 
+    void debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name) override;
+    void debugMarkEnd(QRhiCommandBuffer *cb) override;
+    void debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg) override;
+
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    const QRhiNativeHandles *nativeHandles() override;
 
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
@@ -497,6 +512,7 @@ public:
     ID3D11DeviceContext1 *context = nullptr;
     D3D_FEATURE_LEVEL featureLevel;
     IDXGIFactory2 *dxgiFactory = nullptr;
+    QRhiD3D11NativeHandles nativeHandlesStruct;
 
     bool inFrame = false;
     int finishedFrameCount = 0;

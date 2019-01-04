@@ -1,5 +1,11 @@
-resource import/export, what's the interop story
+d3d: texture import/export
+prof api
+vk, d3d, gl: tex and other prof
+vk, d3d, gl: debug: object names
+vk, d3d, gl: debug: markers (begin, end, msg)
+max texture size?
 multiwindow_threaded should demo pulling out the device and importing to another rhi
+mtl: reduce set*
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -29,6 +35,7 @@ test cubemap face readback
 optional:
 threading options? secondary command lists?
 copy/transfer queue?
+vkmemalloc block size config?
 d3d: support DxcCompiler (in addition to d3dcompiler?) when runtime compiling hlsl?
 tessellation?
 indirect draw?
@@ -46,6 +53,13 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: memalloc stats to prof
+mtl: debug: markers (begin, end, msg)
+mtl: debug: object names
+mtl: buf/tex/rb/sc prof
+mtl, gl, vk: texture import/export
+rhi native handle getter (device, ...)
+imgui example
 vk: shouldn't just qFatal
 mtl: multiwindow
 multi window? (multi swapchain) -> trouble

@@ -50,7 +50,18 @@ struct Q_RHI_EXPORT QRhiMetalInitParams : public QRhiInitParams
     // API validation.
 
     bool importExistingDevice = false;
-    void *dev = nullptr;
+    void *dev = nullptr; // ownership not taken
+};
+
+struct Q_RHI_EXPORT QRhiMetalNativeHandles : public QRhiNativeHandles
+{
+    void *dev;
+    void *cmdQueue;
+};
+
+struct Q_RHI_EXPORT QRhiMetalTextureNativeHandles : public QRhiNativeHandles
+{
+    void *texture = nullptr; // id<MTLTexture>
 };
 
 QT_END_NAMESPACE

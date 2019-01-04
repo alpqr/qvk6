@@ -50,6 +50,7 @@
 
 #include "examplewindow.h"
 #include <QFileInfo>
+#include <QRhiProfiler>
 
 //#define USE_SRGB_SWAPCHAIN
 //#define READBACK_SWAPCHAIN
@@ -110,7 +111,7 @@ void ExampleWindow::init()
     m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
                                 QSize(), // no need to set the size yet
                                 m_sampleCount,
-                                QRhiRenderBuffer::ToBeUsedWithSwapChainOnly);
+                                QRhiRenderBuffer::UsedWithSwapChainOnly);
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
     m_sc->setSampleCount(m_sampleCount);
@@ -151,6 +152,10 @@ void ExampleWindow::init()
         m_liveTexCubeRenderer.initResources(m_scrp);
         m_liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
     }
+
+    // Put the gpu mem allocator statistics to the profiling stream after doing
+    // all the init. (where applicable)
+    m_r->profiler()->addVMemAllocatorStats();
 }
 
 void ExampleWindow::releaseResources()
@@ -240,8 +245,11 @@ void ExampleWindow::render()
     }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
-    if (!m_onScreenOnly)
+    if (!m_onScreenOnly) {
+        cb->debugMarkBegin("Offscreen triangle pass");
         m_liveTexCubeRenderer.queueOffscreenPass(cb);
+        cb->debugMarkEnd();
+    }
 
     QRhiResourceUpdateBatch *u = m_r->nextResourceUpdateBatch();
     m_triRenderer.queueResourceUpdates(u);
@@ -253,13 +261,22 @@ void ExampleWindow::render()
         m_liveTexCubeRenderer.queueResourceUpdates(u);
 
     cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
+    cb->debugMarkBegin(QByteArrayLiteral("Triangle"));
     m_triRenderer.queueDraw(cb, outputSize);
+    cb->debugMarkEnd();
     if (!m_triangleOnly) {
+        cb->debugMarkBegin(QByteArrayLiteral("Quad"));
         m_quadRenderer.queueDraw(cb, outputSize);
+        cb->debugMarkEnd();
+        cb->debugMarkBegin(QByteArrayLiteral("Cube"));
         m_cubeRenderer.queueDraw(cb, outputSize);
+        cb->debugMarkEnd();
     }
-    if (!m_onScreenOnly)
+    if (!m_onScreenOnly) {
+        cb->debugMarkBegin(QByteArrayLiteral("Cube with offscreen triangle"));
         m_liveTexCubeRenderer.queueDraw(cb, outputSize);
+        cb->debugMarkEnd();
+    }
 
     QRhiResourceUpdateBatch *passEndUpdates = nullptr;
 #ifdef READBACK_SWAPCHAIN

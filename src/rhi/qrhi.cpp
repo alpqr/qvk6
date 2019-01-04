@@ -65,6 +65,16 @@ void QRhiResource::releaseAndDestroy()
     delete this;
 }
 
+QByteArray QRhiResource::name() const
+{
+    return objectName;
+}
+
+void QRhiResource::setName(const QByteArray &name)
+{
+    objectName = name;
+}
+
 QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
     : QRhiResource(rhi),
       m_type(type_), m_usage(usage_), m_size(size_)
@@ -83,6 +93,17 @@ QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &p
     : QRhiResource(rhi),
       m_format(format_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_flags(flags_)
 {
+}
+
+const QRhiNativeHandles *QRhiTexture::nativeHandles()
+{
+    return nullptr;
+}
+
+bool QRhiTexture::buildFrom(const QRhiNativeHandles *src)
+{
+    Q_UNUSED(src);
+    return false;
 }
 
 QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
@@ -180,6 +201,11 @@ QRhiCommandBuffer::QRhiCommandBuffer(QRhiImplementation *rhi)
 QRhiImplementation::~QRhiImplementation()
 {
     qDeleteAll(resUpdPool);
+}
+
+void QRhiImplementation::sendVMemStatsToProfiler()
+{
+    // nothing to do in the default implementation
 }
 
 bool QRhiImplementation::isCompressedFormat(QRhiTexture::Format format) const
@@ -350,6 +376,22 @@ void QRhiImplementation::textureFormatInfo(QRhiTexture::Format format, const QSi
         *byteSize = size.width() * size.height() * bpc;
 }
 
+// Approximate because it excludes subresource alignment or multisampling.
+quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format, const QSize &baseSize,
+                                                     int mipCount, int layerCount)
+{
+    quint32 approxSize = 0;
+    for (int level = 0; level < mipCount; ++level) {
+        quint32 byteSize = 0;
+        const QSize size(qFloor(float(qMax(1, baseSize.width() >> level))),
+                         qFloor(float(qMax(1, baseSize.height() >> level))));
+        textureFormatInfo(format, size, nullptr, &byteSize);
+        approxSize += byteSize;
+    }
+    approxSize *= layerCount;
+    return approxSize;
+}
+
 QRhi::QRhi()
 {
 }
@@ -362,7 +404,7 @@ QRhi::~QRhi()
     }
 }
 
-QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
+QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
 {
     QScopedPointer<QRhi> r(new QRhi);
 
@@ -398,8 +440,16 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params)
         break;
     }
 
-    if (r->d && r->d->create())
-        return r.take();
+    if (r->d) {
+        if (flags.testFlag(EnableProfiling)) {
+            QRhiProfilerPrivate *profD = QRhiProfilerPrivate::get(&r->d->profiler);
+            profD->rhi = r.data();
+            profD->rhiD = r->d;
+        }
+        r->d->debugMarkers = flags.testFlag(EnableDebugMarkers);
+        if (r->d->create(flags))
+            return r.take();
+    }
 
     return nullptr;
 }
@@ -591,6 +641,21 @@ void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
     rhi->drawIndexed(this, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
+void QRhiCommandBuffer::debugMarkBegin(const QByteArray &name)
+{
+    rhi->debugMarkBegin(this, name);
+}
+
+void QRhiCommandBuffer::debugMarkEnd()
+{
+    rhi->debugMarkEnd(this);
+}
+
+void QRhiCommandBuffer::debugMarkMsg(const QByteArray &msg)
+{
+    rhi->debugMarkMsg(this, msg);
+}
+
 int QRhi::ubufAligned(int v) const
 {
     const int byteAlign = ubufAlignment();
@@ -627,6 +692,16 @@ bool QRhi::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Fla
 bool QRhi::isFeatureSupported(QRhi::Feature feature) const
 {
     return d->isFeatureSupported(feature);
+}
+
+const QRhiNativeHandles *QRhi::nativeHandles()
+{
+    return d->nativeHandles();
+}
+
+QRhiProfiler *QRhi::profiler()
+{
+    return &d->profiler;
 }
 
 QRhiGraphicsPipeline *QRhi::newGraphicsPipeline()

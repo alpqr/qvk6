@@ -62,6 +62,16 @@ struct Q_RHI_EXPORT QRhiGles2InitParams : public QRhiInitParams
     QOffscreenSurface *fallbackSurface = nullptr;
 };
 
+struct Q_RHI_EXPORT QRhiGles2NativeHandles : public QRhiNativeHandles
+{
+    QOpenGLContext *context;
+};
+
+struct Q_RHI_EXPORT QRhiGles2TextureNativeHandles : public QRhiNativeHandles
+{
+    uint texture = 0;
+};
+
 QT_END_NAMESPACE
 
 #endif

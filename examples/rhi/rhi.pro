@@ -10,6 +10,7 @@ SUBDIRS += \
     cubemap \
     multiwindow \
     multiwindow_threaded \
+    imguidemo \
     plainqwindow_gles2 \
     offscreen_gles2
 

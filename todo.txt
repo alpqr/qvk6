@@ -1,9 +1,10 @@
 prof report api (fed by a cbor stream)
-vk, gl: debug: object names
-vk, gl: debug: markers (begin, end, msg)
+gl: debug: object names
+gl: debug: markers (begin, end, msg)
 mtl: max texture size
-prof: report rb buf
+prof: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
+merge offscreen examples into one
 mtl: reduce set*
 advanced blend modes
 gl: tex formats (texture, readback)
@@ -30,6 +31,7 @@ compute?
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 test cubemap face as target
 test cubemap face readback
+object names for other than buf/rb/tex
 
 optional:
 threading options? secondary command lists?
@@ -52,6 +54,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk: obj name and debug markers
 vk, gl: tex and other prof
 max texture size stuff
 d3d: tex and other prof

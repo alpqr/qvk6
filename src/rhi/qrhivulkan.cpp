@@ -248,8 +248,25 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         if (inst->layers().contains("VK_LAYER_LUNARG_standard_validation"))
             devLayers.append("VK_LAYER_LUNARG_standard_validation");
 
-        QVector<const char *> devExts;
-        devExts.append("VK_KHR_swapchain");
+        uint32_t devExtCount = 0;
+        f->vkEnumerateDeviceExtensionProperties(physDev, nullptr, &devExtCount, nullptr);
+        QVector<VkExtensionProperties> devExts(devExtCount);
+        f->vkEnumerateDeviceExtensionProperties(physDev, nullptr, &devExtCount, devExts.data());
+        qDebug("%d device extensions available", devExts.count());
+
+        QVector<const char *> requestedDevExts;
+        requestedDevExts.append("VK_KHR_swapchain");
+
+        debugMarkersAvailable = false;
+        if (debugMarkers) {
+            for (const VkExtensionProperties &ext : devExts) {
+                if (!strcmp(ext.extensionName, VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
+                    requestedDevExts.append(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+                    debugMarkersAvailable = true;
+                    break;
+                }
+            }
+        }
 
         VkDeviceCreateInfo devInfo;
         memset(&devInfo, 0, sizeof(devInfo));
@@ -258,8 +275,8 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         devInfo.pQueueCreateInfos = queueInfo;
         devInfo.enabledLayerCount = devLayers.count();
         devInfo.ppEnabledLayerNames = devLayers.constData();
-        devInfo.enabledExtensionCount = devExts.count();
-        devInfo.ppEnabledExtensionNames = devExts.constData();
+        devInfo.enabledExtensionCount = requestedDevExts.count();
+        devInfo.ppEnabledExtensionNames = requestedDevExts.constData();
 
         err = f->vkCreateDevice(physDev, &devInfo, nullptr, &dev);
         if (err != VK_SUCCESS) {
@@ -331,6 +348,13 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         descriptorPools.append(pool);
     else
         qWarning("Failed to create initial descriptor pool: %d", err);
+
+    if (debugMarkersAvailable) {
+        vkCmdDebugMarkerBegin = reinterpret_cast<PFN_vkCmdDebugMarkerBeginEXT>(f->vkGetDeviceProcAddr(dev, "vkCmdDebugMarkerBeginEXT"));
+        vkCmdDebugMarkerEnd = reinterpret_cast<PFN_vkCmdDebugMarkerEndEXT>(f->vkGetDeviceProcAddr(dev, "vkCmdDebugMarkerEndEXT"));
+        vkCmdDebugMarkerInsert = reinterpret_cast<PFN_vkCmdDebugMarkerInsertEXT>(f->vkGetDeviceProcAddr(dev, "vkCmdDebugMarkerInsertEXT"));
+        vkDebugMarkerSetObjectName = reinterpret_cast<PFN_vkDebugMarkerSetObjectNameEXT>(f->vkGetDeviceProcAddr(dev, "vkDebugMarkerSetObjectNameEXT"));
+    }
 
     nativeHandlesStruct.physDev = physDev;
     nativeHandlesStruct.dev = dev;
@@ -2904,28 +2928,48 @@ void QRhiVulkan::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 
 void QRhiVulkan::debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name)
 {
-    if (!debugMarkers)
+    if (!debugMarkersAvailable)
         return;
 
-    Q_UNUSED(cb);
-    Q_UNUSED(name);
+    VkDebugMarkerMarkerInfoEXT marker;
+    memset(&marker, 0, sizeof(marker));
+    marker.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
+    marker.pMarkerName = name.constData();
+    vkCmdDebugMarkerBegin(QRHI_RES(QVkCommandBuffer, cb)->cb, &marker);
 }
 
 void QRhiVulkan::debugMarkEnd(QRhiCommandBuffer *cb)
 {
-    if (!debugMarkers)
+    if (!debugMarkersAvailable)
         return;
 
-    Q_UNUSED(cb);
+    vkCmdDebugMarkerEnd(QRHI_RES(QVkCommandBuffer, cb)->cb);
 }
 
 void QRhiVulkan::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
 {
-    if (!debugMarkers)
+    if (!debugMarkersAvailable)
         return;
 
-    Q_UNUSED(cb);
-    Q_UNUSED(msg);
+    VkDebugMarkerMarkerInfoEXT marker;
+    memset(&marker, 0, sizeof(marker));
+    marker.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT;
+    marker.pMarkerName = msg.constData();
+    vkCmdDebugMarkerInsert(QRHI_RES(QVkCommandBuffer, cb)->cb, &marker);
+}
+
+void QRhiVulkan::setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name)
+{
+    if (!debugMarkersAvailable || name.isEmpty())
+        return;
+
+    VkDebugMarkerObjectNameInfoEXT nameInfo;
+    memset(&nameInfo, 0, sizeof(nameInfo));
+    nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT;
+    nameInfo.objectType = type;
+    nameInfo.object = object;
+    nameInfo.pObjectName = name.constData();
+    vkDebugMarkerSetObjectName(dev, &nameInfo);
 }
 
 static inline VkBufferUsageFlagBits toVkBufferUsage(QRhiBuffer::UsageFlags usage)
@@ -3315,9 +3359,12 @@ bool QVkBuffer::build()
             err = vmaCreateBuffer(toVmaAllocator(rhiD->allocator), &bufferInfo, &allocInfo, &buffers[i], &allocation, nullptr);
             if (err != VK_SUCCESS)
                 break;
+
             allocations[i] = allocation;
             if (m_type == Dynamic)
                 pendingDynamicUpdates[i].reserve(16);
+
+            rhiD->setObjectName(reinterpret_cast<uint64_t>(buffers[i]), VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT, objectName);
         }
     }
 
@@ -3391,7 +3438,11 @@ bool QVkRenderBuffer::build()
                                                                       m_pixelSize,
                                                                       m_sampleCount,
                                                                       QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
+        } else {
+            backingTexture->setPixelSize(m_pixelSize);
+            backingTexture->setSampleCount(m_sampleCount);
         }
+        backingTexture->setName(objectName);
         if (!backingTexture->build())
             return false;
         vkformat = backingTexture->vkformat;
@@ -3412,6 +3463,7 @@ bool QVkRenderBuffer::build()
         {
             return false;
         }
+        rhiD->setObjectName(reinterpret_cast<uint64_t>(image), VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, objectName);
         QRHI_PROF_F(newRenderBuffer(this, true, false, samples));
         break;
     default:
@@ -3597,6 +3649,8 @@ bool QVkTexture::build()
 
     if (!finishBuild())
         return false;
+
+    rhiD->setObjectName(reinterpret_cast<uint64_t>(image), VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, objectName);
 
     QRHI_PROF;
     QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, samples));

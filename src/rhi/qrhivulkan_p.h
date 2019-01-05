@@ -447,6 +447,7 @@ public:
     void executeDeferredReleases(bool forced = false);
     void finishActiveReadbacks(bool forced = false);
 
+    void setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name);
     void bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf);
     void imageSubResBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                             VkImageLayout oldLayout, VkImageLayout newLayout,
@@ -478,6 +479,12 @@ public:
     VkPhysicalDeviceProperties physDevProperties;
     VkDeviceSize ubufAlign;
     VkDeviceSize texbufAlign;
+
+    bool debugMarkersAvailable = false;
+    PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin = nullptr;
+    PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd = nullptr;
+    PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert = nullptr;
+    PFN_vkDebugMarkerSetObjectNameEXT vkDebugMarkerSetObjectName = nullptr;
 
     PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR = nullptr;
     PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;

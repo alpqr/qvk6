@@ -12,20 +12,9 @@ SUBDIRS += \
     multiwindow_threaded \
     imguidemo \
     triquadcube \
-    offscreen_gles2
+    offscreen
 
 qtConfig(vulkan) {
     SUBDIRS += \
-        vulkanwindow \
-        offscreen_vulkan
-}
-
-win32 {
-    SUBDIRS += \
-        offscreen_d3d11
-}
-
-mac {
-    SUBDIRS += \
-        offscreen_metal
+        vulkanwindow
 }

@@ -52,10 +52,30 @@
 #include <QImage>
 #include <QFileInfo>
 #include <QFile>
+#include <QLoggingCategory>
+#include <QCommandLineParser>
+#include <QBakedShader>
+
+#ifndef QT_NO_OPENGL
+#include <QRhiGles2InitParams>
 #include <QOpenGLContext>
 #include <QOffscreenSurface>
-#include <QBakedShader>
-#include <QRhiGles2InitParams>
+#endif
+
+#if QT_CONFIG(vulkan)
+#include <QLoggingCategory>
+#include <QRhiVulkanInitParams>
+#endif
+
+#ifdef Q_OS_WIN
+#include <QRhiD3D11InitParams>
+#endif
+
+#ifdef Q_OS_DARWIN
+#include <QRhiMetalInitParams>
+#endif
+
+//#define TEST_FINISH
 
 static float vertexData[] = { // Y up (note m_proj), CCW
      0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
@@ -72,29 +92,139 @@ static QBakedShader getShader(const QString &name)
     return QBakedShader();
 }
 
+enum GraphicsApi
+{
+    OpenGL,
+    Vulkan,
+    D3D11,
+    Metal
+};
+
+GraphicsApi graphicsApi;
+
+QString graphicsApiName()
+{
+    switch (graphicsApi) {
+    case OpenGL:
+        return QLatin1String("OpenGL 2.x");
+    case Vulkan:
+        return QLatin1String("Vulkan");
+    case D3D11:
+        return QLatin1String("Direct3D 11");
+    case Metal:
+        return QLatin1String("Metal");
+    default:
+        break;
+    }
+    return QString();
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
 
+#if defined(Q_OS_WIN)
+    graphicsApi = D3D11;
+#elif defined(Q_OS_DARWIN)
+    graphicsApi = Metal;
+#elif QT_CONFIG(vulkan)
+    graphicsApi = Vulkan;
+#else
+    graphicsApi = OpenGL;
+#endif
+
+    QCommandLineParser cmdLineParser;
+    cmdLineParser.addHelpOption();
+    QCommandLineOption glOption({ "g", "opengl" }, QLatin1String("OpenGL (2.x)"));
+    cmdLineParser.addOption(glOption);
+    QCommandLineOption vkOption({ "v", "vulkan" }, QLatin1String("Vulkan"));
+    cmdLineParser.addOption(vkOption);
+    QCommandLineOption d3dOption({ "d", "d3d11" }, QLatin1String("Direct3D 11"));
+    cmdLineParser.addOption(d3dOption);
+    QCommandLineOption mtlOption({ "m", "metal" }, QLatin1String("Metal"));
+    cmdLineParser.addOption(mtlOption);
+    cmdLineParser.process(app);
+    if (cmdLineParser.isSet(glOption))
+        graphicsApi = OpenGL;
+    if (cmdLineParser.isSet(vkOption))
+        graphicsApi = Vulkan;
+    if (cmdLineParser.isSet(d3dOption))
+        graphicsApi = D3D11;
+    if (cmdLineParser.isSet(mtlOption))
+        graphicsApi = Metal;
+
+    qDebug("Selected graphics API is %s", qPrintable(graphicsApiName()));
+    qDebug("This is a multi-api example, use command line arguments to override:\n%s", qPrintable(cmdLineParser.helpText()));
+
+    QRhi *r = nullptr;
+
+#ifndef QT_NO_OPENGL
     QOpenGLContext context;
-    if (!context.create())
-        qFatal("Failed to get OpenGL context");
-
     QOffscreenSurface offscreenSurface;
-    offscreenSurface.setFormat(context.format());
-    offscreenSurface.create();
+    if (graphicsApi == OpenGL) {
+        QSurfaceFormat fmt;
+        fmt.setDepthBufferSize(24);
+        fmt.setStencilBufferSize(8);
+        QSurfaceFormat::setDefaultFormat(fmt);
 
-    QRhiGles2InitParams params;
-    params.context = &context;
-    params.fallbackSurface = &offscreenSurface;
+        if (!context.create())
+            qFatal("Failed to get OpenGL context");
 
-    QRhi *r = QRhi::create(QRhi::OpenGLES2, &params);
+        offscreenSurface.setFormat(context.format());
+        offscreenSurface.create();
 
-    if (!r) {
-        qWarning("Failed to initialize RHI");
-        return 1;
+        QRhiGles2InitParams params;
+        params.context = &context;
+        params.fallbackSurface = &offscreenSurface;
+        r = QRhi::create(QRhi::OpenGLES2, &params);
     }
+#endif
+
+#if QT_CONFIG(vulkan)
+    QVulkanInstance inst;
+    if (graphicsApi == Vulkan) {
+        QLoggingCategory::setFilterRules(QStringLiteral("qt.vulkan=true"));
+#ifndef Q_OS_ANDROID
+        inst.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
+#else
+        inst.setLayers(QByteArrayList()
+                       << "VK_LAYER_GOOGLE_threading"
+                       << "VK_LAYER_LUNARG_parameter_validation"
+                       << "VK_LAYER_LUNARG_object_tracker"
+                       << "VK_LAYER_LUNARG_core_validation"
+                       << "VK_LAYER_LUNARG_image"
+                       << "VK_LAYER_LUNARG_swapchain"
+                       << "VK_LAYER_GOOGLE_unique_objects");
+#endif
+        if (!inst.create()) {
+            qWarning("Failed to create Vulkan instance, switching to OpenGL");
+            graphicsApi = OpenGL;
+        }
+
+        QRhiVulkanInitParams params;
+        params.inst = &inst;
+        r = QRhi::create(QRhi::Vulkan, &params);
+    }
+#endif
+
+#ifdef Q_OS_WIN
+    if (graphicsApi == D3D11) {
+        QRhiD3D11InitParams params;
+        params.enableDebugLayer = true;
+        r = QRhi::create(QRhi::D3D11, &params);
+    }
+#endif
+
+#ifdef Q_OS_DARWIN
+    if (graphicsApi == Metal) {
+        QRhiMetalInitParams params;
+        r = QRhi::create(QRhi::Metal, &params);
+    }
+#endif
+
+    if (!r)
+        qFatal("Failed to initialize RHI");
 
     QRhiTexture *tex = r->newTexture(QRhiTexture::RGBA8, QSize(1280, 720), 1, QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource);
     tex->build();
@@ -151,7 +281,8 @@ int main(int argc, char **argv)
     ps->setRenderPassDescriptor(rp);
     ps->build();
 
-    for (int frame = 0; frame < 20; ++frame) {
+    int frame = 0;
+    for (; frame < 20; ++frame) {
         QRhiCommandBuffer *cb;
         if (r->beginOffscreenFrame(&cb) != QRhi::FrameOpSuccess)
             break;
@@ -190,20 +321,29 @@ int main(int argc, char **argv)
         cb->endPass(u);
 
         qDebug("Submit and wait");
+#ifdef TEST_FINISH
+        r->finish();
+#else
         r->endOffscreenFrame();
-
-        // No finish() or waiting for the completed callback is needed here
-        // since the endOffscreenFrame() implies a wait for completion.
+#endif
+        // The data should be ready either because endOffscreenFrame() waits
+        // for completion or because finish() did.
         if (!rbResult.data.isEmpty()) {
             const uchar *p = reinterpret_cast<const uchar *>(rbResult.data.constData());
             QImage image(p, rbResult.pixelSize.width(), rbResult.pixelSize.height(), QImage::Format_RGBA8888);
             QString fn = QString::asprintf("frame%d.png", frame);
             fn = QFileInfo(fn).absoluteFilePath();
             qDebug("Saving into %s", qPrintable(fn));
-            image.mirrored().save(fn); // gl has isYUpInFramebuffer == true so mirror
+            if (r->isYUpInFramebuffer())
+                image.mirrored().save(fn);
+            else
+                image.save(fn);
         } else {
             qWarning("Readback failed!");
         }
+#ifdef TEST_FINISH
+        r->endOffscreenFrame();
+#endif
     }
 
     ps->releaseAndDestroy();
@@ -216,6 +356,8 @@ int main(int argc, char **argv)
     tex->releaseAndDestroy();
 
     delete r;
+
+    qDebug("\nRendered and read back %d frames using %s", frame, qPrintable(graphicsApiName()));
 
     return 0;
 }

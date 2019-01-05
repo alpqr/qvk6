@@ -3,7 +3,6 @@ gl: debug: object names
 gl: debug: markers (begin, end, msg)
 prof: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
-merge offscreen examples into one
 mtl: reduce set*
 advanced blend modes
 gl: tex formats (texture, readback)
@@ -53,6 +52,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+merge offscreen examples into one
 mtl: max texture size
 vk: obj name and debug markers
 vk, gl: tex and other prof

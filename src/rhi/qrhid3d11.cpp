@@ -1520,6 +1520,9 @@ void QD3D11RenderBuffer::release()
 
     tex->Release();
     tex = nullptr;
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseRenderBuffer(this));
 }
 
 bool QD3D11RenderBuffer::build()
@@ -1548,8 +1551,6 @@ bool QD3D11RenderBuffer::build()
             qWarning("Failed to create color renderbuffer: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
-        if (!objectName.isEmpty())
-            tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
         D3D11_RENDER_TARGET_VIEW_DESC rtvDesc;
         memset(&rtvDesc, 0, sizeof(rtvDesc));
         rtvDesc.Format = dxgiFormat; rtvDesc.ViewDimension = desc.SampleDesc.Count > 1 ? D3D11_RTV_DIMENSION_TEXTURE2DMS
@@ -1559,7 +1560,6 @@ bool QD3D11RenderBuffer::build()
             qWarning("Failed to create rtv: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
-        return true;
     } else if (m_type == DepthStencil) {
         dxgiFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
         desc.Format = dxgiFormat;
@@ -1569,8 +1569,6 @@ bool QD3D11RenderBuffer::build()
             qWarning("Failed to create depth-stencil buffer: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
-        if (!objectName.isEmpty())
-            tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
         D3D11_DEPTH_STENCIL_VIEW_DESC dsvDesc;
         memset(&dsvDesc, 0, sizeof(dsvDesc));
         dsvDesc.Format = dxgiFormat;
@@ -1581,10 +1579,17 @@ bool QD3D11RenderBuffer::build()
             qWarning("Failed to create dsv: %s", qPrintable(comErrorMessage(hr)));
             return false;
         }
-        return true;
+    } else {
+        return false;
     }
 
-    return false;
+    if (!objectName.isEmpty())
+        tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
+
+    QRHI_PROF;
+    QRHI_PROF_F(newRenderBuffer(this, false, false, sampleDesc.Count));
+
+    return true;
 }
 
 QRhiTexture::Format QD3D11RenderBuffer::backingFormat() const
@@ -1612,6 +1617,9 @@ void QD3D11Texture::release()
         tex->Release();
 
     tex = nullptr;
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseTexture(this));
 }
 
 static inline DXGI_FORMAT toD3DDepthTextureSRVFormat(QRhiTexture::Format format)
@@ -1761,6 +1769,9 @@ bool QD3D11Texture::build()
     if (!objectName.isEmpty())
         tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
 
+    QRHI_PROF;
+    QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, sampleDesc.Count));
+
     owns = true;
     return true;
 }
@@ -1778,6 +1789,9 @@ bool QD3D11Texture::buildFrom(const QRhiNativeHandles *src)
 
     if (!finishBuild())
         return false;
+
+    QRHI_PROF;
+    QRHI_PROF_F(newTexture(this, false, mipLevelCount, m_flags.testFlag(CubeMap) ? 6 : 1, sampleDesc.Count));
 
     owns = false;
     return true;
@@ -2564,6 +2578,9 @@ void QD3D11SwapChain::release()
 
     swapChain->Release();
     swapChain = nullptr;
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseSwapChain(this));
 }
 
 QRhiCommandBuffer *QD3D11SwapChain::currentFrameCommandBuffer()
@@ -2723,6 +2740,9 @@ bool QD3D11SwapChain::buildOrResize()
     rtD->d.dpr = window->devicePixelRatio();
     rtD->d.colorAttCount = 1;
     rtD->d.dsAttCount = m_depthStencil ? 1 : 0;
+
+    QRHI_PROF;
+    QRHI_PROF_F(resizeSwapChain(this, BUFFER_COUNT, sampleDesc.Count > 1 ? BUFFER_COUNT : 0, sampleDesc.Count));
 
     return true;
 }

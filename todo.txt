@@ -1,7 +1,8 @@
 prof report api (fed by a cbor stream)
-vk, d3d, gl: tex and other prof
+vk, gl: tex and other prof
 vk, gl: debug: object names
 vk, gl: debug: markers (begin, end, msg)
+prof: report rb buf
 max texture size stuff
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
@@ -52,6 +53,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+d3d: tex and other prof
 plainqwindow examples should be reorganized into one (using examplefw)
 d3d: debug markers, object names
 d3d: texture import/export

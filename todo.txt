@@ -1,5 +1,4 @@
 prof report api (fed by a cbor stream)
-vk, gl: tex and other prof
 vk, gl: debug: object names
 vk, gl: debug: markers (begin, end, msg)
 mtl: max texture size
@@ -53,6 +52,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+vk, gl: tex and other prof
 max texture size stuff
 d3d: tex and other prof
 plainqwindow examples should be reorganized into one (using examplefw)

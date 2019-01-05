@@ -873,10 +873,10 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         }
 
         ensureBlit();
-        if (!utexD->d->stagingBuf[currentFrameSlot])
+        if (!utexD->d->stagingBuf[currentFrameSlot]) {
             utexD->d->stagingBuf[currentFrameSlot] = [d->dev newBufferWithLength: stagingSize options: MTLResourceStorageModeShared];
-
-        QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, stagingSize));
+            QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, stagingSize));
+        }
 
         void *mp = [utexD->d->stagingBuf[currentFrameSlot] contents];
         qsizetype curOfs = 0;

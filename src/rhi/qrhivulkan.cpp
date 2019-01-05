@@ -2057,6 +2057,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 continue;
             }
             utexD->stagingAllocations[currentFrameSlot] = allocation;
+            QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, stagingSize));
         }
 
         QVarLengthArray<VkBufferImageCopy, 4> copyInfos;
@@ -2169,6 +2170,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             utexD->stagingBuffers[currentFrameSlot] = VK_NULL_HANDLE;
             utexD->stagingAllocations[currentFrameSlot] = nullptr;
             releaseQueue.append(e);
+            QRHI_PROF_F(releaseTextureStagingArea(utexD, currentFrameSlot));
         }
 
         finishTransferDest(cb, utexD);
@@ -3367,6 +3369,9 @@ void QVkRenderBuffer::release()
         Q_ASSERT(backingTexture->lastActiveFrameSlot == -1);
         backingTexture->release();
     }
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseRenderBuffer(this));
 }
 
 bool QVkRenderBuffer::build()
@@ -3375,6 +3380,7 @@ bool QVkRenderBuffer::build()
         release();
 
     QRHI_RES_RHI(QRhiVulkan);
+    QRHI_PROF;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
 
     switch (m_type) {
@@ -3389,6 +3395,7 @@ bool QVkRenderBuffer::build()
         if (!backingTexture->build())
             return false;
         vkformat = backingTexture->vkformat;
+        QRHI_PROF_F(newRenderBuffer(this, false, false, samples));
     }
         break;
     case QRhiRenderBuffer::DepthStencil:
@@ -3405,6 +3412,7 @@ bool QVkRenderBuffer::build()
         {
             return false;
         }
+        QRHI_PROF_F(newRenderBuffer(this, true, false, samples));
         break;
     default:
         Q_UNREACHABLE();
@@ -3458,6 +3466,9 @@ void QVkTexture::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseTexture(this));
 }
 
 bool QVkTexture::prepareBuild(QSize *adjustedSize)
@@ -3587,6 +3598,9 @@ bool QVkTexture::build()
     if (!finishBuild())
         return false;
 
+    QRHI_PROF;
+    QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, samples));
+
     owns = true;
     layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     return true;
@@ -3605,6 +3619,9 @@ bool QVkTexture::buildFrom(const QRhiNativeHandles *src)
 
     if (!finishBuild())
         return false;
+
+    QRHI_PROF;
+    QRHI_PROF_F(newTexture(this, false, mipLevelCount, m_flags.testFlag(CubeMap) ? 6 : 1, samples));
 
     owns = false;
     layout = h->layout;
@@ -4227,6 +4244,9 @@ void QVkSwapChain::release()
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->swapchains.remove(this);
     rhiD->releaseSwapChainResources(this);
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseSwapChain(this));
 }
 
 QRhiCommandBuffer *QVkSwapChain::currentFrameCommandBuffer()
@@ -4455,6 +4475,9 @@ bool QVkSwapChain::buildOrResize()
             return false;
         }
     }
+
+    QRHI_PROF;
+    QRHI_PROF_F(resizeSwapChain(this, QVK_FRAMES_IN_FLIGHT, samples > VK_SAMPLE_COUNT_1_BIT ? QVK_FRAMES_IN_FLIGHT : 0, samples));
 
     wrapWindow = nullptr;
     return true;

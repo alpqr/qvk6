@@ -1585,6 +1585,9 @@ void QGles2RenderBuffer::release()
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseRenderBuffer(this));
 }
 
 bool QGles2RenderBuffer::build()
@@ -1594,17 +1597,20 @@ bool QGles2RenderBuffer::build()
     if (renderbuffer)
         release();
 
+    QRHI_PROF;
+    samples = qMax(1, m_sampleCount);
+
     if (m_flags.testFlag(UsedWithSwapChainOnly)) {
-        if (m_type == DepthStencil)
+        if (m_type == DepthStencil) {
+            QRHI_PROF_F(newRenderBuffer(this, false, true, samples));
             return true;
+        }
 
         qWarning("RenderBuffer: UsedWithSwapChainOnly is meaningless in combination with Color");
     }
 
     if (!rhiD->ensureContext())
         return false;
-
-    samples = qMax(1, m_sampleCount);
 
     rhiD->f->glGenRenderbuffers(1, &renderbuffer);
     rhiD->f->glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
@@ -1617,6 +1623,7 @@ bool QGles2RenderBuffer::build()
         else
             rhiD->f->glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8,
                                            m_pixelSize.width(), m_pixelSize.height());
+        QRHI_PROF_F(newRenderBuffer(this, false, false, samples));
         break;
     case QRhiRenderBuffer::Color:
         if (rhiD->caps.msaaRenderBuffer)
@@ -1625,6 +1632,7 @@ bool QGles2RenderBuffer::build()
         else
             rhiD->f->glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8,
                                            m_pixelSize.width(), m_pixelSize.height());
+        QRHI_PROF_F(newRenderBuffer(this, false, false, samples));
         break;
     default:
         Q_UNREACHABLE();
@@ -1663,6 +1671,9 @@ void QGles2Texture::release()
         QRHI_RES_RHI(QRhiGles2);
         rhiD->releaseQueue.append(e);
     }
+
+    QRHI_PROF;
+    QRHI_PROF_F(releaseTexture(this));
 }
 
 static inline bool isPowerOfTwo(int x)
@@ -1750,6 +1761,9 @@ bool QGles2Texture::build()
         specified = false;
     }
 
+    QRHI_PROF;
+    QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, 1));
+
     owns = true;
     nativeHandlesStruct.texture = texture;
 
@@ -1768,6 +1782,9 @@ bool QGles2Texture::buildFrom(const QRhiNativeHandles *src)
 
     texture = h->texture;
     specified = true;
+
+    QRHI_PROF;
+    QRHI_PROF_F(newTexture(this, false, mipLevelCount, m_flags.testFlag(CubeMap) ? 6 : 1, 1));
 
     owns = false;
     nativeHandlesStruct.texture = texture;
@@ -2145,7 +2162,8 @@ QGles2SwapChain::QGles2SwapChain(QRhiImplementation *rhi)
 
 void QGles2SwapChain::release()
 {
-    // nothing to do here
+    QRHI_PROF;
+    QRHI_PROF_F(releaseSwapChain(this));
 }
 
 QRhiCommandBuffer *QGles2SwapChain::currentFrameCommandBuffer()
@@ -2179,6 +2197,10 @@ bool QGles2SwapChain::buildOrResize()
     rt.d.pixelSize = pixelSize;
     rt.d.dpr = m_window->devicePixelRatio();
     rt.d.attCount = m_depthStencil ? 2 : 1;
+
+    QRHI_PROF;
+    // make something up
+    QRHI_PROF_F(resizeSwapChain(this, 2, m_sampleCount > 1 ? 2 : 0, m_sampleCount));
 
     return true;
 }

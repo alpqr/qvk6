@@ -358,6 +358,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::MultisampleTexture:
         Q_FALLTHROUGH();
     case QRhi::MultisampleRenderBuffer:
+        Q_FALLTHROUGH();
+    case QRhi::DebugMarkers:
         return true;
     default:
         Q_UNREACHABLE();

@@ -1,6 +1,5 @@
+d3d, vk: timestamp query
 prof report api (fed by a cbor stream)
-gl: debug: object names
-gl: debug: markers (begin, end, msg)
 prof: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
@@ -46,6 +45,7 @@ multi mip/layer copy? (fewer barriers...)
 multi-buffer (region) readback?
 depth readback?
 copy image depth?
+gl: markers and object names via gl_khr_debug
 
 shadertools:
 dxc for d3d as an alternative to fxc?

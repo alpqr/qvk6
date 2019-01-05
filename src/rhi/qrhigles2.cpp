@@ -263,6 +263,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::MultisampleRenderBuffer:
         return caps.msaaRenderBuffer;
+    case QRhi::DebugMarkers:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;

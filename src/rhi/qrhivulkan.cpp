@@ -2661,6 +2661,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         Q_FALLTHROUGH();
     case QRhi::MultisampleRenderBuffer:
         return true;
+    case QRhi::DebugMarkers:
+        return debugMarkersAvailable;
     default:
         Q_UNREACHABLE();
         return false;

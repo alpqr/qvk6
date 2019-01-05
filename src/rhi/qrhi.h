@@ -365,8 +365,9 @@ public:
     virtual void release() = 0;
     void releaseAndDestroy();
 
-    // May be ignored unless EnableDebugMarkers is set.
-    // May also be ignored for some objects, depending on the backend.
+    // Ignored when DebugMarkers are not supported or EnableDebugMarkers is not
+    // set. May also be ignored for objects other than buffers, renderbuffers, and
+    // textures, depending on the backend.
     QByteArray name() const;
     void setName(const QByteArray &name);
 
@@ -992,8 +993,7 @@ public:
                      qint32 vertexOffset = 0,
                      quint32 firstInstance = 0);
 
-    // Ignored when EnableDebugMarkers is not set.
-    // May be silently ignored with some backends.
+    // Ignored when DebugMarkers are not supported or EnableDebugMarkers is not set.
     void debugMarkBegin(const QByteArray &name);
     void debugMarkEnd();
     // With some backends debugMarkMsg is only supported inside a pass and is
@@ -1113,7 +1113,8 @@ public:
 
     enum Feature {
         MultisampleTexture = 1,
-        MultisampleRenderBuffer
+        MultisampleRenderBuffer,
+        DebugMarkers
     };
 
     enum ResourceSizeLimit {

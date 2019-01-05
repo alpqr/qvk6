@@ -146,6 +146,7 @@ void Window::customInit()
     // Check some features/limits.
     qDebug("isFeatureSupported(MultisampleTexture): %d", m_r->isFeatureSupported(QRhi::MultisampleTexture));
     qDebug("isFeatureSupported(MultisampleRenderBuffer): %d", m_r->isFeatureSupported(QRhi::MultisampleRenderBuffer));
+    qDebug("isFeatureSupported(DebugMarkers): %d", m_r->isFeatureSupported(QRhi::DebugMarkers));
     qDebug("Min 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMin));
     qDebug("Max 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMax));
 }

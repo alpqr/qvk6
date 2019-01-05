@@ -261,6 +261,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         Q_FALLTHROUGH();
     case QRhi::MultisampleRenderBuffer:
         return true;
+    case QRhi::DebugMarkers:
+        return annotations != nullptr;
     default:
         Q_UNREACHABLE();
         return false;

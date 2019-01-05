@@ -240,6 +240,29 @@ bool QRhiMetal::create(QRhi::Flags flags)
 
     d->cmdQueue = [d->dev newCommandQueue];
 
+#if defined(Q_OS_MACOS)
+    caps.maxTextureSize = 16384;
+#elif defined(Q_OS_TVOS)
+    if ([d->dev supportsFeatureSet: MTLFeatureSet(30003)]) // MTLFeatureSet_tvOS_GPUFamily2_v1
+        caps.maxTextureSize = 16384;
+    else
+        caps.maxTextureSize = 8192;
+#elif defined(Q_OS_IOS)
+    // welcome to feature set hell
+    if ([d->dev supportsFeatureSet: MTLFeatureSet(16)] // MTLFeatureSet_iOS_GPUFamily5_v1
+            || [d->dev supportsFeatureSet: MTLFeatureSet(11)] // MTLFeatureSet_iOS_GPUFamily4_v1
+            || [d->dev supportsFeatureSet: MTLFeatureSet(4)]) // MTLFeatureSet_iOS_GPUFamily3_v1
+    {
+        caps.maxTextureSize = 16384;
+    } else if ([d->dev supportsFeatureSet: MTLFeatureSet(3)] // MTLFeatureSet_iOS_GPUFamily2_v2
+            || [d->dev supportsFeatureSet: MTLFeatureSet(2)]) // MTLFeatureSet_iOS_GPUFamily1_v2
+    {
+        caps.maxTextureSize = 8192;
+    } else {
+        caps.maxTextureSize = 4096;
+    }
+#endif
+
     nativeHandlesStruct.dev = d->dev;
     nativeHandlesStruct.cmdQueue = d->cmdQueue;
 
@@ -348,7 +371,7 @@ int QRhiMetal::resourceSizeLimit(QRhi::ResourceSizeLimit limit) const
     case QRhi::TextureSizeMin:
         return 1;
     case QRhi::TextureSizeMax:
-        return 16384; // ###
+        return caps.maxTextureSize;
     default:
         Q_UNREACHABLE();
         return 0;

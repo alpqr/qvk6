@@ -1,7 +1,6 @@
 prof report api (fed by a cbor stream)
 gl: debug: object names
 gl: debug: markers (begin, end, msg)
-mtl: max texture size
 prof: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 merge offscreen examples into one
@@ -54,6 +53,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: max texture size
 vk: obj name and debug markers
 vk, gl: tex and other prof
 max texture size stuff

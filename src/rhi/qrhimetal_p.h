@@ -344,6 +344,10 @@ public:
     QSet<QMetalSwapChain *> swapchains;
     QRhiMetalNativeHandles nativeHandlesStruct;
 
+    struct {
+        int maxTextureSize = 4096;
+    } caps;
+
     QRhiMetalData *d = nullptr;
 };
 

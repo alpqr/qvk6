@@ -132,7 +132,8 @@ public:
     virtual bool isYUpInFramebuffer() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
     virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
-    virtual bool isFeatureSupported(QRhi::Feature) const = 0;
+    virtual bool isFeatureSupported(QRhi::Feature feature) const = 0;
+    virtual int resourceSizeLimit(QRhi::ResourceSizeLimit limit) const = 0;
     virtual const QRhiNativeHandles *nativeHandles() = 0;
 
     virtual void sendVMemStatsToProfiler();

@@ -117,6 +117,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
     caps.msaaRenderBuffer = f->hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample)
             && f->hasOpenGLExtension(QOpenGLExtensions::FramebufferBlit);
 
+    f->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps.maxTextureSize);
+
     nativeHandlesStruct.context = ctx;
 
     return true;
@@ -264,6 +266,19 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
     default:
         Q_UNREACHABLE();
         return false;
+    }
+}
+
+int QRhiGles2::resourceSizeLimit(QRhi::ResourceSizeLimit limit) const
+{
+    switch (limit) {
+    case QRhi::TextureSizeMin:
+        return 1;
+    case QRhi::TextureSizeMax:
+        return caps.maxTextureSize;
+    default:
+        Q_UNREACHABLE();
+        return 0;
     }
 }
 
@@ -1666,7 +1681,7 @@ bool QGles2Texture::prepareBuild(QSize *adjustedSize)
     if (!rhiD->ensureContext())
         return false;
 
-    QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
+    QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     if (!rhiD->f->hasOpenGLFeature(QOpenGLFunctions::NPOTTextures)
             && (!isPowerOfTwo(size.width()) || !isPowerOfTwo(size.height())))
     {

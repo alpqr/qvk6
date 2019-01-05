@@ -511,6 +511,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    int resourceSizeLimit(QRhi::ResourceSizeLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
 
     bool ensureContext(QSurface *surface = nullptr) const;
@@ -529,6 +530,7 @@ public:
         // Multisample fb and blit are supported (GLES 3.0 or OpenGL 3.x). Not
         // the same as multisample textures!
         bool msaaRenderBuffer = false;
+        int maxTextureSize = 2048;
     } caps;
     bool inFrame = false;
     int finishedFrameCount = 0;

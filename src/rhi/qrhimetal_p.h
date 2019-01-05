@@ -326,6 +326,7 @@ public:
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;
+    int resourceSizeLimit(QRhi::ResourceSizeLimit limit) const override;
     const QRhiNativeHandles *nativeHandles() override;
 
     void executeDeferredReleases(bool forced = false);

@@ -2641,6 +2641,19 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
     }
 }
 
+int QRhiVulkan::resourceSizeLimit(QRhi::ResourceSizeLimit limit) const
+{
+    switch (limit) {
+    case QRhi::TextureSizeMin:
+        return 1;
+    case QRhi::TextureSizeMax:
+        return physDevProperties.limits.maxImageDimension2D;
+    default:
+        Q_UNREACHABLE();
+        return 0;
+    }
+}
+
 const QRhiNativeHandles *QRhiVulkan::nativeHandles()
 {
     return &nativeHandlesStruct;
@@ -3462,7 +3475,7 @@ bool QVkTexture::prepareBuild(QSize *adjustedSize)
         return false;
     }
 
-    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
+    const QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 

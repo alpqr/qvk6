@@ -1116,6 +1116,11 @@ public:
         MultisampleRenderBuffer
     };
 
+    enum ResourceSizeLimit {
+        TextureSizeMin = 1,
+        TextureSizeMax
+    };
+
     ~QRhi();
 
     static QRhi *create(Implementation impl, QRhiInitParams *params, Flags flags = Flags());
@@ -1255,6 +1260,7 @@ public:
 
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags = QRhiTexture::Flags()) const;
     bool isFeatureSupported(QRhi::Feature feature) const;
+    int resourceSizeLimit(ResourceSizeLimit limit) const;
 
     // Returns a ptr to a QRhi<backend>NativeHandles struct.
     // Ownership of the native objects is not transfered.

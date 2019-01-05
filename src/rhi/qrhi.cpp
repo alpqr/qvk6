@@ -694,6 +694,11 @@ bool QRhi::isFeatureSupported(QRhi::Feature feature) const
     return d->isFeatureSupported(feature);
 }
 
+int QRhi::resourceSizeLimit(ResourceSizeLimit limit) const
+{
+    return d->resourceSizeLimit(limit);
+}
+
 const QRhiNativeHandles *QRhi::nativeHandles()
 {
     return d->nativeHandles();

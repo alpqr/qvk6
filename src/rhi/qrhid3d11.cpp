@@ -267,6 +267,19 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
     }
 }
 
+int QRhiD3D11::resourceSizeLimit(QRhi::ResourceSizeLimit limit) const
+{
+    switch (limit) {
+    case QRhi::TextureSizeMin:
+        return 1;
+    case QRhi::TextureSizeMax:
+        return D3D11_REQ_TEXTURE2D_U_OR_V_DIMENSION;
+    default:
+        Q_UNREACHABLE();
+        return 0;
+    }
+}
+
 const QRhiNativeHandles *QRhiD3D11::nativeHandles()
 {
     return &nativeHandlesStruct;
@@ -1655,7 +1668,7 @@ bool QD3D11Texture::prepareBuild(QSize *adjustedSize)
     if (tex)
         release();
 
-    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
+    const QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     const bool isDepth = isDepthTextureFormat(m_format);
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);

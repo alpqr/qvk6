@@ -342,6 +342,19 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
     }
 }
 
+int QRhiMetal::resourceSizeLimit(QRhi::ResourceSizeLimit limit) const
+{
+    switch (limit) {
+    case QRhi::TextureSizeMin:
+        return 1;
+    case QRhi::TextureSizeMax:
+        return 16384; // ###
+    default:
+        Q_UNREACHABLE();
+        return 0;
+    }
+}
+
 const QRhiNativeHandles *QRhiMetal::nativeHandles()
 {
     return &nativeHandlesStruct;
@@ -1549,7 +1562,7 @@ bool QMetalTexture::prepareBuild(QSize *adjustedSize)
     if (d->tex)
         release();
 
-    const QSize size = m_pixelSize.isEmpty() ? QSize(16, 16) : m_pixelSize;
+    const QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 

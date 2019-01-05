@@ -142,6 +142,12 @@ void Window::customInit()
     // Put the gpu mem allocator statistics to the profiling stream after doing
     // all the init. (where applicable)
     m_r->profiler()->addVMemAllocatorStats();
+
+    // Check some features/limits.
+    qDebug("isFeatureSupported(MultisampleTexture): %d", m_r->isFeatureSupported(QRhi::MultisampleTexture));
+    qDebug("isFeatureSupported(MultisampleRenderBuffer): %d", m_r->isFeatureSupported(QRhi::MultisampleRenderBuffer));
+    qDebug("Min 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMin));
+    qDebug("Max 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMax));
 }
 
 void Window::customRelease()

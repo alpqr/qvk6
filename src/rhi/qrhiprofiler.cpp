@@ -105,6 +105,8 @@ void QRhiProfilerPrivate::flushStream()
 #define WRITE_PAIR(a, b) writer->append(a); writer->append(b)
 #define WRITE_OP(op) WRITE_PAIR(QLatin1String("op"), QRhiProfiler::op)
 #define WRITE_TIMESTAMP WRITE_PAIR(QLatin1String("timestamp"), ts.elapsed())
+#define WRITE_RES_NAME(res, key) WRITE_PAIR(QLatin1String(key), quint64(quintptr(res))); \
+    WRITE_PAIR(QLatin1String("name"), res->name());
 
 void QRhiProfilerPrivate::newBuffer(QRhiBuffer *buf, quint32 realSize, int backingGpuBufCount, int backingCpuBufCount)
 {
@@ -114,7 +116,7 @@ void QRhiProfilerPrivate::newBuffer(QRhiBuffer *buf, quint32 realSize, int backi
     writer->startMap();
     WRITE_OP(NewBuffer);
     WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
+    WRITE_RES_NAME(buf, "buffer");
     WRITE_PAIR(QLatin1String("type"), buf->type());
     WRITE_PAIR(QLatin1String("usage"), buf->usage());
     WRITE_PAIR(QLatin1String("logical_size"), buf->size());
@@ -171,7 +173,7 @@ void QRhiProfilerPrivate::newRenderBuffer(QRhiRenderBuffer *rb, bool transientBa
     writer->startMap();
     WRITE_OP(NewRenderBuffer);
     WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("renderbuffer"), quint64(quintptr(rb)));
+    WRITE_RES_NAME(rb, "renderbuffer");
 
     const QRhiRenderBuffer::Type type = rb->type();
     const QSize sz = rb->pixelSize();
@@ -211,7 +213,7 @@ void QRhiProfilerPrivate::newTexture(QRhiTexture *tex, bool owns, int mipCount, 
     writer->startMap();
     WRITE_OP(NewTexture);
     WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
+    WRITE_RES_NAME(tex, "texture");
 
     const QRhiTexture::Format format = tex->format();
     const QSize sz = tex->pixelSize();
@@ -277,7 +279,7 @@ void QRhiProfilerPrivate::resizeSwapChain(QRhiSwapChain *sc, int bufferCount, in
     writer->startMap();
     WRITE_OP(ResizeSwapChain);
     WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
+    WRITE_RES_NAME(sc, "swapchain");
 
     const QSize sz = sc->currentPixelSize();
     quint32 byteSize = rhiD->approxByteSizeForTexture(QRhiTexture::BGRA8, sz, 1, 1);
@@ -315,9 +317,17 @@ void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
     scd.frameDelta[scd.n++] = scd.t.restart();
     if (scd.n == Sc::FRAME_SAMPLE_SIZE) {
         scd.n = 0;
+        qint64 minDelta = 0;
+        qint64 maxDelta = 0;
         float totalDelta = 0;
-        for (int i = 0; i < Sc::FRAME_SAMPLE_SIZE; ++i)
-            totalDelta += scd.frameDelta[i];
+        for (int i = 0; i < Sc::FRAME_SAMPLE_SIZE; ++i) {
+            const qint64 delta = scd.frameDelta[i];
+            totalDelta += delta;
+            if (minDelta == 0 || delta < minDelta)
+                minDelta = delta;
+            if (maxDelta == 0 || delta > maxDelta)
+                maxDelta = delta;
+        }
         const float avgDelta = totalDelta / Sc::FRAME_SAMPLE_SIZE;
         if (ensureStream()) {
             writer->startMap();
@@ -325,6 +335,8 @@ void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
             WRITE_TIMESTAMP;
             WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
             WRITE_PAIR(QLatin1String("frames_since_resize"), frameCount);
+            WRITE_PAIR(QLatin1String("min_ms_between_frames"), minDelta);
+            WRITE_PAIR(QLatin1String("max_ms_between_frames"), maxDelta);
             WRITE_PAIR(QLatin1String("avg_ms_between_frames"), avgDelta);
             writer->endMap();
         }

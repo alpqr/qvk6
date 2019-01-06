@@ -365,8 +365,10 @@ public:
     virtual void release() = 0;
     void releaseAndDestroy();
 
-    // Ignored when DebugMarkers are not supported or EnableDebugMarkers is not
-    // set. May also be ignored for objects other than buffers, renderbuffers, and
+    // This has two uses: to get names visible in graphics debugging tools and
+    // in the profiling output. Regarding the former, the name is ignored when
+    // DebugMarkers are not supported or EnableDebugMarkers is not set. May
+    // also be ignored for objects other than buffers, renderbuffers, and
     // textures, depending on the backend.
     QByteArray name() const;
     void setName(const QByteArray &name);

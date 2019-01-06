@@ -119,7 +119,6 @@ QString graphicsApiName()
 QRhi::Flags rhiFlags = 0;
 int sampleCount = 1;
 QRhiSwapChain::Flags scFlags = 0;
-void (*preInitFunc)() = nullptr;
 
 class Window : public QWindow
 {
@@ -439,10 +438,17 @@ int main(int argc, char **argv)
     qDebug("Selected graphics API is %s", qPrintable(graphicsApiName()));
     qDebug("This is a multi-api example, use command line arguments to override:\n%s", qPrintable(cmdLineParser.helpText()));
 
+#ifdef EXAMPLEFW_PREINIT
+    void preInit();
+    preInit();
+#endif
+
     // OpenGL specifics.
     QSurfaceFormat fmt;
     fmt.setDepthBufferSize(24);
     fmt.setStencilBufferSize(8);
+    if (sampleCount > 1)
+        fmt.setSamples(sampleCount);
     QSurfaceFormat::setDefaultFormat(fmt);
 
     // Vulkan setup.
@@ -466,11 +472,6 @@ int main(int argc, char **argv)
             graphicsApi = OpenGL;
         }
     }
-#endif
-
-#ifdef EXAMPLEFW_PREINIT
-    void preInit();
-    preInit();
 #endif
 
     // Create and show the window.

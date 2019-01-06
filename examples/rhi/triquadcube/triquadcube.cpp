@@ -74,7 +74,6 @@ struct {
     QuadRenderer quadRenderer;
     TexturedCubeRenderer cubeRenderer;
     TriangleOnCubeRenderer liveTexCubeRenderer;
-    int sampleCount = 1;
     bool onScreenOnly = false;
     bool triangleOnly = false;
     QSize lastOutputSize;
@@ -114,27 +113,27 @@ void Window::customInit()
 #endif
 
     d.triRenderer.setRhi(m_r);
-    d.triRenderer.setSampleCount(d.sampleCount);
+    d.triRenderer.setSampleCount(sampleCount);
     d.triRenderer.initResources(m_rp);
 
     if (!d.triangleOnly) {
         d.triRenderer.setTranslation(QVector3D(0, 0.5f, 0));
 
         d.quadRenderer.setRhi(m_r);
-        d.quadRenderer.setSampleCount(d.sampleCount);
+        d.quadRenderer.setSampleCount(sampleCount);
         d.quadRenderer.setPipeline(d.triRenderer.pipeline());
         d.quadRenderer.initResources(m_rp);
         d.quadRenderer.setTranslation(QVector3D(1.5f, -0.5f, 0));
 
         d.cubeRenderer.setRhi(m_r);
-        d.cubeRenderer.setSampleCount(d.sampleCount);
+        d.cubeRenderer.setSampleCount(sampleCount);
         d.cubeRenderer.initResources(m_rp);
         d.cubeRenderer.setTranslation(QVector3D(0, -0.5f, 0));
     }
 
     if (!d.onScreenOnly) {
         d.liveTexCubeRenderer.setRhi(m_r);
-        d.liveTexCubeRenderer.setSampleCount(d.sampleCount);
+        d.liveTexCubeRenderer.setSampleCount(sampleCount);
         d.liveTexCubeRenderer.initResources(m_rp);
         d.liveTexCubeRenderer.setTranslation(QVector3D(-2.0f, 0, 0));
     }

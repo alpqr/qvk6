@@ -13,13 +13,21 @@ HEADERS += \
     qrhi_p.h \
     qrhiprofiler.h \
     qrhiprofiler_p.h \
-    qrhigles2.h \
-    qrhigles2_p.h
+    qrhiprofilerstreamreader.h \
+    qrhiprofilerstreamreader_p.h
 
 SOURCES += \
     qrhi.cpp \
     qrhiprofiler.cpp \
-    qrhigles2.cpp
+    qrhiprofilerstreamreader.cpp
+
+qtConfig(opengl) {
+    HEADERS += \
+        qrhigles2.h \
+        qrhigles2_p.h
+    SOURCES += \
+        qrhigles2.cpp
+}
 
 qtConfig(vulkan) {
     HEADERS += \

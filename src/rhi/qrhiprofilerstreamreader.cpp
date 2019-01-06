@@ -34,52 +34,34 @@
 **
 ****************************************************************************/
 
-#ifndef QRHIPROFILER_H
-#define QRHIPROFILER_H
-
-#include <QtRhi/qrhi.h>
+#include "qrhiprofilerstreamreader_p.h"
 
 QT_BEGIN_NAMESPACE
 
-class QRhiProfilerPrivate;
-class QIODevice;
-
-class Q_RHI_EXPORT QRhiProfiler
+QRhiProfilerStreamReader::QRhiProfilerStreamReader()
+    : d(new QRhiProfilerStreamReaderPrivate)
 {
-public:
-    enum StreamOp {
-        NewBuffer = 1,
-        ReleaseBuffer,
-        NewBufferStagingArea,
-        ReleaseBufferStagingArea,
-        NewRenderBuffer,
-        ReleaseRenderBuffer,
-        NewTexture,
-        ReleaseTexture,
-        NewTextureStagingArea,
-        ReleaseTextureStagingArea,
-        ResizeSwapChain,
-        ReleaseSwapChain,
-        VMemAllocStats,
-        FrameTime
-    };
+}
 
-    ~QRhiProfiler();
+QRhiProfilerStreamReader::QRhiProfilerStreamReader(QIODevice *device)
+    : d(new QRhiProfilerStreamReaderPrivate)
+{
+    d->setDevice(device);
+}
 
-    void setDevice(QIODevice *device);
+QRhiProfilerStreamReader::~QRhiProfilerStreamReader()
+{
+    delete d;
+}
 
-    void flush();
+void QRhiProfilerStreamReader::setDevice(QIODevice *device)
+{
+    d->setDevice(device);
+}
 
-    void addVMemAllocatorStats();
-
-private:
-    Q_DISABLE_COPY(QRhiProfiler)
-    QRhiProfiler();
-    QRhiProfilerPrivate *d;
-    friend class QRhiImplementation;
-    friend class QRhiProfilerPrivate;
-};
+void QRhiProfilerStreamReaderPrivate::setDevice(QIODevice *device)
+{
+    dev = device;
+}
 
 QT_END_NAMESPACE
-
-#endif

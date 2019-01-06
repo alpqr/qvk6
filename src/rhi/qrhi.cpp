@@ -37,7 +37,9 @@
 #include "qrhi_p.h"
 #include <qmath.h>
 
+#ifndef QT_NO_OPENGL
 #include "qrhigles2_p.h"
+#endif
 #if QT_CONFIG(vulkan)
 #include "qrhivulkan_p.h"
 #endif
@@ -418,8 +420,13 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
         break;
 #endif
     case OpenGLES2:
+#ifndef QT_NO_OPENGL
         r->d = new QRhiGles2(params);
         break;
+#else
+        qWarning("This build of Qt has no OpenGL support");
+        break;
+#endif
     case D3D11:
 #ifdef Q_OS_WIN
         r->d = new QRhiD3D11(params);

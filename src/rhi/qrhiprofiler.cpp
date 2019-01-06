@@ -304,6 +304,33 @@ void QRhiProfilerPrivate::releaseSwapChain(QRhiSwapChain *sc)
     writer->endMap();
 }
 
+void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
+{
+    if (!swapchains.contains(sc)) {
+        swapchains[sc].t.start();
+        return;
+    }
+
+    Sc &scd(swapchains[sc]);
+    scd.frameDelta[scd.n++] = scd.t.restart();
+    if (scd.n == Sc::FRAME_SAMPLE_SIZE) {
+        scd.n = 0;
+        float totalDelta = 0;
+        for (int i = 0; i < Sc::FRAME_SAMPLE_SIZE; ++i)
+            totalDelta += scd.frameDelta[i];
+        const float avgDelta = totalDelta / Sc::FRAME_SAMPLE_SIZE;
+        if (ensureStream()) {
+            writer->startMap();
+            WRITE_OP(FrameTime);
+            WRITE_TIMESTAMP;
+            WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
+            WRITE_PAIR(QLatin1String("frames_since_resize"), frameCount);
+            WRITE_PAIR(QLatin1String("avg_ms_between_frames"), avgDelta);
+            writer->endMap();
+        }
+    }
+}
+
 void QRhiProfilerPrivate::vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize)
 {
     if (!ensureStream())

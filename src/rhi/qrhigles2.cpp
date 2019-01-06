@@ -524,13 +524,17 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 
     executeCommandBuffer(&swapChainD->cb);
 
-    swapChainD->frameCount += 1;
-    currentSwapChain = nullptr;
-
     if (swapChainD->surface) {
         ctx->swapBuffers(swapChainD->surface);
         buffersSwapped = true;
     }
+
+    swapChainD->frameCount += 1;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
+
+    currentSwapChain = nullptr;
 
     return QRhi::FrameOpSuccess;
 }

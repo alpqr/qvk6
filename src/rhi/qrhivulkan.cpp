@@ -1244,6 +1244,10 @@ QRhi::FrameOpResult QRhiVulkan::endWrapperFrame(QRhiSwapChain *swapChain)
     Q_ASSERT(currentSwapChain == swapChainD);
 
     swapChainD->frameCount += 1;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
+
     currentSwapChain = nullptr;
 
     return QRhi::FrameOpSuccess;
@@ -1474,6 +1478,10 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 
     swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
     swapChainD->frameCount += 1;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
+
     currentSwapChain = nullptr;
 
     return QRhi::FrameOpSuccess;

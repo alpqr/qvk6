@@ -44,6 +44,7 @@
 #include "qtrhiglobal_p.h"
 #include "qrhiprofiler.h"
 #include <QElapsedTimer>
+#include <QHash>
 
 QT_BEGIN_NAMESPACE
 
@@ -72,6 +73,8 @@ public:
     void resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int msaaBufferCount, int sampleCount);
     void releaseSwapChain(QRhiSwapChain *sc);
 
+    void endSwapChainFrame(QRhiSwapChain *sc, int frameCount);
+
     void vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize);
 
     bool ensureStream();
@@ -83,7 +86,16 @@ public:
     QCborStreamWriter *writer = nullptr;
     bool active = false;
     QElapsedTimer ts;
+    struct Sc {
+        QElapsedTimer t;
+        int n = 0;
+        static const int FRAME_SAMPLE_SIZE = 120;
+        qint64 frameDelta[FRAME_SAMPLE_SIZE];
+    };
+    QHash<QRhiSwapChain *, Sc> swapchains;
 };
+
+Q_DECLARE_TYPEINFO(QRhiProfilerPrivate::Sc, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

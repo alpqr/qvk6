@@ -729,6 +729,10 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 
     swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
     swapChainD->frameCount += 1;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
+
     currentSwapChain = nullptr;
 
     return QRhi::FrameOpSuccess;

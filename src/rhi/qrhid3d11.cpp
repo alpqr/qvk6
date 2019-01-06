@@ -582,6 +582,10 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 
     swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QD3D11SwapChain::BUFFER_COUNT;
     swapChainD->frameCount += 1;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
+
     contextState.currentSwapChain = nullptr;
 
     return QRhi::FrameOpSuccess;

@@ -60,7 +60,8 @@ public:
         ReleaseTextureStagingArea,
         ResizeSwapChain,
         ReleaseSwapChain,
-        VMemAllocStats
+        VMemAllocStats,
+        FrameTime
     };
 
     QRhiProfiler();

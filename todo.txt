@@ -1,6 +1,6 @@
 d3d, vk: timestamp query
 prof report api (fed by a cbor stream)
-prof: report readback temp buf
+mtl: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
 advanced blend modes
@@ -52,6 +52,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+prof: report readback temp buf
 merge offscreen examples into one
 mtl: max texture size
 vk: obj name and debug markers

@@ -75,6 +75,9 @@ public:
 
     void endSwapChainFrame(QRhiSwapChain *sc, int frameCount);
 
+    void newReadbackBuffer(quint64 id, QRhiResource *src, quint32 size);
+    void releaseReadbackBuffer(quint64 id);
+
     void vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize);
 
     bool ensureStream();

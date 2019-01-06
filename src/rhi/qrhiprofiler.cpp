@@ -343,6 +343,32 @@ void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
     }
 }
 
+void QRhiProfilerPrivate::newReadbackBuffer(quint64 id, QRhiResource *src, quint32 size)
+{
+    if (!ensureStream())
+        return;
+
+    writer->startMap();
+    WRITE_OP(NewReadbackBuffer);
+    WRITE_TIMESTAMP;
+    WRITE_PAIR(QLatin1String("id"), id);
+    WRITE_PAIR(QLatin1String("source"), quint64(quintptr(src)));
+    WRITE_PAIR(QLatin1String("size"), size);
+    writer->endMap();
+}
+
+void QRhiProfilerPrivate::releaseReadbackBuffer(quint64 id)
+{
+    if (!ensureStream())
+        return;
+
+    writer->startMap();
+    WRITE_OP(ReleaseReadbackBuffer);
+    WRITE_TIMESTAMP;
+    WRITE_PAIR(QLatin1String("id"), id);
+    writer->endMap();
+}
+
 void QRhiProfilerPrivate::vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize)
 {
     if (!ensureStream())

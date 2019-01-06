@@ -753,6 +753,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 {
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
         QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, u.buf);
@@ -959,6 +960,9 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             qWarning("Failed to create readback staging texture: %s", qPrintable(comErrorMessage(hr)));
             return;
         }
+        QRHI_PROF_F(newReadbackBuffer(quint64(quintptr(stagingTex)),
+                                      texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
+                                      bufSize));
 
         QD3D11CommandBuffer::Command cmd;
         cmd.cmd = QD3D11CommandBuffer::Command::CopySubRes;
@@ -993,6 +997,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 void QRhiD3D11::finishActiveReadbacks()
 {
     QVarLengthArray<std::function<void()>, 4> completedCallbacks;
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     for (int i = activeReadbacks.count() - 1; i >= 0; --i) {
         const QRhiD3D11::ActiveReadback &aRb(activeReadbacks[i]);
@@ -1011,6 +1016,7 @@ void QRhiD3D11::finishActiveReadbacks()
         context->Unmap(aRb.stagingTex, 0);
 
         aRb.stagingTex->Release();
+        QRHI_PROF_F(releaseReadbackBuffer(quint64(quintptr(aRb.stagingTex))));
 
         if (aRb.result->completed)
             completedCallbacks.append(aRb.result->completed);

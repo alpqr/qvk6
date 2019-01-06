@@ -60,6 +60,8 @@ public:
         ReleaseTextureStagingArea,
         ResizeSwapChain,
         ReleaseSwapChain,
+        NewReadbackBuffer,
+        ReleaseReadbackBuffer,
         VMemAllocStats,
         FrameTime
     };

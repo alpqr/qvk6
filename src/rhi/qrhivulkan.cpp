@@ -2299,6 +2299,9 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &aRb.buf, &allocation, nullptr);
         if (err == VK_SUCCESS) {
             aRb.bufAlloc = allocation;
+            QRHI_PROF_F(newReadbackBuffer(reinterpret_cast<quint64>(aRb.buf),
+                                          texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
+                                          aRb.bufSize));
         } else {
             qWarning("Failed to create readback buffer of size %u: %d", aRb.bufSize, err);
             continue;
@@ -2514,6 +2517,7 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
 void QRhiVulkan::finishActiveReadbacks(bool forced)
 {
     QVarLengthArray<std::function<void()>, 4> completedCallbacks;
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     for (int i = activeReadbacks.count() - 1; i >= 0; --i) {
         const QRhiVulkan::ActiveReadback &aRb(activeReadbacks[i]);
@@ -2532,6 +2536,7 @@ void QRhiVulkan::finishActiveReadbacks(bool forced)
             vmaUnmapMemory(toVmaAllocator(allocator), a);
 
             vmaDestroyBuffer(toVmaAllocator(allocator), aRb.buf, a);
+            QRHI_PROF_F(releaseReadbackBuffer(reinterpret_cast<quint64>(aRb.buf)));
 
             if (aRb.result->completed)
                 completedCallbacks.append(aRb.result->completed);

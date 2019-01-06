@@ -316,8 +316,9 @@ struct QVkSwapChain : public QRhiSwapChain
         quint32 imageIndex = 0;
     } frameRes[QVK_FRAMES_IN_FLIGHT];
 
-    quint32 currentImage = 0; // index in imageRes
-    quint32 currentFrame = 0; // index in frameRes
+    quint32 currentImageIndex = 0; // index in imageRes
+    quint32 currentFrameSlot = 0; // index in frameRes
+    int frameCount = 0;
 
     friend class QRhiVulkan;
 };
@@ -435,7 +436,6 @@ public:
     QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
     QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
     void prepareNewFrame(QRhiCommandBuffer *cb);
-    void prepareFrameEnd();
     void prepareForTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
     void prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD);
     void finishTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
@@ -511,7 +511,6 @@ public:
 
     int currentFrameSlot = 0; // 0..FRAMES_IN_FLIGHT-1
     bool inFrame = false;
-    int finishedFrameCount = 0;
     bool inPass = false;
     QVkSwapChain *currentSwapChain = nullptr;
     QSet<QVkSwapChain *> swapchains;

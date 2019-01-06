@@ -434,6 +434,7 @@ struct QGles2SwapChain : public QRhiSwapChain
     QSize pixelSize;
     QGles2ReferenceRenderTarget rt;
     QGles2CommandBuffer cb;
+    int frameCount = 0;
 };
 
 class QRhiGles2 : public QRhiImplementation
@@ -533,7 +534,6 @@ public:
         int maxTextureSize = 2048;
     } caps;
     bool inFrame = false;
-    int finishedFrameCount = 0;
     bool inPass = false;
     QGles2SwapChain *currentSwapChain = nullptr;
     QVector<GLint> supportedCompressedFormats;

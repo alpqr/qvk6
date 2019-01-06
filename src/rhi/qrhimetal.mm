@@ -670,7 +670,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     // (for this same frame slot) but not sure how to do that in a sane way so
     // wait for full cb completion for now.
     for (QMetalSwapChain *sc : qAsConst(swapchains)) {
-        dispatch_semaphore_t sem = sc->d->sem[swapChainD->currentFrame];
+        dispatch_semaphore_t sem = sc->d->sem[swapChainD->currentFrameSlot];
         dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
         if (sc != swapChainD)
             dispatch_semaphore_signal(sem);
@@ -683,7 +683,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     }
 
     currentSwapChain = swapChainD;
-    currentFrameSlot = swapChainD->currentFrame;
+    currentFrameSlot = swapChainD->currentFrameSlot;
     if (swapChainD->ds)
         swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
 
@@ -716,20 +716,21 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
     inFrame = false;
 
     QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, swapChain);
+    Q_ASSERT(currentSwapChain == swapChainD);
 
     [swapChainD->cbWrapper.d->cb presentDrawable: swapChainD->d->curDrawable];
 
-    __block int thisFrame = currentFrameSlot;
+    __block int thisFrameSlot = currentFrameSlot;
     [swapChainD->cbWrapper.d->cb addCompletedHandler: ^(id<MTLCommandBuffer>) {
-        dispatch_semaphore_signal(swapChainD->d->sem[thisFrame]);
+        dispatch_semaphore_signal(swapChainD->d->sem[thisFrameSlot]);
     }];
 
     [swapChainD->cbWrapper.d->cb commit];
 
-    swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QMTL_FRAMES_IN_FLIGHT;
+    swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
+    swapChainD->frameCount += 1;
     currentSwapChain = nullptr;
 
-    ++finishedFrameCount;
     return QRhi::FrameOpSuccess;
 }
 
@@ -772,7 +773,6 @@ QRhi::FrameOpResult QRhiMetal::endOffscreenFrame()
 
     finishActiveReadbacks(true);
 
-    ++finishedFrameCount;
     return QRhi::FrameOpSuccess;
 }
 
@@ -2558,7 +2558,8 @@ bool QMetalSwapChain::buildOrResize()
             d->sem[i] = dispatch_semaphore_create(1);
     }
 
-    currentFrame = 0;
+    currentFrameSlot = 0;
+    frameCount = 0;
 
     ds = m_depthStencil ? QRHI_RES(QMetalRenderBuffer, m_depthStencil) : nullptr;
     if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {

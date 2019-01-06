@@ -517,13 +517,15 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     inFrame = false;
 
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
+    Q_ASSERT(currentSwapChain == swapChainD);
+
     if (!ensureContext(swapChainD->surface))
         return QRhi::FrameOpError;
 
     executeCommandBuffer(&swapChainD->cb);
 
+    swapChainD->frameCount += 1;
     currentSwapChain = nullptr;
-    ++finishedFrameCount;
 
     if (swapChainD->surface) {
         ctx->swapBuffers(swapChainD->surface);
@@ -561,7 +563,6 @@ QRhi::FrameOpResult QRhiGles2::endOffscreenFrame()
 
     executeCommandBuffer(&ofr.cbWrapper);
 
-    ++finishedFrameCount;
     return QRhi::FrameOpSuccess;;
 }
 
@@ -2199,6 +2200,8 @@ bool QGles2SwapChain::buildOrResize()
     rt.d.pixelSize = pixelSize;
     rt.d.dpr = m_window->devicePixelRatio();
     rt.d.attCount = m_depthStencil ? 2 : 1;
+
+    frameCount = 0;
 
     QRHI_PROF;
     // make something up

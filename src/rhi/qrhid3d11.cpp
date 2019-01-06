@@ -550,7 +550,7 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     swapChainD->cb.resetState();
 
     swapChainD->rt.d.rtv[0] = swapChainD->sampleDesc.Count > 1 ?
-                swapChainD->msaaRtv[swapChainD->currentFrame] : swapChainD->rtv[swapChainD->currentFrame];
+                swapChainD->msaaRtv[swapChainD->currentFrameSlot] : swapChainD->rtv[swapChainD->currentFrameSlot];
     swapChainD->rt.d.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
 
     finishActiveReadbacks();
@@ -564,11 +564,13 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     inFrame = false;
 
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
+    Q_ASSERT(contextState.currentSwapChain = swapChainD);
+
     executeCommandBuffer(&swapChainD->cb);
 
     if (swapChainD->sampleDesc.Count > 1) {
-        context->ResolveSubresource(swapChainD->tex[swapChainD->currentFrame], 0,
-                                    swapChainD->msaaTex[swapChainD->currentFrame], 0,
+        context->ResolveSubresource(swapChainD->tex[swapChainD->currentFrameSlot], 0,
+                                    swapChainD->msaaTex[swapChainD->currentFrameSlot], 0,
                                     swapChainD->colorFormat);
     }
 
@@ -578,10 +580,10 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     if (FAILED(hr))
         qWarning("Failed to present: %s", qPrintable(comErrorMessage(hr)));
 
-    swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QD3D11SwapChain::BUFFER_COUNT;
-
+    swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QD3D11SwapChain::BUFFER_COUNT;
+    swapChainD->frameCount += 1;
     contextState.currentSwapChain = nullptr;
-    ++finishedFrameCount;
+
     return QRhi::FrameOpSuccess;
 }
 
@@ -606,7 +608,6 @@ QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
     executeCommandBuffer(&ofr.cbWrapper);
     finishActiveReadbacks();
 
-    ++finishedFrameCount;
     return QRhi::FrameOpSuccess;;
 }
 
@@ -921,14 +922,14 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 // has to be supported. Insert a resolve.
                 QD3D11CommandBuffer::Command rcmd;
                 rcmd.cmd = QD3D11CommandBuffer::Command::ResolveSubRes;
-                rcmd.args.resolveSubRes.dst = swapChainD->tex[swapChainD->currentFrame];
+                rcmd.args.resolveSubRes.dst = swapChainD->tex[swapChainD->currentFrameSlot];
                 rcmd.args.resolveSubRes.dstSubRes = 0;
-                rcmd.args.resolveSubRes.src = swapChainD->msaaTex[swapChainD->currentFrame];
+                rcmd.args.resolveSubRes.src = swapChainD->msaaTex[swapChainD->currentFrameSlot];
                 rcmd.args.resolveSubRes.srcSubRes = 0;
                 rcmd.args.resolveSubRes.format = swapChainD->colorFormat;
                 cbD->commands.append(rcmd);
             }
-            src = swapChainD->tex[swapChainD->currentFrame];
+            src = swapChainD->tex[swapChainD->currentFrameSlot];
             dxgiFormat = swapChainD->colorFormat;
             pixelSize = swapChainD->pixelSize;
             format = colorTextureFormatFromDxgiFormat(dxgiFormat, nullptr);
@@ -2746,7 +2747,8 @@ bool QD3D11SwapChain::buildOrResize()
                  pixelSize.width(), pixelSize.height());
     }
 
-    currentFrame = 0;
+    currentFrameSlot = 0;
+    frameCount = 0;
     ds = m_depthStencil ? QRHI_RES(QD3D11RenderBuffer, m_depthStencil) : nullptr;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);

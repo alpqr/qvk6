@@ -1099,7 +1099,7 @@ bool QRhiVulkan::recreateSwapChain(QRhiSwapChain *swapChain)
         image.cmdFenceWaitable = true; // fence was created in signaled state
     }
 
-    swapChainD->currentImage = 0;
+    swapChainD->currentImageIndex = 0;
 
     VkSemaphoreCreateInfo semInfo;
     memset(&semInfo, 0, sizeof(semInfo));
@@ -1118,7 +1118,7 @@ bool QRhiVulkan::recreateSwapChain(QRhiSwapChain *swapChain)
         df->vkCreateSemaphore(dev, &semInfo, nullptr, &frame.drawSem);
     }
 
-    swapChainD->currentFrame = 0;
+    swapChainD->currentFrameSlot = 0;
 
     return true;
 }
@@ -1237,9 +1237,13 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::endWrapperFrame(QRhiSwapChain *swapChain)
 {
-    Q_UNUSED(swapChain);
+    Q_ASSERT(inFrame);
+    inFrame = false;
 
-    prepareFrameEnd();
+    QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
+    Q_ASSERT(currentSwapChain == swapChainD);
+
+    swapChainD->frameCount += 1;
     currentSwapChain = nullptr;
 
     return QRhi::FrameOpSuccess;
@@ -1339,7 +1343,7 @@ void QRhiVulkan::waitCommandCompletion(int frameSlot)
 QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 {
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
-    QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
+    QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrameSlot]);
 
     if (!frame.imageAcquired) {
         // Wait if we are too far ahead, i.e. the thread gets throttled based on the presentation rate
@@ -1354,7 +1358,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
         VkResult err = vkAcquireNextImageKHR(dev, swapChainD->sc, UINT64_MAX,
                                              frame.imageSem, frame.fence, &frame.imageIndex);
         if (err == VK_SUCCESS || err == VK_SUBOPTIMAL_KHR) {
-            swapChainD->currentImage = frame.imageIndex;
+            swapChainD->currentImageIndex = frame.imageIndex;
             frame.imageSemWaitable = true;
             frame.imageAcquired = true;
             frame.fenceWaitable = true;
@@ -1379,10 +1383,10 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
     // will make B wait for A's frame 0 commands, so if a resource is written
     // in B's frame or when B checks for pending resource releases, that won't
     // mess up A's in-flight commands (as they are not in flight anymore).
-    waitCommandCompletion(swapChainD->currentFrame);
+    waitCommandCompletion(swapChainD->currentFrameSlot);
 
     // build new draw command buffer
-    QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
+    QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImageIndex]);
     QRhi::FrameOpResult cbres = startCommandBuffer(&image.cmdBuf);
     if (cbres != QRhi::FrameOpSuccess)
         return cbres;
@@ -1391,7 +1395,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 
     swapChainD->rtWrapper.d.fb = image.fb;
 
-    currentFrameSlot = swapChainD->currentFrame;
+    currentFrameSlot = swapChainD->currentFrameSlot;
     currentSwapChain = swapChainD;
     if (swapChainD->ds)
         swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
@@ -1403,12 +1407,14 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 {
+    Q_ASSERT(inFrame);
+    inFrame = false;
+
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
+    Q_ASSERT(currentSwapChain == swapChainD);
 
-    prepareFrameEnd();
-
-    QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrame]);
-    QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImage]);
+    QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrameSlot]);
+    QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImageIndex]);
 
     if (!image.presentableLayout) {
         // was used in a readback as transfer source, go back to presentable layout
@@ -1447,7 +1453,7 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     presInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presInfo.swapchainCount = 1;
     presInfo.pSwapchains = &swapChainD->sc;
-    presInfo.pImageIndices = &swapChainD->currentImage;
+    presInfo.pImageIndices = &swapChainD->currentImageIndex;
     presInfo.waitSemaphoreCount = 1;
     presInfo.pWaitSemaphores = &frame.drawSem; // gfxQueueFamilyIdx == presQueueFamilyIdx ? &frame.drawSem : &frame.presTransSem;
 
@@ -1466,8 +1472,8 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 
     frame.imageAcquired = false;
 
-    swapChainD->currentFrame = (swapChainD->currentFrame + 1) % QVK_FRAMES_IN_FLIGHT;
-
+    swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
+    swapChainD->frameCount += 1;
     currentSwapChain = nullptr;
 
     return QRhi::FrameOpSuccess;
@@ -1501,10 +1507,10 @@ QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
 
 QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
 {
+    Q_ASSERT(inFrame);
+    inFrame = false;
     Q_ASSERT(ofr.active);
-
     ofr.active = false;
-    prepareFrameEnd();
 
     if (!ofr.cmdFence) {
         VkFenceCreateInfo fenceInfo;
@@ -1552,7 +1558,7 @@ QRhi::FrameOpResult QRhiVulkan::finish()
                 qWarning("finish() within a frame is not supported in combination with QVulkanWindow");
                 return QRhi::FrameOpError;
             }
-            cb = swapChainD->imageRes[swapChainD->currentImage].cmdBuf;
+            cb = swapChainD->imageRes[swapChainD->currentImageIndex].cmdBuf;
         }
         QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(cb, VK_NULL_HANDLE, nullptr, nullptr);
         if (submitres != QRhi::FrameOpSuccess)
@@ -1566,7 +1572,7 @@ QRhi::FrameOpResult QRhiVulkan::finish()
         if (ofr.active)
             startCommandBuffer(&ofr.cbWrapper.cb);
         else
-            startCommandBuffer(&swapChainD->imageRes[swapChainD->currentImage].cmdBuf);
+            startCommandBuffer(&swapChainD->imageRes[swapChainD->currentImageIndex].cmdBuf);
     }
 
     executeDeferredReleases(true);
@@ -1638,13 +1644,6 @@ void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
     QRHI_RES(QVkCommandBuffer, cb)->resetState();
 
     finishActiveReadbacks(); // last, in case the readback-completed callback issues rhi calls
-}
-
-void QRhiVulkan::prepareFrameEnd()
-{
-    Q_ASSERT(inFrame);
-    inFrame = false;
-    ++finishedFrameCount;
 }
 
 void QRhiVulkan::resourceUpdate(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates)
@@ -2315,7 +2314,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             finishTransferSrc(cb, texD);
         } else {
             // use the swapchain image
-            VkImage image = swapChainD->imageRes[swapChainD->currentImage].image;
+            VkImage image = swapChainD->imageRes[swapChainD->currentImageIndex].image;
             VkImageMemoryBarrier barrier;
             memset(&barrier, 0, sizeof(barrier));
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -2330,7 +2329,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                                      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                      0, 0, nullptr, 0, nullptr,
                                      1, &barrier);
-            swapChainD->imageRes[swapChainD->currentImage].presentableLayout = false;
+            swapChainD->imageRes[swapChainD->currentImageIndex].presentableLayout = false;
 
             df->vkCmdCopyImageToBuffer(cbD->cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, aRb.buf, 1, &copyDesc);
         }
@@ -4451,6 +4450,7 @@ bool QVkSwapChain::buildOrResize()
             rtWrapper.d.colorAttCount = 1;
             rtWrapper.d.dsAttCount = 1;
             rtWrapper.d.resolveAttCount = vkw->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 1 : 0;
+            frameCount = 0;
             wrapWindow = vkw;
             return true;
         }
@@ -4532,10 +4532,12 @@ bool QVkSwapChain::buildOrResize()
         }
     }
 
+    frameCount = 0;
+    wrapWindow = nullptr;
+
     QRHI_PROF;
     QRHI_PROF_F(resizeSwapChain(this, QVK_FRAMES_IN_FLIGHT, samples > VK_SAMPLE_COUNT_1_BIT ? QVK_FRAMES_IN_FLIGHT : 0, samples));
 
-    wrapWindow = nullptr;
     return true;
 }
 

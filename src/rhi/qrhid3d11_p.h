@@ -423,7 +423,8 @@ struct QD3D11SwapChain : public QRhiSwapChain
     ID3D11Texture2D *msaaTex[BUFFER_COUNT];
     ID3D11RenderTargetView *msaaRtv[BUFFER_COUNT];
     DXGI_SAMPLE_DESC sampleDesc;
-    int currentFrame = 0;
+    int currentFrameSlot = 0;
+    int frameCount = 0;
     QD3D11RenderBuffer *ds = nullptr;
 };
 
@@ -523,7 +524,6 @@ public:
     QRhiD3D11NativeHandles nativeHandlesStruct;
 
     bool inFrame = false;
-    int finishedFrameCount = 0;
     bool inPass = false;
 
     struct {

@@ -240,7 +240,8 @@ struct QMetalSwapChain : public QRhiSwapChain
 
     QWindow *window = nullptr;
     QSize pixelSize;
-    int currentFrame = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
+    int currentFrameSlot = 0; // 0..QMTL_FRAMES_IN_FLIGHT-1
+    int frameCount = 0;
     int samples = 1;
     QMetalReferenceRenderTarget rtWrapper;
     QMetalCommandBuffer cbWrapper;
@@ -338,7 +339,6 @@ public:
     bool importedDevice = false;
     bool inFrame = false;
     int currentFrameSlot = 0;
-    int finishedFrameCount = 0;
     bool inPass = false;
     QMetalSwapChain *currentSwapChain = nullptr;
     QSet<QMetalSwapChain *> swapchains;

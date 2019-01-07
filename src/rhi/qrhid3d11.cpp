@@ -148,10 +148,8 @@ bool QRhiD3D11::create(QRhi::Flags flags)
         featureLevel = dev->GetFeatureLevel();
     }
 
-    if (debugMarkers) {
-        if (FAILED(context->QueryInterface(IID_ID3DUserDefinedAnnotation, reinterpret_cast<void **>(&annotations))))
-            annotations = nullptr;
-    }
+    if (FAILED(context->QueryInterface(IID_ID3DUserDefinedAnnotation, reinterpret_cast<void **>(&annotations))))
+        annotations = nullptr;
 
     nativeHandlesStruct.dev = dev;
     nativeHandlesStruct.context = context;
@@ -264,7 +262,7 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::DebugMarkers:
         return annotations != nullptr;
     case QRhi::Timestamps:
-        return false;
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -549,13 +547,32 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
 
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
     contextState.currentSwapChain = swapChainD;
+    const int currentFrameSlot = swapChainD->currentFrameSlot;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    ID3D11Query *tsDisjoint = swapChainD->timestampDisjointQuery[currentFrameSlot];
+    const int tsIdx = QD3D11SwapChain::BUFFER_COUNT * currentFrameSlot;
+    ID3D11Query *tsStart = swapChainD->timestampQuery[tsIdx];
+    ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
+    if (tsDisjoint && tsStart && tsEnd) {
+        quint64 timestamps[2];
+        D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj;
+        bool ok = true;
+        ok &= context->GetData(tsDisjoint, &dj, sizeof(dj), 0) == S_OK;
+        ok &= context->GetData(tsStart, &timestamps[0], sizeof(quint64), 0) == S_OK;
+        ok &= context->GetData(tsEnd, &timestamps[1], sizeof(quint64), 0) == S_OK;
+        if (ok && !dj.Disjoint && dj.Frequency) {
+            const float elapsedMs = (timestamps[1] - timestamps[0]) / float(dj.Frequency) * 1000.0f;
+            QRHI_PROF_F(swapChainFrameGpuTime(swapChain, elapsedMs));
+        }
+    }
+
     swapChainD->cb.resetState();
 
     swapChainD->rt.d.rtv[0] = swapChainD->sampleDesc.Count > 1 ?
-                swapChainD->msaaRtv[swapChainD->currentFrameSlot] : swapChainD->rtv[swapChainD->currentFrameSlot];
+                swapChainD->msaaRtv[currentFrameSlot] : swapChainD->rtv[currentFrameSlot];
     swapChainD->rt.d.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
 
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
     QRHI_PROF_F(beginSwapChainFrame(swapChain));
 
     finishActiveReadbacks();
@@ -570,13 +587,33 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
     Q_ASSERT(contextState.currentSwapChain = swapChainD);
+    const int currentFrameSlot = swapChainD->currentFrameSlot;
+
+    ID3D11Query *tsDisjoint = swapChainD->timestampDisjointQuery[currentFrameSlot];
+    const int tsIdx = QD3D11SwapChain::BUFFER_COUNT * currentFrameSlot;
+    ID3D11Query *tsStart = swapChainD->timestampQuery[tsIdx];
+    ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
+    if (tsDisjoint && tsStart && tsEnd) {
+        // disjoint_ts[frame] record/begin
+        // ts[frame][0] record
+        // ... <commands>
+        // ts[frame][1] record
+        // disjoint_ts[frame] record/end
+        context->Begin(tsDisjoint);
+        context->End(tsStart); // just record a timestamp, no Begin needed
+    }
 
     executeCommandBuffer(&swapChainD->cb);
 
     if (swapChainD->sampleDesc.Count > 1) {
-        context->ResolveSubresource(swapChainD->tex[swapChainD->currentFrameSlot], 0,
-                                    swapChainD->msaaTex[swapChainD->currentFrameSlot], 0,
+        context->ResolveSubresource(swapChainD->tex[currentFrameSlot], 0,
+                                    swapChainD->msaaTex[currentFrameSlot], 0,
                                     swapChainD->colorFormat);
+    }
+
+    if (tsDisjoint && tsStart && tsEnd) {
+        context->End(tsEnd);
+        context->End(tsDisjoint);
     }
 
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
@@ -2576,6 +2613,9 @@ QD3D11SwapChain::QD3D11SwapChain(QRhiImplementation *rhi)
         rtv[i] = nullptr;
         msaaTex[i] = nullptr;
         msaaRtv[i] = nullptr;
+        timestampDisjointQuery[i] = nullptr;
+        timestampQuery[2 * i] = nullptr;
+        timestampQuery[2 * i + 1] = nullptr;
     }
 }
 
@@ -2607,6 +2647,20 @@ void QD3D11SwapChain::release()
         return;
 
     releaseBuffers();
+
+    for (int i = 0; i < BUFFER_COUNT; ++i) {
+        if (timestampDisjointQuery[i]) {
+            timestampDisjointQuery[i]->Release();
+            timestampDisjointQuery[i] = nullptr;
+        }
+        for (int j = 0; j < 2; ++j) {
+            const int idx = BUFFER_COUNT * i + j;
+            if (timestampQuery[idx]) {
+                timestampQuery[idx]->Release();
+                timestampQuery[idx] = nullptr;
+            }
+        }
+    }
 
     swapChain->Release();
     swapChain = nullptr;
@@ -2776,6 +2830,32 @@ bool QD3D11SwapChain::buildOrResize()
 
     QRHI_PROF;
     QRHI_PROF_F(resizeSwapChain(this, BUFFER_COUNT, sampleDesc.Count > 1 ? BUFFER_COUNT : 0, sampleDesc.Count));
+    if (rhiP) {
+        D3D11_QUERY_DESC queryDesc;
+        memset(&queryDesc, 0, sizeof(queryDesc));
+        for (int i = 0; i < BUFFER_COUNT; ++i) {
+            if (!timestampDisjointQuery[i]) {
+                queryDesc.Query = D3D11_QUERY_TIMESTAMP_DISJOINT;
+                HRESULT hr = rhiD->dev->CreateQuery(&queryDesc, &timestampDisjointQuery[i]);
+                if (FAILED(hr)) {
+                    qWarning("Failed to create timestamp disjoint query: %s", qPrintable(comErrorMessage(hr)));
+                    break;
+                }
+            }
+            queryDesc.Query = D3D11_QUERY_TIMESTAMP;
+            for (int j = 0; j < 2; ++j) {
+                const int idx = BUFFER_COUNT * i + j; // one pair per buffer (frame)
+                if (!timestampQuery[idx]) {
+                    HRESULT hr = rhiD->dev->CreateQuery(&queryDesc, &timestampQuery[idx]);
+                    if (FAILED(hr)) {
+                        qWarning("Failed to create timestamp query: %s", qPrintable(comErrorMessage(hr)));
+                        break;
+                    }
+                }
+            }
+        }
+        // timestamp queries are optional so we can go on even if they failed
+    }
 
     return true;
 }

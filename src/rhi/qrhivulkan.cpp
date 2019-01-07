@@ -1426,9 +1426,9 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
                 mask |= 0xFFULL << i;
             const quint64 ts0 = timestamp[0] & mask;
             const quint64 ts1 = timestamp[1] & mask;
-            const float freqNs = physDevProperties.limits.timestampPeriod;
-            if (!qFuzzyIsNull(freqNs)) {
-                const float elapsedMs = float(ts1 - ts0) / freqNs / 1000000.0f;
+            const float nsecsPerTick = physDevProperties.limits.timestampPeriod;
+            if (!qFuzzyIsNull(nsecsPerTick)) {
+                const float elapsedMs = float(ts1 - ts0) * nsecsPerTick / 1000000.0f;
                 // now we have the gpu time for the previous frame for this slot, report it
                 // (does not matter that it is not for this frame)
                 QRHI_PROF_F(swapChainFrameGpuTime(swapChain, elapsedMs));

@@ -548,23 +548,35 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
     contextState.currentSwapChain = swapChainD;
     const int currentFrameSlot = swapChainD->currentFrameSlot;
-
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
-    ID3D11Query *tsDisjoint = swapChainD->timestampDisjointQuery[currentFrameSlot];
-    const int tsIdx = QD3D11SwapChain::BUFFER_COUNT * currentFrameSlot;
-    ID3D11Query *tsStart = swapChainD->timestampQuery[tsIdx];
-    ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
-    if (tsDisjoint && tsStart && tsEnd) {
+
+    if (swapChainD->timestampActive[currentFrameSlot]) {
+        ID3D11Query *tsDisjoint = swapChainD->timestampDisjointQuery[currentFrameSlot];
+        const int tsIdx = QD3D11SwapChain::BUFFER_COUNT * currentFrameSlot;
+        ID3D11Query *tsStart = swapChainD->timestampQuery[tsIdx];
+        ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
         quint64 timestamps[2];
         D3D11_QUERY_DATA_TIMESTAMP_DISJOINT dj;
         bool ok = true;
-        ok &= context->GetData(tsDisjoint, &dj, sizeof(dj), 0) == S_OK;
-        ok &= context->GetData(tsStart, &timestamps[0], sizeof(quint64), 0) == S_OK;
-        ok &= context->GetData(tsEnd, &timestamps[1], sizeof(quint64), 0) == S_OK;
-        if (ok && !dj.Disjoint && dj.Frequency) {
-            const float elapsedMs = (timestamps[1] - timestamps[0]) / float(dj.Frequency) * 1000.0f;
-            QRHI_PROF_F(swapChainFrameGpuTime(swapChain, elapsedMs));
-        }
+        ok &= context->GetData(tsDisjoint, &dj, sizeof(dj), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK;
+        ok &= context->GetData(tsEnd, &timestamps[1], sizeof(quint64), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK;
+        // this above is often not ready, not even in frame_where_recorded+2,
+        // not clear why. so make the whole thing async and do not touch the
+        // queries until they are finally all available in frame this+2 or
+        // this+4 or ...
+        ok &= context->GetData(tsStart, &timestamps[0], sizeof(quint64), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK;
+        if (ok) {
+            if (!dj.Disjoint && dj.Frequency) {
+                // The timestamps seem to include vsync time with Present(1) on
+                // AMD and Intel, but not with NVIDIA. The latter is what we
+                // would need but not much we can do about it.
+                const float elapsedMs = (timestamps[1] - timestamps[0]) / float(dj.Frequency) * 1000.0f;
+
+                // finally got a value, just report it, the profiler cares about min/max/avg anyway
+                QRHI_PROF_F(swapChainFrameGpuTime(swapChain, elapsedMs));
+            }
+            swapChainD->timestampActive[currentFrameSlot] = false;
+        } // else leave timestampActive set to true, will retry in a subsequent beginFrame
     }
 
     swapChainD->cb.resetState();
@@ -593,7 +605,7 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     const int tsIdx = QD3D11SwapChain::BUFFER_COUNT * currentFrameSlot;
     ID3D11Query *tsStart = swapChainD->timestampQuery[tsIdx];
     ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
-    if (tsDisjoint && tsStart && tsEnd) {
+    if (tsDisjoint && tsStart && tsEnd && !swapChainD->timestampActive[currentFrameSlot]) {
         // disjoint_ts[frame] record/begin
         // ts[frame][0] record
         // ... <commands>
@@ -611,9 +623,10 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
                                     swapChainD->colorFormat);
     }
 
-    if (tsDisjoint && tsStart && tsEnd) {
+    if (tsDisjoint && tsStart && tsEnd && !swapChainD->timestampActive[currentFrameSlot]) {
         context->End(tsEnd);
         context->End(tsDisjoint);
+        swapChainD->timestampActive[currentFrameSlot] = true;
     }
 
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
@@ -2612,6 +2625,7 @@ QD3D11SwapChain::QD3D11SwapChain(QRhiImplementation *rhi)
         rtv[i] = nullptr;
         msaaTex[i] = nullptr;
         msaaRtv[i] = nullptr;
+        timestampActive[i] = false;
         timestampDisjointQuery[i] = nullptr;
         timestampQuery[2 * i] = nullptr;
         timestampQuery[2 * i + 1] = nullptr;

@@ -426,6 +426,7 @@ struct QD3D11SwapChain : public QRhiSwapChain
     int currentFrameSlot = 0;
     int frameCount = 0;
     QD3D11RenderBuffer *ds = nullptr;
+    bool timestampActive[BUFFER_COUNT];
     ID3D11Query *timestampDisjointQuery[BUFFER_COUNT];
     ID3D11Query *timestampQuery[BUFFER_COUNT * 2];
     UINT swapInterval = 1;

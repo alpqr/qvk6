@@ -567,9 +567,11 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
         ok &= context->GetData(tsStart, &timestamps[0], sizeof(quint64), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK;
         if (ok) {
             if (!dj.Disjoint && dj.Frequency) {
-                // The timestamps seem to include vsync time with Present(1) on
-                // AMD and Intel, but not with NVIDIA. The latter is what we
-                // would need but not much we can do about it.
+                // The timestamps seem to include vsync time with Present(1),
+                // except when running on a non-primary gpu. This is not ideal,
+                // and differs from other backends (Vulkan), but not much we
+                // can do about it. (apart from telling people to set NoVSync
+                // to get more useful results)
                 const float elapsedMs = (timestamps[1] - timestamps[0]) / float(dj.Frequency) * 1000.0f;
 
                 // finally got a value, just report it, the profiler cares about min/max/avg anyway

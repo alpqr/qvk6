@@ -2557,8 +2557,12 @@ bool QMetalSwapChain::buildOrResize()
     if (m_flags.testFlag(UsedAsTransferSource))
         d->layer.framebufferOnly = NO;
 
-    if (m_flags.testFlag(NoVSync))
-        d->layer.displaySyncEnabled = NO;
+#ifdef Q_OS_MAC
+    if (m_flags.testFlag(NoVSync)) {
+        if (@available(macOS 10.13, *))
+            d->layer.displaySyncEnabled = NO;
+    }
+#endif
 
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;

@@ -230,6 +230,8 @@ bool QRhiVulkan::create(QRhi::Flags flags)
             return false;
         }
 
+        timestampValidBits = queueFamilyProps[gfxQueueFamilyIdx].timestampValidBits;
+
         VkDeviceQueueCreateInfo queueInfo[2];
         const float prio[] = { 0 };
         memset(queueInfo, 0, sizeof(queueInfo));
@@ -349,6 +351,19 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     else
         qWarning("Failed to create initial descriptor pool: %d", err);
 
+    VkQueryPoolCreateInfo timestampQueryPoolInfo;
+    memset(&timestampQueryPoolInfo, 0, sizeof(timestampQueryPoolInfo));
+    timestampQueryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+    timestampQueryPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+    timestampQueryPoolInfo.queryCount = QVK_MAX_ACTIVE_TIMESTAMP_PAIRS * 2;
+    err = df->vkCreateQueryPool(dev, &timestampQueryPoolInfo, nullptr, &timestampQueryPool);
+    if (err != VK_SUCCESS) {
+        qWarning("Failed to create timestamp query pool: %d", err);
+        return false;
+    }
+    timestampQueryPoolMap.resize(QVK_MAX_ACTIVE_TIMESTAMP_PAIRS); // 1 bit per pair
+    timestampQueryPoolMap.fill(false);
+
     if (debugMarkersAvailable) {
         vkCmdDebugMarkerBegin = reinterpret_cast<PFN_vkCmdDebugMarkerBeginEXT>(f->vkGetDeviceProcAddr(dev, "vkCmdDebugMarkerBeginEXT"));
         vkCmdDebugMarkerEnd = reinterpret_cast<PFN_vkCmdDebugMarkerEndEXT>(f->vkGetDeviceProcAddr(dev, "vkCmdDebugMarkerEndEXT"));
@@ -395,6 +410,11 @@ void QRhiVulkan::destroy()
         df->vkDestroyDescriptorPool(dev, pool.pool, nullptr);
 
     descriptorPools.clear();
+
+    if (timestampQueryPool) {
+        df->vkDestroyQueryPool(dev, timestampQueryPool, nullptr);
+        timestampQueryPool = VK_NULL_HANDLE;
+    }
 
     if (!importedDevPoolQueue) {
         vmaDestroyAllocator(toVmaAllocator(allocator));
@@ -1230,6 +1250,9 @@ QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
     currentFrameSlot = w->currentFrame();
     currentSwapChain = swapChainD;
 
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(beginSwapChainFrame(swapChain));
+
     prepareNewFrame(&swapChainD->cbWrapper);
 
     return QRhi::FrameOpSuccess;
@@ -1348,6 +1371,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 {
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
     QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrameSlot]);
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     if (!frame.imageAcquired) {
         // Wait if we are too far ahead, i.e. the thread gets throttled based on the presentation rate
@@ -1389,11 +1413,55 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
     // mess up A's in-flight commands (as they are not in flight anymore).
     waitCommandCompletion(swapChainD->currentFrameSlot);
 
+    // Now is the time to read the timestamps for the previous frame for this slot.
+    if (frame.timestampQueryIndex >= 0) {
+        quint64 timestamp[2] = { 0, 0 };
+        VkResult err = df->vkGetQueryPoolResults(dev, timestampQueryPool, frame.timestampQueryIndex, 2,
+                                                 2 * sizeof(quint64), &timestamp, 0, VK_QUERY_RESULT_64_BIT);
+        timestampQueryPoolMap.clearBit(frame.timestampQueryIndex / 2);
+        frame.timestampQueryIndex = -1;
+        if (err == VK_SUCCESS) {
+            quint64 mask = 0;
+            for (quint64 i = 0; i < timestampValidBits; i += 8)
+                mask |= 0xFFULL << i;
+            const quint64 ts0 = timestamp[0] & mask;
+            const quint64 ts1 = timestamp[1] & mask;
+            const float freqNs = physDevProperties.limits.timestampPeriod;
+            if (!qFuzzyIsNull(freqNs)) {
+                const float elapsedMs = float(ts1 - ts0) / freqNs / 1000000.0f;
+                // now we have the gpu time for the previous frame for this slot, report it
+                // (does not matter that it is not for this frame)
+                QRHI_PROF_F(swapChainFrameGpuTime(swapChain, elapsedMs));
+            }
+        } else {
+            qWarning("Failed to query timestamp: %d", err);
+        }
+    }
+
     // build new draw command buffer
     QVkSwapChain::ImageResources &image(swapChainD->imageRes[swapChainD->currentImageIndex]);
     QRhi::FrameOpResult cbres = startCommandBuffer(&image.cmdBuf);
     if (cbres != QRhi::FrameOpSuccess)
         return cbres;
+
+    // when profiling is enabled, pick a free query (pair) from the pool
+    int timestampQueryIdx = -1;
+    if (profilerPrivateOrNull()) {
+        for (int i = 0; i < timestampQueryPoolMap.count(); ++i) {
+            if (!timestampQueryPoolMap.testBit(i)) {
+                timestampQueryPoolMap.setBit(i);
+                timestampQueryIdx = i * 2;
+                break;
+            }
+        }
+    }
+    if (timestampQueryIdx >= 0) {
+        df->vkCmdResetQueryPool(image.cmdBuf, timestampQueryPool, timestampQueryIdx, 2);
+        // record timestamp at the start of the command buffer
+        df->vkCmdWriteTimestamp(image.cmdBuf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                timestampQueryPool, timestampQueryIdx);
+        frame.timestampQueryIndex = timestampQueryIdx;
+    }
 
     swapChainD->cbWrapper.cb = image.cmdBuf;
 
@@ -1403,6 +1471,8 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
     currentSwapChain = swapChainD;
     if (swapChainD->ds)
         swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
+
+    QRHI_PROF_F(beginSwapChainFrame(swapChain));
 
     prepareNewFrame(&swapChainD->cbWrapper);
 
@@ -1439,6 +1509,12 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
         image.presentableLayout = true;
     }
 
+    // record another timestamp, when enabled
+    if (frame.timestampQueryIndex >= 0) {
+        df->vkCmdWriteTimestamp(image.cmdBuf, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                                timestampQueryPool, frame.timestampQueryIndex + 1);
+    }
+
     // stop recording and submit to the queue
     Q_ASSERT(!image.cmdFenceWaitable);
     QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(image.cmdBuf,
@@ -1450,6 +1526,10 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 
     frame.imageSemWaitable = false;
     image.cmdFenceWaitable = true;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    // this must be done before the Present
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
 
     // add the Present to the queue
     VkPresentInfoKHR presInfo;
@@ -1478,9 +1558,6 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 
     swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
     swapChainD->frameCount += 1;
-
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
-    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
 
     currentSwapChain = nullptr;
 
@@ -2675,6 +2752,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::DebugMarkers:
         return debugMarkersAvailable;
+    case QRhi::Timestamps:
+        return timestampValidBits != 0;
     default:
         Q_UNREACHABLE();
         return false;

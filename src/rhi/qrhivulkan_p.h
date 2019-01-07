@@ -56,6 +56,8 @@ static const int QVK_DESC_SETS_PER_POOL = 128;
 static const int QVK_UNIFORM_BUFFERS_PER_POOL = 256;
 static const int QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL = 256;
 
+static const int QVK_MAX_ACTIVE_TIMESTAMP_PAIRS = 16;
+
 // no vk_mem_alloc.h available here, void* is good enough
 typedef void * QVkAlloc;
 typedef void * QVkAllocator;
@@ -314,6 +316,7 @@ struct QVkSwapChain : public QRhiSwapChain
         bool imageAcquired = false;
         bool imageSemWaitable = false;
         quint32 imageIndex = 0;
+        int timestampQueryIndex = -1;
     } frameRes[QVK_FRAMES_IN_FLIGHT];
 
     quint32 currentImageIndex = 0; // index in imageRes
@@ -473,6 +476,7 @@ public:
     VkCommandPool cmdPool = VK_NULL_HANDLE;
     int gfxQueueFamilyIdx = -1;
     VkQueue gfxQueue = VK_NULL_HANDLE;
+    quint32 timestampValidBits = 0;
     QVkAllocator allocator = nullptr;
     QVulkanFunctions *f = nullptr;
     QVulkanDeviceFunctions *df = nullptr;
@@ -505,6 +509,9 @@ public:
         int allocedDescSets = 0;
     };
     QVector<DescriptorPoolData> descriptorPools;
+
+    VkQueryPool timestampQueryPool = VK_NULL_HANDLE;
+    QBitArray timestampQueryPoolMap;
 
     VkFormat optimalDsFormat = VK_FORMAT_UNDEFINED;
     QMatrix4x4 clipCorrectMatrix;

@@ -263,6 +263,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::DebugMarkers:
         return annotations != nullptr;
+    case QRhi::Timestamps:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;
@@ -553,6 +555,9 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
                 swapChainD->msaaRtv[swapChainD->currentFrameSlot] : swapChainD->rtv[swapChainD->currentFrameSlot];
     swapChainD->rt.d.dsv = swapChainD->ds ? swapChainD->ds->dsv : nullptr;
 
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(beginSwapChainFrame(swapChain));
+
     finishActiveReadbacks();
 
     return QRhi::FrameOpSuccess;
@@ -574,6 +579,10 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
                                     swapChainD->colorFormat);
     }
 
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    // this must be done before the Present
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
+
     const UINT swapInterval = 1;
     const UINT presentFlags = 0;
     HRESULT hr = swapChainD->swapChain->Present(swapInterval, presentFlags);
@@ -582,9 +591,6 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 
     swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QD3D11SwapChain::BUFFER_COUNT;
     swapChainD->frameCount += 1;
-
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
-    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
 
     contextState.currentSwapChain = nullptr;
 

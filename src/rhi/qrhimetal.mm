@@ -361,6 +361,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         Q_FALLTHROUGH();
     case QRhi::DebugMarkers:
         return true;
+    case QRhi::Timestamps:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;
@@ -702,6 +704,9 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     swapChainD->rtWrapper.d->fb.colorAtt[0] = { scTex, 0, 0, resolveTex, 0, 0 };
     swapChainD->rtWrapper.d->fb.dsTex = swapChainD->ds ? swapChainD->ds->d->tex : nil;
     swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
+
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(beginSwapChainFrame(swapChain));
 
     executeDeferredReleases();
     swapChainD->cbWrapper.resetState();

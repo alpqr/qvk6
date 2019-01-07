@@ -1116,7 +1116,8 @@ public:
     enum Feature {
         MultisampleTexture = 1,
         MultisampleRenderBuffer,
-        DebugMarkers
+        DebugMarkers,
+        Timestamps
     };
 
     enum ResourceSizeLimit {

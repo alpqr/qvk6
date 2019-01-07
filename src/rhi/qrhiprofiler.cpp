@@ -67,6 +67,17 @@ void QRhiProfiler::addVMemAllocatorStats()
         d->rhiD->sendVMemStatsToProfiler();
 }
 
+int QRhiProfiler::frameTimingWriteInterval() const
+{
+    return d->frameTimingWriteInterval;
+}
+
+void QRhiProfiler::setFrameTimingWriteInterval(int frameCount)
+{
+    if (frameCount > 0)
+        d->frameTimingWriteInterval = frameCount;
+}
+
 QRhiProfilerPrivate::~QRhiProfilerPrivate()
 {
     flushStream();
@@ -306,38 +317,97 @@ void QRhiProfilerPrivate::releaseSwapChain(QRhiSwapChain *sc)
     writer->endMap();
 }
 
+template<typename T>
+void calcTiming(QVector<T> *vec, T *minDelta, T *maxDelta, float *avgDelta)
+{
+    if (vec->isEmpty())
+        return;
+
+    *minDelta = *maxDelta = 0;
+    float totalDelta = 0;
+    for (T delta : qAsConst(*vec)) {
+        totalDelta += float(delta);
+        if (*minDelta == 0 || delta < *minDelta)
+            *minDelta = delta;
+        if (*maxDelta == 0 || delta > *maxDelta)
+            *maxDelta = delta;
+    }
+    *avgDelta = totalDelta / vec->count();
+
+    vec->clear();
+}
+
+void QRhiProfilerPrivate::beginSwapChainFrame(QRhiSwapChain *sc)
+{
+    Sc &scd(swapchains[sc]);
+    scd.beginToEndTimer.start();
+}
+
 void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
 {
-    if (!swapchains.contains(sc)) {
-        swapchains[sc].t.start();
+    Sc &scd(swapchains[sc]);
+    if (!scd.frameToFrameRunning) {
+        scd.frameToFrameTimer.start();
+        scd.frameToFrameRunning = true;
         return;
     }
 
-    Sc &scd(swapchains[sc]);
-    scd.frameDelta[scd.n++] = scd.t.restart();
-    if (scd.n == Sc::FRAME_SAMPLE_SIZE) {
-        scd.n = 0;
-        qint64 minDelta = 0;
-        qint64 maxDelta = 0;
-        float totalDelta = 0;
-        for (int i = 0; i < Sc::FRAME_SAMPLE_SIZE; ++i) {
-            const qint64 delta = scd.frameDelta[i];
-            totalDelta += delta;
-            if (minDelta == 0 || delta < minDelta)
-                minDelta = delta;
-            if (maxDelta == 0 || delta > maxDelta)
-                maxDelta = delta;
-        }
-        const float avgDelta = totalDelta / Sc::FRAME_SAMPLE_SIZE;
+    scd.frameToFrameDelta.append(scd.frameToFrameTimer.restart());
+    if (scd.frameToFrameDelta.count() >= frameTimingWriteInterval) {
+        qint64 minDelta;
+        qint64 maxDelta;
+        float avgDelta = 0;
+        calcTiming(&scd.frameToFrameDelta, &minDelta, &maxDelta, &avgDelta);
         if (ensureStream()) {
             writer->startMap();
-            WRITE_OP(FrameTime);
+            WRITE_OP(FrameToFrameTime);
             WRITE_TIMESTAMP;
             WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
             WRITE_PAIR(QLatin1String("frames_since_resize"), frameCount);
-            WRITE_PAIR(QLatin1String("min_ms_between_frames"), minDelta);
-            WRITE_PAIR(QLatin1String("max_ms_between_frames"), maxDelta);
-            WRITE_PAIR(QLatin1String("avg_ms_between_frames"), avgDelta);
+            WRITE_PAIR(QLatin1String("min_ms_frame_delta"), minDelta);
+            WRITE_PAIR(QLatin1String("max_ms_frame_delta"), maxDelta);
+            WRITE_PAIR(QLatin1String("avg_ms_frame_delta"), avgDelta);
+            writer->endMap();
+        }
+    }
+
+    scd.beginToEndDelta.append(scd.beginToEndTimer.elapsed());
+    if (scd.beginToEndDelta.count() >= frameTimingWriteInterval) {
+        qint64 minDelta;
+        qint64 maxDelta;
+        float avgDelta = 0;
+        calcTiming(&scd.beginToEndDelta, &minDelta, &maxDelta, &avgDelta);
+        if (ensureStream()) {
+            writer->startMap();
+            WRITE_OP(FrameBuildTime);
+            WRITE_TIMESTAMP;
+            WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
+            WRITE_PAIR(QLatin1String("frames_since_resize"), frameCount);
+            WRITE_PAIR(QLatin1String("min_ms_frame_build"), minDelta);
+            WRITE_PAIR(QLatin1String("max_ms_frame_build"), maxDelta);
+            WRITE_PAIR(QLatin1String("avg_ms_frame_build"), avgDelta);
+            writer->endMap();
+        }
+    }
+}
+
+void QRhiProfilerPrivate::swapChainFrameGpuTime(QRhiSwapChain *sc, float gpuTime)
+{
+    Sc &scd(swapchains[sc]);
+    scd.gpuFrameTime.append(gpuTime);
+    if (scd.gpuFrameTime.count() >= frameTimingWriteInterval) {
+        float minDelta;
+        float maxDelta;
+        float avgDelta = 0;
+        calcTiming(&scd.gpuFrameTime, &minDelta, &maxDelta, &avgDelta);
+        if (ensureStream()) {
+            writer->startMap();
+            WRITE_OP(GpuFrameTime);
+            WRITE_TIMESTAMP;
+            WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
+            WRITE_PAIR(QLatin1String("min_ms_gpu_frame_time"), minDelta);
+            WRITE_PAIR(QLatin1String("max_ms_gpu_frame_time"), maxDelta);
+            WRITE_PAIR(QLatin1String("avg_ms_gpu_frame_time"), avgDelta);
             writer->endMap();
         }
     }

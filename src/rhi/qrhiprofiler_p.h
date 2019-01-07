@@ -73,7 +73,9 @@ public:
     void resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int msaaBufferCount, int sampleCount);
     void releaseSwapChain(QRhiSwapChain *sc);
 
+    void beginSwapChainFrame(QRhiSwapChain *sc);
     void endSwapChainFrame(QRhiSwapChain *sc, int frameCount);
+    void swapChainFrameGpuTime(QRhiSwapChain *sc, float gpuTimeMs);
 
     void newReadbackBuffer(quint64 id, QRhiResource *src, quint32 size);
     void releaseReadbackBuffer(quint64 id);
@@ -89,11 +91,20 @@ public:
     QCborStreamWriter *writer = nullptr;
     bool active = false;
     QElapsedTimer ts;
+    static const int DEFAULT_FRAME_TIMING_WRITE_INTERVAL = 120; // frames
+    int frameTimingWriteInterval = DEFAULT_FRAME_TIMING_WRITE_INTERVAL;
     struct Sc {
-        QElapsedTimer t;
-        int n = 0;
-        static const int FRAME_SAMPLE_SIZE = 120;
-        qint64 frameDelta[FRAME_SAMPLE_SIZE];
+        Sc() {
+            frameToFrameDelta.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
+            beginToEndDelta.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
+            gpuFrameTime.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
+        }
+        QElapsedTimer frameToFrameTimer;
+        bool frameToFrameRunning = false;
+        QElapsedTimer beginToEndTimer;
+        QVector<qint64> frameToFrameDelta;
+        QVector<qint64> beginToEndDelta;
+        QVector<float> gpuFrameTime;
     };
     QHash<QRhiSwapChain *, Sc> swapchains;
 };

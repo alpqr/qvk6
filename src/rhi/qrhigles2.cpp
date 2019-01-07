@@ -265,6 +265,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return caps.msaaRenderBuffer;
     case QRhi::DebugMarkers:
         return false;
+    case QRhi::Timestamps:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;
@@ -505,6 +507,9 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
     inFrame = true;
     currentSwapChain = swapChainD;
 
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(beginSwapChainFrame(swapChain));
+
     executeDeferredReleases();
     QRHI_RES(QGles2CommandBuffer, &swapChainD->cb)->resetState();
 
@@ -524,15 +529,16 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
 
     executeCommandBuffer(&swapChainD->cb);
 
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    // this must be done before the swap
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
+
     if (swapChainD->surface) {
         ctx->swapBuffers(swapChainD->surface);
         buffersSwapped = true;
     }
 
     swapChainD->frameCount += 1;
-
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
-    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
 
     currentSwapChain = nullptr;
 

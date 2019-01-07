@@ -63,16 +63,20 @@ public:
         NewReadbackBuffer,
         ReleaseReadbackBuffer,
         VMemAllocStats,
-        FrameTime
+        GpuFrameTime,
+        FrameToFrameTime,
+        FrameBuildTime
     };
 
     ~QRhiProfiler();
 
     void setDevice(QIODevice *device);
-
     void flush();
 
     void addVMemAllocatorStats();
+
+    int frameTimingWriteInterval() const;
+    void setFrameTimingWriteInterval(int frameCount);
 
 private:
     Q_DISABLE_COPY(QRhiProfiler)

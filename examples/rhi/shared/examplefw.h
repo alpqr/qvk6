@@ -153,8 +153,7 @@ protected:
     QMatrix4x4 m_proj;
 
     QElapsedTimer m_timer;
-    qint64 m_elapsedMs;
-    int m_elapsedCount;
+    int m_frameCount;
 
 #ifndef QT_NO_OPENGL
     QOpenGLContext *m_context = nullptr;
@@ -334,8 +333,8 @@ void Window::resizeSwapChain()
 
     m_hasSwapChain = m_sc->buildOrResize();
 
-    m_elapsedMs = 0;
-    m_elapsedCount = 0;
+    m_frameCount = 0;
+    m_timer.restart();
 
     m_proj = m_r->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, outputSize.width() / (float) outputSize.height(), 0.01f, 1000.0f);
@@ -381,21 +380,28 @@ void Window::render()
         return;
     }
 
-    if (m_elapsedCount)
-        m_elapsedMs += m_timer.elapsed();
-    m_timer.restart();
-    m_elapsedCount += 1;
-    if (m_elapsedMs >= 4000) {
-        qDebug("%f", m_elapsedCount / 4.0f);
-        m_elapsedMs = 0;
-        m_elapsedCount = 0;
+    m_frameCount += 1;
+    if (m_timer.elapsed() > 1000) {
+        qDebug("%d", m_frameCount);
+        m_timer.restart();
+        m_frameCount = 0;
     }
 
     customRender();
 
     m_r->endFrame(m_sc);
 
-    requestUpdate();
+    // There should be no need to rely on requestUpdate().
+    // Outside Apple that's a 5 ms timer, otherwise backed by CVDisplayLink but
+    // for Metal we do not need that either.
+    bool sillyPlatform = false;
+#ifdef Q_OS_DARWIN
+    sillyPlatform = graphicsApi == OpenGL;
+#endif
+    if (sillyPlatform)
+        requestUpdate();
+    else
+        QCoreApplication::postEvent(this, new QEvent(QEvent::UpdateRequest));
 }
 
 int main(int argc, char **argv)

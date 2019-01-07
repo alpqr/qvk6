@@ -1008,11 +1008,13 @@ bool QRhiVulkan::recreateSwapChain(QRhiSwapChain *swapChain)
     if (swapChainD->supportsReadback && swapChainD->m_flags.testFlag(QRhiSwapChain::UsedAsTransferSource))
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-    VkPresentModeKHR presentMode = swapChainD->m_flags.testFlag(QRhiSwapChain::NoVSync)
-            ? VK_PRESENT_MODE_IMMEDIATE_KHR
-            : VK_PRESENT_MODE_FIFO_KHR;
-    if (!swapChainD->supportedPresentationModes.contains(presentMode))
-        presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+    if (swapChainD->m_flags.testFlag(QRhiSwapChain::NoVSync)) {
+        if (swapChainD->supportedPresentationModes.contains(VK_PRESENT_MODE_MAILBOX_KHR))
+            presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+        else if (swapChainD->supportedPresentationModes.contains(VK_PRESENT_MODE_IMMEDIATE_KHR))
+            presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
 
     qDebug("Creating new swapchain of %d buffers, size %dx%d, presentation mode %d",
            reqBufferCount, swapChainD->pixelSize.width(), swapChainD->pixelSize.height(), presentMode);

@@ -1,4 +1,3 @@
-d3d: timestamp query
 prof report api (fed by a cbor stream)
 mtl: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
@@ -52,6 +51,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+allow requesting no-vsync present mode where applicable
+d3d: timestamp query
 vk: timestamp query
 prof: report readback temp buf
 merge offscreen examples into one

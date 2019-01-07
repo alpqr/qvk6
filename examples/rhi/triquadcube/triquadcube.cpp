@@ -68,6 +68,7 @@
 //#define USE_MSAA
 //#define USE_SRGB_SWAPCHAIN
 //#define READBACK_SWAPCHAIN
+//#define NO_VSYNC
 
 struct {
     TriangleRenderer triRenderer;
@@ -104,6 +105,13 @@ void preInit()
 #ifdef USE_SRGB_SWAPCHAIN
     scFlags |= QRhiSwapChain::sRGB;
 #endif
+
+#ifdef NO_VSYNC
+    scFlags |= QRhiSwapChain::NoVSync;
+#endif
+
+    // For OpenGL some of these are incorporated into the QSurfaceFormat by
+    // examplefw.h after returning from here as that is out of the RHI's control.
 }
 
 void Window::customInit()

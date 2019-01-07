@@ -2557,6 +2557,9 @@ bool QMetalSwapChain::buildOrResize()
     if (m_flags.testFlag(UsedAsTransferSource))
         d->layer.framebufferOnly = NO;
 
+    if (m_flags.testFlag(NoVSync))
+        d->layer.displaySyncEnabled = NO;
+
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;
 

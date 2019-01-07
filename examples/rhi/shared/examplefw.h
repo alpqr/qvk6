@@ -449,6 +449,8 @@ int main(int argc, char **argv)
     fmt.setStencilBufferSize(8);
     if (sampleCount > 1)
         fmt.setSamples(sampleCount);
+    if (scFlags.testFlag(QRhiSwapChain::NoVSync))
+        fmt.setSwapInterval(0);
     QSurfaceFormat::setDefaultFormat(fmt);
 
     // Vulkan setup.

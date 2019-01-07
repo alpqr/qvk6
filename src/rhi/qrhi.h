@@ -871,7 +871,8 @@ public:
         SurfaceHasPreMulAlpha = 1 << 0,
         SurfaceHasNonPreMulAlpha = 1 << 1,
         sRGB = 1 << 2,
-        UsedAsTransferSource = 1 << 3 // will be read back
+        UsedAsTransferSource = 1 << 3, // will be read back
+        NoVSync = 1 << 4
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 

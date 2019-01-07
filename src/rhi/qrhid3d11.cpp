@@ -620,9 +620,8 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     // this must be done before the Present
     QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
 
-    const UINT swapInterval = 1;
     const UINT presentFlags = 0;
-    HRESULT hr = swapChainD->swapChain->Present(swapInterval, presentFlags);
+    HRESULT hr = swapChainD->swapChain->Present(swapChainD->swapInterval, presentFlags);
     if (FAILED(hr))
         qWarning("Failed to present: %s", qPrintable(comErrorMessage(hr)));
 
@@ -2820,6 +2819,7 @@ bool QD3D11SwapChain::buildOrResize()
     currentFrameSlot = 0;
     frameCount = 0;
     ds = m_depthStencil ? QRHI_RES(QD3D11RenderBuffer, m_depthStencil) : nullptr;
+    swapInterval = m_flags.testFlag(QRhiSwapChain::NoVSync) ? 0 : 1;
 
     QD3D11ReferenceRenderTarget *rtD = QRHI_RES(QD3D11ReferenceRenderTarget, &rt);
     rtD->d.rp = QRHI_RES(QD3D11RenderPassDescriptor, m_renderPassDesc);

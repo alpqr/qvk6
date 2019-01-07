@@ -292,6 +292,7 @@ struct QVkSwapChain : public QRhiSwapChain
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     QVkRenderBuffer *ds = nullptr;
     VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
+    QVector<VkPresentModeKHR> supportedPresentationModes;
     VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
     QVkReferenceRenderTarget rtWrapper;
     QVkCommandBuffer cbWrapper;
@@ -497,6 +498,7 @@ public:
     PFN_vkQueuePresentKHR vkQueuePresentKHR;
     PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR = nullptr;
     PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
+    PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR;
 
     VkPipelineCache pipelineCache = VK_NULL_HANDLE;
     struct DescriptorPoolData {

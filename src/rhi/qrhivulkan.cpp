@@ -744,8 +744,6 @@ bool QRhiVulkan::createTransientImage(VkFormat format,
     return true;
 }
 
-static const VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-
 VkFormat QRhiVulkan::optimalDepthStencilFormat()
 {
     if (optimalDsFormat != VK_FORMAT_UNDEFINED)
@@ -1010,8 +1008,14 @@ bool QRhiVulkan::recreateSwapChain(QRhiSwapChain *swapChain)
     if (swapChainD->supportsReadback && swapChainD->m_flags.testFlag(QRhiSwapChain::UsedAsTransferSource))
         usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
-    qDebug("Creating new swapchain of %d buffers, size %dx%d",
-           reqBufferCount, swapChainD->pixelSize.width(), swapChainD->pixelSize.height());
+    VkPresentModeKHR presentMode = swapChainD->m_flags.testFlag(QRhiSwapChain::NoVSync)
+            ? VK_PRESENT_MODE_IMMEDIATE_KHR
+            : VK_PRESENT_MODE_FIFO_KHR;
+    if (!swapChainD->supportedPresentationModes.contains(presentMode))
+        presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+    qDebug("Creating new swapchain of %d buffers, size %dx%d, presentation mode %d",
+           reqBufferCount, swapChainD->pixelSize.width(), swapChainD->pixelSize.height(), presentMode);
 
     VkSwapchainKHR oldSwapChain = swapChainD->sc;
     VkSwapchainCreateInfoKHR swapChainInfo;
@@ -4494,7 +4498,12 @@ bool QVkSwapChain::ensureSurface()
                     rhiD->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceCapabilitiesKHR"));
         rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfaceFormatsKHR>(
                     rhiD->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfaceFormatsKHR"));
-        if (!rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR || !rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR) {
+        rhiD->vkGetPhysicalDeviceSurfacePresentModesKHR = reinterpret_cast<PFN_vkGetPhysicalDeviceSurfacePresentModesKHR>(
+                    rhiD->inst->getInstanceProcAddr("vkGetPhysicalDeviceSurfacePresentModesKHR"));
+        if (!rhiD->vkGetPhysicalDeviceSurfaceCapabilitiesKHR
+                || !rhiD->vkGetPhysicalDeviceSurfaceFormatsKHR
+                || !rhiD->vkGetPhysicalDeviceSurfacePresentModesKHR)
+        {
             qWarning("Physical device surface queries not available");
             return false;
         }
@@ -4524,6 +4533,12 @@ bool QVkSwapChain::ensureSurface()
     }
 
     samples = rhiD->effectiveSampleCount(m_sampleCount);
+
+    quint32 presModeCount = 0;
+    rhiD->vkGetPhysicalDeviceSurfacePresentModesKHR(rhiD->physDev, surface, &presModeCount, nullptr);
+    QVector<VkPresentModeKHR> presModes(presModeCount);
+    rhiD->vkGetPhysicalDeviceSurfacePresentModesKHR(rhiD->physDev, surface, &presModeCount, presModes.data());
+    supportedPresentationModes = presModes;
 
     return true;
 }

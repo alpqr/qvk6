@@ -514,7 +514,8 @@ public:
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
-    void executeCommandBuffer(QD3D11CommandBuffer *cbD);
+    void setRenderTarget(QRhiRenderTarget *rt);
+    void executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain = nullptr);
     DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;
     void finishActiveReadbacks();
 

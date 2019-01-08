@@ -567,13 +567,7 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
         ok &= context->GetData(tsStart, &timestamps[0], sizeof(quint64), D3D11_ASYNC_GETDATA_DONOTFLUSH) == S_OK;
         if (ok) {
             if (!dj.Disjoint && dj.Frequency) {
-                // The timestamps seem to include vsync time with Present(1),
-                // except when running on a non-primary gpu. This is not ideal,
-                // and differs from other backends (Vulkan), but not much we
-                // can do about it. (apart from telling people to set NoVSync
-                // to get more useful results)
                 const float elapsedMs = (timestamps[1] - timestamps[0]) / float(dj.Frequency) * 1000.0f;
-
                 // finally got a value, just report it, the profiler cares about min/max/avg anyway
                 QRHI_PROF_F(swapChainFrameGpuTime(swapChain, elapsedMs));
             }
@@ -607,17 +601,12 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     const int tsIdx = QD3D11SwapChain::BUFFER_COUNT * currentFrameSlot;
     ID3D11Query *tsStart = swapChainD->timestampQuery[tsIdx];
     ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
-    if (tsDisjoint && tsStart && tsEnd && !swapChainD->timestampActive[currentFrameSlot]) {
-        // disjoint_ts[frame] record/begin
-        // ts[frame][0] record
-        // ... <commands>
-        // ts[frame][1] record
-        // disjoint_ts[frame] record/end
-        context->Begin(tsDisjoint);
-        context->End(tsStart); // just record a timestamp, no Begin needed
-    }
+    const bool recordTimestamps = tsDisjoint && tsStart && tsEnd && !swapChainD->timestampActive[currentFrameSlot];
 
-    executeCommandBuffer(&swapChainD->cb);
+    if (recordTimestamps)
+        executeCommandBuffer(&swapChainD->cb, swapChainD);
+    else
+        executeCommandBuffer(&swapChainD->cb);
 
     if (swapChainD->sampleDesc.Count > 1) {
         context->ResolveSubresource(swapChainD->tex[currentFrameSlot], 0,
@@ -625,7 +614,8 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
                                     swapChainD->colorFormat);
     }
 
-    if (tsDisjoint && tsStart && tsEnd && !swapChainD->timestampActive[currentFrameSlot]) {
+    // this is here because we want to include the time spent on the resolve as well
+    if (recordTimestamps) {
         context->End(tsEnd);
         context->End(tsDisjoint);
         swapChainD->timestampActive[currentFrameSlot] = true;
@@ -798,7 +788,7 @@ QRhi::FrameOpResult QRhiD3D11::finish()
             ofr.cbWrapper.resetCommands();
         } else {
             Q_ASSERT(contextState.currentSwapChain);
-            executeCommandBuffer(&contextState.currentSwapChain->cb);
+            executeCommandBuffer(&contextState.currentSwapChain->cb, contextState.currentSwapChain);
             contextState.currentSwapChain->cb.resetCommands();
         }
     }
@@ -1357,28 +1347,46 @@ void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
     }
 }
 
-void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD)
+void QRhiD3D11::setRenderTarget(QRhiRenderTarget *rt)
+{
+    // The new output cannot be bound as input from the previous frame,
+    // otherwise the debug layer complains. Avoid this.
+    const int nullsrvCount = qMax(contextState.vsLastActiveSrvBinding, contextState.fsLastActiveSrvBinding) + 1;
+    QVarLengthArray<ID3D11ShaderResourceView *,
+            D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> nullsrvs(nullsrvCount);
+    for (int i = 0; i < nullsrvs.count(); ++i)
+        nullsrvs[i] = nullptr;
+    context->VSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
+    context->PSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
+    QD3D11RenderTargetData *rtD = rtData(rt);
+    context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rtD->rtv : nullptr, rtD->dsv);
+}
+
+void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain)
 {
     quint32 stencilRef = 0;
     float blendConstants[] = { 1, 1, 1, 1 };
 
+    if (timestampSwapChain) {
+        const int currentFrameSlot = timestampSwapChain->currentFrameSlot;
+        ID3D11Query *tsDisjoint = timestampSwapChain->timestampDisjointQuery[currentFrameSlot];
+        const int tsIdx = QD3D11SwapChain::BUFFER_COUNT * currentFrameSlot;
+        ID3D11Query *tsStart = timestampSwapChain->timestampQuery[tsIdx];
+        if (tsDisjoint && tsStart && !timestampSwapChain->timestampActive[currentFrameSlot]) {
+            // The timestamps seem to include vsync time with Present(1), except
+            // when running on a non-primary gpu. This is not ideal. So try working
+            // it around by issuing a semi-fake OMSetRenderTargets early and
+            // writing the first timestamp only afterwards.
+            context->Begin(tsDisjoint);
+            setRenderTarget(&timestampSwapChain->rt);
+            context->End(tsStart); // just record a timestamp, no Begin needed
+        }
+    }
+
     for (const QD3D11CommandBuffer::Command &cmd : qAsConst(cbD->commands)) {
         switch (cmd.cmd) {
         case QD3D11CommandBuffer::Command::SetRenderTarget:
-        {
-            QRhiRenderTarget *rt = cmd.args.setRenderTarget.rt;
-            // The new output cannot be bound as input from the previous frame,
-            // otherwise the debug layer complains. Avoid this.
-            const int nullsrvCount = qMax(contextState.vsLastActiveSrvBinding, contextState.fsLastActiveSrvBinding) + 1;
-            QVarLengthArray<ID3D11ShaderResourceView *,
-                    D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT> nullsrvs(nullsrvCount);
-            for (int i = 0; i < nullsrvs.count(); ++i)
-                nullsrvs[i] = nullptr;
-            context->VSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
-            context->PSSetShaderResources(0, nullsrvs.count(), nullsrvs.constData());
-            QD3D11RenderTargetData *rtD = rtData(rt);
-            context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rtD->rtv : nullptr, rtD->dsv);
-        }
+            setRenderTarget(cmd.args.setRenderTarget.rt);
             break;
         case QD3D11CommandBuffer::Command::Clear:
         {

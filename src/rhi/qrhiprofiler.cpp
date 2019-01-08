@@ -36,7 +36,6 @@
 
 #include "qrhiprofiler_p.h"
 #include "qrhi_p.h"
-#include <QCborStreamWriter>
 
 QT_BEGIN_NAMESPACE
 
@@ -56,11 +55,6 @@ void QRhiProfiler::setDevice(QIODevice *device)
     d->outputDevice = device;
 }
 
-void QRhiProfiler::flush()
-{
-    d->flushStream();
-}
-
 void QRhiProfiler::addVMemAllocatorStats()
 {
     if (d->rhiD)
@@ -78,113 +72,90 @@ void QRhiProfiler::setFrameTimingWriteInterval(int frameCount)
         d->frameTimingWriteInterval = frameCount;
 }
 
-QRhiProfilerPrivate::~QRhiProfilerPrivate()
+void QRhiProfilerPrivate::startEntry(QRhiProfiler::StreamOp op, qint64 timestamp, QRhiResource *res)
 {
-    flushStream();
-    delete writer;
+    buf.clear();
+    buf.append(QByteArray::number(op));
+    buf.append(',');
+    buf.append(QByteArray::number(timestamp));
+    buf.append(',');
+    buf.append(QByteArray::number(quint64(quintptr(res))));
+    buf.append(',');
 }
 
-bool QRhiProfilerPrivate::ensureStream()
+void QRhiProfilerPrivate::writeInt(const char *key, qint64 v)
 {
-    if (!outputDevice)
-        return false;
-
-    if (!writer) {
-        writer = new QCborStreamWriter(outputDevice);
-        active = false;
-    }
-
-    if (!active) {
-        writer->startArray();
-        active = true;
-    }
-
-    return true;
+    Q_ASSERT(key[0] != 'F');
+    buf.append(key);
+    buf.append(',');
+    buf.append(QByteArray::number(v));
+    buf.append(',');
 }
 
-void QRhiProfilerPrivate::flushStream()
+void QRhiProfilerPrivate::writeFloat(const char *key, float f)
 {
-    if (!active || !writer)
-        return;
-
-    // CborWriter is unbuffered so all we need to do here is to end the top-level array
-    writer->endArray();
-
-    active = false;
+    Q_ASSERT(key[0] == 'F');
+    buf.append(key);
+    buf.append(',');
+    buf.append(QByteArray::number(f));
+    buf.append(',');
 }
 
-#define WRITE_PAIR(a, b) writer->append(a); writer->append(b)
-#define WRITE_OP(op) WRITE_PAIR(QLatin1String("op"), QRhiProfiler::op)
-#define WRITE_TIMESTAMP WRITE_PAIR(QLatin1String("timestamp"), ts.elapsed())
-#define WRITE_RES_NAME(res, key) WRITE_PAIR(QLatin1String(key), quint64(quintptr(res))); \
-    WRITE_PAIR(QLatin1String("name"), res->name());
+void QRhiProfilerPrivate::endEntry()
+{
+    buf.append('\n');
+    outputDevice->write(buf);
+}
 
 void QRhiProfilerPrivate::newBuffer(QRhiBuffer *buf, quint32 realSize, int backingGpuBufCount, int backingCpuBufCount)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(NewBuffer);
-    WRITE_TIMESTAMP;
-    WRITE_RES_NAME(buf, "buffer");
-    WRITE_PAIR(QLatin1String("type"), buf->type());
-    WRITE_PAIR(QLatin1String("usage"), buf->usage());
-    WRITE_PAIR(QLatin1String("logical_size"), buf->size());
-    WRITE_PAIR(QLatin1String("effective_size"), realSize);
-    WRITE_PAIR(QLatin1String("backing_gpu_buf_count"), backingGpuBufCount);
-    WRITE_PAIR(QLatin1String("backing_cpu_buf_count"), backingCpuBufCount);
-    writer->endMap();
+    startEntry(QRhiProfiler::NewBuffer, ts.elapsed(), buf);
+    writeInt("type", buf->type());
+    writeInt("usage", buf->usage());
+    writeInt("logical_size", buf->size());
+    writeInt("effective_size", realSize);
+    writeInt("backing_gpu_buf_count", backingGpuBufCount);
+    writeInt("backing_cpu_buf_count", backingCpuBufCount);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::releaseBuffer(QRhiBuffer *buf)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(ReleaseBuffer);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
-    writer->endMap();
+    startEntry(QRhiProfiler::ReleaseBuffer, ts.elapsed(), buf);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::newBufferStagingArea(QRhiBuffer *buf, int slot, quint32 size)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(NewBufferStagingArea);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
-    WRITE_PAIR(QLatin1String("slot"), slot);
-    WRITE_PAIR(QLatin1String("size"), size);
-    writer->endMap();
+    startEntry(QRhiProfiler::NewBufferStagingArea, ts.elapsed(), buf);
+    writeInt("slot", slot);
+    writeInt("size", size);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::releaseBufferStagingArea(QRhiBuffer *buf, int slot)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(ReleaseBufferStagingArea);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("buffer"), quint64(quintptr(buf)));
-    WRITE_PAIR(QLatin1String("slot"), slot);
-    writer->endMap();
+    startEntry(QRhiProfiler::ReleaseBufferStagingArea, ts.elapsed(), buf);
+    writeInt("slot", slot);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::newRenderBuffer(QRhiRenderBuffer *rb, bool transientBacking, bool winSysBacking, int sampleCount)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
-
-    writer->startMap();
-    WRITE_OP(NewRenderBuffer);
-    WRITE_TIMESTAMP;
-    WRITE_RES_NAME(rb, "renderbuffer");
 
     const QRhiRenderBuffer::Type type = rb->type();
     const QSize sz = rb->pixelSize();
@@ -194,37 +165,30 @@ void QRhiProfilerPrivate::newRenderBuffer(QRhiRenderBuffer *rb, bool transientBa
     if (sampleCount > 1)
         byteSize *= sampleCount;
 
-    WRITE_PAIR(QLatin1String("type"), type);
-    WRITE_PAIR(QLatin1String("width"), sz.width());
-    WRITE_PAIR(QLatin1String("height"), sz.height());
-    WRITE_PAIR(QLatin1String("effective_sample_count"), sampleCount);
-    WRITE_PAIR(QLatin1String("transient_backing"), transientBacking);
-    WRITE_PAIR(QLatin1String("winsys_backing"), winSysBacking);
-    WRITE_PAIR(QLatin1String("approx_byte_size"), byteSize);
-    writer->endMap();
+    startEntry(QRhiProfiler::NewRenderBuffer, ts.elapsed(), rb);
+    writeInt("type", type);
+    writeInt("width", sz.width());
+    writeInt("height", sz.height());
+    writeInt("effective_sample_count", sampleCount);
+    writeInt("transient_backing", transientBacking);
+    writeInt("winsys_backing", winSysBacking);
+    writeInt("approx_byte_size", byteSize);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::releaseRenderBuffer(QRhiRenderBuffer *rb)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(ReleaseRenderBuffer);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("renderbuffer"), quint64(quintptr(rb)));
-    writer->endMap();
+    startEntry(QRhiProfiler::ReleaseRenderBuffer, ts.elapsed(), rb);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::newTexture(QRhiTexture *tex, bool owns, int mipCount, int layerCount, int sampleCount)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
-
-    writer->startMap();
-    WRITE_OP(NewTexture);
-    WRITE_TIMESTAMP;
-    WRITE_RES_NAME(tex, "texture");
 
     const QRhiTexture::Format format = tex->format();
     const QSize sz = tex->pixelSize();
@@ -232,89 +196,74 @@ void QRhiProfilerPrivate::newTexture(QRhiTexture *tex, bool owns, int mipCount, 
     if (sampleCount > 1)
         byteSize *= sampleCount;
 
-    WRITE_PAIR(QLatin1String("width"), sz.width());
-    WRITE_PAIR(QLatin1String("height"), sz.height());
-    WRITE_PAIR(QLatin1String("format"), format);
-    WRITE_PAIR(QLatin1String("owns_native_resource"), owns);
-    WRITE_PAIR(QLatin1String("mip_count"), mipCount);
-    WRITE_PAIR(QLatin1String("layer_count"), layerCount);
-    WRITE_PAIR(QLatin1String("effective_sample_count"), sampleCount);
-    WRITE_PAIR(QLatin1String("approx_byte_size"), byteSize);
-    writer->endMap();
+    startEntry(QRhiProfiler::NewTexture, ts.elapsed(), tex);
+    writeInt("width", sz.width());
+    writeInt("height", sz.height());
+    writeInt("format", format);
+    writeInt("owns_native_resource", owns);
+    writeInt("mip_count", mipCount);
+    writeInt("layer_count", layerCount);
+    writeInt("effective_sample_count", sampleCount);
+    writeInt("approx_byte_size", byteSize);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::releaseTexture(QRhiTexture *tex)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(ReleaseTexture);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
-    writer->endMap();
+    startEntry(QRhiProfiler::ReleaseTexture, ts.elapsed(), tex);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::newTextureStagingArea(QRhiTexture *tex, int slot, quint32 size)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(NewTextureStagingArea);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
-    WRITE_PAIR(QLatin1String("slot"), slot);
-    WRITE_PAIR(QLatin1String("size"), size);
-    writer->endMap();
+    startEntry(QRhiProfiler::NewTextureStagingArea, ts.elapsed(), tex);
+    writeInt("slot", slot);
+    writeInt("size", size);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::releaseTextureStagingArea(QRhiTexture *tex, int slot)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(ReleaseTextureStagingArea);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("texture"), quint64(quintptr(tex)));
-    WRITE_PAIR(QLatin1String("slot"), slot);
-    writer->endMap();
+    startEntry(QRhiProfiler::ReleaseTextureStagingArea, ts.elapsed(), tex);
+    writeInt("slot", slot);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::resizeSwapChain(QRhiSwapChain *sc, int bufferCount, int msaaBufferCount, int sampleCount)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
-
-    writer->startMap();
-    WRITE_OP(ResizeSwapChain);
-    WRITE_TIMESTAMP;
-    WRITE_RES_NAME(sc, "swapchain");
 
     const QSize sz = sc->currentPixelSize();
     quint32 byteSize = rhiD->approxByteSizeForTexture(QRhiTexture::BGRA8, sz, 1, 1);
     byteSize = byteSize * bufferCount + byteSize * msaaBufferCount * sampleCount;
 
-    WRITE_PAIR(QLatin1String("width"), sz.width());
-    WRITE_PAIR(QLatin1String("height"), sz.height());
-    WRITE_PAIR(QLatin1String("buffer_count"), bufferCount);
-    WRITE_PAIR(QLatin1String("msaa_buffer_count"), msaaBufferCount);
-    WRITE_PAIR(QLatin1String("effective_sample_count"), sampleCount);
-    WRITE_PAIR(QLatin1String("approx_total_byte_size"), byteSize);
-    writer->endMap();
+    startEntry(QRhiProfiler::ResizeSwapChain, ts.elapsed(), sc);
+    writeInt("width", sz.width());
+    writeInt("height", sz.height());
+    writeInt("buffer_count", bufferCount);
+    writeInt("msaa_buffer_count", msaaBufferCount);
+    writeInt("effective_sample_count", sampleCount);
+    writeInt("approx_total_byte_size", byteSize);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::releaseSwapChain(QRhiSwapChain *sc)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(ReleaseSwapChain);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
-    writer->endMap();
+    startEntry(QRhiProfiler::ReleaseSwapChain, ts.elapsed(), sc);
+    endEntry();
 }
 
 template<typename T>
@@ -358,16 +307,13 @@ void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
         qint64 maxDelta;
         float avgDelta = 0;
         calcTiming(&scd.frameToFrameDelta, &minDelta, &maxDelta, &avgDelta);
-        if (ensureStream()) {
-            writer->startMap();
-            WRITE_OP(FrameToFrameTime);
-            WRITE_TIMESTAMP;
-            WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
-            WRITE_PAIR(QLatin1String("frames_since_resize"), frameCount);
-            WRITE_PAIR(QLatin1String("min_ms_frame_delta"), minDelta);
-            WRITE_PAIR(QLatin1String("max_ms_frame_delta"), maxDelta);
-            WRITE_PAIR(QLatin1String("avg_ms_frame_delta"), avgDelta);
-            writer->endMap();
+        if (outputDevice) {
+            startEntry(QRhiProfiler::FrameToFrameTime, ts.elapsed(), sc);
+            writeInt("frames_since_resize", frameCount);
+            writeInt("min_ms_frame_delta", minDelta);
+            writeInt("max_ms_frame_delta", maxDelta);
+            writeFloat("Favg_ms_frame_delta", avgDelta);
+            endEntry();
         }
     }
 
@@ -377,16 +323,13 @@ void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
         qint64 maxDelta;
         float avgDelta = 0;
         calcTiming(&scd.beginToEndDelta, &minDelta, &maxDelta, &avgDelta);
-        if (ensureStream()) {
-            writer->startMap();
-            WRITE_OP(FrameBuildTime);
-            WRITE_TIMESTAMP;
-            WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
-            WRITE_PAIR(QLatin1String("frames_since_resize"), frameCount);
-            WRITE_PAIR(QLatin1String("min_ms_frame_build"), minDelta);
-            WRITE_PAIR(QLatin1String("max_ms_frame_build"), maxDelta);
-            WRITE_PAIR(QLatin1String("avg_ms_frame_build"), avgDelta);
-            writer->endMap();
+        if (outputDevice) {
+            startEntry(QRhiProfiler::FrameBuildTime, ts.elapsed(), sc);
+            writeInt("frames_since_resize", frameCount);
+            writeInt("min_ms_frame_build", minDelta);
+            writeInt("max_ms_frame_build", maxDelta);
+            writeFloat("Favg_ms_frame_build", avgDelta);
+            endEntry();
         }
     }
 }
@@ -400,58 +343,47 @@ void QRhiProfilerPrivate::swapChainFrameGpuTime(QRhiSwapChain *sc, float gpuTime
         float maxDelta;
         float avgDelta = 0;
         calcTiming(&scd.gpuFrameTime, &minDelta, &maxDelta, &avgDelta);
-        if (ensureStream()) {
-            writer->startMap();
-            WRITE_OP(GpuFrameTime);
-            WRITE_TIMESTAMP;
-            WRITE_PAIR(QLatin1String("swapchain"), quint64(quintptr(sc)));
-            WRITE_PAIR(QLatin1String("min_ms_gpu_frame_time"), minDelta);
-            WRITE_PAIR(QLatin1String("max_ms_gpu_frame_time"), maxDelta);
-            WRITE_PAIR(QLatin1String("avg_ms_gpu_frame_time"), avgDelta);
-            writer->endMap();
-        }
+        if (outputDevice) {
+            startEntry(QRhiProfiler::GpuFrameTime, ts.elapsed(), sc);
+            writeFloat("Fmin_ms_gpu_frame_time", minDelta);
+            writeFloat("Fmax_ms_gpu_frame_time", maxDelta);
+            writeFloat("Favg_ms_gpu_frame_time", avgDelta);
+            endEntry();        }
     }
 }
 
 void QRhiProfilerPrivate::newReadbackBuffer(quint64 id, QRhiResource *src, quint32 size)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(NewReadbackBuffer);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("id"), id);
-    WRITE_PAIR(QLatin1String("source"), quint64(quintptr(src)));
-    WRITE_PAIR(QLatin1String("size"), size);
-    writer->endMap();
+    startEntry(QRhiProfiler::NewReadbackBuffer, ts.elapsed(), src);
+    writeInt("id", id);
+    writeInt("size", size);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::releaseReadbackBuffer(quint64 id)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(ReleaseReadbackBuffer);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("id"), id);
-    writer->endMap();
+    startEntry(QRhiProfiler::ReleaseReadbackBuffer, ts.elapsed(), nullptr);
+    writeInt("id", id);
+    endEntry();
 }
 
 void QRhiProfilerPrivate::vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize)
 {
-    if (!ensureStream())
+    if (!outputDevice)
         return;
 
-    writer->startMap();
-    WRITE_OP(VMemAllocStats);
-    WRITE_TIMESTAMP;
-    WRITE_PAIR(QLatin1String("realAllocCount"), realAllocCount);
-    WRITE_PAIR(QLatin1String("subAllocCount"), subAllocCount);
-    WRITE_PAIR(QLatin1String("totalSize"), totalSize);
-    WRITE_PAIR(QLatin1String("unusedSize"), unusedSize);
-    writer->endMap();
+    startEntry(QRhiProfiler::VMemAllocStats, ts.elapsed(), nullptr);
+    writeInt("realAllocCount", realAllocCount);
+    writeInt("subAllocCount", subAllocCount);
+    writeInt("totalSize", totalSize);
+    writeInt("unusedSize", unusedSize);
+    endEntry();
 }
 
 QT_END_NAMESPACE

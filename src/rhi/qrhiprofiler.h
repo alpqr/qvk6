@@ -71,7 +71,6 @@ public:
     ~QRhiProfiler();
 
     void setDevice(QIODevice *device);
-    void flush();
 
     void addVMemAllocatorStats();
 

@@ -48,14 +48,10 @@
 
 QT_BEGIN_NAMESPACE
 
-class QCborStreamWriter;
-
 class QRhiProfilerPrivate
 {
 public:
     static QRhiProfilerPrivate *get(QRhiProfiler *p) { return p->d; }
-
-    ~QRhiProfilerPrivate();
 
     void newBuffer(QRhiBuffer *buf, quint32 realSize, int backingGpuBufCount, int backingCpuBufCount);
     void releaseBuffer(QRhiBuffer *buf);
@@ -82,15 +78,16 @@ public:
 
     void vmemStat(int realAllocCount, int subAllocCount, quint32 totalSize, quint32 unusedSize);
 
-    bool ensureStream();
-    void flushStream();
+    void startEntry(QRhiProfiler::StreamOp op, qint64 timestamp, QRhiResource *res);
+    void writeInt(const char *key, qint64 v);
+    void writeFloat(const char *key, float f);
+    void endEntry();
 
     QRhi *rhi = nullptr;
     QRhiImplementation *rhiD = nullptr;
     QIODevice *outputDevice = nullptr;
-    QCborStreamWriter *writer = nullptr;
-    bool active = false;
     QElapsedTimer ts;
+    QByteArray buf;
     static const int DEFAULT_FRAME_TIMING_WRITE_INTERVAL = 120; // frames
     int frameTimingWriteInterval = DEFAULT_FRAME_TIMING_WRITE_INTERVAL;
     struct Sc {

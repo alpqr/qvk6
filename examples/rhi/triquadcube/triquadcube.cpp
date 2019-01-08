@@ -49,7 +49,7 @@
 ****************************************************************************/
 
 // An example exercising more than a single feature. Enables profiling
-// (resource logging to a CBOR file) and inserts debug markers and sets some
+// (resource logging to a file) and inserts debug markers and sets some
 // object names. Can also be used to test MSAA swapchains, swapchain image
 // readback, requesting an sRGB swapchain, and some texture features.
 
@@ -88,7 +88,7 @@ void preInit()
 
 #ifdef PROFILE_TO_FILE
     rhiFlags |= QRhi::EnableProfiling;
-    const QString profFn = QFileInfo(QLatin1String("rhiprof.cbor")).absoluteFilePath();
+    const QString profFn = QFileInfo(QLatin1String("rhiprof.txt")).absoluteFilePath();
     qDebug("Writing profiling output to %s", qPrintable(profFn));
     d.profOut.setFileName(profFn);
     d.profOut.open(QIODevice::WriteOnly);

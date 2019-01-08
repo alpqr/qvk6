@@ -12,14 +12,11 @@ HEADERS += \
     qrhi.h \
     qrhi_p.h \
     qrhiprofiler.h \
-    qrhiprofiler_p.h \
-    qrhiprofilerstreamreader.h \
-    qrhiprofilerstreamreader_p.h
+    qrhiprofiler_p.h
 
 SOURCES += \
     qrhi.cpp \
-    qrhiprofiler.cpp \
-    qrhiprofilerstreamreader.cpp
+    qrhiprofiler.cpp
 
 qtConfig(opengl) {
     HEADERS += \

@@ -1621,6 +1621,9 @@ bool QD3D11RenderBuffer::build()
     if (tex)
         release();
 
+    if (m_pixelSize.isEmpty())
+        return false;
+
     QRHI_RES_RHI(QRhiD3D11);
     sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
 
@@ -2762,6 +2765,9 @@ bool QD3D11SwapChain::buildOrResize()
     window = m_window;
     m_currentPixelSize = surfacePixelSize();
     pixelSize = m_currentPixelSize;
+
+    if (pixelSize.isEmpty())
+        return false;
 
     colorFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
     const DXGI_FORMAT srgbAdjustedFormat = m_flags.testFlag(sRGB) ?

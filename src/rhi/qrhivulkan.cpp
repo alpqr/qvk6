@@ -3525,6 +3525,9 @@ bool QVkRenderBuffer::build()
     if (memory || backingTexture)
         release();
 
+    if (m_pixelSize.isEmpty())
+        return false;
+
     QRHI_RES_RHI(QRhiVulkan);
     QRHI_PROF;
     samples = rhiD->effectiveSampleCount(m_sampleCount);

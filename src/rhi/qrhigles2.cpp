@@ -1622,6 +1622,9 @@ bool QGles2RenderBuffer::build()
         qWarning("RenderBuffer: UsedWithSwapChainOnly is meaningless in combination with Color");
     }
 
+    if (m_pixelSize.isEmpty())
+        return false;
+
     if (!rhiD->ensureContext())
         return false;
 

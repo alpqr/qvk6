@@ -1,4 +1,3 @@
-prof report api (fed by a cbor stream)
 mtl: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
@@ -7,7 +6,6 @@ gl: tex formats (texture, readback)
 gl: srgb
 should istexformatsupported should check srgb combinations
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
-vk: rendering hangs sometimes when minimize and back on some systems?
 mtl: cbuffers, textures, samplers set should be batched too
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 what does image copy do for compressed formats?
@@ -20,16 +18,15 @@ gl: more ubuf types
 more QImage->tex formats
 if tex adjust its size (e.g. npot on gl), should QImage get scaled automatically?
 d3d, gl, mtl: cache shader sources?
-resize to 0 width or height fails (vk)
 gl: ubuf structs, arrays
-gl: target QOpenGLWindow/Widget?
-compute?
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 test cubemap face as target
 test cubemap face readback
 object names for other than buf/rb/tex
 
 optional:
+compute?
+gl: target QOpenGLWindow/Widget?
 threading options? secondary command lists?
 copy/transfer queue?
 vkmemalloc block size config?
@@ -51,6 +48,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+resize to 0 width or height fails (vk, d3d)
+vk: rendering hangs sometimes when minimize and back on some systems?
 allow requesting no-vsync present mode where applicable
 d3d: timestamp query
 vk: timestamp query

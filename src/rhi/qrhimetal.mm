@@ -1379,6 +1379,9 @@ bool QMetalRenderBuffer::build()
     if (d->tex)
         release();
 
+    if (m_pixelSize.isEmpty())
+        return false;
+
     QRHI_RES_RHI(QRhiMetal);
     samples = rhiD->effectiveSampleCount(m_sampleCount);
 

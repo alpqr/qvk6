@@ -199,12 +199,13 @@ void Window::exposeEvent(QExposeEvent *)
         render();
     }
 
-    // stop pushing frames when not exposed (on some platforms this is essential, optional on others)
-    if (!isExposed() && m_running)
+    // stop pushing frames when not exposed (or size is 0)
+    if ((!isExposed() || (m_hasSwapChain && m_sc->surfacePixelSize().isEmpty())) && m_running)
         m_notExposed = true;
 
-    // continue when exposed again
-    if (isExposed() && m_running && m_notExposed) {
+    // continue when exposed again and the surface has a valid size.
+    // note that the surface size can be (0, 0) even though size() reports a valid one...
+    if (isExposed() && m_running && m_notExposed && !m_sc->surfacePixelSize().isEmpty()) {
         m_notExposed = false;
         m_newlyExposed = true;
         render();

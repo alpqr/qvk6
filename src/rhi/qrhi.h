@@ -1118,7 +1118,9 @@ public:
         MultisampleTexture = 1,
         MultisampleRenderBuffer,
         DebugMarkers,
-        Timestamps
+        Timestamps,
+        Instancing,
+        CustomInstanceStepRate
     };
 
     enum ResourceSizeLimit {

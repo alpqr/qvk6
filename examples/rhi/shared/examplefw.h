@@ -482,6 +482,8 @@ int main(int argc, char **argv)
                        << "VK_LAYER_LUNARG_swapchain"
                        << "VK_LAYER_GOOGLE_unique_objects");
 #endif
+        inst.setExtensions(QByteArrayList()
+                           << "VK_KHR_get_physical_device_properties2");
         if (!inst.create()) {
             qWarning("Failed to create Vulkan instance, switching to OpenGL");
             graphicsApi = OpenGL;

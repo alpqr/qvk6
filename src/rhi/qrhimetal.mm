@@ -356,13 +356,17 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
 {
     switch (feature) {
     case QRhi::MultisampleTexture:
-        Q_FALLTHROUGH();
+        return true;
     case QRhi::MultisampleRenderBuffer:
-        Q_FALLTHROUGH();
+        return true;
     case QRhi::DebugMarkers:
         return true;
     case QRhi::Timestamps:
         return false;
+    case QRhi::Instancing:
+        return true;
+    case QRhi::CustomInstanceStepRate:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

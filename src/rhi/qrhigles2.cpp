@@ -267,6 +267,10 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::Timestamps:
         return false;
+    case QRhi::Instancing:
+        return false;
+    case QRhi::CustomInstanceStepRate:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;

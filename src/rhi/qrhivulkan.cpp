@@ -260,12 +260,15 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         requestedDevExts.append("VK_KHR_swapchain");
 
         debugMarkersAvailable = false;
-        if (debugMarkers) {
-            for (const VkExtensionProperties &ext : devExts) {
-                if (!strcmp(ext.extensionName, VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
-                    requestedDevExts.append(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
-                    debugMarkersAvailable = true;
-                    break;
+        vertexAttribDivisorAvailable = false;
+        for (const VkExtensionProperties &ext : devExts) {
+            if (!strcmp(ext.extensionName, VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
+                requestedDevExts.append(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+                debugMarkersAvailable = true;
+            } else if (!strcmp(ext.extensionName, VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME)) {
+                if (inst->extensions().contains(QByteArrayLiteral("VK_KHR_get_physical_device_properties2"))) {
+                    requestedDevExts.append(VK_EXT_VERTEX_ATTRIBUTE_DIVISOR_EXTENSION_NAME);
+                    vertexAttribDivisorAvailable = true;
                 }
             }
         }
@@ -2753,13 +2756,17 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
 {
     switch (feature) {
     case QRhi::MultisampleTexture:
-        Q_FALLTHROUGH();
+        return true;
     case QRhi::MultisampleRenderBuffer:
         return true;
     case QRhi::DebugMarkers:
         return debugMarkersAvailable;
     case QRhi::Timestamps:
         return timestampValidBits != 0;
+    case QRhi::Instancing:
+        return true;
+    case QRhi::CustomInstanceStepRate:
+        return vertexAttribDivisorAvailable;
     default:
         Q_UNREACHABLE();
         return false;
@@ -3027,7 +3034,7 @@ void QRhiVulkan::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 
 void QRhiVulkan::debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name)
 {
-    if (!debugMarkersAvailable)
+    if (!debugMarkers || !debugMarkersAvailable)
         return;
 
     VkDebugMarkerMarkerInfoEXT marker;
@@ -3039,7 +3046,7 @@ void QRhiVulkan::debugMarkBegin(QRhiCommandBuffer *cb, const QByteArray &name)
 
 void QRhiVulkan::debugMarkEnd(QRhiCommandBuffer *cb)
 {
-    if (!debugMarkersAvailable)
+    if (!debugMarkers || !debugMarkersAvailable)
         return;
 
     vkCmdDebugMarkerEnd(QRHI_RES(QVkCommandBuffer, cb)->cb);
@@ -3047,7 +3054,7 @@ void QRhiVulkan::debugMarkEnd(QRhiCommandBuffer *cb)
 
 void QRhiVulkan::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
 {
-    if (!debugMarkersAvailable)
+    if (!debugMarkers || !debugMarkersAvailable)
         return;
 
     VkDebugMarkerMarkerInfoEXT marker;
@@ -3059,7 +3066,7 @@ void QRhiVulkan::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
 
 void QRhiVulkan::setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name)
 {
-    if (!debugMarkersAvailable || name.isEmpty())
+    if (!debugMarkers || !debugMarkersAvailable || name.isEmpty())
         return;
 
     VkDebugMarkerObjectNameInfoEXT nameInfo;
@@ -4233,6 +4240,7 @@ bool QVkGraphicsPipeline::build()
     pipelineInfo.pStages = shaderStageCreateInfos.constData();
 
     QVarLengthArray<VkVertexInputBindingDescription, 4> vertexBindings;
+    QVarLengthArray<VkVertexInputBindingDivisorDescriptionEXT> nonOneStepRates;
     for (int i = 0, ie = m_vertexInputLayout.bindings.count(); i != ie; ++i) {
         const QRhiVertexInputLayout::Binding &binding(m_vertexInputLayout.bindings[i]);
         VkVertexInputBindingDescription bindingInfo = {
@@ -4244,8 +4252,13 @@ bool QVkGraphicsPipeline::build()
         if (binding.classification == QRhiVertexInputLayout::Binding::PerInstance
                 && binding.instanceStepRate != 1)
         {
-            // ### could be supported with VK_EXT_vertex_attribute_divisor (Vulkan 1.1)
-            qWarning("QRhiVulkan: Instance step rates other than 1 not currently supported");
+            if (rhiD->vertexAttribDivisorAvailable) {
+                nonOneStepRates.append({ uint32_t(i), uint32_t(binding.instanceStepRate) });
+            } else {
+                qWarning("QRhiVulkan: Instance step rates other than 1 not supported without "
+                         "VK_EXT_vertex_attribute_divisor on the device and "
+                         "VK_KHR_get_physical_device_properties2 on the instance");
+            }
         }
         vertexBindings.append(bindingInfo);
     }
@@ -4266,6 +4279,14 @@ bool QVkGraphicsPipeline::build()
     vertexInputInfo.pVertexBindingDescriptions = vertexBindings.constData();
     vertexInputInfo.vertexAttributeDescriptionCount = vertexAttributes.count();
     vertexInputInfo.pVertexAttributeDescriptions = vertexAttributes.constData();
+    VkPipelineVertexInputDivisorStateCreateInfoEXT divisorInfo;
+    if (!nonOneStepRates.isEmpty()) {
+        memset(&divisorInfo, 0, sizeof(divisorInfo));
+        divisorInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
+        divisorInfo.vertexBindingDivisorCount = nonOneStepRates.count();
+        divisorInfo.pVertexBindingDivisors = nonOneStepRates.constData();
+        vertexInputInfo.pNext = &divisorInfo;
+    }
     pipelineInfo.pVertexInputState = &vertexInputInfo;
 
     QVarLengthArray<VkDynamicState, 8> dynEnable;

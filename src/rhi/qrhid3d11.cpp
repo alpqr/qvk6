@@ -256,12 +256,16 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
 {
     switch (feature) {
     case QRhi::MultisampleTexture:
-        Q_FALLTHROUGH();
+        return true;
     case QRhi::MultisampleRenderBuffer:
         return true;
     case QRhi::DebugMarkers:
         return annotations != nullptr;
     case QRhi::Timestamps:
+        return true;
+    case QRhi::Instancing:
+        return true;
+    case QRhi::CustomInstanceStepRate:
         return true;
     default:
         Q_UNREACHABLE();

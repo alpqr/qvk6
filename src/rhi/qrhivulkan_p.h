@@ -486,6 +486,7 @@ public:
     VkDeviceSize texbufAlign;
 
     bool debugMarkersAvailable = false;
+    bool vertexAttribDivisorAvailable = false;
     PFN_vkCmdDebugMarkerBeginEXT vkCmdDebugMarkerBegin = nullptr;
     PFN_vkCmdDebugMarkerEndEXT vkCmdDebugMarkerEnd = nullptr;
     PFN_vkCmdDebugMarkerInsertEXT vkCmdDebugMarkerInsert = nullptr;

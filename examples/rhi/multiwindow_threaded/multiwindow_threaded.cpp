@@ -566,21 +566,41 @@ void Renderer::render(bool newlyExposed, bool wakeBeforePresent)
         m_proj.translate(0, 0, -4);
     };
 
-    if (newlyExposed || m_sc->currentPixelSize() != m_sc->surfacePixelSize())
+    auto wakeUpIfNeeded = [wakeBeforePresent, this] {
+        // make sure the main/gui thread is not blocked when issuing the Present (or equivalent)
+        if (wakeBeforePresent) {
+            thread->cond.wakeOne();
+            thread->mutex.unlock();
+        }
+    };
+
+    const QSize surfaceSize = m_sc->surfacePixelSize();
+    if (surfaceSize.isEmpty()) {
+        wakeUpIfNeeded();
+        return;
+    }
+
+    if (newlyExposed || m_sc->currentPixelSize() != surfaceSize)
         buildOrResizeSwapChain();
 
-    if (!m_hasSwapChain)
+    if (!m_hasSwapChain) {
+        wakeUpIfNeeded();
         return;
+    }
 
     QRhi::FrameOpResult result = r->beginFrame(m_sc);
     if (result == QRhi::FrameOpSwapChainOutOfDate) {
         buildOrResizeSwapChain();
-        if (!m_hasSwapChain)
+        if (!m_hasSwapChain) {
+            wakeUpIfNeeded();
             return;
+        }
         result = r->beginFrame(m_sc);
     }
-    if (result != QRhi::FrameOpSuccess)
+    if (result != QRhi::FrameOpSuccess) {
+        wakeUpIfNeeded();
         return;
+    }
 
     QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
     const QSize outputSize = m_sc->currentPixelSize();
@@ -610,11 +630,7 @@ void Renderer::render(bool newlyExposed, bool wakeBeforePresent)
 
     cb->endPass();
 
-    // make sure the main/gui thread is not blocked when issuing the Present (or equivalent)
-    if (wakeBeforePresent) {
-        thread->cond.wakeOne();
-        thread->mutex.unlock();
-    }
+    wakeUpIfNeeded();
 
     r->endFrame(m_sc);
 }

@@ -1,7 +1,5 @@
 TARGET = QtRhi
 
-load(qt_module)
-
 QT += shadertools gui-private
 
 DEFINES += QT_BUILD_RHI_LIB
@@ -55,3 +53,5 @@ mac {
 }
 
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)
+
+load(qt_module)

@@ -1,7 +1,5 @@
 TARGET = QtShaderTools
 
-load(qt_module)
-
 DEFINES += QT_BUILD_SHADERTOOLS_LIB
 
 HEADERS += \
@@ -35,3 +33,5 @@ for(libname, STATICLIBS) {
     LIBS_PRIVATE += $$staticlib
     PRE_TARGETDEPS += $$staticlib
 }
+
+load(qt_module)

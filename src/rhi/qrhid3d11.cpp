@@ -337,38 +337,48 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     QD3D11ShaderResourceBindings *srbD = QRHI_RES(QD3D11ShaderResourceBindings, srb);
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
 
-    bool resChanged = false;
+    bool srbUpdate = false;
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
         QD3D11ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
         switch (b.type) {
         case QRhiShaderResourceBinding::UniformBuffer:
-            if (QRHI_RES(QD3D11Buffer, b.ubuf.buf)->generation != bd.ubuf.generation) {
-                resChanged = true;
-                bd.ubuf.generation = QRHI_RES(QD3D11Buffer, b.ubuf.buf)->generation;
+        {
+            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
+            if (bufD->m_type == QRhiBuffer::Dynamic)
+                executeBufferHostWritesForCurrentFrame(bufD);
+
+            if (bufD->generation != bd.ubuf.generation) {
+                srbUpdate = true;
+                bd.ubuf.generation = bufD->generation;
             }
+        }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
-            if (QRHI_RES(QD3D11Texture, b.stex.tex)->generation != bd.stex.texGeneration
-                    || QRHI_RES(QD3D11Sampler, b.stex.sampler)->generation != bd.stex.samplerGeneration)
+        {
+            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b.stex.tex);
+            QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b.stex.sampler);
+            if (texD->generation != bd.stex.texGeneration
+                    || samplerD->generation != bd.stex.samplerGeneration)
             {
-                resChanged = true;
-                bd.stex.texGeneration = QRHI_RES(QD3D11Texture, b.stex.tex)->generation;
-                bd.stex.samplerGeneration = QRHI_RES(QD3D11Sampler, b.stex.sampler)->generation;
+                srbUpdate = true;
+                bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerGeneration = samplerD->generation;
             }
+        }
             break;
         default:
             Q_UNREACHABLE();
             break;
         }
     }
-    if (resChanged)
+    if (srbUpdate)
         updateShaderResourceBindings(srbD);
 
     const bool pipelineChanged = cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation;
     const bool srbChanged = cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation;
 
-    if (pipelineChanged || srbChanged || resChanged) {
+    if (pipelineChanged || srbChanged || srbUpdate) {
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
         cbD->currentSrb = srb;
@@ -378,7 +388,7 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         cmd.cmd = QD3D11CommandBuffer::Command::BindGraphicsPipeline;
         cmd.args.bindGraphicsPipeline.ps = psD;
         cmd.args.bindGraphicsPipeline.srb = srbD;
-        cmd.args.bindGraphicsPipeline.resOnlyChange = !pipelineChanged && !srbChanged && resChanged;
+        cmd.args.bindGraphicsPipeline.srbOnlyChange = !pipelineChanged && !srbChanged && srbUpdate;
         cbD->commands.append(cmd);
     }
 }
@@ -1287,6 +1297,7 @@ void QRhiD3D11::executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD)
     if (!bufD->hasPendingDynamicUpdates)
         return;
 
+    Q_ASSERT(bufD->m_type == QRhiBuffer::Dynamic);
     bufD->hasPendingDynamicUpdates = false;
     D3D11_MAPPED_SUBRESOURCE mp;
     HRESULT hr = context->Map(bufD->buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mp);
@@ -1300,24 +1311,6 @@ void QRhiD3D11::executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD)
 
 void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
 {
-    for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
-        switch (b.type) {
-        case QRhiShaderResourceBinding::UniformBuffer:
-        {
-            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
-            if (bufD->m_type == QRhiBuffer::Dynamic)
-                executeBufferHostWritesForCurrentFrame(bufD);
-        }
-            break;
-        case QRhiShaderResourceBinding::SampledTexture:
-            break;
-        default:
-            Q_UNREACHABLE();
-            break;
-        }
-    }
-
     for (const auto &batch : srbD->vssamplers.batches)
         context->VSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
 
@@ -1446,7 +1439,7 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *
         {
             QD3D11GraphicsPipeline *psD = cmd.args.bindGraphicsPipeline.ps;
             QD3D11ShaderResourceBindings *srbD = cmd.args.bindGraphicsPipeline.srb;
-            if (!cmd.args.bindGraphicsPipeline.resOnlyChange) {
+            if (!cmd.args.bindGraphicsPipeline.srbOnlyChange) {
                 context->VSSetShader(psD->vs, nullptr, 0);
                 context->PSSetShader(psD->fs, nullptr, 0);
                 context->IASetPrimitiveTopology(psD->d3dTopology);

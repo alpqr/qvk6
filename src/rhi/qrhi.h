@@ -1059,9 +1059,16 @@ public:
     // beginPass(). (nb the one we merged from must be release()'d manually)
     void merge(QRhiResourceUpdateBatch *other);
 
-    // None of these execute anything. Deferred to
-    // beginPass/endPass/resourceUpdate. What exactly then happens underneath
-    // is hidden from the applications.
+    // None of these execute anything, processing is deferred. What exactly
+    // then happens underneath is hidden from the applications. The caller is
+    // free to destroy or reuse the data or image right after returning from
+    // the functions.
+    //
+    // Note: Updates involving host writes - typically the dynamic buffer
+    // updates - may accumulate within a frame. Thus pass 1 reading a region
+    // changed by a batch passed to pass 2 may see the changes specified in
+    // pass 2's update batch.
+    //
     void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);

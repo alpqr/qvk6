@@ -1081,6 +1081,10 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         textureFormatInfo(aRb.format, aRb.pixelSize, &bpl, &aRb.bufSize);
         aRb.buf = [d->dev newBufferWithLength: aRb.bufSize options: MTLResourceStorageModeShared];
 
+        QRHI_PROF_F(newReadbackBuffer(quint64(quintptr(aRb.buf)),
+                                      texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
+                                      aRb.bufSize));
+
         ensureBlit();
         [blitEnc copyFromTexture: src
                                   sourceSlice: aRb.desc.layer
@@ -1253,6 +1257,7 @@ void QRhiMetal::executeDeferredReleases(bool forced)
 void QRhiMetal::finishActiveReadbacks(bool forced)
 {
     QVarLengthArray<std::function<void()>, 4> completedCallbacks;
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
     for (int i = d->activeReadbacks.count() - 1; i >= 0; --i) {
         const QRhiMetalData::ActiveReadback &aRb(d->activeReadbacks[i]);
@@ -1263,6 +1268,8 @@ void QRhiMetal::finishActiveReadbacks(bool forced)
             void *p = [aRb.buf contents];
             memcpy(aRb.result->data.data(), p, aRb.bufSize);
             [aRb.buf release];
+
+            QRHI_PROF_F(releaseReadbackBuffer(quint64(quintptr(aRb.buf))));
 
             if (aRb.result->completed)
                 completedCallbacks.append(aRb.result->completed);

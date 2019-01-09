@@ -1,4 +1,3 @@
-mtl: report readback temp buf
 multiwindow_threaded should demo pulling out the device and importing to another rhi
 mtl: reduce set*
 advanced blend modes
@@ -17,6 +16,7 @@ anisotropic
 gl: more ubuf types
 more QImage->tex formats
 if tex adjust its size (e.g. npot on gl), should QImage get scaled automatically?
+pool staging/readback buffers?
 d3d, gl, mtl: cache shader sources?
 gl: ubuf structs, arrays
 test cubemap face as target
@@ -47,6 +47,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: report readback temp buf
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 resize to 0 width or height fails (vk, d3d)
 vk: rendering hangs sometimes when minimize and back on some systems?

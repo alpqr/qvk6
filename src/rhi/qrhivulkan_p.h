@@ -253,12 +253,14 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
         currentPipelineGeneration = 0;
         currentSrb = nullptr;
         currentSrbGeneration = 0;
+        currentDescSetSlot = -1;
     }
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
+    int currentDescSetSlot;
 
     friend class QRhiVulkan;
 };

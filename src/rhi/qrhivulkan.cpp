@@ -2847,8 +2847,9 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     if (!srb)
         srb = psD->m_shaderResourceBindings;
 
+    // do host writes and mark referenced shader resources as in-use
     QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
-    bool hasDynamicBufferInSrb = false;
+    bool hasSlottedResourceInSrb = false;
     for (const QRhiShaderResourceBinding &b : qAsConst(srbD->m_bindings)) {
         switch (b.type) {
         case QRhiShaderResourceBinding::UniformBuffer:
@@ -2857,7 +2858,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             bufD->lastActiveFrameSlot = currentFrameSlot;
             if (bufD->m_type == QRhiBuffer::Dynamic) {
-                hasDynamicBufferInSrb = true;
+                hasSlottedResourceInSrb = true;
                 executeBufferHostWritesForCurrentFrame(bufD);
             }
         }
@@ -2873,7 +2874,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     }
 
     // ensure the descriptor set we are going to bind refers to up-to-date Vk objects
-    const int descSetIdx = hasDynamicBufferInSrb ? currentFrameSlot : 0;
+    const int descSetIdx = hasSlottedResourceInSrb ? currentFrameSlot : 0;
     bool srbUpdate = false;
     for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBinding &b(srbD->m_bindings[i]);
@@ -2910,11 +2911,16 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     }
     psD->lastActiveFrameSlot = currentFrameSlot;
 
-    if (hasDynamicBufferInSrb || srbUpdate || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
+    // make sure the descriptors for the correct slot will get bound
+    if (hasSlottedResourceInSrb && cbD->currentDescSetSlot != descSetIdx)
+        srbUpdate = true;
+
+    if (srbUpdate || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
         df->vkCmdBindDescriptorSets(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
                                     &srbD->descSets[descSetIdx], 0, nullptr);
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
+        cbD->currentDescSetSlot = descSetIdx;
     }
     srbD->lastActiveFrameSlot = currentFrameSlot;
 }

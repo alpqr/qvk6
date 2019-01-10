@@ -426,25 +426,13 @@ QRhiShaderResourceBindings *QRhiMetal::createShaderResourceBindings()
     return new QMetalShaderResourceBindings(this);
 }
 
-void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
+void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD, QMetalCommandBuffer *cbD)
 {
-    Q_ASSERT(inPass);
-
-    QMetalGraphicsPipeline *psD = QRHI_RES(QMetalGraphicsPipeline, ps);
-    if (!srb)
-        srb = psD->m_shaderResourceBindings;
-
-    QMetalShaderResourceBindings *srbD = QRHI_RES(QMetalShaderResourceBindings, srb);
-    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
-
     for (const QRhiShaderResourceBinding &b : qAsConst(srbD->sortedBindings)) {
         switch (b.type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
-            Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
-            bufD->lastActiveFrameSlot = currentFrameSlot;
-            executeBufferHostWritesForCurrentFrame(bufD);
             id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
             if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage))
                 [cbD->d->currentPassEncoder setVertexBuffer: mtlbuf offset: b.ubuf.offset atIndex: b.binding];
@@ -454,17 +442,15 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             break;
         case QRhiShaderResourceBinding::SampledTexture:
         {
-            QMetalTexture *tex = QRHI_RES(QMetalTexture, b.stex.tex);
-            tex->lastActiveFrameSlot = currentFrameSlot;
-            QMetalSampler *samp = QRHI_RES(QMetalSampler, b.stex.sampler);
-            samp->lastActiveFrameSlot = currentFrameSlot;
+            QMetalTexture *texD = QRHI_RES(QMetalTexture, b.stex.tex);
+            QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b.stex.sampler);
             if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                [cbD->d->currentPassEncoder setVertexTexture: tex->d->tex atIndex: b.binding];
-                [cbD->d->currentPassEncoder setVertexSamplerState: samp->d->samplerState atIndex: b.binding];
+                [cbD->d->currentPassEncoder setVertexTexture: texD->d->tex atIndex: b.binding];
+                [cbD->d->currentPassEncoder setVertexSamplerState: samplerD->d->samplerState atIndex: b.binding];
             }
             if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                [cbD->d->currentPassEncoder setFragmentTexture: tex->d->tex atIndex: b.binding];
-                [cbD->d->currentPassEncoder setFragmentSamplerState: samp->d->samplerState atIndex: b.binding];
+                [cbD->d->currentPassEncoder setFragmentTexture: texD->d->tex atIndex: b.binding];
+                [cbD->d->currentPassEncoder setFragmentSamplerState: samplerD->d->samplerState atIndex: b.binding];
             }
         }
             break;
@@ -473,19 +459,83 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             break;
         }
     }
+}
 
-    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation
-            || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation)
-    {
+void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
+{
+    Q_ASSERT(inPass);
+
+    QMetalGraphicsPipeline *psD = QRHI_RES(QMetalGraphicsPipeline, ps);
+    if (!srb)
+        srb = psD->m_shaderResourceBindings;
+
+    QMetalShaderResourceBindings *srbD = QRHI_RES(QMetalShaderResourceBindings, srb);
+    bool hasSlottedResourceInSrb = false;
+    const int resSlot = hasSlottedResourceInSrb ? currentFrameSlot : 0;
+    bool resNeedsRebind = false;
+
+    // do host writes, figure out if we need to rebind, and mark as in-use
+    for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
+        QMetalShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
+        switch (b.type) {
+        case QRhiShaderResourceBinding::UniformBuffer:
+        {
+            QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
+            Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
+            if (bufD->m_type != QRhiBuffer::Immutable) { // static and dynamic are both slotted
+                hasSlottedResourceInSrb = true;
+                executeBufferHostWritesForCurrentFrame(bufD);
+            }
+            if (bufD->generation != bd.ubuf.generation) {
+                resNeedsRebind = true;
+                bd.ubuf.generation = bufD->generation;
+            }
+            bufD->lastActiveFrameSlot = currentFrameSlot;
+        }
+            break;
+        case QRhiShaderResourceBinding::SampledTexture:
+        {
+            QMetalTexture *texD = QRHI_RES(QMetalTexture, b.stex.tex);
+            QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b.stex.sampler);
+            if (texD->generation != bd.stex.texGeneration
+                    || samplerD->generation != bd.stex.samplerGeneration)
+            {
+                resNeedsRebind = true;
+                bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerGeneration = samplerD->generation;
+            }
+            texD->lastActiveFrameSlot = currentFrameSlot;
+            samplerD->lastActiveFrameSlot = currentFrameSlot;
+        }
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+    // make sure the resources for the correct slot get bound
+    if (hasSlottedResourceInSrb && cbD->currentResSlot != resSlot)
+        resNeedsRebind = true;
+
+    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
-        cbD->currentSrb = srb;
-        cbD->currentSrbGeneration = srbD->generation;
         [cbD->d->currentPassEncoder setRenderPipelineState: psD->d->ps];
         [cbD->d->currentPassEncoder setDepthStencilState: psD->d->ds];
         [cbD->d->currentPassEncoder setCullMode: psD->d->cullMode];
         [cbD->d->currentPassEncoder setFrontFacingWinding: psD->d->winding];
     }
+
+    if (resNeedsRebind || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
+        cbD->currentSrb = srb;
+        cbD->currentSrbGeneration = srbD->generation;
+        cbD->currentResSlot = resSlot;
+        enqueueShaderResourceBindings(srbD, cbD);
+    }
+
     psD->lastActiveFrameSlot = currentFrameSlot;
 }
 
@@ -1341,8 +1391,14 @@ bool QMetalBuffer::build()
         if (i == 0 || m_type != Immutable) {
             d->buf[i] = [rhiD->d->dev newBufferWithLength: roundedSize options: opts];
             d->pendingUpdates[i].reserve(16);
-            if (!objectName.isEmpty())
-                d->buf[i].label = [NSString stringWithUTF8String: objectName.constData()];
+            if (!objectName.isEmpty()) {
+                if (m_type == Immutable) {
+                    d->buf[i].label = [NSString stringWithUTF8String: objectName.constData()];
+                } else {
+                    const QByteArray name = objectName + '/' + QByteArray::number(i);
+                    d->buf[i].label = [NSString stringWithUTF8String: name.constData()];
+                }
+            }
         }
     }
 
@@ -1973,6 +2029,25 @@ bool QMetalShaderResourceBindings::build()
     else
         maxBinding = -1;
 
+    boundResourceData.resize(sortedBindings.count());
+
+    for (int i = 0, ie = sortedBindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBinding &b(sortedBindings[i]);
+        QMetalShaderResourceBindings::BoundResourceData &bd(boundResourceData[i]);
+        switch (b.type) {
+        case QRhiShaderResourceBinding::UniformBuffer:
+            bd.ubuf.generation = QRHI_RES(QMetalBuffer, b.ubuf.buf)->generation;
+            break;
+        case QRhiShaderResourceBinding::SampledTexture:
+            bd.stex.texGeneration = QRHI_RES(QMetalTexture, b.stex.tex)->generation;
+            bd.stex.samplerGeneration = QRHI_RES(QMetalSampler, b.stex.sampler)->generation;
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+    }
+
     generation += 1;
     return true;
 }
@@ -2440,6 +2515,7 @@ void QMetalCommandBuffer::resetState()
     currentPipelineGeneration = 0;
     currentSrb = nullptr;
     currentSrbGeneration = 0;
+    currentResSlot = -1;
     currentIndexBuffer = nullptr;
     d->currentPassEncoder = nil;
     d->currentPassRpDesc = nil;

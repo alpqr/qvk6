@@ -1903,12 +1903,14 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
                 break;
             case QRhiShaderResourceBinding::SampledTexture:
             {
+                QVkTexture *texD = QRHI_RES(QVkTexture, b.stex.tex);
+                QVkSampler *samplerD = QRHI_RES(QVkSampler, b.stex.sampler);
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-                bd.stex.texGeneration = QRHI_RES(QVkTexture, b.stex.tex)->generation;
-                bd.stex.samplerGeneration = QRHI_RES(QVkSampler, b.stex.sampler)->generation;
+                bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerGeneration = samplerD->generation;
                 VkDescriptorImageInfo imageInfo;
-                imageInfo.sampler = QRHI_RES(QVkSampler, b.stex.sampler)->sampler;
-                imageInfo.imageView = QRHI_RES(QVkTexture, b.stex.tex)->imageView;
+                imageInfo.sampler = samplerD->sampler;
+                imageInfo.imageView = texD->imageView;
                 imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 imageInfos.append(imageInfo);
                 writeInfo.pImageInfo = &imageInfos.last();
@@ -2847,10 +2849,16 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     if (!srb)
         srb = psD->m_shaderResourceBindings;
 
-    // do host writes and mark referenced shader resources as in-use
     QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
     bool hasSlottedResourceInSrb = false;
-    for (const QRhiShaderResourceBinding &b : qAsConst(srbD->m_bindings)) {
+    const int descSetIdx = hasSlottedResourceInSrb ? currentFrameSlot : 0;
+    bool rewriteDescSet = false;
+
+    // Do host writes and mark referenced shader resources as in-use.
+    // Also prepare to ensure the descriptor set we are going to bind refers to up-to-date Vk objects.
+    for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBinding &b(srbD->m_bindings[i]);
+        QVkShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[descSetIdx][i]);
         switch (b.type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
@@ -2861,11 +2869,26 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
                 hasSlottedResourceInSrb = true;
                 executeBufferHostWritesForCurrentFrame(bufD);
             }
+            if (bufD->generation != bd.ubuf.generation) {
+                rewriteDescSet = true;
+                bd.ubuf.generation = bufD->generation;
+            }
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
-            QRHI_RES(QVkTexture, b.stex.tex)->lastActiveFrameSlot = currentFrameSlot;
-            QRHI_RES(QVkSampler, b.stex.sampler)->lastActiveFrameSlot = currentFrameSlot;
+        {
+            QVkTexture *texD = QRHI_RES(QVkTexture, b.stex.tex);
+            QVkSampler *samplerD = QRHI_RES(QVkSampler, b.stex.sampler);
+            texD->lastActiveFrameSlot = currentFrameSlot;
+            samplerD->lastActiveFrameSlot = currentFrameSlot;
+            if (texD->generation != bd.stex.texGeneration
+                    || samplerD->generation != bd.stex.samplerGeneration)
+            {
+                rewriteDescSet = true;
+                bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerGeneration = samplerD->generation;
+            }
+        }
             break;
         default:
             Q_UNREACHABLE();
@@ -2873,34 +2896,8 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
         }
     }
 
-    // ensure the descriptor set we are going to bind refers to up-to-date Vk objects
-    const int descSetIdx = hasSlottedResourceInSrb ? currentFrameSlot : 0;
-    bool srbUpdate = false;
-    for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(srbD->m_bindings[i]);
-        QVkShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[descSetIdx][i]);
-        switch (b.type) {
-        case QRhiShaderResourceBinding::UniformBuffer:
-            if (QRHI_RES(QVkBuffer, b.ubuf.buf)->generation != bd.ubuf.generation) {
-                srbUpdate = true;
-                bd.ubuf.generation = QRHI_RES(QVkBuffer, b.ubuf.buf)->generation;
-            }
-            break;
-        case QRhiShaderResourceBinding::SampledTexture:
-            if (QRHI_RES(QVkTexture, b.stex.tex)->generation != bd.stex.texGeneration
-                    || QRHI_RES(QVkSampler, b.stex.sampler)->generation != bd.stex.samplerGeneration)
-            {
-                srbUpdate = true;
-                bd.stex.texGeneration = QRHI_RES(QVkTexture, b.stex.tex)->generation;
-                bd.stex.samplerGeneration = QRHI_RES(QVkSampler, b.stex.sampler)->generation;
-            }
-            break;
-        default:
-            Q_UNREACHABLE();
-            break;
-        }
-    }
-    if (srbUpdate)
+    // write descriptor sets, if needed
+    if (rewriteDescSet)
         updateShaderResourceBindings(srb, descSetIdx);
 
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
@@ -2912,10 +2909,9 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     psD->lastActiveFrameSlot = currentFrameSlot;
 
     // make sure the descriptors for the correct slot will get bound
-    if (hasSlottedResourceInSrb && cbD->currentDescSetSlot != descSetIdx)
-        srbUpdate = true;
+    const bool forceRebind = hasSlottedResourceInSrb && cbD->currentDescSetSlot != descSetIdx;
 
-    if (srbUpdate || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
+    if (forceRebind || rewriteDescSet || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
         df->vkCmdBindDescriptorSets(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
                                     &srbD->descSets[descSetIdx], 0, nullptr);
         cbD->currentSrb = srb;
@@ -3070,7 +3066,7 @@ void QRhiVulkan::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
     vkCmdDebugMarkerInsert(QRHI_RES(QVkCommandBuffer, cb)->cb, &marker);
 }
 
-void QRhiVulkan::setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name)
+void QRhiVulkan::setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name, int slot)
 {
     if (!debugMarkers || !debugMarkersAvailable || name.isEmpty())
         return;
@@ -3080,7 +3076,12 @@ void QRhiVulkan::setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type,
     nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT;
     nameInfo.objectType = type;
     nameInfo.object = object;
-    nameInfo.pObjectName = name.constData();
+    QByteArray decoratedName = name;
+    if (slot >= 0) {
+        decoratedName += '/';
+        decoratedName += QByteArray::number(slot);
+    }
+    nameInfo.pObjectName = decoratedName.constData();
     vkDebugMarkerSetObjectName(dev, &nameInfo);
 }
 
@@ -3476,7 +3477,8 @@ bool QVkBuffer::build()
             if (m_type == Dynamic)
                 pendingDynamicUpdates[i].reserve(16);
 
-            rhiD->setObjectName(reinterpret_cast<uint64_t>(buffers[i]), VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT, objectName);
+            rhiD->setObjectName(reinterpret_cast<uint64_t>(buffers[i]), VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT, objectName,
+                                m_type == Dynamic ? i : -1);
         }
     }
 

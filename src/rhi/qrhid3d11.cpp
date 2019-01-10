@@ -372,6 +372,7 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             break;
         }
     }
+
     if (srbUpdate)
         updateShaderResourceBindings(srbD);
 
@@ -1258,18 +1259,22 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
+        {
             // A sampler with binding N is mapped to a HLSL sampler and texture
             // with registers sN and tN by SPIRV-Cross.
-            bd.stex.texGeneration = QRHI_RES(QD3D11Texture, b.stex.tex)->generation;
-            bd.stex.samplerGeneration = QRHI_RES(QD3D11Sampler, b.stex.sampler)->generation;
+            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b.stex.tex);
+            QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b.stex.sampler);
+            bd.stex.texGeneration = texD->generation;
+            bd.stex.samplerGeneration = samplerD->generation;
             if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                srbD->vssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
-                srbD->vsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
+                srbD->vssamplers.feed(b.binding, samplerD->samplerState);
+                srbD->vsshaderresources.feed(b.binding, texD->srv);
             }
             if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                srbD->fssamplers.feed(b.binding, QRHI_RES(QD3D11Sampler, b.stex.sampler)->samplerState);
-                srbD->fsshaderresources.feed(b.binding, QRHI_RES(QD3D11Texture, b.stex.tex)->srv);
+                srbD->fssamplers.feed(b.binding, samplerD->samplerState);
+                srbD->fsshaderresources.feed(b.binding, texD->srv);
             }
+        }
             break;
         default:
             Q_UNREACHABLE();

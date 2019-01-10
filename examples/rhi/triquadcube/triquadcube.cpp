@@ -84,8 +84,6 @@ struct {
 
 void preInit()
 {
-    rhiFlags |= QRhi::EnableDebugMarkers;
-
 #ifdef PROFILE_TO_FILE
     rhiFlags |= QRhi::EnableProfiling;
     const QString profFn = QFileInfo(QLatin1String("rhiprof.txt")).absoluteFilePath();

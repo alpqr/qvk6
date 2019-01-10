@@ -116,7 +116,7 @@ QString graphicsApiName()
     return QString();
 }
 
-QRhi::Flags rhiFlags = 0;
+QRhi::Flags rhiFlags = QRhi::EnableDebugMarkers;
 int sampleCount = 1;
 QRhiSwapChain::Flags scFlags = 0;
 

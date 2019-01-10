@@ -178,6 +178,22 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
 
     QVector<QRhiShaderResourceBinding> sortedBindings;
     int maxBinding = -1;
+
+    struct BoundUniformBufferData {
+        uint generation;
+    };
+    struct BoundSampledTextureData {
+        uint texGeneration;
+        uint samplerGeneration;
+    };
+    struct BoundResourceData {
+        union {
+            BoundUniformBufferData ubuf;
+            BoundSampledTextureData stex;
+        };
+    };
+    QVector<BoundResourceData> boundResourceData;
+
     uint generation = 0;
     friend class QRhiMetal;
 };
@@ -213,6 +229,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
+    int currentResSlot;
     QRhiBuffer *currentIndexBuffer;
     quint32 currentIndexOffset;
     QRhiCommandBuffer::IndexFormat currentIndexFormat;
@@ -334,6 +351,7 @@ public:
     void finishActiveReadbacks(bool forced = false);
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeBufferHostWritesForCurrentFrame(QMetalBuffer *bufD);
+    void enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD, QMetalCommandBuffer *cbD);
     int effectiveSampleCount(int sampleCount) const;
 
     bool importedDevice = false;

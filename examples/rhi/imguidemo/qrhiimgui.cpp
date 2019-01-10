@@ -105,6 +105,7 @@ bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
 
     if (!d->ubuf) {
         d->ubuf = d->rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 64 + 4);
+        d->ubuf->setName(QByteArrayLiteral("imgui uniform buffer"));
         d->releasePool << d->ubuf;
         if (!d->ubuf->build())
             return false;
@@ -124,14 +125,17 @@ bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
     if (!d->sampler) {
         d->sampler = d->rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
                                         QRhiSampler::Repeat, QRhiSampler::Repeat);
+        d->sampler->setName(QByteArrayLiteral("imgui sampler"));
         d->releasePool << d->sampler;
         if (!d->sampler->build())
             return false;
     }
 
-    for (QRhiImguiPrivate::Texture &t : d->textures) {
+    for (int i = 0; i < d->textures.count(); ++i) {
+        QRhiImguiPrivate::Texture &t(d->textures[i]);
         if (!t.tex) {
             t.tex = d->rhi->newTexture(QRhiTexture::RGBA8, t.image.size());
+            t.tex->setName(QByteArrayLiteral("imgui texture ") + QByteArray::number(i));
             if (!t.tex->build())
                 return false;
             dstResourceUpdates->uploadTexture(t.tex, t.image);
@@ -212,6 +216,7 @@ bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
 
     if (!d->vbuf) {
         d->vbuf = d->rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::VertexBuffer, totalVbufSize);
+        d->vbuf->setName(QByteArrayLiteral("imgui vertex buffer"));
         d->releasePool << d->vbuf;
         if (!d->vbuf->build())
             return false;
@@ -224,6 +229,7 @@ bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
     }
     if (!d->ibuf) {
         d->ibuf = d->rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::IndexBuffer, totalIbufSize);
+        d->ibuf->setName(QByteArrayLiteral("imgui index buffer"));
         d->releasePool << d->ibuf;
         if (!d->ibuf->build())
             return false;

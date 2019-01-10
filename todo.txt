@@ -1,5 +1,4 @@
 multiwindow_threaded should demo pulling out the device and importing to another rhi
-mtl: reduce set*
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -47,6 +46,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: reduce set*
 mtl: report readback temp buf
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor
 resize to 0 width or height fails (vk, d3d)

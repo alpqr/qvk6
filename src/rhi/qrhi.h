@@ -367,9 +367,9 @@ public:
 
     // This has two uses: to get names visible in graphics debugging tools and
     // in the profiling output. Regarding the former, the name is ignored when
-    // DebugMarkers are not supported or EnableDebugMarkers is not set. May
-    // also be ignored for objects other than buffers, renderbuffers, and
-    // textures, depending on the backend.
+    // DebugMarkers are not supported, and may be ignored when
+    // EnableDebugMarkers is not set. May also be ignored for objects other
+    // than buffers, renderbuffers, and textures, depending on the backend.
     QByteArray name() const;
     void setName(const QByteArray &name);
 

@@ -453,7 +453,7 @@ public:
     void executeDeferredReleases(bool forced = false);
     void finishActiveReadbacks(bool forced = false);
 
-    void setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name);
+    void setObjectName(uint64_t object, VkDebugReportObjectTypeEXT type, const QByteArray &name, int slot = -1);
     void bufferBarrier(QRhiCommandBuffer *cb, QRhiBuffer *buf);
     void imageSubResBarrier(QRhiCommandBuffer *cb, QRhiTexture *tex,
                             VkImageLayout oldLayout, VkImageLayout newLayout,

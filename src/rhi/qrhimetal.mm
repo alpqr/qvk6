@@ -158,6 +158,13 @@ struct QMetalCommandBufferData
     id<MTLCommandBuffer> cb;
     id<MTLRenderCommandEncoder> currentPassEncoder;
     MTLRenderPassDescriptor *currentPassRpDesc;
+
+    QRhiBuffer *currentIndexBuffer;
+    quint32 currentIndexOffset;
+    QRhiCommandBuffer::IndexFormat currentIndexFormat;
+    int currentFirstVertexBinding;
+    QRhiBatchedBindings<id<MTLBuffer> > currentVertexInputsBuffers;
+    QRhiBatchedBindings<NSUInteger> currentVertexInputOffsets;
 };
 
 struct QMetalRenderTargetData
@@ -592,16 +599,20 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
         cbD->currentPipeline = ps;
         cbD->currentPipelineGeneration = psD->generation;
+
         [cbD->d->currentPassEncoder setRenderPipelineState: psD->d->ps];
         [cbD->d->currentPassEncoder setDepthStencilState: psD->d->ds];
         [cbD->d->currentPassEncoder setCullMode: psD->d->cullMode];
         [cbD->d->currentPassEncoder setFrontFacingWinding: psD->d->winding];
+
+        cbD->resetPerPipelineState();
     }
 
     if (resNeedsRebind || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
         cbD->currentResSlot = resSlot;
+
         enqueueShaderResourceBindings(srbD, cbD);
     }
 
@@ -630,24 +641,33 @@ void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
     // same binding space for vertex and constant buffers - work it around
     const int firstVertexBinding = QRHI_RES(QMetalShaderResourceBindings, cbD->currentSrb)->maxBinding + 1;
 
-    for (int i = 0, ie = buffers.batches.count(); i != ie; ++i) {
-        const auto &bufferBatch(buffers.batches[i]);
-        const auto &offsetBatch(offsets.batches[i]);
-        [cbD->d->currentPassEncoder setVertexBuffers:
-            bufferBatch.resources.constData()
-          offsets: offsetBatch.resources.constData()
-          withRange: NSMakeRange(firstVertexBinding + bufferBatch.startBinding, bufferBatch.resources.count())];
+    if (firstVertexBinding != cbD->d->currentFirstVertexBinding
+            || buffers != cbD->d->currentVertexInputsBuffers
+            || offsets != cbD->d->currentVertexInputOffsets)
+    {
+        cbD->d->currentFirstVertexBinding = firstVertexBinding;
+        cbD->d->currentVertexInputsBuffers = buffers;
+        cbD->d->currentVertexInputOffsets = offsets;
+
+        for (int i = 0, ie = buffers.batches.count(); i != ie; ++i) {
+            const auto &bufferBatch(buffers.batches[i]);
+            const auto &offsetBatch(offsets.batches[i]);
+            [cbD->d->currentPassEncoder setVertexBuffers:
+                bufferBatch.resources.constData()
+              offsets: offsetBatch.resources.constData()
+              withRange: NSMakeRange(firstVertexBinding + bufferBatch.startBinding, bufferBatch.resources.count())];
+        }
     }
 
     if (indexBuf) {
         QMetalBuffer *ibufD = QRHI_RES(QMetalBuffer, indexBuf);
         executeBufferHostWritesForCurrentFrame(ibufD);
         ibufD->lastActiveFrameSlot = currentFrameSlot;
-        cbD->currentIndexBuffer = indexBuf;
-        cbD->currentIndexOffset = indexOffset;
-        cbD->currentIndexFormat = indexFormat;
+        cbD->d->currentIndexBuffer = indexBuf;
+        cbD->d->currentIndexOffset = indexOffset;
+        cbD->d->currentIndexFormat = indexFormat;
     } else {
-        cbD->currentIndexBuffer = nullptr;
+        cbD->d->currentIndexBuffer = nullptr;
     }
 }
 
@@ -724,18 +744,18 @@ void QRhiMetal::drawIndexed(QRhiCommandBuffer *cb, quint32 indexCount,
 {
     Q_ASSERT(inPass);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
-    if (!cbD->currentIndexBuffer)
+    if (!cbD->d->currentIndexBuffer)
         return;
 
-    const quint32 indexOffset = cbD->currentIndexOffset + firstIndex * (cbD->currentIndexFormat == QRhiCommandBuffer::IndexUInt16 ? 2 : 4);
+    const quint32 indexOffset = cbD->d->currentIndexOffset + firstIndex * (cbD->d->currentIndexFormat == QRhiCommandBuffer::IndexUInt16 ? 2 : 4);
     Q_ASSERT(indexOffset == aligned(indexOffset, 4));
 
-    QMetalBuffer *ibufD = QRHI_RES(QMetalBuffer, cbD->currentIndexBuffer);
+    QMetalBuffer *ibufD = QRHI_RES(QMetalBuffer, cbD->d->currentIndexBuffer);
     id<MTLBuffer> mtlbuf = ibufD->d->buf[ibufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
 
     [cbD->d->currentPassEncoder drawIndexedPrimitives: QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->d->primitiveType
       indexCount: indexCount
-      indexType: cbD->currentIndexFormat == QRhiCommandBuffer::IndexUInt16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
+      indexType: cbD->d->currentIndexFormat == QRhiCommandBuffer::IndexUInt16 ? MTLIndexTypeUInt16 : MTLIndexTypeUInt32
       indexBuffer: mtlbuf
       indexBufferOffset: indexOffset
       instanceCount: instanceCount
@@ -2585,9 +2605,19 @@ void QMetalCommandBuffer::resetState()
     currentSrb = nullptr;
     currentSrbGeneration = 0;
     currentResSlot = -1;
-    currentIndexBuffer = nullptr;
+
     d->currentPassEncoder = nil;
     d->currentPassRpDesc = nil;
+
+    resetPerPipelineState();
+}
+
+void QMetalCommandBuffer::resetPerPipelineState()
+{
+    d->currentIndexBuffer = nullptr;
+    d->currentFirstVertexBinding = -1;
+    d->currentVertexInputsBuffers.clear();
+    d->currentVertexInputOffsets.clear();
 }
 
 QMetalSwapChain::QMetalSwapChain(QRhiImplementation *rhi)

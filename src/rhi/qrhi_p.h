@@ -297,6 +297,11 @@ struct QRhiBatchedBindings
         {
             return startBinding == other.startBinding && resources == other.resources;
         }
+
+        bool operator!=(const Batch &other) const
+        {
+            return !operator==(other);
+        }
     };
 
     QVarLengthArray<Batch, 4> batches; // sorted by startBinding
@@ -304,6 +309,11 @@ struct QRhiBatchedBindings
     bool operator==(const QRhiBatchedBindings<T> &other) const
     {
         return batches == other.batches;
+    }
+
+    bool operator!=(const QRhiBatchedBindings<T> &other) const
+    {
+        return !operator==(other);
     }
 
 private:

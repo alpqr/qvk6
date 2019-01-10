@@ -254,15 +254,19 @@ bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
 
 void QRhiImgui::queueFrame(QRhiCommandBuffer *cb)
 {
-    ImDrawData *draw = ImGui::GetDrawData();
+    QVector<QRhiCommandBuffer::VertexInput> vertexInput { { d->vbuf, 0 } };
     cb->setViewport({ 0, 0, float(d->lastOutputSize.width()), float(d->lastOutputSize.height()) });
 
+    ImDrawData *draw = ImGui::GetDrawData();
     for (int n = 0; n < draw->CmdListsCount; ++n) {
         const ImDrawList *cmdList = draw->CmdLists[n];
         const ImDrawIdx *indexBufOffset = nullptr;
+        vertexInput[0].second = d->vbufOffsets[n];
 
         for (int i = 0; i < cmdList->CmdBuffer.Size; ++i) {
             const ImDrawCmd *cmd = &cmdList->CmdBuffer[i];
+            const quint32 indexOffset = d->ibufOffsets[n] + quintptr(indexBufOffset);
+
             if (!cmd->UserCallback) {
                 const QPointF scissorPixelBottomLeft = QPointF(cmd->ClipRect.x, d->lastOutputSize.height() - cmd->ClipRect.w);
                 const QSizeF scissorPixelSize = QSizeF(cmd->ClipRect.z - cmd->ClipRect.x, cmd->ClipRect.w - cmd->ClipRect.y);
@@ -270,12 +274,12 @@ void QRhiImgui::queueFrame(QRhiCommandBuffer *cb)
                 cb->setGraphicsPipeline(d->ps, d->textures[textureIndex].srb);
                 cb->setScissor({ int(scissorPixelBottomLeft.x()), int(scissorPixelBottomLeft.y()),
                                  int(scissorPixelSize.width()), int(scissorPixelSize.height()) });
-                cb->setVertexInput(0, { { d->vbuf, d->vbufOffsets[n] } },
-                                   d->ibuf, d->ibufOffsets[n] + quintptr(indexBufOffset), QRhiCommandBuffer::IndexUInt32);
+                cb->setVertexInput(0, vertexInput, d->ibuf, indexOffset, QRhiCommandBuffer::IndexUInt32);
                 cb->drawIndexed(cmd->ElemCount);
             } else {
                 cmd->UserCallback(cmdList, cmd);
             }
+
             indexBufOffset += cmd->ElemCount;
         }
     }

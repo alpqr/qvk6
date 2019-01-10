@@ -473,7 +473,7 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     bool hasSlottedResourceInSrb = false;
     bool resNeedsRebind = false;
 
-    // do host writes, figure out if we need to rebind, and mark as in-use
+    // do buffer writes, figure out if we need to rebind, and mark as in-use
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
         QMetalShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
@@ -482,10 +482,9 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         {
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
-            if (bufD->m_type != QRhiBuffer::Immutable) { // static and dynamic are both slotted
+            executeBufferHostWritesForCurrentFrame(bufD);
+            if (bufD->m_type != QRhiBuffer::Immutable)
                 hasSlottedResourceInSrb = true;
-                executeBufferHostWritesForCurrentFrame(bufD);
-            }
             if (bufD->generation != bd.ubuf.generation) {
                 resNeedsRebind = true;
                 bd.ubuf.generation = bufD->generation;

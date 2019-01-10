@@ -292,9 +292,19 @@ struct QRhiBatchedBindings
     struct Batch {
         uint startBinding;
         QVarLengthArray<T, 4> resources;
+
+        bool operator==(const Batch &other) const
+        {
+            return startBinding == other.startBinding && resources == other.resources;
+        }
     };
 
     QVarLengthArray<Batch, 4> batches; // sorted by startBinding
+
+    bool operator==(const QRhiBatchedBindings<T> &other) const
+    {
+        return batches == other.batches;
+    }
 
 private:
     Batch curBatch;

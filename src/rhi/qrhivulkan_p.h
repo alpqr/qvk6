@@ -254,13 +254,25 @@ struct QVkCommandBuffer : public QRhiCommandBuffer
         currentSrb = nullptr;
         currentSrbGeneration = 0;
         currentDescSetSlot = -1;
+        currentIndexBuffer = VK_NULL_HANDLE;
+        currentIndexOffset = 0;
+        currentIndexFormat = VK_INDEX_TYPE_UINT16;
+        memset(currentVertexBuffers, 0, sizeof(currentVertexBuffers));
+        memset(currentVertexOffsets, 0, sizeof(currentVertexOffsets));
     }
+
     QRhiRenderTarget *currentTarget;
     QRhiGraphicsPipeline *currentPipeline;
     uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
     int currentDescSetSlot;
+    VkBuffer currentIndexBuffer;
+    quint32 currentIndexOffset;
+    VkIndexType currentIndexFormat;
+    static const int VERTEX_INPUT_RESOURCE_SLOT_COUNT = 32;
+    VkBuffer currentVertexBuffers[VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+    quint32 currentVertexOffsets[VERTEX_INPUT_RESOURCE_SLOT_COUNT];
 
     friend class QRhiVulkan;
 };

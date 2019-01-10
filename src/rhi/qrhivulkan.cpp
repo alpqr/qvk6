@@ -2938,24 +2938,37 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
                                 QRhiBuffer *indexBuf, quint32 indexOffset, QRhiCommandBuffer::IndexFormat indexFormat)
 {
     Q_ASSERT(inPass);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
 
-    QVarLengthArray<VkBuffer, 4> bufs;
-    QVarLengthArray<VkDeviceSize, 4> ofs;
+    bool needsBindVBuf = false;
     for (int i = 0, ie = bindings.count(); i != ie; ++i) {
-        QRhiBuffer *buf = bindings[i].first;
-        QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
+        const int inputSlot = startBinding + i;
+        QVkBuffer *bufD = QRHI_RES(QVkBuffer, bindings[i].first);
         Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::VertexBuffer));
         bufD->lastActiveFrameSlot = currentFrameSlot;
         if (bufD->m_type == QRhiBuffer::Dynamic)
             executeBufferHostWritesForCurrentFrame(bufD);
 
-        const int idx = bufD->m_type == QRhiBuffer::Dynamic ? currentFrameSlot : 0;
-        bufs.append(bufD->buffers[idx]);
-        ofs.append(bindings[i].second);
+        const VkBuffer vkvertexbuf = bufD->buffers[bufD->m_type == QRhiBuffer::Dynamic ? currentFrameSlot : 0];
+        if (cbD->currentVertexBuffers[inputSlot] != vkvertexbuf
+                || cbD->currentVertexOffsets[inputSlot] != bindings[i].second)
+        {
+            needsBindVBuf = true;
+            cbD->currentVertexBuffers[inputSlot] = vkvertexbuf;
+            cbD->currentVertexOffsets[inputSlot] = bindings[i].second;
+        }
     }
-    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
-    if (!bufs.isEmpty())
+
+    if (needsBindVBuf) {
+        QVarLengthArray<VkBuffer, 4> bufs;
+        QVarLengthArray<VkDeviceSize, 4> ofs;
+        for (int i = 0, ie = bindings.count(); i != ie; ++i) {
+            QVkBuffer *bufD = QRHI_RES(QVkBuffer, bindings[i].first);
+            bufs.append(bufD->buffers[bufD->m_type == QRhiBuffer::Dynamic ? currentFrameSlot : 0]);
+            ofs.append(bindings[i].second);
+        }
         df->vkCmdBindVertexBuffers(cbD->cb, startBinding, bufs.count(), bufs.constData(), ofs.constData());
+    }
 
     if (indexBuf) {
         QVkBuffer *ibufD = QRHI_RES(QVkBuffer, indexBuf);
@@ -2964,10 +2977,20 @@ void QRhiVulkan::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const Q
         if (ibufD->m_type == QRhiBuffer::Dynamic)
             executeBufferHostWritesForCurrentFrame(ibufD);
 
-        const int idx = ibufD->m_type == QRhiBuffer::Dynamic ? currentFrameSlot : 0;
+        const VkBuffer vkindexbuf = ibufD->buffers[ibufD->m_type == QRhiBuffer::Dynamic ? currentFrameSlot : 0];
         const VkIndexType type = indexFormat == QRhiCommandBuffer::IndexUInt16 ? VK_INDEX_TYPE_UINT16
                                                                                : VK_INDEX_TYPE_UINT32;
-        df->vkCmdBindIndexBuffer(cbD->cb, ibufD->buffers[idx], indexOffset, type);
+
+        if (cbD->currentIndexBuffer != vkindexbuf
+                || cbD->currentIndexOffset != indexOffset
+                || cbD->currentIndexFormat != type)
+        {
+            cbD->currentIndexBuffer = vkindexbuf;
+            cbD->currentIndexOffset = indexOffset;
+            cbD->currentIndexFormat = type;
+
+            df->vkCmdBindIndexBuffer(cbD->cb, vkindexbuf, indexOffset, type);
+        }
     }
 }
 

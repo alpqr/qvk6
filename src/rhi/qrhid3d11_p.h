@@ -368,7 +368,7 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     quint32 currentIndexOffset;
     DXGI_FORMAT currentIndexFormat;
     ID3D11Buffer *currentVertexBuffers[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
-    UINT currentVertexOffsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+    quint32 currentVertexOffsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
 
     QVector<QByteArray> dataRetainPool;
     QVector<QImage> imageRetainPool;

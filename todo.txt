@@ -4,7 +4,6 @@ gl: tex formats (texture, readback)
 gl: srgb
 should istexformatsupported should check srgb combinations
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
-mtl: cbuffers, textures, samplers set should be batched too
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 what does image copy do for compressed formats?
 figure sg out for minimizing viewport/scissor cmds
@@ -46,6 +45,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+mtl: cbuffers, textures, samplers set should be batched too
 mtl: reduce set*
 mtl: report readback temp buf
 vk: support instanceStepRate via VK_EXT_vertex_attribute_divisor

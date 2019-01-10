@@ -428,16 +428,28 @@ QRhiShaderResourceBindings *QRhiMetal::createShaderResourceBindings()
 
 void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD, QMetalCommandBuffer *cbD)
 {
+    static const int KNOWN_STAGES = 2;
+    struct {
+        QRhiBatchedBindings<id<MTLBuffer> > buffers;
+        QRhiBatchedBindings<NSUInteger> bufferOffsets;
+        QRhiBatchedBindings<id<MTLTexture> > textures;
+        QRhiBatchedBindings<id<MTLSamplerState> > samplers;
+    } res[KNOWN_STAGES];
+
     for (const QRhiShaderResourceBinding &b : qAsConst(srbD->sortedBindings)) {
         switch (b.type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
             id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
-            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage))
-                [cbD->d->currentPassEncoder setVertexBuffer: mtlbuf offset: b.ubuf.offset atIndex: b.binding];
-            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage))
-                [cbD->d->currentPassEncoder setFragmentBuffer: mtlbuf offset: b.ubuf.offset atIndex: b.binding];
+            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
+                res[0].buffers.feed(b.binding, mtlbuf);
+                res[0].bufferOffsets.feed(b.binding, b.ubuf.offset);
+            }
+            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
+                res[1].buffers.feed(b.binding, mtlbuf);
+                res[1].bufferOffsets.feed(b.binding, b.ubuf.offset);
+            }
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
@@ -445,18 +457,76 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
             QMetalTexture *texD = QRHI_RES(QMetalTexture, b.stex.tex);
             QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b.stex.sampler);
             if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                [cbD->d->currentPassEncoder setVertexTexture: texD->d->tex atIndex: b.binding];
-                [cbD->d->currentPassEncoder setVertexSamplerState: samplerD->d->samplerState atIndex: b.binding];
+                res[0].textures.feed(b.binding, texD->d->tex);
+                res[0].samplers.feed(b.binding, samplerD->d->samplerState);
             }
             if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                [cbD->d->currentPassEncoder setFragmentTexture: texD->d->tex atIndex: b.binding];
-                [cbD->d->currentPassEncoder setFragmentSamplerState: samplerD->d->samplerState atIndex: b.binding];
+                res[1].textures.feed(b.binding, texD->d->tex);
+                res[1].samplers.feed(b.binding, samplerD->d->samplerState);
             }
         }
             break;
         default:
             Q_UNREACHABLE();
             break;
+        }
+    }
+
+    for (int idx = 0; idx < KNOWN_STAGES; ++idx) {
+        res[idx].buffers.finish();
+        res[idx].bufferOffsets.finish();
+        res[idx].textures.finish();
+        res[idx].samplers.finish();
+        for (int i = 0, ie = res[idx].buffers.batches.count(); i != ie; ++i) {
+            const auto &bufferBatch(res[idx].buffers.batches[i]);
+            const auto &offsetBatch(res[idx].bufferOffsets.batches[i]);
+            switch (idx) {
+            case 0:
+                [cbD->d->currentPassEncoder setVertexBuffers: bufferBatch.resources.constData()
+                  offsets: offsetBatch.resources.constData()
+                  withRange: NSMakeRange(bufferBatch.startBinding, bufferBatch.resources.count())];
+                break;
+            case 1:
+                [cbD->d->currentPassEncoder setFragmentBuffers: bufferBatch.resources.constData()
+                  offsets: offsetBatch.resources.constData()
+                  withRange: NSMakeRange(bufferBatch.startBinding, bufferBatch.resources.count())];
+                break;
+            default:
+                Q_UNREACHABLE();
+                break;
+            }
+        }
+        for (int i = 0, ie = res[idx].textures.batches.count(); i != ie; ++i) {
+            const auto &batch(res[idx].textures.batches[i]);
+            switch (idx) {
+            case 0:
+                [cbD->d->currentPassEncoder setVertexTextures: batch.resources.constData()
+                  withRange: NSMakeRange(batch.startBinding, batch.resources.count())];
+                break;
+            case 1:
+                [cbD->d->currentPassEncoder setFragmentTextures: batch.resources.constData()
+                  withRange: NSMakeRange(batch.startBinding, batch.resources.count())];
+                break;
+            default:
+                Q_UNREACHABLE();
+                break;
+            }
+        }
+        for (int i = 0, ie = res[idx].samplers.batches.count(); i != ie; ++i) {
+            const auto &batch(res[idx].samplers.batches[i]);
+            switch (idx) {
+            case 0:
+                [cbD->d->currentPassEncoder setVertexSamplerStates: batch.resources.constData()
+                  withRange: NSMakeRange(batch.startBinding, batch.resources.count())];
+                break;
+            case 1:
+                [cbD->d->currentPassEncoder setFragmentSamplerStates: batch.resources.constData()
+                  withRange: NSMakeRange(batch.startBinding, batch.resources.count())];
+                break;
+            default:
+                Q_UNREACHABLE();
+                break;
+            }
         }
     }
 }

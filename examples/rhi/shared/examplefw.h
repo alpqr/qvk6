@@ -392,23 +392,14 @@ void Window::render()
 
     m_r->endFrame(m_sc);
 
-    // There should be no need to rely on requestUpdate(). Outside Apple that's
-    // a 5 ms timer, otherwise backed by CVDisplayLink but for Metal we do not
-    // need that either, on macOS at least. For iOS/tvOS however, or when using
-    // OpenGL on Apple, continue to use requestUpdate.
-    bool useRequestUpdate = false;
 #ifdef Q_OS_DARWIN
-#if defined(Q_OS_IOS) || defined(Q_OS_TVOS)
-    useRequestUpdate = true;
-#else
-    if (graphicsApi == OpenGL)
-        useRequestUpdate = true;
-#endif
-#endif
-    if (useRequestUpdate)
-        requestUpdate();
+    if (!scFlags.testFlag(QRhiSwapChain::NoVSync))
+        requestUpdate(); // CVDisplayLink (not strictly needed on macOS with Metal)
     else
         QCoreApplication::postEvent(this, new QEvent(QEvent::UpdateRequest));
+#else
+    QCoreApplication::postEvent(this, new QEvent(QEvent::UpdateRequest));
+#endif
 }
 
 int main(int argc, char **argv)

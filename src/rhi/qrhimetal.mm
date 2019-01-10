@@ -471,7 +471,6 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
 
     QMetalShaderResourceBindings *srbD = QRHI_RES(QMetalShaderResourceBindings, srb);
     bool hasSlottedResourceInSrb = false;
-    const int resSlot = hasSlottedResourceInSrb ? currentFrameSlot : 0;
     bool resNeedsRebind = false;
 
     // do host writes, figure out if we need to rebind, and mark as in-use
@@ -517,6 +516,7 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
 
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     // make sure the resources for the correct slot get bound
+    const int resSlot = hasSlottedResourceInSrb ? currentFrameSlot : 0;
     if (hasSlottedResourceInSrb && cbD->currentResSlot != resSlot)
         resNeedsRebind = true;
 

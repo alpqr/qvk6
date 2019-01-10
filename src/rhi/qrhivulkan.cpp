@@ -2851,6 +2851,18 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
 
     QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
     bool hasSlottedResourceInSrb = false;
+
+    for (const QRhiShaderResourceBinding &b : qAsConst(srbD->m_bindings)) {
+        switch (b.type) {
+        case QRhiShaderResourceBinding::UniformBuffer:
+            if (QRHI_RES(QVkBuffer, b.ubuf.buf)->m_type == QRhiBuffer::Dynamic)
+                hasSlottedResourceInSrb = true;
+            break;
+        default:
+            break;
+        }
+    }
+
     const int descSetIdx = hasSlottedResourceInSrb ? currentFrameSlot : 0;
     bool rewriteDescSet = false;
 
@@ -2865,10 +2877,10 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
             QVkBuffer *bufD = QRHI_RES(QVkBuffer, b.ubuf.buf);
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             bufD->lastActiveFrameSlot = currentFrameSlot;
-            if (bufD->m_type == QRhiBuffer::Dynamic) {
-                hasSlottedResourceInSrb = true;
+
+            if (bufD->m_type == QRhiBuffer::Dynamic)
                 executeBufferHostWritesForCurrentFrame(bufD);
-            }
+
             if (bufD->generation != bd.ubuf.generation) {
                 rewriteDescSet = true;
                 bd.ubuf.generation = bufD->generation;
@@ -2881,6 +2893,7 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
             QVkSampler *samplerD = QRHI_RES(QVkSampler, b.stex.sampler);
             texD->lastActiveFrameSlot = currentFrameSlot;
             samplerD->lastActiveFrameSlot = currentFrameSlot;
+
             if (texD->generation != bd.stex.texGeneration
                     || samplerD->generation != bd.stex.samplerGeneration)
             {

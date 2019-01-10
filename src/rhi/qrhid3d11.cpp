@@ -400,36 +400,61 @@ void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
     Q_ASSERT(inPass);
     QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
 
-    QD3D11CommandBuffer::Command cmd;
-    cmd.cmd = QD3D11CommandBuffer::Command::BindVertexBuffers;
-    cmd.args.bindVertexBuffers.startSlot = startBinding;
-    cmd.args.bindVertexBuffers.slotCount = bindings.count();
+    bool needsBindVBuf = false;
     for (int i = 0, ie = bindings.count(); i != ie; ++i) {
-        QRhiBuffer *buf = bindings[i].first;
-        quint32 ofs = bindings[i].second;
-        QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, buf);
+        const int inputSlot = startBinding + i;
+        QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, bindings[i].first);
         Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::VertexBuffer));
-        cmd.args.bindVertexBuffers.buffers[i] = bufD->buffer;
-        cmd.args.bindVertexBuffers.offsets[i] = ofs;
-        cmd.args.bindVertexBuffers.strides[i] =
-                QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline)->m_vertexInputLayout.bindings[i].stride;
         if (bufD->m_type == QRhiBuffer::Dynamic)
             executeBufferHostWritesForCurrentFrame(bufD);
+
+        if (cbD->currentVertexBuffers[inputSlot] != bufD->buffer
+                || cbD->currentVertexOffsets[inputSlot] != bindings[i].second)
+        {
+            needsBindVBuf = true;
+            cbD->currentVertexBuffers[inputSlot] = bufD->buffer;
+            cbD->currentVertexOffsets[inputSlot] = bindings[i].second;
+        }
     }
-    cbD->commands.append(cmd);
+
+    if (needsBindVBuf) {
+        QD3D11CommandBuffer::Command cmd;
+        cmd.cmd = QD3D11CommandBuffer::Command::BindVertexBuffers;
+        cmd.args.bindVertexBuffers.startSlot = startBinding;
+        cmd.args.bindVertexBuffers.slotCount = bindings.count();
+        for (int i = 0, ie = bindings.count(); i != ie; ++i) {
+            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, bindings[i].first);
+            cmd.args.bindVertexBuffers.buffers[i] = bufD->buffer;
+            cmd.args.bindVertexBuffers.offsets[i] = bindings[i].second;
+            cmd.args.bindVertexBuffers.strides[i] =
+                    QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline)->m_vertexInputLayout.bindings[i].stride;
+        }
+        cbD->commands.append(cmd);
+    }
 
     if (indexBuf) {
         QD3D11Buffer *ibufD = QRHI_RES(QD3D11Buffer, indexBuf);
         Q_ASSERT(ibufD->m_usage.testFlag(QRhiBuffer::IndexBuffer));
-        QD3D11CommandBuffer::Command cmd;
-        cmd.cmd = QD3D11CommandBuffer::Command::BindIndexBuffer;
-        cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
-        cmd.args.bindIndexBuffer.offset = indexOffset;
-        cmd.args.bindIndexBuffer.format = indexFormat == QRhiCommandBuffer::IndexUInt16 ? DXGI_FORMAT_R16_UINT
-                                                                                        : DXGI_FORMAT_R32_UINT;
-        cbD->commands.append(cmd);
         if (ibufD->m_type == QRhiBuffer::Dynamic)
             executeBufferHostWritesForCurrentFrame(ibufD);
+
+        const DXGI_FORMAT dxgiFormat = indexFormat == QRhiCommandBuffer::IndexUInt16 ? DXGI_FORMAT_R16_UINT
+                                                                                     : DXGI_FORMAT_R32_UINT;
+        if (cbD->currentIndexBuffer != ibufD->buffer
+                || cbD->currentIndexOffset != indexOffset
+                || cbD->currentIndexFormat != dxgiFormat)
+        {
+            cbD->currentIndexBuffer = ibufD->buffer;
+            cbD->currentIndexOffset = indexOffset;
+            cbD->currentIndexFormat = dxgiFormat;
+
+            QD3D11CommandBuffer::Command cmd;
+            cmd.cmd = QD3D11CommandBuffer::Command::BindIndexBuffer;
+            cmd.args.bindIndexBuffer.buffer = ibufD->buffer;
+            cmd.args.bindIndexBuffer.offset = indexOffset;
+            cmd.args.bindIndexBuffer.format = dxgiFormat;
+            cbD->commands.append(cmd);
+        }
     }
 }
 

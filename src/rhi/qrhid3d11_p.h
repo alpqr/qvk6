@@ -364,6 +364,11 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     uint currentPipelineGeneration;
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
+    ID3D11Buffer *currentIndexBuffer;
+    quint32 currentIndexOffset;
+    DXGI_FORMAT currentIndexFormat;
+    ID3D11Buffer *currentVertexBuffers[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
+    UINT currentVertexOffsets[D3D11_IA_VERTEX_INPUT_RESOURCE_SLOT_COUNT];
 
     QVector<QByteArray> dataRetainPool;
     QVector<QImage> imageRetainPool;
@@ -389,6 +394,11 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
         currentPipelineGeneration = 0;
         currentSrb = nullptr;
         currentSrbGeneration = 0;
+        currentIndexBuffer = nullptr;
+        currentIndexOffset = 0;
+        currentIndexFormat = DXGI_FORMAT_R16_UINT;
+        memset(currentVertexBuffers, 0, sizeof(currentVertexBuffers));
+        memset(currentVertexOffsets, 0, sizeof(currentVertexOffsets));
     }
 };
 

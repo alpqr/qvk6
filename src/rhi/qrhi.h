@@ -962,18 +962,21 @@ public:
 
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
-    // the pipeline or desc.set are the same as in the last call in the same
-    // frame; srb is updated automatically at this point whenever a referenced
-    // buffer, texture, etc. is out of date internally (due to rebuilding since
-    // the creation of the srb) - hence no need to manually recreate the srb in
-    // case a QRhiBuffer is "resized" etc.
+    // the pipeline or srb are the same as in the last call in the same frame;
+    // resource bindings are updated automatically at this point if a
+    // referenced buffer, texture, etc. has a new underlying native resource
+    // (due to rebuilding since the creation of the srb) - hence no need to
+    // rebuild the srb in case, for example, a QRhiBuffer is "resized" via
+    // setSize()+build().
     void setGraphicsPipeline(QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb = nullptr);
 
-    // The set* and draw* functions expect to have the pipeline set before on
-    // the command buffer. Otherwise, unspecified issues may arise depending on
+    // The set* and draw* functions expect to have a pipeline set already on
+    // the command buffer. Otherwise, unspecified issues may arise, depending on
     // the backend.
 
+    // Some level of smartness can be expected from most backends: superfluous
+    // vertex input or index buffer changes are ignored automatically.
     using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
     void setVertexInput(int startBinding, const QVector<VertexInput> &bindings,
                         QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,

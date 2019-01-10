@@ -230,6 +230,9 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     QRhiShaderResourceBindings *currentSrb;
     uint currentSrbGeneration;
     int currentResSlot;
+    QRhiBuffer *currentIndexBuffer;
+    quint32 currentIndexOffset;
+    QRhiCommandBuffer::IndexFormat currentIndexFormat;
 
     void resetState();
     void resetPerPipelineState();

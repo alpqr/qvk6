@@ -72,6 +72,33 @@ void QRhiProfiler::setFrameTimingWriteInterval(int frameCount)
         d->frameTimingWriteInterval = frameCount;
 }
 
+QRhiProfiler::CpuTime QRhiProfiler::frameToFrameTimes(QRhiSwapChain *sc) const
+{
+    auto it = d->swapchains.constFind(sc);
+    if (it != d->swapchains.constEnd())
+        return it->frameToFrameTime;
+
+    return QRhiProfiler::CpuTime();
+}
+
+QRhiProfiler::CpuTime QRhiProfiler::frameBuildTimes(QRhiSwapChain *sc) const
+{
+    auto it = d->swapchains.constFind(sc);
+    if (it != d->swapchains.constEnd())
+        return it->beginToEndFrameTime;
+
+    return QRhiProfiler::CpuTime();
+}
+
+QRhiProfiler::GpuTime QRhiProfiler::gpuFrameTimes(QRhiSwapChain *sc) const
+{
+    auto it = d->swapchains.constFind(sc);
+    if (it != d->swapchains.constEnd())
+        return it->gpuFrameTime;
+
+    return QRhiProfiler::GpuTime();
+}
+
 void QRhiProfilerPrivate::startEntry(QRhiProfiler::StreamOp op, qint64 timestamp, QRhiResource *res)
 {
     buf.clear();
@@ -301,34 +328,30 @@ void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
         return;
     }
 
-    scd.frameToFrameDelta.append(scd.frameToFrameTimer.restart());
-    if (scd.frameToFrameDelta.count() >= frameTimingWriteInterval) {
-        qint64 minDelta;
-        qint64 maxDelta;
-        float avgDelta = 0;
-        calcTiming(&scd.frameToFrameDelta, &minDelta, &maxDelta, &avgDelta);
+    scd.frameToFrameSamples.append(scd.frameToFrameTimer.restart());
+    if (scd.frameToFrameSamples.count() >= frameTimingWriteInterval) {
+        calcTiming(&scd.frameToFrameSamples,
+                   &scd.frameToFrameTime.minTime, &scd.frameToFrameTime.maxTime, &scd.frameToFrameTime.avgTime);
         if (outputDevice) {
             startEntry(QRhiProfiler::FrameToFrameTime, ts.elapsed(), sc);
             writeInt("frames_since_resize", frameCount);
-            writeInt("min_ms_frame_delta", minDelta);
-            writeInt("max_ms_frame_delta", maxDelta);
-            writeFloat("Favg_ms_frame_delta", avgDelta);
+            writeInt("min_ms_frame_delta", scd.frameToFrameTime.minTime);
+            writeInt("max_ms_frame_delta", scd.frameToFrameTime.maxTime);
+            writeFloat("Favg_ms_frame_delta", scd.frameToFrameTime.avgTime);
             endEntry();
         }
     }
 
-    scd.beginToEndDelta.append(scd.beginToEndTimer.elapsed());
-    if (scd.beginToEndDelta.count() >= frameTimingWriteInterval) {
-        qint64 minDelta;
-        qint64 maxDelta;
-        float avgDelta = 0;
-        calcTiming(&scd.beginToEndDelta, &minDelta, &maxDelta, &avgDelta);
+    scd.beginToEndSamples.append(scd.beginToEndTimer.elapsed());
+    if (scd.beginToEndSamples.count() >= frameTimingWriteInterval) {
+        calcTiming(&scd.beginToEndSamples,
+                   &scd.beginToEndFrameTime.minTime, &scd.beginToEndFrameTime.maxTime, &scd.beginToEndFrameTime.avgTime);
         if (outputDevice) {
             startEntry(QRhiProfiler::FrameBuildTime, ts.elapsed(), sc);
             writeInt("frames_since_resize", frameCount);
-            writeInt("min_ms_frame_build", minDelta);
-            writeInt("max_ms_frame_build", maxDelta);
-            writeFloat("Favg_ms_frame_build", avgDelta);
+            writeInt("min_ms_frame_build", scd.beginToEndFrameTime.minTime);
+            writeInt("max_ms_frame_build", scd.beginToEndFrameTime.maxTime);
+            writeFloat("Favg_ms_frame_build", scd.beginToEndFrameTime.avgTime);
             endEntry();
         }
     }
@@ -337,18 +360,17 @@ void QRhiProfilerPrivate::endSwapChainFrame(QRhiSwapChain *sc, int frameCount)
 void QRhiProfilerPrivate::swapChainFrameGpuTime(QRhiSwapChain *sc, float gpuTime)
 {
     Sc &scd(swapchains[sc]);
-    scd.gpuFrameTime.append(gpuTime);
-    if (scd.gpuFrameTime.count() >= frameTimingWriteInterval) {
-        float minDelta;
-        float maxDelta;
-        float avgDelta = 0;
-        calcTiming(&scd.gpuFrameTime, &minDelta, &maxDelta, &avgDelta);
+    scd.gpuFrameSamples.append(gpuTime);
+    if (scd.gpuFrameSamples.count() >= frameTimingWriteInterval) {
+        calcTiming(&scd.gpuFrameSamples,
+                   &scd.gpuFrameTime.minTime, &scd.gpuFrameTime.maxTime, &scd.gpuFrameTime.avgTime);
         if (outputDevice) {
             startEntry(QRhiProfiler::GpuFrameTime, ts.elapsed(), sc);
-            writeFloat("Fmin_ms_gpu_frame_time", minDelta);
-            writeFloat("Fmax_ms_gpu_frame_time", maxDelta);
-            writeFloat("Favg_ms_gpu_frame_time", avgDelta);
-            endEntry();        }
+            writeFloat("Fmin_ms_gpu_frame_time", scd.gpuFrameTime.minTime);
+            writeFloat("Fmax_ms_gpu_frame_time", scd.gpuFrameTime.maxTime);
+            writeFloat("Favg_ms_gpu_frame_time", scd.gpuFrameTime.avgTime);
+            endEntry();
+        }
     }
 }
 

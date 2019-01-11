@@ -92,16 +92,19 @@ public:
     int frameTimingWriteInterval = DEFAULT_FRAME_TIMING_WRITE_INTERVAL;
     struct Sc {
         Sc() {
-            frameToFrameDelta.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
-            beginToEndDelta.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
-            gpuFrameTime.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
+            frameToFrameSamples.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
+            beginToEndSamples.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
+            gpuFrameSamples.reserve(DEFAULT_FRAME_TIMING_WRITE_INTERVAL);
         }
         QElapsedTimer frameToFrameTimer;
         bool frameToFrameRunning = false;
         QElapsedTimer beginToEndTimer;
-        QVector<qint64> frameToFrameDelta;
-        QVector<qint64> beginToEndDelta;
-        QVector<float> gpuFrameTime;
+        QVector<qint64> frameToFrameSamples;
+        QVector<qint64> beginToEndSamples;
+        QVector<float> gpuFrameSamples;
+        QRhiProfiler::CpuTime frameToFrameTime;
+        QRhiProfiler::CpuTime beginToEndFrameTime;
+        QRhiProfiler::GpuTime gpuFrameTime;
     };
     QHash<QRhiSwapChain *, Sc> swapchains;
 };

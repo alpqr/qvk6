@@ -77,6 +77,22 @@ public:
     int frameTimingWriteInterval() const;
     void setFrameTimingWriteInterval(int frameCount);
 
+    struct CpuTime {
+        qint64 minTime = 0;
+        qint64 maxTime = 0;
+        float avgTime = 0;
+    };
+
+    struct GpuTime {
+        float minTime = 0;
+        float maxTime = 0;
+        float avgTime = 0;
+    };
+
+    CpuTime frameToFrameTimes(QRhiSwapChain *sc) const;
+    CpuTime frameBuildTimes(QRhiSwapChain *sc) const; // beginFrame - endFrame
+    GpuTime gpuFrameTimes(QRhiSwapChain *sc) const;
+
 private:
     Q_DISABLE_COPY(QRhiProfiler)
     QRhiProfiler();
@@ -84,6 +100,9 @@ private:
     friend class QRhiImplementation;
     friend class QRhiProfilerPrivate;
 };
+
+Q_DECLARE_TYPEINFO(QRhiProfiler::CpuTime, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiProfiler::GpuTime, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

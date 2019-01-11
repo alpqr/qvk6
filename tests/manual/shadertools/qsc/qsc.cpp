@@ -52,8 +52,8 @@
 #include <QtCore/qcommandlineparser.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qdebug.h>
-#include <QtShaderTools/qspirvshader.h>
-#include <QtShaderTools/qspirvcompiler.h>
+#include <private/qspirvshader_p.h>
+#include <private/qspirvcompiler_p.h>
 
 static bool writeToFile(const QByteArray &buf, const QString &filename, bool text = false)
 {

@@ -1,6 +1,6 @@
 TEMPLATE = app
 
-QT += shadertools
+QT += shadertools-private
 
 CONFIG += console
 

@@ -54,7 +54,7 @@
 #include <QOpenGLContext>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLExtraFunctions>
-#include <QSpirvShader>
+#include <private/qspirvshader_p.h>
 
 RenderWindow::RenderWindow(const QSpirvShader &vs, const QSpirvShader &fs, const QSurfaceFormat &format)
     : m_context(0),

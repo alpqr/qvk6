@@ -9,8 +9,8 @@ HEADERS += \
     $$PWD/qbakedshader.h \
     $$PWD/qbakedshader_p.h \
     $$PWD/qshaderbaker.h \
-    $$PWD/qspirvshader.h \
-    $$PWD/qspirvcompiler.h \
+    $$PWD/qspirvshader_p.h \
+    $$PWD/qspirvcompiler_p.h \
     $$PWD/qshaderbatchablerewriter_p.h
 
 SOURCES += \

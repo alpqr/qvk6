@@ -34,7 +34,7 @@
 **
 ****************************************************************************/
 
-#include "qspirvcompiler.h"
+#include "qspirvcompiler_p.h"
 #include "qshaderbatchablerewriter_p.h"
 #include <QFile>
 #include <QFileInfo>

@@ -46,6 +46,26 @@ QT_BEGIN_NAMESPACE
     \inmodule QtShaderTools
  */
 
+/*!
+    \class QShaderDescription::InOutVariable
+    \inmodule QtShaderTools
+ */
+
+/*!
+    \class QShaderDescription::BlockVariable
+    \inmodule QtShaderTools
+ */
+
+/*!
+    \class QShaderDescription::UniformBlock
+    \inmodule QtShaderTools
+ */
+
+/*!
+    \class QShaderDescription::PushConstantBlock
+    \inmodule QtShaderTools
+ */
+
 QShaderDescription::QShaderDescription()
     : d(new QShaderDescriptionPrivate)
 {

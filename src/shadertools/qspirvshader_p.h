@@ -34,44 +34,67 @@
 **
 ****************************************************************************/
 
-#ifndef QSPIRVCOMPILER_H
-#define QSPIRVCOMPILER_H
+#ifndef QSPIRVSHADER_P_H
+#define QSPIRVSHADER_P_H
 
-#include <QtShaderTools/qtshadertoolsglobal.h>
-#include <QtShaderTools/qbakedshader.h>
-#include <QtCore/QString>
+//
+//  W A R N I N G
+//  -------------
+//
+// This file is not part of the Qt API.  It exists for the convenience
+// of a number of Qt sources files.  This header file may change from
+// version to version without notice, or even be removed.
+//
+// We mean it.
+//
+
+#include <QtShaderTools/private/qtshadertoolsglobal_p.h>
+#include <QtShaderTools/qshaderdescription.h>
 
 QT_BEGIN_NAMESPACE
 
-struct QSpirvCompilerPrivate;
 class QIODevice;
+struct QSpirvShaderPrivate;
 
-class Q_SHADERTOOLS_EXPORT QSpirvCompiler
+class Q_SHADERTOOLS_PRIVATE_EXPORT QSpirvShader
 {
 public:
-    QSpirvCompiler();
-    ~QSpirvCompiler();
-
-    enum Flag {
-        RewriteToMakeBatchableForSG = 0x01
+    enum GlslFlag {
+        GlslEs = 0x01,
+        FixClipSpace = 0x02,
+        FragDefaultMediump = 0x04
     };
-    Q_DECLARE_FLAGS(Flags, Flag)
+    Q_DECLARE_FLAGS(GlslFlags, GlslFlag)
 
-    void setSourceFileName(const QString &fileName);
-    void setSourceFileName(const QString &fileName, QBakedShader::ShaderStage stage);
-    void setSourceDevice(QIODevice *device, QBakedShader::ShaderStage stage, const QString &fileName = QString());
-    void setSourceString(const QByteArray &sourceString, QBakedShader::ShaderStage stage, const QString &fileName = QString());
-    void setFlags(Flags flags);
+    enum StripFlag {
+        Remap = 0x01
+    };
+    Q_DECLARE_FLAGS(StripFlags, StripFlag)
 
-    QByteArray compileToSpirv();
-    QString errorMessage() const;
+    QSpirvShader();
+    ~QSpirvShader();
+
+    void setFileName(const QString &fileName);
+    void setDevice(QIODevice *device);
+    void setSpirvBinary(const QByteArray &spirv);
+
+    QShaderDescription shaderDescription() const;
+
+    QByteArray strippedSpirvBinary(StripFlags flags = StripFlags(), QString *errorMessage = nullptr) const;
+
+    QByteArray translateToGLSL(int version = 120, GlslFlags flags = GlslFlags()) const;
+    QByteArray translateToHLSL(int version = 50) const;
+    QByteArray translateToMSL(int version = 12) const;
+
+    QString translationErrorMessage() const;
 
 private:
-    Q_DISABLE_COPY(QSpirvCompiler)
-    QSpirvCompilerPrivate *d = nullptr;
+    Q_DISABLE_COPY(QSpirvShader)
+    QSpirvShaderPrivate *d = nullptr;
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QSpirvCompiler::Flags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QSpirvShader::GlslFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QSpirvShader::StripFlags)
 
 QT_END_NAMESPACE
 

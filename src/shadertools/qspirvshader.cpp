@@ -34,7 +34,7 @@
 **
 ****************************************************************************/
 
-#include "qspirvshader.h"
+#include "qspirvshader_p.h"
 #include "qshaderdescription_p.h"
 #include <QFile>
 #include <QDebug>

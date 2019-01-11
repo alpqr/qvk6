@@ -35,8 +35,8 @@
 ****************************************************************************/
 
 #include "qshaderbaker.h"
-#include "qspirvcompiler.h"
-#include "qspirvshader.h"
+#include "qspirvcompiler_p.h"
+#include "qspirvshader_p.h"
 #include <QFileInfo>
 #include <QFile>
 #include <QDebug>

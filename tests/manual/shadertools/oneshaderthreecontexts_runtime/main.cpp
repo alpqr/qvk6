@@ -61,8 +61,8 @@
 // that uses the SPIR-V binary.
 
 #include <QGuiApplication>
-#include <QSpirvCompiler>
-#include <QSpirvShader>
+#include <private/qspirvcompiler_p.h>
+#include <private/qspirvshader_p.h>
 #include <QDebug>
 #include <QOpenGLContext>
 #include "renderwindow.h"

@@ -45,6 +45,21 @@ QT_BEGIN_NAMESPACE
     \inmodule QtShaderTools
  */
 
+/*!
+    \class QBakedShader::ShaderSourceVersion
+    \inmodule QtShaderTools
+ */
+
+/*!
+    \class QBakedShader::ShaderKey
+    \inmodule QtShaderTools
+ */
+
+/*!
+    \class QBakedShader::Shader
+    \inmodule QtShaderTools
+ */
+
 static const int QSB_VERSION = 1;
 
 QBakedShader::QBakedShader()

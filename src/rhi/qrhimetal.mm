@@ -62,6 +62,21 @@ QT_BEGIN_NAMESPACE
 // in Debug mode in XCode. Some of the issues that break validation are not
 // obvious and not visible when running outside XCode.
 
+/*!
+    \class QRhiMetalInitParams
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiMetalNativeHandles
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiMetalTextureNativeHandles
+    \inmodule QtRhi
+ */
+
 struct QRhiMetalData
 {
     QRhiMetalData(QRhiImplementation *rhi) : ofr(rhi) { }

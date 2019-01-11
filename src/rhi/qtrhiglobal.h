@@ -53,6 +53,10 @@ QT_BEGIN_NAMESPACE
 #  endif
 #endif
 
+#ifdef Q_CLANG_QDOC
+#define Q_RHI_EXPORT
+#endif
+
 QT_END_NAMESPACE
 
 #endif

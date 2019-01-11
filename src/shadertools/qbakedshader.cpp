@@ -40,6 +40,11 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \class QBakedShader
+    \inmodule QtShaderTools
+ */
+
 static const int QSB_VERSION = 1;
 
 QBakedShader::QBakedShader()

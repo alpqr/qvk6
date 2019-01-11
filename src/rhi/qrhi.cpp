@@ -52,6 +52,181 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \class QRhi
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiInitParams
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiColorClearValue
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiDepthStencilClearValue
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiViewport
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiScissor
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiVertexInputLayout
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiVertexInputLayout::Binding
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiVertexInputLayout::Attribute
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiGraphicsShaderStage
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiShaderResourceBinding
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTextureRenderTargetDescription
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTextureRenderTargetDescription::ColorAttachment
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTextureUploadDescription
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTextureUploadDescription::Layer
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTextureUploadDescription::Layer::MipLevel
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTextureCopyDescription
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiReadbackDescription
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiReadbackResult
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiNativeHandles
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiResource
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiBuffer
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTexture
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiSampler
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiRenderBuffer
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiRenderPassDescriptor
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiRenderTarget
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiTextureRenderTarget
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiShaderResourceBindings
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiGraphicsPipeline
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiGraphicsPipeline::TargetBlend
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiGraphicsPipeline::StencilOpState
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiSwapChain
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiCommandBuffer
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiResourceUpdateBatch
+    \inmodule QtRhi
+ */
+
 QRhiResource::QRhiResource(QRhiImplementation *rhi_)
     : rhi(rhi_)
 {

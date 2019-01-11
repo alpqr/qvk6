@@ -41,6 +41,11 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \class QShaderDescription
+    \inmodule QtShaderTools
+ */
+
 QShaderDescription::QShaderDescription()
     : d(new QShaderDescriptionPrivate)
 {

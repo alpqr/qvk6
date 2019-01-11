@@ -58,6 +58,21 @@ QT_BEGIN_NAMESPACE
   renderbuffers and blits are used when available.
 */
 
+/*!
+    \class QRhiGles2InitParams
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiGles2NativeHandles
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiGles2TextureNativeHandles
+    \inmodule QtRhi
+ */
+
 QRhiGles2::QRhiGles2(QRhiInitParams *params)
     : ofr(this)
 {

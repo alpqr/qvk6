@@ -54,4 +54,6 @@ mac {
 
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)
 
+include($$PWD/doc/doc.pri)
+
 load(qt_module)

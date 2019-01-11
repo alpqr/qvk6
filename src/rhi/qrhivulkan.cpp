@@ -58,6 +58,21 @@ QT_BEGIN_NAMESPACE
   can be 2 frames in flight). This is handled transparently to the application.
 */
 
+/*!
+    \class QRhiVulkanInitParams
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiVulkanNativeHandles
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiVulkanTextureNativeHandles
+    \inmodule QtRhi
+ */
+
 static inline VkDeviceSize aligned(VkDeviceSize v, VkDeviceSize byteAlign)
 {
     return (v + byteAlign - 1) & ~(byteAlign - 1);

@@ -34,4 +34,6 @@ for(libname, STATICLIBS) {
     PRE_TARGETDEPS += $$staticlib
 }
 
+include($$PWD/doc/doc.pri)
+
 load(qt_module)

@@ -43,6 +43,11 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \class QShaderBaker
+    \inmodule QtShaderTools
+ */
+
 struct QShaderBakerPrivate
 {
     bool readFile(const QString &fn);
@@ -189,7 +194,7 @@ QBakedShader QShaderBaker::bake()
                 break;
             case QBakedShader::GlslShader:
             {
-                QSpirvShader::GlslFlags flags = 0; // FixClipSpace??
+                QSpirvShader::GlslFlags flags = 0;
                 if (req.second.flags.testFlag(QBakedShader::ShaderSourceVersion::GlslEs))
                     flags |= QSpirvShader::GlslEs;
                 shader.shader = currentSpirvShader->translateToGLSL(req.second.version, flags);

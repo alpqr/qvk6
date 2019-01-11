@@ -1,0 +1,49 @@
+include($QT_INSTALL_DOCS/global/qt-module-defaults.qdocconf)
+
+project                 = QtRhi
+description             = Qt Rendering Hardware Interface Reference Documentation
+version                 = $QT_VERSION
+
+examplesinstallpath     = rhi
+
+qhp.projects            = QtRhi
+
+qhp.QtRhi.file                = qtrhi.qhp
+qhp.QtRhi.namespace           = org.qt-project.qtrhi.$QT_VERSION_TAG
+qhp.QtRhi.virtualFolder       = qtrhi
+qhp.QtRhi.indexTitle          = Qt Rendering Hardware Interface
+qhp.QtRhi.indexRoot           =
+
+qhp.QtRhi.filterAttributes    = qtrhi $QT_VERSION qtrefdoc
+qhp.QtRhi.customFilters.Qt.name = QtRhi $QT_VERSION
+qhp.QtRhi.customFilters.Qt.filterAttributes = qtrhi $QT_VERSION
+
+qhp.QtRhi.subprojects         = classes examples
+
+qhp.QtRhi.subprojects.classes.title = C++ Classes
+qhp.QtRhi.subprojects.classes.indexTitle = Qt Rendering Hardware Interface C++ Classes
+qhp.QtRhi.subprojects.classes.selectors = class fake:headerfile
+qhp.QtRhi.subprojects.classes.sortPages = true
+
+qhp.QtRhi.subprojects.examples.title = Examples
+qhp.QtRhi.subprojects.examples.indexTitle = Qt Rendering Hardware Interface Examples and Tutorials
+qhp.QtRhi.subprojects.examples.selectors = fake:example
+
+tagfile                 = ../../../doc/qtrhi/qtrhi.tags
+
+depends += qtcore qtgui
+
+headerdirs  += ..
+
+sourcedirs  += ..
+
+exampledirs +=  ../../../examples/rhi \
+                snippets
+
+imagedirs   += images
+
+navigation.landingpage = "Qt Rendering Hardware Interface"
+navigation.landingtitle = "RHI"
+navigation.cppclassespage = "Qt Rendering Hardware Interface C++ Classes"
+
+Cpp.ignoretokens     += Q_RHI_EXPORT

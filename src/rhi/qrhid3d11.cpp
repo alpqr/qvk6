@@ -54,6 +54,21 @@ QT_BEGIN_NAMESPACE
   returns) to the driver).
 */
 
+/*!
+    \class QRhiD3D11InitParams
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiD3D11NativeHandles
+    \inmodule QtRhi
+ */
+
+/*!
+    \class QRhiD3D11TextureNativeHandles
+    \inmodule QtRhi
+ */
+
 QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
     : ofr(this)
 {

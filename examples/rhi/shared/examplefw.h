@@ -388,14 +388,23 @@ void Window::render()
             const QRhiProfiler::CpuTime ff = m_r->profiler()->frameToFrameTimes(m_sc);
             const QRhiProfiler::CpuTime be = m_r->profiler()->frameBuildTimes(m_sc);
             const QRhiProfiler::GpuTime gp = m_r->profiler()->gpuFrameTimes(m_sc);
-            qDebug("ca. %d fps. "
-                   "frame-to-frame: min %lld max %lld avg %f. "
-                   "frame build: min %lld max %lld avg %f. "
-                   "gpu frame time: min %f max %f avg %f",
-                   m_frameCount,
-                   ff.minTime, ff.maxTime, ff.avgTime,
-                   be.minTime, be.maxTime, be.avgTime,
-                   gp.minTime, gp.maxTime, gp.avgTime);
+            if (m_r->isFeatureSupported(QRhi::Timestamps)) {
+                qDebug("ca. %d fps. "
+                       "frame-to-frame: min %lld max %lld avg %f. "
+                       "frame build: min %lld max %lld avg %f. "
+                       "gpu frame time: min %f max %f avg %f",
+                       m_frameCount,
+                       ff.minTime, ff.maxTime, ff.avgTime,
+                       be.minTime, be.maxTime, be.avgTime,
+                       gp.minTime, gp.maxTime, gp.avgTime);
+            } else {
+                qDebug("ca. %d fps. "
+                       "frame-to-frame: min %lld max %lld avg %f. "
+                       "frame build: min %lld max %lld avg %f. ",
+                       m_frameCount,
+                       ff.minTime, ff.maxTime, ff.avgTime,
+                       be.minTime, be.maxTime, be.avgTime);
+            }
         } else {
             qDebug("ca. %d fps", m_frameCount);
         }

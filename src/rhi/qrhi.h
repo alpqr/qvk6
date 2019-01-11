@@ -951,7 +951,7 @@ public:
 
     // Sometimes committing the updates is necessary without starting a render
     // pass. Not often needed, updates should typically be passed to beginPass
-    // (or endPass, in case of readbacks) instead.
+    // (or endPass, in case of readbacks) instead. Cannot be called inside a pass.
     void resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates);
 
     void beginPass(QRhiRenderTarget *rt,
@@ -959,6 +959,13 @@ public:
                    const QRhiDepthStencilClearValue &depthStencilClearValue, // ignored when no ds attachment
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiResourceUpdateBatch *resourceUpdates = nullptr);
+
+    // The set* and draw* functions can only be called inside a pass. Also,
+    // (with the exception of setGraphicsPipeline) they expect to have a
+    // pipeline set already on the command buffer. Otherwise, unspecified
+    // issues may arise, depending on the backend.
+    //
+    // Do not assume that any bindings or states persist between passes.
 
     // When specified, srb can be different from ps' srb but the layouts must
     // match. Basic tracking is included: no command is added to the cb when
@@ -971,12 +978,8 @@ public:
     void setGraphicsPipeline(QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb = nullptr);
 
-    // The set* and draw* functions expect to have a pipeline set already on
-    // the command buffer. Otherwise, unspecified issues may arise, depending on
-    // the backend.
-
     // Some level of smartness can be expected from most backends: superfluous
-    // vertex input or index buffer changes are ignored automatically.
+    // vertex input and index changes in the same pass are ignored automatically.
     using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
     void setVertexInput(int startBinding, const QVector<VertexInput> &bindings,
                         QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,
@@ -1000,6 +1003,7 @@ public:
                      quint32 firstInstance = 0);
 
     // Ignored when DebugMarkers are not supported or EnableDebugMarkers is not set.
+    // debugMarkBegin/End can be called both inside and outside a pass.
     void debugMarkBegin(const QByteArray &name);
     void debugMarkEnd();
     // With some backends debugMarkMsg is only supported inside a pass and is

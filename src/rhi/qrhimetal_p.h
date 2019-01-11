@@ -235,7 +235,7 @@ struct QMetalCommandBuffer : public QRhiCommandBuffer
     QRhiCommandBuffer::IndexFormat currentIndexFormat;
 
     void resetState();
-    void resetPerPipelineState();
+    void resetPerPassState();
 };
 
 struct QMetalSwapChainData;

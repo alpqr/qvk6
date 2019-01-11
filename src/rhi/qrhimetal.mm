@@ -158,6 +158,7 @@ struct QMetalCommandBufferData
     id<MTLCommandBuffer> cb;
     id<MTLRenderCommandEncoder> currentPassEncoder;
     MTLRenderPassDescriptor *currentPassRpDesc;
+    bool shaderResourceBindingsValid;
     int currentFirstVertexBinding;
     QRhiBatchedBindings<id<MTLBuffer> > currentVertexInputsBuffers;
     QRhiBatchedBindings<NSUInteger> currentVertexInputOffsets;
@@ -600,11 +601,10 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         [cbD->d->currentPassEncoder setDepthStencilState: psD->d->ds];
         [cbD->d->currentPassEncoder setCullMode: psD->d->cullMode];
         [cbD->d->currentPassEncoder setFrontFacingWinding: psD->d->winding];
-
-        // resource assignments will need to be redone both for vertex input and shader resources
-        cbD->resetPerPipelineState();
-        resNeedsRebind = true;
     }
+
+    if (!cbD->d->shaderResourceBindingsValid)
+        resNeedsRebind = true;
 
     if (resNeedsRebind || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
         cbD->currentSrb = srb;
@@ -612,6 +612,7 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         cbD->currentResSlot = resSlot;
 
         enqueueShaderResourceBindings(srbD, cbD);
+        cbD->d->shaderResourceBindingsValid = true;
     }
 
     psD->lastActiveFrameSlot = currentFrameSlot;
@@ -1340,6 +1341,8 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
     }
 
     cbD->d->currentPassEncoder = [cbD->d->cb renderCommandEncoderWithDescriptor: cbD->d->currentPassRpDesc];
+
+    cbD->resetPerPassState();
 
     cbD->currentTarget = rt;
     inPass = true;
@@ -2608,11 +2611,12 @@ void QMetalCommandBuffer::resetState()
     d->currentPassEncoder = nil;
     d->currentPassRpDesc = nil;
 
-    resetPerPipelineState();
+    resetPerPassState();
 }
 
-void QMetalCommandBuffer::resetPerPipelineState()
+void QMetalCommandBuffer::resetPerPassState()
 {
+    d->shaderResourceBindingsValid = false;
     d->currentFirstVertexBinding = -1;
     d->currentVertexInputsBuffers.clear();
     d->currentVertexInputOffsets.clear();

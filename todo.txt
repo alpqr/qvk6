@@ -6,7 +6,7 @@ should istexformatsupported should check srgb combinations
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
 what does image copy do for compressed formats?
-figure sg out for minimizing viewport/scissor cmds
+reduce viewport/scissor/other state changes in a pass
 vk: test FrameOpDeviceLost somehow
 d3d device loss?
 more what-if-resource-rebuilt cases
@@ -45,7 +45,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
-vk, d3d, mtl: minimize vertex input changes
+vk, d3d, mtl: minimize vertex input changes inside passes
 mtl: cbuffers, textures, samplers set should be batched too
 mtl: reduce set*
 mtl: report readback temp buf

@@ -37,6 +37,7 @@
 #include "qrhi_p.h"
 #include <qmath.h>
 
+#include "qrhinull_p.h"
 #ifndef QT_NO_OPENGL
 #include "qrhigles2_p.h"
 #endif
@@ -586,6 +587,9 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
     QScopedPointer<QRhi> r(new QRhi);
 
     switch (impl) {
+    case Null:
+        r->d = new QRhiNull(params);
+        break;
     case Vulkan:
 #if QT_CONFIG(vulkan)
         r->d = new QRhiVulkan(params);

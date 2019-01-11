@@ -10,11 +10,14 @@ HEADERS += \
     qrhi.h \
     qrhi_p.h \
     qrhiprofiler.h \
-    qrhiprofiler_p.h
+    qrhiprofiler_p.h \
+    qrhinull.h \
+    qrhinull_p.h
 
 SOURCES += \
     qrhi.cpp \
-    qrhiprofiler.cpp
+    qrhiprofiler.cpp \
+    qrhinull.cpp
 
 qtConfig(opengl) {
     HEADERS += \

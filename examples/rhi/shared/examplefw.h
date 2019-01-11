@@ -62,6 +62,8 @@
 #include <QFile>
 #include <QRhiProfiler>
 
+#include <QRhiNullInitParams>
+
 #ifndef QT_NO_OPENGL
 #include <QRhiGles2InitParams>
 #include <QOpenGLContext>
@@ -92,6 +94,7 @@ QBakedShader getShader(const QString &name)
 
 enum GraphicsApi
 {
+    Null,
     OpenGL,
     Vulkan,
     D3D11,
@@ -103,6 +106,8 @@ GraphicsApi graphicsApi;
 QString graphicsApiName()
 {
     switch (graphicsApi) {
+    case Null:
+        return QLatin1String("Null (no output)");
     case OpenGL:
         return QLatin1String("OpenGL 2.x");
     case Vulkan:
@@ -235,6 +240,11 @@ bool Window::event(QEvent *e)
 
 void Window::init()
 {
+    if (graphicsApi == Null) {
+        QRhiNullInitParams params;
+        m_r = QRhi::create(QRhi::Null, &params, rhiFlags);
+    }
+
 #ifndef QT_NO_OPENGL
     if (graphicsApi == OpenGL) {
         m_context = new QOpenGLContext;
@@ -446,6 +456,8 @@ int main(int argc, char **argv)
     // Allow overriding via the command line.
     QCommandLineParser cmdLineParser;
     cmdLineParser.addHelpOption();
+    QCommandLineOption nullOption({ "n", "null" }, QLatin1String("Null"));
+    cmdLineParser.addOption(nullOption);
     QCommandLineOption glOption({ "g", "opengl" }, QLatin1String("OpenGL (2.x)"));
     cmdLineParser.addOption(glOption);
     QCommandLineOption vkOption({ "v", "vulkan" }, QLatin1String("Vulkan"));
@@ -455,6 +467,8 @@ int main(int argc, char **argv)
     QCommandLineOption mtlOption({ "m", "metal" }, QLatin1String("Metal"));
     cmdLineParser.addOption(mtlOption);
     cmdLineParser.process(app);
+    if (cmdLineParser.isSet(nullOption))
+        graphicsApi = Null;
     if (cmdLineParser.isSet(glOption))
         graphicsApi = OpenGL;
     if (cmdLineParser.isSet(vkOption))

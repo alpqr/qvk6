@@ -1109,6 +1109,7 @@ class Q_RHI_EXPORT QRhi
 {
 public:
     enum Implementation {
+        Null,
         Vulkan,
         OpenGLES2,
         D3D11,

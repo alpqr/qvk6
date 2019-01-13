@@ -133,9 +133,9 @@ struct QGles2RenderPassDescriptor : public QRhiRenderPassDescriptor
     void release() override;
 };
 
-struct QGles2BasicRenderTargetData
+struct QGles2RenderTargetData
 {
-    QGles2BasicRenderTargetData(QRhiImplementation *) { }
+    QGles2RenderTargetData(QRhiImplementation *) { }
 
     QGles2RenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
@@ -151,7 +151,7 @@ struct QGles2ReferenceRenderTarget : public QRhiReferenceRenderTarget
     QSize sizeInPixels() const override;
     float devicePixelRatio() const override;
 
-    QGles2BasicRenderTargetData d;
+    QGles2RenderTargetData d;
 };
 
 struct QGles2TextureRenderTarget : public QRhiTextureRenderTarget
@@ -166,7 +166,7 @@ struct QGles2TextureRenderTarget : public QRhiTextureRenderTarget
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
-    QGles2BasicRenderTargetData d;
+    QGles2RenderTargetData d;
     GLuint framebuffer = 0;
     friend class QRhiGles2;
 };

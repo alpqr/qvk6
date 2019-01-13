@@ -1463,7 +1463,7 @@ void QRhiGles2::beginPass(QRhiCommandBuffer *cb,
     QGles2CommandBuffer *cbD = QRHI_RES(QGles2CommandBuffer, cb);
     bool needsColorClear = true;
     bool needsDsClear = true;
-    QGles2BasicRenderTargetData *rtD = nullptr;
+    QGles2RenderTargetData *rtD = nullptr;
     QGles2CommandBuffer::Command fbCmd;
     fbCmd.cmd = QGles2CommandBuffer::Command::BindFramebuffer;
     switch (rt->type()) {

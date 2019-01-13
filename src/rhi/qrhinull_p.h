@@ -88,9 +88,9 @@ struct QNullRenderPassDescriptor : public QRhiRenderPassDescriptor
     void release() override;
 };
 
-struct QNullBasicRenderTargetData
+struct QNullRenderTargetData
 {
-    QNullBasicRenderTargetData(QRhiImplementation *) { }
+    QNullRenderTargetData(QRhiImplementation *) { }
 
     QNullRenderPassDescriptor *rp = nullptr;
     QSize pixelSize;
@@ -105,7 +105,7 @@ struct QNullReferenceRenderTarget : public QRhiReferenceRenderTarget
     QSize sizeInPixels() const override;
     float devicePixelRatio() const override;
 
-    QNullBasicRenderTargetData d;
+    QNullRenderTargetData d;
 };
 
 struct QNullTextureRenderTarget : public QRhiTextureRenderTarget
@@ -120,7 +120,7 @@ struct QNullTextureRenderTarget : public QRhiTextureRenderTarget
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
     bool build() override;
 
-    QNullBasicRenderTargetData d;
+    QNullRenderTargetData d;
 };
 
 struct QNullShaderResourceBindings : public QRhiShaderResourceBindings

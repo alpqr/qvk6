@@ -142,8 +142,8 @@ static QString sourceVersionStr(const QBakedShader::ShaderSourceVersion &v)
 static QString sourceVariantStr(const QBakedShader::ShaderVariant &v)
 {
     switch (v) {
-    case QBakedShader::NormalShader:
-        return QLatin1String("Normal");
+    case QBakedShader::StandardShader:
+        return QLatin1String("Standard");
     case QBakedShader::BatchableVertexShader:
         return QLatin1String("Batchable");
     default:
@@ -284,7 +284,7 @@ int main(int argc, char **argv)
         baker.setSourceFileName(fn);
 
         QVector<QBakedShader::ShaderVariant> variants;
-        variants << QBakedShader::NormalShader;
+        variants << QBakedShader::StandardShader;
         if (cmdLineParser.isSet(batchableOption))
             variants << QBakedShader::BatchableVertexShader;
 

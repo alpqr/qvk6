@@ -1,3 +1,4 @@
+//! [0]
 #version 440
 
 layout(location = 0) in vec3 v_color;
@@ -12,3 +13,4 @@ void main()
 {
     fragColor = vec4(v_color * ubuf.opacity, ubuf.opacity);
 }
+//! [0]

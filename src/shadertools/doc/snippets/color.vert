@@ -1,3 +1,4 @@
+//! [0]
 #version 440
 
 layout(location = 0) in vec4 position;
@@ -16,3 +17,4 @@ void main()
     v_color = color;
     gl_Position = ubuf.mvp * position;
 }
+//! [0]

@@ -82,7 +82,7 @@ public:
     };
 
     enum ShaderVariant {
-        NormalShader = 0,
+        StandardShader = 0,
         BatchableVertexShader
     };
 
@@ -90,7 +90,7 @@ public:
         ShaderKey() { }
         ShaderKey(ShaderSource source_,
                   const ShaderSourceVersion &sourceVersion_ = ShaderSourceVersion(),
-                  ShaderVariant variant_ = QBakedShader::NormalShader)
+                  ShaderVariant variant_ = QBakedShader::StandardShader)
             : source(source_),
               sourceVersion(sourceVersion_),
               variant(variant_)
@@ -98,7 +98,7 @@ public:
 
         ShaderSource source = SpirvShader;
         ShaderSourceVersion sourceVersion;
-        ShaderVariant variant = QBakedShader::NormalShader;
+        ShaderVariant variant = QBakedShader::StandardShader;
     };
 
     struct Shader {

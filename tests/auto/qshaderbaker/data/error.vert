@@ -13,6 +13,6 @@ out gl_PerVertex { vec4 gl_Position; };
 
 void main()
 {
-    v_color = color;
+    v_color = cgrepijrgrewolor;
     gl_Position = ubuf.mvp * position;
 }

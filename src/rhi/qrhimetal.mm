@@ -61,6 +61,9 @@ QT_BEGIN_NAMESPACE
 // Note: we expect everything here pass the Metal API validation when running
 // in Debug mode in XCode. Some of the issues that break validation are not
 // obvious and not visible when running outside XCode.
+//
+// An exception is the nextDrawable Called Early blah blah warning, which is
+// plain and simply false.
 
 /*!
     \class QRhiMetalInitParams
@@ -137,6 +140,9 @@ struct QRhiMetalData
         QRhiTexture::Format format;
     };
     QVector<ActiveReadback> activeReadbacks;
+
+    API_AVAILABLE(macos(10.13), ios(11.0)) MTLCaptureManager *captureMgr;
+    API_AVAILABLE(macos(10.13), ios(11.0)) id<MTLCaptureScope> captureScope = nil;
 };
 
 Q_DECLARE_TYPEINFO(QRhiMetalData::DeferredReleaseEntry, Q_MOVABLE_TYPE);
@@ -187,9 +193,11 @@ struct QMetalRenderTargetData
     int dsAttCount = 0;
 
     struct ColorAtt {
+        bool needsDrawableForTex = false;
         id<MTLTexture> tex = nil;
         int layer = 0;
         int level = 0;
+        bool needsDrawableForResolveTex = false;
         id<MTLTexture> resolveTex = nil;
         int resolveLayer = 0;
         int resolveLevel = 0;
@@ -259,6 +267,12 @@ bool QRhiMetal::create(QRhi::Flags flags)
 
     d->cmdQueue = [d->dev newCommandQueue];
 
+    if (@available(macOS 10.13, iOS 11.0, *)) {
+        d->captureMgr = [MTLCaptureManager sharedCaptureManager];
+        d->captureScope = [d->captureMgr newCaptureScopeWithCommandQueue: d->cmdQueue];
+        d->captureScope.label = @"Qt capture scope";
+    }
+
 #if defined(Q_OS_MACOS)
     caps.maxTextureSize = 16384;
 #elif defined(Q_OS_TVOS)
@@ -292,6 +306,13 @@ void QRhiMetal::destroy()
 {
     executeDeferredReleases(true);
     finishActiveReadbacks(true);
+
+    if (@available(macOS 10.13, iOS 11.0, *)) {
+        if (d->captureScope) {
+            [d->captureScope release];
+            d->captureScope = nil;
+        }
+    }
 
     if (d->cmdQueue) {
         [d->cmdQueue release];
@@ -835,30 +856,28 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
             dispatch_semaphore_signal(sem);
     }
 
-    swapChainD->d->curDrawable = [swapChainD->d->layer nextDrawable];
-    if (!swapChainD->d->curDrawable) {
-        qWarning("No drawable");
-        return QRhi::FrameOpSwapChainOutOfDate;
-    }
-
     currentSwapChain = swapChainD;
     currentFrameSlot = swapChainD->currentFrameSlot;
     if (swapChainD->ds)
         swapChainD->ds->lastActiveFrameSlot = currentFrameSlot;
+
+    if (@available(macOS 10.13, iOS 11.0, *))
+        [d->captureScope beginScope];
 
     // Do not let the command buffer mess with the refcount of objects. We do
     // have a proper render loop and will manage lifetimes similarly to other
     // backends (Vulkan).
     swapChainD->cbWrapper.d->cb = [d->cmdQueue commandBufferWithUnretainedReferences];
 
-    id<MTLTexture> scTex = swapChainD->d->curDrawable.texture;
-    id<MTLTexture> resolveTex = nil;
+    QMetalRenderTargetData::ColorAtt colorAtt;
     if (swapChainD->samples > 1) {
-        resolveTex = scTex;
-        scTex = swapChainD->d->msaaTex[currentFrameSlot];
+        colorAtt.tex = swapChainD->d->msaaTex[currentFrameSlot];
+        colorAtt.needsDrawableForResolveTex = true;
+    } else {
+        colorAtt.needsDrawableForTex = true;
     }
 
-    swapChainD->rtWrapper.d->fb.colorAtt[0] = { scTex, 0, 0, resolveTex, 0, 0 };
+    swapChainD->rtWrapper.d->fb.colorAtt[0] = colorAtt;
     swapChainD->rtWrapper.d->fb.dsTex = swapChainD->ds ? swapChainD->ds->d->tex : nil;
     swapChainD->rtWrapper.d->fb.hasStencil = swapChainD->ds ? true : false;
 
@@ -888,6 +907,9 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
     }];
 
     [swapChainD->cbWrapper.d->cb commit];
+
+    if (@available(macOS 10.13, iOS 11.0, *))
+        [d->captureScope endScope];
 
     swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
     swapChainD->frameCount += 1;
@@ -1316,6 +1338,26 @@ void QRhiMetal::beginPass(QRhiCommandBuffer *cb,
     case QRhiRenderTarget::RtRef:
         rtD = QRHI_RES(QMetalReferenceRenderTarget, rt)->d;
         cbD->d->currentPassRpDesc = d->createDefaultRenderPass(rtD->dsAttCount, colorClearValue, depthStencilClearValue);
+        if (rtD->colorAttCount) {
+            QMetalRenderTargetData::ColorAtt &color0(rtD->fb.colorAtt[0]);
+            if (color0.needsDrawableForTex || color0.needsDrawableForResolveTex) {
+                Q_ASSERT(currentSwapChain);
+                QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, currentSwapChain);
+                swapChainD->d->curDrawable = [swapChainD->d->layer nextDrawable];
+                if (!swapChainD->d->curDrawable) {
+                    qWarning("No drawable");
+                    return;
+                }
+                id<MTLTexture> scTex = swapChainD->d->curDrawable.texture;
+                if (color0.needsDrawableForTex) {
+                    color0.tex = scTex;
+                    color0.needsDrawableForTex = false;
+                } else {
+                    color0.resolveTex = scTex;
+                    color0.needsDrawableForResolveTex = false;
+                }
+            }
+        }
         break;
     case QRhiRenderTarget::RtTexture:
     {
@@ -2065,10 +2107,15 @@ bool QMetalTextureRenderTarget::build()
             if (i == 0)
                 d->pixelSize = rbD->pixelSize();
         }
+        QMetalRenderTargetData::ColorAtt colorAtt;
+        colorAtt.tex = dst;
+        colorAtt.layer = m_desc.colorAttachments[i].layer;
+        colorAtt.level = m_desc.colorAttachments[i].level;
         QMetalTexture *resTexD = QRHI_RES(QMetalTexture, m_desc.colorAttachments[i].resolveTexture);
-        id<MTLTexture> resDst = resTexD ? resTexD->d->tex : nil;
-        d->fb.colorAtt[i] = { dst, m_desc.colorAttachments[i].layer, m_desc.colorAttachments[i].level,
-                              resDst, m_desc.colorAttachments[i].resolveLayer, m_desc.colorAttachments[i].resolveLevel };
+        colorAtt.resolveTex = resTexD ? resTexD->d->tex : nil;
+        colorAtt.resolveLayer = m_desc.colorAttachments[i].resolveLayer;
+        colorAtt.resolveLevel = m_desc.colorAttachments[i].resolveLevel;
+        d->fb.colorAtt[i] = colorAtt;
     }
     d->dpr = 1;
 

@@ -1,5 +1,4 @@
 multiwindow_threaded should demo pulling out the device and importing to another rhi
-mtl: drawable warning?
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -24,6 +23,7 @@ object names for other than buf/rb/tex
 
 optional:
 compute?
+mtl: drawable warning?
 gl: target QOpenGLWindow/Widget?
 threading options? secondary command lists?
 copy/transfer queue?

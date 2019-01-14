@@ -376,6 +376,7 @@ int main(int argc, char **argv)
                                                           typeArg.constData(),
                                                           tempOutFileName.constData(),
                                                           inFileName.constData());
+                    qDebug("%s", qPrintable(cmd));
                     QByteArray output;
                     QByteArray errorOutput;
                     bool success = runProcess(cmd, &output, &errorOutput);
@@ -428,9 +429,13 @@ int main(int argc, char **argv)
 
                     const QByteArray inFileName = QDir::toNativeSeparators(tmpIn).toUtf8();
                     const QByteArray tempIntermediateFileName = QDir::toNativeSeparators(tmpInterm).toUtf8();
-                    QString cmd = QString::asprintf("xcrun -sdk macosx metal %s -o %s",
+                    qDebug("About to invoke xcrun with metal and metallib.\n"
+                           "  qsb is set up for XCode 10. For earlier versions the -c argument may need to be removed.\n"
+                           "  If getting unable to find utility \"metal\", do xcode-select --switch /Applications/Xcode.app/Contents/Developer");
+                    QString cmd = QString::asprintf("xcrun -sdk macosx metal -c %s -o %s",
                                                     inFileName.constData(),
                                                     tempIntermediateFileName.constData());
+                    qDebug("%s", qPrintable(cmd));
                     QByteArray output;
                     QByteArray errorOutput;
                     bool success = runProcess(cmd, &output, &errorOutput);
@@ -447,6 +452,7 @@ int main(int argc, char **argv)
                     cmd = QString::asprintf("xcrun -sdk macosx metallib %s -o %s",
                                             tempIntermediateFileName.constData(),
                                             tempOutFileName.constData());
+                    qDebug("%s", qPrintable(cmd));
                     output.clear();
                     errorOutput.clear();
                     success = runProcess(cmd, &output, &errorOutput);

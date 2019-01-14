@@ -131,13 +131,13 @@ QT_BEGIN_NAMESPACE
     setting up the translation targets via setGeneratedShaders():
 
     \badcode
-        baker.setGeneratedShaderVariants({ QBakedShader::NormalShader });
+        baker.setGeneratedShaderVariants({ QBakedShaderKey::StandardShader });
         QVector<QShaderBaker::GeneratedShader> targets;
-        targets.append({ QBakedShader::SpirvShader, QBakedShader::ShaderSourceVersion(100) });
-        targets.append({ QBakedShader::GlslShader, QBakedShader::ShaderSourceVersion(100, QBakedShader::ShaderSourceVersion::GlslEs) });
-        targets.append({ QBakedShader::SpirvShader, QBakedShader::ShaderSourceVersion(120) });
-        targets.append({ QBakedShader::HlslShader, QBakedShader::ShaderSourceVersion(50) });
-        targets.append({ QBakedShader::MslShader, QBakedShader::ShaderSourceVersion(12) });
+        targets.append({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(100) });
+        targets.append({ QBakedShaderKey::GlslShader, QBakedShaderVersion(100, QBakedShaderVersion::GlslEs) });
+        targets.append({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(120) });
+        targets.append({ QBakedShaderKey::HlslShader, QBakedShaderVersion(50) });
+        targets.append({ QBakedShaderKey::MslShader, QBakedShaderVersion(12) });
         baker.setGeneratedShaders(targets);
         QBakedShader shaders = baker.bake();
         if (!shaders.isValid())
@@ -278,7 +278,7 @@ void QShaderBaker::setSourceString(const QByteArray &sourceString, QBakedShader:
     additional translations to other languages. To request this, do:
 
     \badcode
-        baker.setGeneratedShaders({ QBakedShader::SpirvShader, QBakedShader::ShaderSourceVersion(100) });
+        baker.setGeneratedShaders({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(100) });
     \endcode
  */
 void QShaderBaker::setGeneratedShaders(const QVector<GeneratedShader> &v)
@@ -290,7 +290,7 @@ void QShaderBaker::setGeneratedShaders(const QVector<GeneratedShader> &v)
     Specifies which shader variants are genetated. Each shader version can have
     multiple variants in the resulting QBakedShader.
 
-    In most cases \a v contains a single entry, QBakedShader::StandardShader.
+    In most cases \a v contains a single entry, QBakedShaderKey::StandardShader.
 
     \note when no variants are set, the resulting QBakedShader will be empty and
     thus invalid.

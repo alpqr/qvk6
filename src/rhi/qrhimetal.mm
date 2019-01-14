@@ -2441,17 +2441,17 @@ static inline MTLCullMode toMetalCullMode(QRhiGraphicsPipeline::CullMode c)
 
 id<MTLLibrary> QRhiMetalData::createMetalLib(const QBakedShader &shader, QString *error, QByteArray *entryPoint)
 {
-    QBakedShader::Shader mtllib = shader.shader({ QBakedShader::MetalLibShader, 12 });
-    if (!mtllib.shader.isEmpty()) {
-        dispatch_data_t data = dispatch_data_create(mtllib.shader.constData(),
-                                                    mtllib.shader.size(),
+    QBakedShaderCode mtllib = shader.shader({ QBakedShaderKey::MetalLibShader, 12 });
+    if (!mtllib.shader().isEmpty()) {
+        dispatch_data_t data = dispatch_data_create(mtllib.shader().constData(),
+                                                    mtllib.shader().size(),
                                                     dispatch_get_global_queue(0, 0),
                                                     DISPATCH_DATA_DESTRUCTOR_DEFAULT);
         NSError *err = nil;
         id<MTLLibrary> lib = [dev newLibraryWithData: data error: &err];
         dispatch_release(data);
         if (!err) {
-            *entryPoint = mtllib.entryPoint;
+            *entryPoint = mtllib.entryPoint();
             return lib;
         } else {
             const QString msg = QString::fromNSString(err.localizedDescription);
@@ -2459,13 +2459,13 @@ id<MTLLibrary> QRhiMetalData::createMetalLib(const QBakedShader &shader, QString
         }
     }
 
-    QBakedShader::Shader mslSource = shader.shader({ QBakedShader::MslShader, 12 });
-    if (mslSource.shader.isEmpty()) {
+    QBakedShaderCode mslSource = shader.shader({ QBakedShaderKey::MslShader, 12 });
+    if (mslSource.shader().isEmpty()) {
         qWarning() << "No MSL 1.2 code found in baked shader" << shader;
         return nil;
     }
 
-    NSString *src = [NSString stringWithUTF8String: mslSource.shader.constData()];
+    NSString *src = [NSString stringWithUTF8String: mslSource.shader().constData()];
     MTLCompileOptions *opts = [[MTLCompileOptions alloc] init];
     opts.languageVersion = MTLLanguageVersion1_2;
     NSError *err = nil;
@@ -2479,7 +2479,7 @@ id<MTLLibrary> QRhiMetalData::createMetalLib(const QBakedShader &shader, QString
         return nil;
     }
 
-    *entryPoint = mslSource.entryPoint;
+    *entryPoint = mslSource.entryPoint();
     return lib;
 }
 

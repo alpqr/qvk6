@@ -2467,12 +2467,12 @@ static inline D3D11_BLEND_OP toD3DBlendOp(QRhiGraphicsPipeline::BlendOp op)
 
 static QByteArray compileHlslShaderSource(const QBakedShader &shader, QString *error)
 {
-    QBakedShader::Shader dxbc = shader.shader({ QBakedShader::DxbcShader, 50 });
-    if (!dxbc.shader.isEmpty())
+    QBakedShaderCode dxbc = shader.shader({ QBakedShaderKey::DxbcShader, 50 });
+    if (!dxbc.shader().isEmpty())
         return dxbc.shader;
 
-    QBakedShader::Shader hlslSource = shader.shader({ QBakedShader::HlslShader, 50 });
-    if (hlslSource.shader.isEmpty()) {
+    QBakedShaderCode hlslSource = shader.shader({ QBakedShaderKey::HlslShader, 50 });
+    if (hlslSource.shader().isEmpty()) {
         qWarning() << "No HLSL (shader model 5.0) code found in baked shader" << shader;
         return QByteArray();
     }
@@ -2504,9 +2504,9 @@ static QByteArray compileHlslShaderSource(const QBakedShader &shader, QString *e
 
     ID3DBlob *bytecode = nullptr;
     ID3DBlob *errors = nullptr;
-    HRESULT hr = D3DCompile(hlslSource.shader.constData(), hlslSource.shader.size(),
+    HRESULT hr = D3DCompile(hlslSource.shader().constData(), hlslSource.shader().size(),
                             nullptr, nullptr, nullptr,
-                            hlslSource.entryPoint.constData(), target, 0, 0, &bytecode, &errors);
+                            hlslSource.entryPoint().constData(), target, 0, 0, &bytecode, &errors);
     if (FAILED(hr) || !bytecode) {
         qWarning("HLSL shader compilation failed: 0x%x", hr);
         if (errors) {

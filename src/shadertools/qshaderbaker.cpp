@@ -143,6 +143,8 @@ QT_BEGIN_NAMESPACE
         if (!shaders.isValid())
             qWarning() << baker.errorMessage();
     \endcode
+
+    \sa QBakedShader
  */
 
 struct QShaderBakerPrivate
@@ -153,7 +155,7 @@ struct QShaderBakerPrivate
     QByteArray source;
     QBakedShader::ShaderStage stage;
     QVector<QShaderBaker::GeneratedShader> reqVersions;
-    QVector<QBakedShader::ShaderVariant> variants;
+    QVector<QBakedShaderKey::ShaderVariant> variants;
     QSpirvCompiler compiler;
     QString errorMessage;
 };
@@ -262,7 +264,7 @@ void QShaderBaker::setSourceString(const QByteArray &sourceString, QBakedShader:
 /*!
     \typedef QShaderBaker::GeneratedShader
 
-    Synonym for QPair<QBakedShader::ShaderSource, QBakedShader::ShaderSourceVersion>.
+    Synonym for QPair<QBakedShaderKey::ShaderSource, QBakedShaderVersion>.
 */
 
 /*!
@@ -293,7 +295,7 @@ void QShaderBaker::setGeneratedShaders(const QVector<GeneratedShader> &v)
     \note when no variants are set, the resulting QBakedShader will be empty and
     thus invalid.
  */
-void QShaderBaker::setGeneratedShaderVariants(const QVector<QBakedShader::ShaderVariant> &v)
+void QShaderBaker::setGeneratedShaderVariants(const QVector<QBakedShaderKey::ShaderVariant> &v)
 {
     d->variants = v;
 }
@@ -330,7 +332,7 @@ QBakedShader QShaderBaker::bake()
     }
 
     QByteArray batchableSpirv;
-    if (d->stage == QBakedShader::VertexStage && d->variants.contains(QBakedShader::BatchableVertexShader)) {
+    if (d->stage == QBakedShader::VertexStage && d->variants.contains(QBakedShaderKey::BatchableVertexShader)) {
         d->compiler.setFlags(QSpirvCompiler::RewriteToMakeBatchableForSG);
         batchableSpirv = d->compiler.compileToSpirv();
         if (batchableSpirv.isEmpty()) {
@@ -351,10 +353,10 @@ QBakedShader QShaderBaker::bake()
         batchableSpirvShader.setSpirvBinary(batchableSpirv);
 
     for (const GeneratedShader &req: d->reqVersions) {
-        for (const QBakedShader::ShaderVariant &v : d->variants) {
+        for (const QBakedShaderKey::ShaderVariant &v : d->variants) {
             QByteArray *currentSpirv = &spirv;
             QSpirvShader *currentSpirvShader = &spirvShader;
-            if (v == QBakedShader::BatchableVertexShader) {
+            if (v == QBakedShaderKey::BatchableVertexShader) {
                 if (!batchableSpirv.isEmpty()) {
                     currentSpirv = &batchableSpirv;
                     currentSpirvShader = &batchableSpirvShader;
@@ -362,39 +364,39 @@ QBakedShader QShaderBaker::bake()
                     continue;
                 }
             }
-            const QBakedShader::ShaderKey key(req.first, req.second, v);
-            QBakedShader::Shader shader;
-            shader.entryPoint = QByteArrayLiteral("main");
+            const QBakedShaderKey key(req.first, req.second, v);
+            QBakedShaderCode shader;
+            shader.setEntryPoint(QByteArrayLiteral("main"));
             switch (req.first) {
-            case QBakedShader::SpirvShader:
-                shader.shader = *currentSpirv;
+            case QBakedShaderKey::SpirvShader:
+                shader.setShader(*currentSpirv);
                 break;
-            case QBakedShader::GlslShader:
+            case QBakedShaderKey::GlslShader:
             {
                 QSpirvShader::GlslFlags flags = 0;
-                if (req.second.flags.testFlag(QBakedShader::ShaderSourceVersion::GlslEs))
+                if (req.second.flags().testFlag(QBakedShaderVersion::GlslEs))
                     flags |= QSpirvShader::GlslEs;
-                shader.shader = currentSpirvShader->translateToGLSL(req.second.version, flags);
-                if (shader.shader.isEmpty()) {
+                shader.setShader(currentSpirvShader->translateToGLSL(req.second.version(), flags));
+                if (shader.shader().isEmpty()) {
                     d->errorMessage = currentSpirvShader->translationErrorMessage();
                     return QBakedShader();
                 }
             }
                 break;
-            case QBakedShader::HlslShader:
-                shader.shader = currentSpirvShader->translateToHLSL(req.second.version);
-                if (shader.shader.isEmpty()) {
+            case QBakedShaderKey::HlslShader:
+                shader.setShader(currentSpirvShader->translateToHLSL(req.second.version()));
+                if (shader.shader().isEmpty()) {
                     d->errorMessage = currentSpirvShader->translationErrorMessage();
                     return QBakedShader();
                 }
                 break;
-            case QBakedShader::MslShader:
-                shader.shader = currentSpirvShader->translateToMSL(req.second.version);
-                if (shader.shader.isEmpty()) {
+            case QBakedShaderKey::MslShader:
+                shader.setShader(currentSpirvShader->translateToMSL(req.second.version()));
+                if (shader.shader().isEmpty()) {
                     d->errorMessage = currentSpirvShader->translationErrorMessage();
                     return QBakedShader();
                 }
-                shader.entryPoint = QByteArrayLiteral("main0");
+                shader.setEntryPoint(QByteArrayLiteral("main0"));
                 break;
             default:
                 Q_UNREACHABLE();

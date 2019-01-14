@@ -2075,14 +2075,14 @@ bool QGles2GraphicsPipeline::build()
             continue;
 
         GLuint shader = rhiD->f->glCreateShader(isVertex ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER);
-        QBakedShader::ShaderSourceVersion ver;
+        QBakedShaderVersion ver;
         if (rhiD->ctx->isOpenGLES())
-            ver = { 100, QBakedShader::ShaderSourceVersion::GlslEs };
+            ver = { 100, QBakedShaderVersion::GlslEs };
         else
             ver = { 120 };
-        const QByteArray source = shaderStage.shader.shader({ QBakedShader::GlslShader, ver }).shader;
+        const QByteArray source = shaderStage.shader.shader({ QBakedShaderKey::GlslShader, ver }).shader();
         if (source.isEmpty()) {
-            qWarning() << "No GLSL" << ver.version << "shader code found in baked shader" << shaderStage.shader;
+            qWarning() << "No GLSL" << ver.version() << "shader code found in baked shader" << shaderStage.shader;
             return false;
         }
         const char *srcStr = source.constData();

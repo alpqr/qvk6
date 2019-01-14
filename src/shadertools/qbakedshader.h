@@ -44,18 +44,38 @@ QT_BEGIN_NAMESPACE
 
 struct QBakedShaderPrivate;
 
-class Q_SHADERTOOLS_EXPORT QBakedShader
+class Q_SHADERTOOLS_EXPORT QBakedShaderVersion
 {
 public:
-    enum ShaderStage {
-        VertexStage = 0,
-        TessControlStage,
-        TessEvaluationStage,
-        GeometryStage,
-        FragmentStage,
-        ComputeStage
+    enum Flag {
+        GlslEs = 0x01
     };
+#ifndef Q_CLANG_QDOC
+    Q_DECLARE_FLAGS(Flags, Flag)
+#endif
 
+    QBakedShaderVersion() { }
+    QBakedShaderVersion(int v, Flags f = Flags())
+        : m_version(v), m_flags(f)
+    { }
+
+    int version() const { return m_version; }
+    void setVersion(int v) { m_version = v; }
+
+    Flags flags() const { return m_flags; }
+    void setFlags(Flags f) { m_flags = f; }
+
+private:
+    int m_version = 100;
+    Flags m_flags;
+};
+
+Q_DECLARE_OPERATORS_FOR_FLAGS(QBakedShaderVersion::Flags)
+Q_DECLARE_TYPEINFO(QBakedShaderVersion, Q_MOVABLE_TYPE);
+
+class Q_SHADERTOOLS_EXPORT QBakedShaderKey
+{
+public:
     enum ShaderSource {
         SpirvShader = 0,
         GlslShader,
@@ -66,49 +86,68 @@ public:
         MetalLibShader // xcrun metal + xcrun metallib
     };
 
-    struct ShaderSourceVersion {
-        enum Flag {
-            GlslEs = 0x01
-        };
-        Q_DECLARE_FLAGS(Flags, Flag)
-
-        ShaderSourceVersion() { }
-        ShaderSourceVersion(int version_, Flags flags_ = Flags())
-            : version(version_), flags(flags_)
-        { }
-
-        int version = 100;
-        Flags flags;
-    };
-
     enum ShaderVariant {
         StandardShader = 0,
         BatchableVertexShader
     };
 
-    struct ShaderKey {
-        ShaderKey() { }
-        ShaderKey(ShaderSource source_,
-                  const ShaderSourceVersion &sourceVersion_ = ShaderSourceVersion(),
-                  ShaderVariant variant_ = QBakedShader::StandardShader)
-            : source(source_),
-              sourceVersion(sourceVersion_),
-              variant(variant_)
-        { }
+    QBakedShaderKey() { }
+    QBakedShaderKey(ShaderSource s,
+                    const QBakedShaderVersion &sver,
+                    ShaderVariant svar = StandardShader)
+        : m_source(s),
+          m_sourceVersion(sver),
+          m_sourceVariant(svar)
+    { }
 
-        ShaderSource source = SpirvShader;
-        ShaderSourceVersion sourceVersion;
-        ShaderVariant variant = QBakedShader::StandardShader;
-    };
+    ShaderSource source() const { return m_source; }
+    void setSource(ShaderSource s) { m_source = s; }
 
-    struct Shader {
-        Shader() { }
-        Shader(const QByteArray &shader_, const QByteArray &entryPoint_ = QByteArray())
-            : shader(shader_), entryPoint(entryPoint_)
-        { }
+    QBakedShaderVersion sourceVersion() const { return m_sourceVersion; }
+    void setSourceVersion(const QBakedShaderVersion &sver) { m_sourceVersion = sver; }
 
-        QByteArray shader;
-        QByteArray entryPoint;
+    ShaderVariant sourceVariant() const { return m_sourceVariant; }
+    void setSourceVariant(ShaderVariant svar) { m_sourceVariant = svar; }
+
+private:
+    ShaderSource m_source = SpirvShader;
+    QBakedShaderVersion m_sourceVersion;
+    ShaderVariant m_sourceVariant = StandardShader;
+};
+
+Q_DECLARE_TYPEINFO(QBakedShaderKey, Q_MOVABLE_TYPE);
+
+class Q_SHADERTOOLS_EXPORT QBakedShaderCode
+{
+public:
+    QBakedShaderCode() { }
+    QBakedShaderCode(const QByteArray &code, const QByteArray &entry = QByteArray())
+        : m_shader(code), m_entryPoint(entry)
+    { }
+
+    QByteArray shader() const { return m_shader; }
+    void setShader(const QByteArray &code) { m_shader = code; }
+
+    QByteArray entryPoint() const { return m_entryPoint; }
+    void setEntryPoint(const QByteArray &entry) { m_entryPoint = entry; }
+
+private:
+    QByteArray m_shader;
+    QByteArray m_entryPoint;
+};
+
+Q_DECLARE_TYPEINFO(QBakedShaderCode, Q_MOVABLE_TYPE);
+
+class Q_SHADERTOOLS_EXPORT QBakedShader
+{
+public:
+    enum ShaderStage {
+        VertexStage = 0,
+        TessControlStage,
+        TessEvaluationStage,
+        GeometryStage,
+        FragmentStage,
+        ComputeStage
     };
 
     QBakedShader();
@@ -125,10 +164,10 @@ public:
     QShaderDescription description() const;
     void setDescription(const QShaderDescription &desc);
 
-    QList<ShaderKey> availableShaders() const;
-    Shader shader(const ShaderKey &key) const;
-    void setShader(const ShaderKey &key, const Shader &shader);
-    void removeShader(const ShaderKey &key);
+    QList<QBakedShaderKey> availableShaders() const;
+    QBakedShaderCode shader(const QBakedShaderKey &key) const;
+    void setShader(const QBakedShaderKey &key, const QBakedShaderCode &shader);
+    void removeShader(const QBakedShaderKey &key);
 
     QByteArray serialized() const;
     static QBakedShader fromSerialized(const QByteArray &data);
@@ -141,38 +180,32 @@ private:
 #endif
 };
 
-Q_DECLARE_OPERATORS_FOR_FLAGS(QBakedShader::ShaderSourceVersion::Flags)
+Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShaderVersion &lhs, const QBakedShaderVersion &rhs) Q_DECL_NOTHROW;
+Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShaderKey &lhs, const QBakedShaderKey &rhs) Q_DECL_NOTHROW;
+Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShaderCode &lhs, const QBakedShaderCode &rhs) Q_DECL_NOTHROW;
 
-Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShader::ShaderSourceVersion &lhs, const QBakedShader::ShaderSourceVersion &rhs) Q_DECL_NOTHROW;
-Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShader::ShaderKey &lhs, const QBakedShader::ShaderKey &rhs) Q_DECL_NOTHROW;
-Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShader::Shader &lhs, const QBakedShader::Shader &rhs) Q_DECL_NOTHROW;
-
-inline bool operator!=(const QBakedShader::ShaderSourceVersion &lhs, const QBakedShader::ShaderSourceVersion &rhs) Q_DECL_NOTHROW
+inline bool operator!=(const QBakedShaderVersion &lhs, const QBakedShaderVersion &rhs) Q_DECL_NOTHROW
 {
     return !(lhs == rhs);
 }
 
-inline bool operator!=(const QBakedShader::ShaderKey &lhs, const QBakedShader::ShaderKey &rhs) Q_DECL_NOTHROW
+inline bool operator!=(const QBakedShaderKey &lhs, const QBakedShaderKey &rhs) Q_DECL_NOTHROW
 {
     return !(lhs == rhs);
 }
 
-inline bool operator!=(const QBakedShader::Shader &lhs, const QBakedShader::Shader &rhs) Q_DECL_NOTHROW
+inline bool operator!=(const QBakedShaderCode &lhs, const QBakedShaderCode &rhs) Q_DECL_NOTHROW
 {
     return !(lhs == rhs);
 }
 
-Q_SHADERTOOLS_EXPORT uint qHash(const QBakedShader::ShaderKey &k, uint seed = 0);
+Q_SHADERTOOLS_EXPORT uint qHash(const QBakedShaderKey &k, uint seed = 0);
 
 #ifndef QT_NO_DEBUG_STREAM
 Q_SHADERTOOLS_EXPORT QDebug operator<<(QDebug, const QBakedShader &);
-Q_SHADERTOOLS_EXPORT QDebug operator<<(QDebug dbg, const QBakedShader::ShaderKey &k);
-Q_SHADERTOOLS_EXPORT QDebug operator<<(QDebug dbg, const QBakedShader::ShaderSourceVersion &v);
+Q_SHADERTOOLS_EXPORT QDebug operator<<(QDebug dbg, const QBakedShaderKey &k);
+Q_SHADERTOOLS_EXPORT QDebug operator<<(QDebug dbg, const QBakedShaderVersion &v);
 #endif
-
-Q_DECLARE_TYPEINFO(QBakedShader::ShaderSourceVersion, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QBakedShader::ShaderKey, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QBakedShader::Shader, Q_MOVABLE_TYPE);
 
 QT_END_NAMESPACE
 

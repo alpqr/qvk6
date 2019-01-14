@@ -73,7 +73,7 @@ struct QBakedShaderPrivate
     QAtomicInt ref;
     QBakedShader::ShaderStage stage = QBakedShader::VertexStage;
     QShaderDescription desc;
-    QHash<QBakedShader::ShaderKey, QBakedShader::Shader> shaders;
+    QHash<QBakedShaderKey, QBakedShaderCode> shaders;
 };
 
 QT_END_NAMESPACE

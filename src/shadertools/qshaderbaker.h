@@ -60,9 +60,9 @@ public:
     void setSourceString(const QByteArray &sourceString, QBakedShader::ShaderStage stage,
                          const QString &fileName = QString());
 
-    typedef QPair<QBakedShader::ShaderSource, QBakedShader::ShaderSourceVersion> GeneratedShader;
+    typedef QPair<QBakedShaderKey::ShaderSource, QBakedShaderVersion> GeneratedShader;
     void setGeneratedShaders(const QVector<GeneratedShader> &v);
-    void setGeneratedShaderVariants(const QVector<QBakedShader::ShaderVariant> &v);
+    void setGeneratedShaderVariants(const QVector<QBakedShaderKey::ShaderVariant> &v);
 
     QBakedShader bake();
 

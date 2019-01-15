@@ -68,6 +68,11 @@ QT_BEGIN_NAMESPACE
     QWindow the first QRhiSwapChain will target is passed in as well.
 
     \badcode
+        QSurfaceFormat format;
+        format.setDepthBufferSize(24);
+        format.setStencilBufferSize(8);
+        QSurfaceFormat::setDefaultFormat(format);
+
         context = new QOpenGLContext;
         if (!context->create())
             qFatal("Failed to get OpenGL context");

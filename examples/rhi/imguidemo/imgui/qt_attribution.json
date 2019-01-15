@@ -4,7 +4,7 @@
         "Name": "Dear ImGui",
         "QDocModule": "qtrhi",
         "Description": "Dear ImGui",
-        "QtUsage": "Bloat-free GUI library for in-scene visualization of profiling and debugging data",
+        "QtUsage": "Used in examples to demo integration of an external GUI library.",
 
         "Homepage": "https://github.com/ocornut/imgui",
         "Version": "v1.66b",

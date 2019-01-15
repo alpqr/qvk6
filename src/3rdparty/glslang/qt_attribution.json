@@ -4,7 +4,7 @@
         "Name": "glslang",
         "QDocModule": "qtshadertools",
         "Description": "An OpenGL and OpenGL ES shader front end and validator.",
-        "QtUsage": "Compile Vulkan-flavor GLSL to SPIR-V",
+        "QtUsage": "Compile GLSL to SPIR-V.",
 
         "Homepage": "https://github.com/KhronosGroup/glslang",
         "Version": "816bc4447ce58c048a40e3f2a3a46b4d1019083b",

@@ -74,7 +74,7 @@ class QRhiProfiler;
 //   5. Ownership of resources imported (QRhi*InitParams or buildFrom()) or exported (nativeHandles()) is never taken or given away.
 //
 // Other:
-//   1. QRhiResourceUpdateBatch manages no graphics resources underneath. beginPass() implicitly calls release() on the batch.
+//   1. QRhiResourceUpdateBatch manages no graphics resources underneath. begin/endPass() implicitly calls release() on the batch.
 
 struct Q_RHI_EXPORT QRhiColorClearValue
 {

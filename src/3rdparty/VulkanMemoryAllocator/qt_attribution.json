@@ -4,7 +4,7 @@
         "Name": "Vulkan Memory Allocator",
         "QDocModule": "qtrhi",
         "Description": "Vulkan Memory Allocator",
-        "QtUsage": "Memory management for the Vulkan backend",
+        "QtUsage": "Memory management for the Vulkan backend of QRhi.",
 
         "Homepage": "https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator",
         "Version": "2.1.0",

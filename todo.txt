@@ -20,6 +20,7 @@ gl: ubuf structs, arrays
 test cubemap face as target
 test cubemap face readback
 object names for other than buf/rb/tex
+clang_qdoc ifdefs for q_declare_flags to be removed once qdoc does not choke on them
 
 optional:
 compute?

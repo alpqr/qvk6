@@ -16,28 +16,23 @@ Experiments for more modern graphics shader management in future Qt (QtShaderToo
 
 Uses https://github.com/KhronosGroup/SPIRV-Cross and https://github.com/KhronosGroup/glslang
 
-1. qmake && (n)make
+QShaderBaker: Compile (Vulkan-flavor) GLSL to SPIR-V. Generate reflection info.
+Translate to HLSL, MSL, and various GLSL versions. Optionally rewrite vertex
+shaders to make them suitable for Qt Quick scenegraph batching. Pack all this
+into conveniently (de)serializable QBakedShader instances. Complemented by a
+command-line tool (qsb) to allow doing the expensive work offline. This
+optionally allows invoking fxc or metal/metallib to include compiled bytecode
+for HLSL and MSL as well.
 
-2. QT += shadertools
+Documentation
+=============
 
-3. Use QSpirvCompiler to compile (Vulkan-flavored) GLSL to SPIR-V. This can also optionally rewrite the input source to make it suitable for the batched pass of Qt Quick's default OpenGL renderer.
-
-4. Use QSpirvShader parse a SPIR-V binary to get reflection data, to strip the binary, and to translate to GLSL suitable for various OpenGL (ES) versions. (or to HLSL/MSL)
-
-5. The reflection data (QShaderDescription) can also be serialized to binary and human-readable JSON, and deserialized from binary JSON.
-
-Alternatively,
-
-3. Run the qsb tool to generate a single file with reflection info and multiple variants (SPIR-V, HLSL, various GLSL versions) of the input shader source.
-
-4. Use QBakedShader to load and access those at run time.
-
-The latter is what the RHI uses, and expects applications to provide QBakedShader packs.
+Generated docs are now online at https://alpqr.github.io
 
 In action
 =========
 
-Needs Qt 5.12. Tested on Windows 10 with MSVC2015 and 2017, Ubuntu 16.04, and macOS 10.13.
+Needs Qt 5.12. Tested on Windows 10 with MSVC2015 and 2017, and macOS 10.14 with XCode 10.
 
 Screenshots from the test application demonstrating basic drawing, pipeline
 state (blending, depth), indexed drawing, texturing, and rendering into a

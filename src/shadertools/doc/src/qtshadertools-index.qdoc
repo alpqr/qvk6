@@ -29,6 +29,30 @@
 \title Qt Shader Tools
 \page qtshadertools-index.html
 
+\section1 Introduction
+
+The Qt Shader Tools module builds on the SPIR-V Open Source Ecosystem as
+described at \l{https://www.khronos.org/spir/}{the Khronos SPIR-V web
+site}. For compiling into SPIR-V
+\l{https://github.com/KhronosGroup/glslang}{glslang} is used, while
+translating and reflecting is done via
+\l{https://github.com/KhronosGroup/SPIRV-Cross}{SPIRV-Cross}.
+
+In order to allow shader code to be written once in Qt applications and
+libraries, all shaders are expected to be written in a single language
+which is then compiled into SPIR-V. Versions for various shading language
+are then generated from that, together with reflection information (inputs,
+outputs, shader resources). This is then packed into easily and efficiently
+serializable QBakedShader instances. The Qt Rendering Hardware Interface
+consumes QBakedShader instances directly.
+
+The two main components are:
+
+\list
+\li QShaderBaker and the \c qsb command-line tool, and
+\li QBakedShader
+\endlist
+
 \section1 Table of Contents
 
 \list

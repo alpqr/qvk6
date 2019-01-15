@@ -202,21 +202,34 @@ QT_BEGIN_NAMESPACE
 /*!
     \class QShaderDescription::InOutVariable
     \inmodule QtShaderTools
+
+    \brief Describes an input or output variable in the shader.
  */
 
 /*!
     \class QShaderDescription::BlockVariable
     \inmodule QtShaderTools
+
+    \brief Describes a member of a uniform or push constant block.
  */
 
 /*!
     \class QShaderDescription::UniformBlock
     \inmodule QtShaderTools
+
+    \brief Describes a uniform block.
+
+    \note When translating to shading languages without uniform block support
+    (like GLSL 120 or GLSL/ES 100), uniform blocks are replaced with ordinary
+    uniforms in a struct. The name of the struct, and so the prefix for the
+    uniforms generated from the block members, is given by structName.
  */
 
 /*!
     \class QShaderDescription::PushConstantBlock
     \inmodule QtShaderTools
+
+    \brief Describes a push constant block.
  */
 
 /*!

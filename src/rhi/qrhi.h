@@ -205,7 +205,9 @@ struct Q_RHI_EXPORT QRhiShaderResourceBinding
         TessellationControlStage = 1 << 2,
         TessellationEvaluationStage = 1 << 3
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(StageFlags, StageFlag)
+#endif
 
     static QRhiShaderResourceBinding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_);
 
@@ -394,7 +396,9 @@ public:
         IndexBuffer = 1 << 1,
         UniformBuffer = 1 << 2
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(UsageFlags, UsageFlag)
+#endif
 
     Type type() const { return m_type; }
     void setType(Type t) { m_type = t; }
@@ -431,7 +435,9 @@ public:
         UsedAsTransferSource = 1 << 5, // will (also) be used as the source of a copy or readback
         UsedWithGenerateMips = 1 << 6
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(Flags, Flag)
+#endif
 
     enum Format {
         UnknownFormat,
@@ -569,7 +575,9 @@ public:
     enum Flag {
         UsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(Flags, Flag)
+#endif
 
     Type type() const { return m_type; }
     void setType(Type t) { m_type = t; }
@@ -636,7 +644,9 @@ public:
         PreserveColorContents = 1 << 0,
         PreserveDepthStencilContents = 1 << 1
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(Flags, Flag)
+#endif
 
     QRhiTextureRenderTargetDescription description() const { return m_desc; }
     void setDescription(const QRhiTextureRenderTargetDescription &desc) { m_desc = desc; }
@@ -682,7 +692,9 @@ public:
         UsesStencilRef = 1 << 1,
         UsesScissor = 1 << 2
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(Flags, Flag)
+#endif
 
     enum Topology {
         Triangles,
@@ -709,7 +721,9 @@ public:
         B = 1 << 2,
         A = 1 << 3
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(ColorMask, ColorMaskComponent)
+#endif
 
     enum BlendFactor {
         Zero,
@@ -874,7 +888,9 @@ public:
         UsedAsTransferSource = 1 << 3, // will be read back
         NoVSync = 1 << 4 // may be implementation specific what this results in
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(Flags, Flag)
+#endif
 
     QWindow *window() const { return m_window; }
     void setWindow(QWindow *window) { m_window = window; }
@@ -1054,7 +1070,9 @@ public:
         TextureRead = 1 << 0,
         TextureWrite = 1 << 1
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(TexturePrepareFlags, TexturePrepareFlag)
+#endif
 
     ~QRhiResourceUpdateBatch();
     // Puts the batch back to the pool without any processing.
@@ -1120,7 +1138,9 @@ public:
         EnableProfiling = 1 << 0,
         EnableDebugMarkers = 1 << 1
     };
+#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(Flags, Flag)
+#endif
 
     enum FrameOpResult {
         FrameOpSuccess = 0,

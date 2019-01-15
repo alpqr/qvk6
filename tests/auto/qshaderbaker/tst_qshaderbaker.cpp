@@ -50,6 +50,7 @@ private slots:
     void reuse();
     void compileError();
     void translateError();
+    void genVariants();
 };
 
 void tst_QShaderBaker::initTestCase()
@@ -319,6 +320,43 @@ void tst_QShaderBaker::translateError()
     QVERIFY(!s.isValid());
     QVERIFY(!baker.errorMessage().isEmpty());
     qDebug() << baker.errorMessage();
+}
+
+void tst_QShaderBaker::genVariants()
+{
+    QShaderBaker baker;
+    baker.setSourceFileName(QLatin1String(":/data/color.vert"));
+    baker.setGeneratedShaderVariants({
+                                         QBakedShaderKey::StandardShader,
+                                         QBakedShaderKey::BatchableVertexShader
+                                     });
+    QVector<QShaderBaker::GeneratedShader> targets;
+    targets.append({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(100) });
+    targets.append({ QBakedShaderKey::GlslShader, QBakedShaderVersion(100, QBakedShaderVersion::GlslEs) });
+    targets.append({ QBakedShaderKey::GlslShader, QBakedShaderVersion(330) });
+    targets.append({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(120) });
+    targets.append({ QBakedShaderKey::HlslShader, QBakedShaderVersion(50) });
+    targets.append({ QBakedShaderKey::MslShader, QBakedShaderVersion(12) });
+    baker.setGeneratedShaders(targets);
+    QBakedShader s = baker.bake();
+    QVERIFY(s.isValid());
+    QVERIFY(baker.errorMessage().isEmpty());
+    QCOMPARE(s.availableShaders().count(), 2 * 6);
+
+    int batchableVariantCount = 0;
+    int batchableGlslVariantCount = 0;
+    for (const QBakedShaderKey &key : s.availableShaders()) {
+        if (key.sourceVariant() == QBakedShaderKey::BatchableVertexShader) {
+            ++batchableVariantCount;
+            if (key.source() == QBakedShaderKey::GlslShader) {
+                ++batchableGlslVariantCount;
+                const QByteArray src = s.shader(key).shader();
+                QVERIFY(src.contains(QByteArrayLiteral("gl_Position.z * _qt.zRange")));
+            }
+        }
+    }
+    QCOMPARE(batchableVariantCount, 6);
+    QCOMPARE(batchableGlslVariantCount, 2);
 }
 
 #include <tst_qshaderbaker.moc>

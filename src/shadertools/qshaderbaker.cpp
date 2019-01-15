@@ -64,12 +64,6 @@ QT_BEGIN_NAMESPACE
     restricted to cases where run time compilation cannot be avoided, such as
     when working with user-provided shader source strings.
 
-    QShaderBaker builds on the SPIR-V Open Source Ecosystem as described at
-    \l{https://www.khronos.org/spir/}{the Khronos SPIR-V web site}. For
-    compiling into SPIR-V \l{https://github.com/KhronosGroup/glslang}{glslang}
-    is used, while translating and reflecting is done via
-    \l{https://github.com/KhronosGroup/SPIRV-Cross}{SPIRV-Cross}.
-
     The input format is always assumed to be Vulkan-flavored GLSL at the
     moment. See the
     \l{https://github.com/KhronosGroup/GLSL/blob/master/extensions/khr/GL_KHR_vulkan_glsl.txt}{GL_KHR_vulkan_glsl

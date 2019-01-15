@@ -39,6 +39,13 @@
 
 QT_BEGIN_NAMESPACE
 
+/*!
+    \class QRhiProfiler
+    \inmodule QtRhi
+
+    \brief Collects resource and timing information from an active QRhi
+ */
+
 QRhiProfiler::QRhiProfiler()
     : d(new QRhiProfilerPrivate)
 {

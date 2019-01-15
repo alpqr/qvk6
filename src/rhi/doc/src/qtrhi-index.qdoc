@@ -29,6 +29,67 @@
 \title Qt Rendering Hardware Interface
 \page qtrhi-index.html
 
+\section1 Introduction
+
+The Qt Rendering Hardware Interface is an abstraction for hardware accelerated
+graphics APIs, such as, \l{https://www.khronos.org/opengl/}{OpenGL},
+\l{https://www.khronos.org/opengles/}{OpenGL ES},
+\l{https://docs.microsoft.com/en-us/windows/desktop/direct3d}{Direct3D},
+\l{https://developer.apple.com/metal/}{Metal}, and
+\l{https://www.khronos.org/vulkan/}{Vulkan}.
+
+Some of the main design goals are:
+
+\list
+
+\li Simple, minimal, understandable, extensible. Follow the proven path of the
+Qt Quick scenegraph.
+
+\li Aim to be a product - and in the bigger picture, part of a product (Qt) -
+that is usable out of the box both by internal (such as, Qt Quick) and,
+eventually, external users.
+
+\li Not a complete 1:1 wrapper for any of the underlying APIs. The feature set
+is tuned towards the needs of Qt's 2D and 3D offering (QPainter, Qt Quick, Qt
+3D Studio). Iterate and evolve in a sustainable manner.
+
+\li Intrinsically cross-platform, without reinventing: abstracting
+cross-platform aspects of certain APIs (such as, OpenGL context creation and
+windowing system interfaces, Vulkan instance and surface management) is not in
+scope here. These are delegated to the existing QtGui facilities (QWindow,
+QOpenGLContext, QVulkanInstance) and its backing QPA architecture.
+
+\endlist
+
+The main class in the module is QRhi. Each QRhi instance is backed by a backend
+for a specific graphics API. The selection of the backend is a run time choice
+and is up to the application or library that creates the QRhi instance. Some
+backends are available on multiple platforms (OpenGL, Vulkan, Null), while APIs
+specific to a given platform are only available when running on the platform in
+question.
+
+The available backends currently are:
+
+\list
+
+\li OpenGL 2.1 or OpenGL ES 2.0 or newer. Some extensions are utilized when
+present, for example to enable multisample framebuffers.
+
+\li Direct3D 11.1
+
+\li Metal
+
+\li Vulkan 1.0, optionally with some extensions that are part of Vulkan 1.1
+
+\li Null - A "dummy" backend that issues no graphics calls at all.
+
+\endlist
+
+Managing shader code and dealing with shading language differences is not in
+the scope of this module. Rather, it is delegated to the \l{Qt Shader Tools}
+module. Classes like QRhiGraphicsPipeline and QRhiGraphicsShaderStage are
+prepared to work directly with QBakedShader instances.
+
 \section1 Table of Contents
 
 \list

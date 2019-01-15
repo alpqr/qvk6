@@ -56,6 +56,80 @@ QT_BEGIN_NAMESPACE
 /*!
     \class QRhi
     \inmodule QtRhi
+
+    \brief Accelerated 2D/3D graphics API abstraction.
+ */
+
+/*!
+    \enum QRhi::Implementation
+    Describes which graphics API-specific backend gets used by a QRhi instance.
+
+    \value Null
+    \value Vulkan
+    \value OpenGLES2
+    \value D3D11
+    \value Metal
+ */
+
+/*!
+    \enum QRhi::Flag
+    Describes what special features to enable.
+
+    \value EnableProfiling Enables gathering timing (CPU, GPU) and resource
+    (QRhiBuffer, QRhiTexture, etc.) information and additional metadata. See
+    QRhiProfiler. Avoid enabling in production builds as it may involve a
+    performance penalty.
+
+    \value EnableDebugMarkers Enables debug marker groups. Without this frame
+    debugging features like making debug groups and custom resource name
+    visible in external GPU debugging tools will not be available and functions
+    like QRhiCommandBuffer::debugMarkBegin() will become a no-op. Avoid
+    enabling in production builds as it may involve a performance penalty.
+ */
+
+/*!
+    \enum QRhi::FrameOpResult
+    Describes the result of operations that can have a soft failure.
+
+    \value FrameOpSuccess Success
+
+    \value FrameOpError Unspecified error
+
+    \value FrameOpSwapChainOutOfDate The swapchain is in an inconsistent state
+    internally. This can be recoverable by attempting to repeat the operation
+    (such as, beginFrame()) later.
+
+    \value FrameOpDeviceLost The graphics device was lost. This can be
+    recoverable by attempting to repeat the operation (such as, beginFrame())
+    and releasing and reinitializing all objects backed by native graphics
+    resources.
+ */
+
+/*!
+    \enum QRhi::Feature
+    Flag values to indicate what features are supported by the backend currently in use.
+
+    \value MultisampleTexture Textures with sample count larger than 1 are supported.
+    \value MultisampleRenderBuffer Renderbuffers with sample count larger than 1 are supported.
+    \value DebugMarkers Debug marker groups (and so QRhiCommandBuffer::debugMarkBegin()) are supported.
+    \value Timestamps Command buffer timestamps are supported. Relevant for QRhiProfiler::gpuFrameTimes().
+    \value Instancing Instanced drawing is supported.
+    \value CustomInstanceStepRate Instance step rate other than 1 is supported.
+ */
+
+/*!
+    \enum QRhi::ResourceSizeLimit
+    Describes the resource limit to query.
+
+    \value TextureSizeMin Minimum texture width and height. This is typically
+    1. The minimum texture size is handled gracefully, meaning attempting to
+    create a texture with an empty size will instead create a texture with the
+    minimum size.
+
+    \value TextureSizeMax Maximum texture width and height. This depends on the
+    graphics API and sometimes the platform or implementation as well.
+    Typically the value is in the range 4096 - 16384. Attempting to create
+    textures larger than this is expected to fail.
  */
 
 /*!

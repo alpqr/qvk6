@@ -31,7 +31,7 @@ qhp.QtRhi.subprojects.examples.selectors = fake:example
 
 tagfile                 = ../../../doc/qtrhi/qtrhi.tags
 
-depends += qtcore qtgui
+depends += qtcore qtgui qtshadertools
 
 headerdirs  += ..
 

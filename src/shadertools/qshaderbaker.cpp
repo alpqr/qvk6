@@ -191,10 +191,10 @@ QShaderBaker::~QShaderBaker()
     The supported file extensions are:
     \list
     \li \c{.vert} - vertex shader
-    \li \c{.frag} - fragment shader
-    \li \c{.tesc} - tessellation control (hull)
-    \li \c{.tese} - tessellation evaluation (domain)
-    \li \c{.geom} - geometry
+    \li \c{.frag} - fragment (pixel) shader
+    \li \c{.tesc} - tessellation control (hull) shader
+    \li \c{.tese} - tessellation evaluation (domain) shader
+    \li \c{.geom} - geometry shader
     \li \c{.comp} - compute shader
     \endlist
  */

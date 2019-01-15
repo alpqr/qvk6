@@ -61,16 +61,95 @@ QT_BEGIN_NAMESPACE
 /*!
     \class QRhiVulkanInitParams
     \inmodule QtRhi
+    \brief Vulkan specific initialization parameters.
+
+    A Vulkan-based QRhi needs at minimum a valid QVulkanInstance. It is up to
+    the user to ensure this is available and initialized. This is typically
+    done in main() similarly to the following:
+
+    \badcode
+    int main(int argc, char **argv)
+    {
+        ...
+
+        QVulkanInstance inst;
+    #ifndef Q_OS_ANDROID
+        inst.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
+    #else
+        inst.setLayers(QByteArrayList()
+                       << "VK_LAYER_GOOGLE_threading"
+                       << "VK_LAYER_LUNARG_parameter_validation"
+                       << "VK_LAYER_LUNARG_object_tracker"
+                       << "VK_LAYER_LUNARG_core_validation"
+                       << "VK_LAYER_LUNARG_image"
+                       << "VK_LAYER_LUNARG_swapchain"
+                       << "VK_LAYER_GOOGLE_unique_objects");
+    #endif
+        inst.setExtensions(QByteArrayList()
+                           << "VK_KHR_get_physical_device_properties2");
+        if (!inst.create())
+            qFatal("Vulkan not available");
+
+        ...
+    }
+    \endcode
+
+    The example here has two optional aspects: it enables the
+    \l{https://github.com/KhronosGroup/Vulkan-ValidationLayers}{Vulkan
+    validation layers}, when they are available, and also enables the
+    VK_KHR_get_physical_device_properties2 extension (part of Vulkan 1.1), when
+    available. The former is useful during the development phase (remember that
+    QVulkanInstance conveniently redirects messages and warnings to qDebug).
+    Avoid enabling it in production builds, however. The latter is important in
+    order to make QRhi::CustomInstanceStepRate available with Vulkan since
+    VK_EXT_vertex_attribute_divisor (part of Vulkan 1.1) depends on it. It can
+    be omitted when instanced drawing with a non-one step rate is not used.
+
+    Once this is done, a Vulkan-based QRhi can be created by passing the
+    instance and a QWindow with its surface type set to
+    QSurface::VulkanSurface:
+
+    \badcode
+        QRhiVulkanInitParams params;
+        params.inst = vulkanInstance;
+        params.window = window;
+        rhi = QRhi::create(QRhi::Vulkan, &params);
+    \endcode
+
+    The window is optional and can be omitted. This is not recommended however
+    because there is then no way to ensure presenting is supported while
+    choosing a graphics queue.
+
+    \note Even when a window is specified, QRhiSwapChain objects can be created
+    for other windows as well, as long as they all have their
+    QWindow::surfaceType() set to QSurface::VulkanSurface.
+
+    \section2 Working with existing Vulkan devices
+
+    When interoperating with another graphics engine, it may be necessary to
+    get a QRhi instance that uses the same Vulkan device. This can be achieved
+    by setting importExistingDevice to \c true and providing the already
+    created physical device and device objects. In addition, either the
+    graphics queue family index or the graphics queue object itself is
+    required. Prefer the former, whenever possible since deducing the index is
+    not possible afterwards. Optionally, an existing command pool object can be
+    specified as well. Finally, vmemAllocator can be used to share the same
+    \l{https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator}{Vulkan
+    memory allocator} between two QRhi instances.
+
+    The QRhi does not take ownership of any of the external objects.
  */
 
 /*!
     \class QRhiVulkanNativeHandles
     \inmodule QtRhi
+    \brief Collects device, queue, and other Vulkan objects that are used by the QRhi.
  */
 
 /*!
     \class QRhiVulkanTextureNativeHandles
     \inmodule QtRhi
+    \brief Holds the Vulkan image object that is backing a QRhiTexture instance.
  */
 
 static inline VkDeviceSize aligned(VkDeviceSize v, VkDeviceSize byteAlign)

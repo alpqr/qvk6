@@ -38,19 +38,35 @@
 
 QT_BEGIN_NAMESPACE
 
-/*
+/*!
     \class QRhiNullInitParams
     \inmodule QtRhi
+    \brief Null backend specific initialization parameters.
+
+    A Null QRhi needs no special parameters for initialization.
+
+    \badcode
+        QRhiNullInitParams params;
+        rhi = QRhi::create(QRhi::Null, &params);
+    \endcode
+
+    The Null backend does not issue any graphics calls and creates no
+    resources. All QRhi operations will succeed as normal so applications can
+    still be run, albeit potentially at an unthrottled speed, depending on
+    their frame rendering strategy. The backend reports resources to
+    QRhiProfiler as usual.
  */
 
 /*!
     \class QRhiNullNativeHandles
     \inmodule QtRhi
+    \brief Empty.
  */
 
 /*!
     \class QRhiNullTextureNativeHandles
     \inmodule QtRhi
+    \brief Empty.
  */
 
 QRhiNull::QRhiNull(QRhiInitParams *params)

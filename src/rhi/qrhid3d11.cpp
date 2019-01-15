@@ -57,16 +57,54 @@ QT_BEGIN_NAMESPACE
 /*!
     \class QRhiD3D11InitParams
     \inmodule QtRhi
+    \brief Direct3D 11 specific initialization parameters.
+
+    A D3D11-based QRhi needs no special parameters for initialization. If
+    desired, enableDebugLayer can be set to \c true to enable the Direct3D
+    debug layer. This can be useful during development, but should be avoided
+    in production builds.
+
+    \badcode
+        QRhiD3D11InitParams params;
+        params.enableDebugLayer = true;
+        rhi = QRhi::create(QRhi::D3D11, &params);
+    \endcode
+
+    \note QRhiSwapChain should only be used in combination with QWindow
+    instances that have their surface type set to QSurface::OpenGLSurface.
+    There are currently no Direct3D specifics in the Windows platform support
+    of Qt and therefore there is no separate QSurface type available.
+
+    \section2 Working with existing Direct3D 11 devices
+
+    When interoperating with another graphics engine, it may be necessary to
+    get a QRhi instance that uses the same Direct3D device and device context.
+    This can be achieved by setting importExistingDevice to \c true and
+    providing both dev and context.
+
+    \note QRhi works with immediate contexts only. Deferred contexts are not
+    used in any way.
+
+    \note The class uses \c{void *} as the type since including the COM-based
+    \c{d3d11.h} headers is not acceptable here. The actual types are
+    \c{ID3D11Device *} and \c{ID3D11DeviceContext *}.
+
+    \note Regardless of using an imported or a QRhi-created device context,
+    \c ID3D11DeviceContext1 must be supported. Initialization will fail otherwise.
+
+    The QRhi does not take ownership of any of the external objects.
  */
 
 /*!
     \class QRhiD3D11NativeHandles
     \inmodule QtRhi
+    \brief Holds the D3D device and device context used by the QRhi.
  */
 
 /*!
     \class QRhiD3D11TextureNativeHandles
     \inmodule QtRhi
+    \brief Holds the D3D texture object that is backing a QRhiTexture instance.
  */
 
 QRhiD3D11::QRhiD3D11(QRhiInitParams *params)

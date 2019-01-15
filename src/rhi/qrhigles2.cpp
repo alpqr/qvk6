@@ -61,16 +61,48 @@ QT_BEGIN_NAMESPACE
 /*!
     \class QRhiGles2InitParams
     \inmodule QtRhi
+    \brief OpenGL specific initialization parameters.
+
+    An OpenGL-based QRhi needs an already initialized QOpenGLContext and
+    QOffscreenSurface. Additionally, while optional, it is recommended that the
+    QWindow the first QRhiSwapChain will target is passed in as well.
+
+    \badcode
+        context = new QOpenGLContext;
+        if (!context->create())
+            qFatal("Failed to get OpenGL context");
+
+        fallbackSurface = new QOffscreenSurface;
+        fallbackSurface->setFormat(context->format());
+        fallbackSurface->create();
+
+        QRhiGles2InitParams params;
+        params.context = context;
+        params.window = window;
+        params.fallbackSurface = fallbackSurface;
+        rhi = QRhi::create(QRhi::OpenGLES2, &params);
+    \endcode
+
+    \note The example here shows the creation of the context and fallback
+    surface as well. Watch out for the fact that, unlike QOpenGLContext, a
+    QOffscreenSurface can only be created on the gui/main thread.
+
+    \note QRhiSwapChain can only target QWindow instances that have their
+    surface type set to QSurface::OpenGLSurface.
+
+    The QRhi does not take ownership of any of the external objects.
  */
 
 /*!
     \class QRhiGles2NativeHandles
     \inmodule QtRhi
+    \brief Holds the OpenGL context used by the QRhi.
  */
 
 /*!
     \class QRhiGles2TextureNativeHandles
     \inmodule QtRhi
+    \brief Holds the OpenGL texture object that is backing a QRhiTexture instance.
  */
 
 QRhiGles2::QRhiGles2(QRhiInitParams *params)

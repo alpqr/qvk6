@@ -68,16 +68,46 @@ QT_BEGIN_NAMESPACE
 /*!
     \class QRhiMetalInitParams
     \inmodule QtRhi
+    \brief Metal specific initialization parameters.
+
+    A Metal-based QRhi needs no special parameters for initialization.
+
+    \badcode
+        QRhiMetalInitParams params;
+        rhi = QRhi::create(QRhi::Metal, &params);
+    \endcode
+
+    \note Metal API validation cannot be enabled by the application. Instead,
+    run the debug build of the application in XCode. Generating a
+    \c{.xcodeproj} file via \c{qmake -spec macx-xcode} provides a convenient
+    way to enable this.
+
+    \note QRhiSwapChain can only target QWindow instances that have their
+    surface type set to QSurface::MetalSurface.
+
+    \section2 Working with existing Metal devices
+
+    When interoperating with another graphics engine, it may be necessary to
+    get a QRhi instance that uses the same Metal device. This can be achieved
+    by setting importExistingDevice to \c true and providing dev.
+
+    \note The class uses \c{void *} as the type since including the Objective C
+    headers is not acceptable here. The actual type is \c{id<MTLDevice>} or
+    \c{MTLDevice *}.
+
+    The QRhi does not take ownership of any of the external objects.
  */
 
 /*!
     \class QRhiMetalNativeHandles
     \inmodule QtRhi
+    \brief Holds the Metal device used by the QRhi.
  */
 
 /*!
     \class QRhiMetalTextureNativeHandles
     \inmodule QtRhi
+    \brief Holds the Metal texture object that is backing a QRhiTexture instance.
  */
 
 struct QRhiMetalData

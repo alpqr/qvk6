@@ -135,171 +135,210 @@ QT_BEGIN_NAMESPACE
 /*!
     \class QRhiInitParams
     \inmodule QtRhi
+    \brief Base class for backend-specific initialization parameters.
  */
 
 /*!
     \class QRhiColorClearValue
     \inmodule QtRhi
+    \brief Specifies a clear color for a color buffer.
  */
 
 /*!
     \class QRhiDepthStencilClearValue
     \inmodule QtRhi
+    \brief Specifies clear values for a depth or stencil buffer.
  */
 
 /*!
     \class QRhiViewport
     \inmodule QtRhi
+    \brief Specifies a viewport rectangle.
  */
 
 /*!
     \class QRhiScissor
     \inmodule QtRhi
+    \brief Specifies a scissor rectangle.
  */
 
 /*!
     \class QRhiVertexInputLayout
     \inmodule QtRhi
+    \brief Describes the layout of vertex inputs consumed by a vertex shader.
  */
 
 /*!
     \class QRhiVertexInputLayout::Binding
     \inmodule QtRhi
+    \brief Describes a vertex input binding.
  */
 
 /*!
     \class QRhiVertexInputLayout::Attribute
     \inmodule QtRhi
+    \brief Describes a single vertex input element.
  */
 
 /*!
     \class QRhiGraphicsShaderStage
     \inmodule QtRhi
+    \brief Specifies the type and the shader code for a shader stage in the graphics pipeline.
  */
 
 /*!
     \class QRhiShaderResourceBinding
     \inmodule QtRhi
+    \brief Specifies the shader resources that are made visible to one or more shader stages.
  */
 
 /*!
     \class QRhiTextureRenderTargetDescription
     \inmodule QtRhi
+    \brief Describes the color and depth or depth/stencil attachments of a render target.
  */
 
 /*!
     \class QRhiTextureRenderTargetDescription::ColorAttachment
     \inmodule QtRhi
+    \brief Describes the color attachments of a render target.
  */
 
 /*!
     \class QRhiTextureUploadDescription
     \inmodule QtRhi
+    \brief Describes a texture upload operation.
  */
 
 /*!
     \class QRhiTextureUploadDescription::Layer
     \inmodule QtRhi
+    \brief Describes one layer (face for cubemaps) in a texture upload operation.
  */
 
 /*!
     \class QRhiTextureUploadDescription::Layer::MipLevel
     \inmodule QtRhi
+    \brief Describes one mip level in a layer in a texture upload operation.
  */
 
 /*!
     \class QRhiTextureCopyDescription
     \inmodule QtRhi
+    \brief Describes a texture-to-texture copy operation.
  */
 
 /*!
     \class QRhiReadbackDescription
     \inmodule QtRhi
+    \brief Describes a readback (reading back texture contents from possibly GPU-only memory) operation.
  */
 
 /*!
     \class QRhiReadbackResult
     \inmodule QtRhi
+    \brief Describes the results of a potentially asynchronous readback operation.
  */
 
 /*!
     \class QRhiNativeHandles
     \inmodule QtRhi
+    \brief Base class for classes exposing backend-specific collections of native resource objects.
  */
 
 /*!
     \class QRhiResource
     \inmodule QtRhi
+    \brief Base class for classes encapsulating native resource objects.
  */
 
 /*!
     \class QRhiBuffer
     \inmodule QtRhi
+    \brief Vertex, index, or uniform (constant) buffer resource.
  */
 
 /*!
     \class QRhiTexture
     \inmodule QtRhi
+    \brief Texture resource.
  */
 
 /*!
     \class QRhiSampler
     \inmodule QtRhi
+    \brief Sampler resource.
  */
 
 /*!
     \class QRhiRenderBuffer
     \inmodule QtRhi
+    \brief Renderbuffer resource.
  */
 
 /*!
     \class QRhiRenderPassDescriptor
     \inmodule QtRhi
+    \brief Render pass resource.
  */
 
 /*!
     \class QRhiRenderTarget
     \inmodule QtRhi
+    \brief Represents an onscreen (swapchain) or offscreen (texture) render target.
  */
 
 /*!
     \class QRhiTextureRenderTarget
     \inmodule QtRhi
+    \brief Texture render target resource.
  */
 
 /*!
     \class QRhiShaderResourceBindings
     \inmodule QtRhi
+    \brief Encapsulates resources for making buffer, texture, sampler resources visible to shaders.
  */
 
 /*!
     \class QRhiGraphicsPipeline
     \inmodule QtRhi
+    \brief Graphics pipeline state resource.
  */
 
 /*!
     \class QRhiGraphicsPipeline::TargetBlend
     \inmodule QtRhi
+    \brief Describes the blend state for one color attachment.
  */
 
 /*!
     \class QRhiGraphicsPipeline::StencilOpState
     \inmodule QtRhi
+    \brief Describes the stencil operation state.
  */
 
 /*!
     \class QRhiSwapChain
     \inmodule QtRhi
+    \brief Swapchain resource.
  */
 
 /*!
     \class QRhiCommandBuffer
     \inmodule QtRhi
+    \brief Command buffer resource.
+
+    Not creatable by applications at the moment. The only ways to obtain a
+    valid QRhiCommandBuffer are to get it from the targeted swapchain via
+    QRhiSwapChain::currentFrameCommandBuffer(), or, in case of rendering
+    compeletely offscreen, initializing one via beginOffscreenFrame().
  */
 
 /*!
     \class QRhiResourceUpdateBatch
     \inmodule QtRhi
+    \brief Records upload and copy type of operations.
  */
 
 QRhiResource::QRhiResource(QRhiImplementation *rhi_)

@@ -725,6 +725,70 @@ QT_BEGIN_NAMESPACE
     \class QRhiShaderResourceBindings
     \inmodule QtRhi
     \brief Encapsulates resources for making buffer, texture, sampler resources visible to shaders.
+
+    A QRhiShaderResourceBindings is a collection of QRhiShaderResourceBinding
+    instances, each of which describe a single binding.
+
+    Take a fragment shader with the following interface:
+
+    \badcode
+        layout(std140, binding = 0) uniform buf {
+            mat4 mvp;
+            int flip;
+        } ubuf;
+
+        layout(binding = 1) uniform sampler2D tex;
+    \endcode
+
+    To make resources visible to the shader, the following
+    QRhiShaderResourceBindings could be created and then passed to
+    QRhiGraphicsPipeline::setShaderResourceBindings():
+
+    \badcode
+        srb = rhi->newShaderResourceBindings();
+        srb->setBindings({
+            QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, ubuf),
+            QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, texture, sampler)
+        });
+        srb->build();
+        ...
+        ps = rhi->newGraphicsPipeline();
+        ...
+        ps->setShaderResourceBindings(srb);
+        ps->build();
+        ...
+        cb->setGraphicsPipeline(ps);
+    \endcode
+
+    This assumes that \c ubuf is a QRhiBuffer, \c texture is a QRhiTexture,
+    while \a sampler is a QRhiSampler. The example also assumes that the
+    uniform block is present in the vertex shader as well so the same buffer is
+    made visible to the vertex stage too.
+
+    \section3 Advanced usage
+
+    Building on the above example, let's assume that a pass now needs to use
+    the exact same pipeline and shaders with a different texture. Creating a
+    whole separate QRhiGraphicsPipeline just for this would be an overkill.
+    This is why QRhiCommandBuffer::setGraphicsPipeline() allows specifying an
+    optional \a srb argument. As long as the layouts (so the number of bindings
+    and the binding points) match between two QRhiShaderResourceBindings, they
+    can both be used with the same pipeline, assuming the pipeline was built
+    with one of them in the first place.
+
+    Creating and then using a new \c srb2 that is very similar to \c srb with
+    the exception of referencing another texture could be implemented like the
+    following:
+
+    \badcode
+        srb2 = rhi->newShaderResourceBindings();
+        QVector<QRhiShaderResourceBinding> bindings = srb->bindings();
+        bindings[1].stex.tex = anotherTexture;
+        srb2->setBindings(bindings);
+        srb2->build();
+        ...
+        cb->setGraphicsPipeline(ps, srb2);
+    \endcode
  */
 
 /*!

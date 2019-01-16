@@ -150,7 +150,7 @@ QT_BEGIN_NAMESPACE
         ubuf = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 256);
         ubuf->build();
 
-        srb = m_r->newShaderResourceBindings()
+        srb = rhi->newShaderResourceBindings()
         srb->setBindings({
             QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, ubuf)
         });
@@ -620,6 +620,20 @@ QT_BEGIN_NAMESPACE
     \class QRhiRenderBuffer
     \inmodule QtRhi
     \brief Renderbuffer resource.
+
+    Renderbuffers cannot be sampled or read but have some benefits over
+    textures in some cases:
+
+    A DepthStencil renderbuffer may be lazily allocated and be backed by
+    transient memory with some APIs. On some platforms this may mean the
+    depth/stencil buffer uses no physical backing at all.
+
+    Color renderbuffers are useful since QRhi::MultisampleRenderBuffer may be
+    supported even when QRhi::MultisampleTexture is not.
+
+    How the renderbuffer is implemented by a backend is not exposed to the
+    applications. In some cases it may be backed by ordinary textures, while in
+    others there may be a different kind of native resource used.
  */
 
 /*!
@@ -669,6 +683,25 @@ QT_BEGIN_NAMESPACE
     \class QRhiTextureRenderTarget
     \inmodule QtRhi
     \brief Texture render target resource.
+
+    A texture render target allows rendering into one or more textures,
+    optionally with a depth texture or depth/stencil renderbuffer.
+
+    \note Textures used in combination with QRhiTextureRenderTarget must be
+    created with the QRhiTexture::RenderTarget flag.
+
+    The simplest example of creating a render target with a texture as its
+    single color attachment:
+
+    \badcode
+        texture = rhi->newTexture(QRhiTexture::RGBA8, size, 1, QRhiTexture::RenderTarget);
+        texture->build();
+        rt = rhi->newTextureRenderTarget({ texture });
+        rp = rt->newCompatibleRenderPassDescriptor();
+        rt->setRenderPassDescriptor(rt);
+        rt->build();
+        // rt can now be used with beginPass()
+    \endcode
  */
 
 /*!
@@ -842,6 +875,131 @@ QT_BEGIN_NAMESPACE
     \class QRhiSwapChain
     \inmodule QtRhi
     \brief Swapchain resource.
+
+    A swapchain enables presenting rendering results to a surface. A swapchain
+    is typically backed by a set of color buffers. Of these, one is displayed
+    at a time.
+
+    Below is a typical pattern for creating and managing a swapchain and some
+    associated resources in order to render onto a QWindow:
+
+    \badcode
+      void init()
+      {
+          sc = rhi->newSwapChain();
+          ds = rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
+                                    QSize(), // no need to set the size yet
+                                    1,
+                                    QRhiRenderBuffer::UsedWithSwapChainOnly);
+          sc->setWindow(window);
+          sc->setDepthStencil(ds);
+          rp = sc->newCompatibleRenderPassDescriptor();
+          sc->setRenderPassDescriptor(rp);
+          resizeSwapChain();
+      }
+
+      void resizeSwapChain()
+      {
+          const QSize outputSize = sc->surfacePixelSize();
+          ds->setPixelSize(outputSize);
+          ds->build();
+          hasSwapChain = sc->buildOrResize();
+      }
+
+      void render()
+      {
+          if (!hasSwapChain || notExposed)
+              return;
+
+          if (sc->currentPixelSize() != sc->surfacePixelSize() || newlyExposed) {
+              resizeSwapChain();
+              if (!hasSwapChain)
+                  return;
+              newlyExposed = false;
+          }
+
+          rhi->beginFrame(sc);
+          // ...
+          rhi->endFrame(sc);
+      }
+    \endcode
+
+    Avoid relying on QWindow resize events to resize swapchains, especially
+    considering that surface sizes may not always fully match the QWindow
+    reported dimensions. The safe, cross-platform approach is to do the check
+    via surfacePixelSize() whenever starting a new frame.
+
+    Releasing the swapchain must happen while the QWindow and the underlying
+    native window is fully up and running. Building on the previous example:
+
+    \badcode
+        void releaseSwapChain()
+        {
+            sc->release();
+            hasSwapChain = false;
+        }
+
+        // assuming Window is our QWindow subclass
+        bool Window::event(QEvent *e)
+        {
+            switch (e->type()) {
+            case QEvent::UpdateRequest: // for QWindow::requestUpdate()
+                render();
+                break;
+            case QEvent::PlatformSurface:
+                if (static_cast<QPlatformSurfaceEvent *>(e)->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed)
+                    releaseSwapChain();
+                break;
+            default:
+                break;
+            }
+            return QWindow::event(e);
+        }
+    \endcode
+
+    Initializing the swapchain and starting to render the first frame cannot
+    start at any time. The safe, cross-platform approach is to rely on expose
+    events. QExposeEvent is a loosely specified event that is sent whenever a
+    window gets mapped, obscured, and resized, depending on the platform.
+
+    \badcode
+        void Window::exposeEvent(QExposeEvent *)
+        {
+            // initialize and start rendering when the window becomes usable for graphics purposes
+            if (isExposed() && !running) {
+                running = true;
+                init();
+                render();
+            }
+
+            // stop pushing frames when not exposed or size becomes 0
+            if ((!isExposed() || (hasSwapChain && sc->surfacePixelSize().isEmpty())) && running)
+                notExposed = true;
+
+            // continue when exposed again and the surface has a valid size
+            if (isExposed() && running && notExposed && !sc->surfacePixelSize().isEmpty()) {
+                notExposed = false;
+                newlyExposed = true;
+                render();
+            }
+        }
+    \endcode
+
+    Once the rendering has started, a simple way to request a new frame is
+    QWindow::requestUpdate(). While on some platforms this is merely a small
+    timer, on others it has a specific implementation: for instance on macOS or
+    iOS it may be backed by
+    \l{https://developer.apple.com/documentation/corevideo/cvdisplaylink?language=objc}{CVDisplayLink}.
+    The example above is already prepared for update requests by handling
+    QEvent::UpdateRequest.
+
+    While acting as a QRhiRenderTarget, QRhiSwapChain also manages a
+    QRhiCommandBuffer. Calling QRhi::endFrame() submits the recorded commands
+    and also enqueues a \c present request. The default behavior is to do this
+    with a swap interval of 1, meaning synchronizing to the display's vertical
+    refresh is enabled. Thus the rendering thread calling beginFrame() and
+    endFrame() will get throttled to vsync. On some backends this can be
+    disabled by passing QRhiSwapChain:NoVSync in flags().
  */
 
 /*!
@@ -873,7 +1031,7 @@ QT_BEGIN_NAMESPACE
     Not creatable by applications at the moment. The only ways to obtain a
     valid QRhiCommandBuffer are to get it from the targeted swapchain via
     QRhiSwapChain::currentFrameCommandBuffer(), or, in case of rendering
-    compeletely offscreen, initializing one via QRhi::beginOffscreenFrame().
+    completely offscreen, initializing one via QRhi::beginOffscreenFrame().
  */
 
 /*!
@@ -885,9 +1043,30 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    \typedef QRhiCommandBuffer::VertexInput
+
+    Synonym for QPair<QRhiBuffer *, quint32>. The second entry is an offset in
+    the buffer specified by the first.
+*/
+
+/*!
     \class QRhiResourceUpdateBatch
     \inmodule QtRhi
     \brief Records upload and copy type of operations.
+
+    With QRhi it is no longer possible to perform copy type of operations at
+    arbitrary times. Instead, all such operations are recorded into batches
+    that are then passed, most commonly, to QRhiCommandBuffer::beginPass().
+    What then happens under the hood is hidden from the application: the
+    underlying implementations can defer and implement these operations in
+    various different ways.
+
+    A resource update batch owns no graphics resources and does not perform any
+    actual operations on its own. It should rather be viewed as a command
+    buffer for update, upload, and copy type of commands.
+
+    To get an available, empty batch from the pool, call
+    QRhi::nextResourceUpdateBatch().
  */
 
 /*!
@@ -895,37 +1074,99 @@ QT_BEGIN_NAMESPACE
     \internal
  */
 
+/*!
+    \internal
+ */
 QRhiResource::QRhiResource(QRhiImplementation *rhi_)
     : rhi(rhi_)
 {
 }
 
+/*!
+   Destructor.
+ */
 QRhiResource::~QRhiResource()
 {
 }
 
+/*!
+    \fn void QRhiResource::release()
+
+    Releases the underlying native graphics resources. Safe to call multiple
+    times, subsequent invocations will be a no-op then.
+
+    Once release() is called, the QRhiResource instance can be reused, by
+    calling the appropriate \c build() function again, or destroyed.
+ */
+
+/*!
+    Releases native graphics resources, if there is any, and destroys the
+    QRhiResource. Equivalent to \c{r->release(); delete r; }.
+ */
 void QRhiResource::releaseAndDestroy()
 {
     release();
     delete this;
 }
 
+/*!
+    Returns the currently set object name. By default the name is empty.
+ */
 QByteArray QRhiResource::name() const
 {
     return objectName;
 }
 
+/*!
+    Sets a \a name for the object.
+
+    This has two uses: to get descriptive names for the native graphics
+    resources visible in graphics debugging tools, such as
+    \l{https://renderdoc.org/}{RenderDoc} and
+    \l{https://developer.apple.com/xcode/}{XCode}, and in the output stream of
+    QRhiProfiler.
+
+    When it comes to naming native objects by relaying the name via the
+    appropriate graphics API, note that the name is ignored when
+    QRhi::DebugMarkers are not supported, and may, depending on the backend,
+    also be ignored when QRhi::EnableDebugMarkers is not set.
+
+    \note The name may be ignored for objects other than buffers,
+    renderbuffers, and textures, depending on the backend.
+
+    \note The name may be modified. For slotted resources, such as a QRhiBuffer
+    backed by multiple native buffers, QRhi will append a suffix to make the
+    underlying native buffers easily distinguishable from each other.
+ */
 void QRhiResource::setName(const QByteArray &name)
 {
     objectName = name;
+    objectName.replace(',', '_'); // cannot contain comma for QRhiProfiler
 }
 
+/*!
+    \internal
+ */
 QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
     : QRhiResource(rhi),
       m_type(type_), m_usage(usage_), m_size(size_)
 {
 }
 
+/*!
+    \fn bool QRhiBuffer::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \internal
+ */
 QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
                                    int sampleCount_, Flags flags_)
     : QRhiResource(rhi),
@@ -933,6 +1174,20 @@ QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QS
 {
 }
 
+/*!
+    \fn bool QRhiRenderBuffer::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \internal
+ */
 QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
                          int sampleCount_, Flags flags_)
     : QRhiResource(rhi),
@@ -940,17 +1195,50 @@ QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &p
 {
 }
 
+/*!
+    \fn bool QRhiTexture::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \return a pointer to a backend-specific QRhiNativeHandles subclass, such as
+    QRhiVulkanTextureNativeHandles. The returned value is null when exposing
+    the underlying native resources is not supported by the backend.
+ */
 const QRhiNativeHandles *QRhiTexture::nativeHandles()
 {
     return nullptr;
 }
 
+/*!
+    Similar to build() except that no new native textures are created. Instead,
+    the texture from \a src is used.
+
+    // Calling this instead of build() allows importing an existing native
+    // texture object (must belong to the same device or a sharing context).
+    // Note that format, pixelSize, etc. must still be set correctly (typically
+    // via QRhi::newTexture()). Ownership of the native resource is not taken.
+
+    \note QRhiTexture does not take ownership of the texture object. release()
+    does not free the object or any associated memory.
+
+    \sa QRhiVulkanTextureNativeHandles
+ */
 bool QRhiTexture::buildFrom(const QRhiNativeHandles *src)
 {
     Q_UNUSED(src);
     return false;
 }
 
+/*!
+    \internal
+ */
 QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
                          Filter magFilter_, Filter minFilter_, Filter mipmapMode_,
                          AddressMode u_, AddressMode v_, AddressMode w_)
@@ -960,21 +1248,54 @@ QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
 {
 }
 
+/*!
+    \internal
+ */
 QRhiRenderPassDescriptor::QRhiRenderPassDescriptor(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
+/*!
+    \internal
+ */
 QRhiRenderTarget::QRhiRenderTarget(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
+/*!
+    \fn QRhiRenderTarget::Type QRhiRenderTarget::type() const
+
+    \return the type of the render target.
+ */
+
+/*!
+    \fn QSize QRhiRenderTarget::sizeInPixels() const
+
+    \return the size in pixels.
+ */
+
+/*!
+    \fn float QRhiRenderTarget::devicePixelRatio() const
+
+    \return the device pixel ratio. For QRhiTextureRenderTarget this is always
+    1. For targets retrieved from a QRhiSwapChain the value reflects the
+    \l{QWindow::devicePixelRatio()}{device pixel ratio} of the targeted
+    QWindow.
+ */
+
+/*!
+    \internal
+ */
 QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhiImplementation *rhi)
     : QRhiRenderTarget(rhi)
 {
 }
 
+/*!
+    \internal
+ */
 QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
                                                  const QRhiTextureRenderTargetDescription &desc_,
                                                  Flags flags_)
@@ -984,6 +1305,53 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
 {
 }
 
+/*!
+    \fn QRhiRenderPassDescriptor *QRhiTextureRenderTarget::newCompatibleRenderPassDescriptor()
+
+    \return a new QRhiRenderPassDescriptor that is compatible with this render
+    target.
+
+    The returned value is used in two ways: it can be passed to
+    setRenderPassDescriptor() and
+    QRhiGraphicsPipeline::setRenderPassDescriptor(). A render pass descriptor
+    describes the attachments (color, depth/stencil) and the load/store
+    behavior that can be affected by flags(). A QRhiGraphicsPipeline can only
+    be used in combination with a render target that has the same
+    QRhiRenderPassDescriptor set.
+
+    Two QRhiTextureRenderTarget instances can share the same render pass
+    descriptor as long as they have the same number and type of attachments.
+    The associated QRhiTexture or QRhiRenderBuffer instances are not part of
+    the render pass descriptor so those can differ in the two
+    QRhiTextureRenderTarget intances.
+
+    \sa build()
+ */
+
+/*!
+    \fn bool QRhiTextureRenderTarget::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \note renderPassDescriptor() must be set before calling build(). To obtain
+    a QRhiRenderPassDescriptor compatible with the render target, call
+    newCompatibleRenderPassDescriptor() before build() but after setting all
+    other parameters, such as description() and flags(). To save resources,
+    reuse the same QRhiRenderPassDescriptor with multiple
+    QRhiTextureRenderTarget instances, whenever possible. Sharing the same
+    render pass descriptor is only possible when the render targets have the
+    same number and type of attachments (the actual textures can differ) and
+    the same flags.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \internal
+ */
 QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
@@ -1045,16 +1413,108 @@ QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
     return b;
 }
 
+/*!
+    \internal
+ */
 QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
+/*!
+    \fn bool QRhiGraphicsPipeline::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \internal
+ */
 QRhiSwapChain::QRhiSwapChain(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
 }
 
+/*!
+    \fn QObject *QRhiSwapChain::target() const
+    \internal
+ */
+
+/*!
+    \fn void QRhiSwapChain::setTarget(QObject *obj)
+    \internal
+ */
+
+/*!
+    \fn QSize QRhiSwapChain::currentPixelSize() const
+
+    \return the size with which the swapchain was last successfully built. Use
+    this to decide if buildOrResize() needs to be called again: if
+    \c{currentPixelSize() != surfacePixelSize()} then the swapchain needs to be
+    resized.
+
+    \sa surfacePixelSize()
+  */
+
+/*!
+    \fn QSize QRhiSwapChain::surfacePixelSize()
+
+    \return The size of the window's associated surface or layer. Do not assume
+    this is the same as QWindow::size() * QWindow::devicePixelRatio().
+
+    Can be called before buildOrResize() (but with window() already set), which
+    allows setting the correct size for the depth-stencil buffer that is then
+    used together with the swapchain's color buffers. Also used in combination
+    with currentPixelSize() to detect size changes.
+
+    \sa currentPixelSize()
+  */
+
+/*!
+    \fn QRhiCommandBuffer *QRhiSwapChain::currentFrameCommandBuffer()
+
+    \return a command buffer on which rendering commands can be recorded. Only
+    valid within a Rhi::beginFrame() - QRhi::endFrame() block where
+    beginFrame() was called with this swapchain.
+
+    \note the value must not be cached and reused between frames
+*/
+
+/*!
+    \fn QRhiRenderTarget *QRhiSwapChain::currentFrameRenderTarget()
+
+    \return a render target that can used with beginPass() in order to render
+    the the swapchain's current backbuffer. Only valid within a
+    QRhi::beginFrame() - QRhi::endFrame() block where beginFrame() was called
+    with this swapchain.
+
+    \note the value must not be cached and reused between frames
+ */
+
+/*!
+    \fn bool QRhiSwapChain::buildOrResize()
+
+    Creates the swapchain if not already done and resizes the swapchain buffers
+    to match the current size of the targeted surface. Call this whenever the
+    size of the target surface is different than before.
+
+    \note call release() only when the swapchain needs to be released
+    completely, typically upon
+    QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed. To perform resizing, just
+    call buildOrResize().
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \internal
+ */
 QRhiCommandBuffer::QRhiCommandBuffer(QRhiImplementation *rhi)
     : QRhiResource(rhi)
 {
@@ -1342,6 +1802,9 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
     return nullptr;
 }
 
+/*!
+    \internal
+ */
 QRhiResourceUpdateBatch::QRhiResourceUpdateBatch(QRhiImplementation *rhi)
     : d(new QRhiResourceUpdateBatchPrivate)
 {
@@ -1354,51 +1817,195 @@ QRhiResourceUpdateBatch::~QRhiResourceUpdateBatch()
     delete d;
 }
 
+/*!
+    Returns the batch to the pool. This should only be used when the batch is
+    not passed to one of QRhiCommandBuffer::beginPass(),
+    QRhiCommandBuffer::endPass(), or QRhiCommandBuffer::resourceUpdate()
+    because these implicitly call release().
+
+    \note QRhiResourceUpdateBatch instances must never by \c deleted by
+    applications.
+ */
 void QRhiResourceUpdateBatch::release()
 {
     d->free();
 }
 
+/*!
+    Copies all queued operations from the \a other batch into this one.
+
+    \note \a other is not changed in any way, typically it will still need a
+    release()
+
+    This allows for a convenient pattern where resource updates that are
+    already known during the initialization step are collected into a batch
+    that is then merged into another when starting to first render pass later
+    on:
+
+    \badcode
+    void init()
+    {
+        ...
+        initialUpdates = rhi->nextResourceUpdateBatch();
+        initialUpdates->uploadStaticBuffer(vbuf, vertexData);
+        initialUpdates->uploadStaticBuffer(ibuf, indexData);
+        ...
+    }
+
+    void render()
+    {
+        ...
+        QRhiResourceUpdateBatch *resUpdates = rhi->nextResourceUpdateBatch();
+        if (initialUpdates) {
+            resUpdates->merge(initialUpdates);
+            initialUpdates->release();
+            initialUpdates = nullptr;
+        }
+        resUpdates->updateDynamicBuffer(...);
+        ...
+        cb->beginPass(rt, clearCol, clearDs, resUpdates);
+    }
+    \endcode
+ */
 void QRhiResourceUpdateBatch::merge(QRhiResourceUpdateBatch *other)
 {
     d->merge(other->d);
 }
 
+/*!
+    Enqueues updating a region of a QRhiBuffer \a buf created with the type
+    QRhiBuffer::Dynamic.
+
+    The region is specified \a offset and \a size. The actual bytes to write
+    are specified by \a data which must have at least \a size bytes available.
+    \a data can safely be destroyed or changed once this function returns since
+    it takes a copy internally as necessary.
+
+    \note If host writes are involved, which in case of updateDynamicBuffer()
+    typically are as such buffers are backed by host visible memory with most
+    backend, they may accumulate within a frame. Thus pass 1 reading a region
+    changed by a batch passed to pass 2 may see the changes specified in pass
+    2's update batch.
+
+    \note QRhi transparently manages double buffering in order to prevent
+    stalling the graphics pipeline. The fact that a QRhiBuffer may have
+    multiple native underneath can be safely ignored when using the QRhi and
+    QRhiResourceUpdateBatch.
+ */
 void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
 {
     d->dynamicBufferUpdates.append({ buf, offset, size, data });
 }
 
+/*!
+    Enqueues updating a region of a QRhiBuffer \a buf created with the type
+    QRhiBuffer::Immutable or QRhiBuffer::Static.
+
+    The region is specified \a offset and \a size. The actual bytes to write
+    are specified by \a data which must have at least \a size bytes available.
+    \a data can safely be destroyed or changed once this function returns since
+    it takes a copy internally as necessary.
+ */
 void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
 {
     d->staticBufferUploads.append({ buf, offset, size, data });
 }
 
+/*!
+    Enqueues updating the entire QRhiBuffer \a buf created with the type
+    QRhiBuffer::Immutable or QRhiBuffer::Static.
+ */
 void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *data)
 {
     d->staticBufferUploads.append({ buf, 0, 0, data });
 }
 
+/*!
+    Enqueues uploading the image data for one or more mip levels in one or more
+    layers of the texture \a tex.
+
+    The details of the copy (source QImage or compressed texture data, regions,
+    target layers and levels) are described in \a desc.
+ */
 void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc)
 {
     d->textureUploads.append({ tex, desc });
 }
 
+/*!
+    Enqueues uploading the image data for mip level 0 of layer 0 of the texture
+    \a tex.
+
+    \a tex must have an uncompressed format. Its format must also be compatible
+    with the QImage::format() of \a image. The source data is given in \a
+    image.
+ */
 void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &image)
 {
     uploadTexture(tex, {{{{{ image }}}}});
 }
 
+/*!
+   Enqueues a texture-to-texture copy operation from \a src into \a dst as
+   described by \a desc.
+
+   \note The source texture \a src must be created with
+   QRhiTexture::UsedAsTransferSource.
+ */
 void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc)
 {
     d->textureCopies.append({ dst, src, desc });
 }
 
+/*!
+   Enqueues a texture-to-host copy operation as described by \a rb.
+
+   Normally \a rb will specify a QRhiTexture as the source. However, when the
+   swapchain in the current frame was created with
+   QRhiSwapChain::UsedAsTransferSource, it can also be the source of the
+   readback. For this, leave the texture set to null in \a rb.
+
+   Unlike other operations, the results here need to be processed by the
+   application. Therefore, \a result provides not just the data but also a
+   callback as operations on the batch are asynchronous by nature:
+
+   \badcode
+      beginFrame(sc);
+      beginPass
+      ...
+      QRhiReadbackResult *rbResult = new QRhiReadbackResult;
+      rbResult->completed = [rbResult] {
+          {
+              QImage::Format fmt = rbResult->format == QRhiTexture::BGRA8 ? QImage::Format_ARGB32_Premultiplied
+                                                                          : QImage::Format_RGBA8888_Premultiplied;
+              const uchar *p = reinterpret_cast<const uchar *>(rbResult->data.constData());
+              QImage image(p, rbResult->pixelSize.width(), rbResult->pixelSize.height(), fmt);
+              image.save("result.png");
+          }
+          delete rbResult;
+      };
+      u = nextResourceUpdateBatch();
+      QRhiReadbackDescription rb; // no texture -> uses the current backbuffer of sc
+      u->readBackTexture(rb, rbResult);
+      endPass(u);
+      endFrame(sc);
+   \endcode
+
+   \note The texture must be created with QRhiTexture::UsedAsTransferSource.
+
+   \note Multisample textures cannot be read back.
+ */
 void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
     d->textureReadbacks.append({ rb, result });
 }
 
+/*!
+   Enqueues a mipmap generation operation for the texture \a tex.
+
+   \note The texture must be created with QRhiTexture::MipMapped and
+   QRhiTexture::UsedWithGenerateMips.
+ */
 void QRhiResourceUpdateBatch::generateMips(QRhiTexture *tex)
 {
     d->textureMipGens.append(QRhiResourceUpdateBatchPrivate::TextureMipGen(tex));
@@ -1412,6 +2019,19 @@ void QRhiResourceUpdateBatch::prepareTextureForUse(QRhiTexture *tex, TexturePrep
     d->texturePrepares.append({ tex, flags });
 }
 
+/*!
+   \return an available, empty batch to which copy type of operations can be
+   recorded.
+
+   \note the return value is not owned by the caller and must never be
+   destroyed. Instead, the batch is returned the the pool for reuse by passing
+   it to QRhiCommandBuffer::beginPass(), QRhiCommandBuffer::endPass(), or
+   QRhiCommandBuffer::resourceUpdate(), or by calling
+   QRhiResourceUpdateBatch::release() on it.
+
+   \note Can be called outside beginFrame() - endFrame() as well since a batch
+   instance just collects data on its own, it does not perform any operations.
+ */
 QRhiResourceUpdateBatch *QRhi::nextResourceUpdateBatch()
 {
     auto nextFreeBatch = [this]() -> QRhiResourceUpdateBatch * {
@@ -1468,11 +2088,48 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
     texturePrepares += other->texturePrepares;
 }
 
+/*!
+    Sometimes committing resource updates is necessary without starting a
+    render pass. Not often needed, updates should typically be passed to
+    beginPass (or endPass, in case of readbacks) instead.
+
+    \note Cannot be called inside a pass.
+ */
 void QRhiCommandBuffer::resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates)
 {
     rhi->resourceUpdate(this, resourceUpdates);
 }
 
+/*!
+    Records starting a new render pass targeting the render target \a rt.
+
+    \a resourceUpdates, when not null, specifies a resource update batch that
+    is to be committed and then released.
+
+    The color and depth/stencil buffers of the render target are normally
+    cleared. The clear values are specified in \a colorClearValue and \a
+    depthStencilClearValue. The exception is when the render target was created
+    with QRhiTextureRenderTarget::PreserveColorContents and/or
+    QRhiTextureRenderTarget::PreserveDepthStencilContents. The clear values are
+    ignored then.
+
+    \note Enabling preserved color or depth contents leads to decreased
+    performance depending on the underlying hardware. Mobile GPUs with tiled
+    architecture benefit from not having to reload the previous contents into
+    the tile buffer. Similarly, a QRhiTextureRenderTarget with a QRhiTexture as
+    the depth buffer is less efficient than a QRhiRenderBuffer since using a
+    depth texture triggers requiring writing the data out to it, while with
+    renderbuffers this is not needed (as the API does not allow sampling or
+    reading from a renderbuffer).
+
+    \note Do not assume that any state or resource bindings persist between
+    passes.
+
+    \note The QRhiCommandBuffer's \c set and \c draw functions can only be
+    called inside a pass. Also, with the exception of setGraphicsPipeline(),
+    they expect to have a pipeline set already on the command buffer.
+    Unspecified issues may arise otherwise, depending on the backend.
+ */
 void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
                                   const QRhiColorClearValue &colorClearValue,
                                   const QRhiDepthStencilClearValue &depthStencilClearValue,
@@ -1481,17 +2138,102 @@ void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
     rhi->beginPass(this, rt, colorClearValue, depthStencilClearValue, resourceUpdates);
 }
 
+/*!
+    Records ending the current render pass.
+
+    \a resourceUpdates, when not null, specifies a resource update batch that
+    is to be committed and then released.
+ */
 void QRhiCommandBuffer::endPass(QRhiResourceUpdateBatch *resourceUpdates)
 {
     rhi->endPass(this, resourceUpdates);
 }
 
+/*!
+    Records setting a new graphics pipeline and shader resource binding
+    collection.
+
+    The pipeline is specified by \a ps. \a srb can be null in which case the
+    pipeline's associated QRhiGraphicsPipeline::shaderResourceBindings() is
+    used. When \a srb is specified, the layout (number of bindings, the type
+    and binding number of each binding) must fully match the
+    QRhiShaderResourceBindings that was associated with the pipeline upon
+    calling QRhiGraphicsPipeline::build().
+
+    There are cases when a seemingly unnecessary setGraphicsPipeline() call is
+    mandatory: when rebuilding a resource referenced from \a srb, for example
+    changing the size of a QRhiBuffer followed by a QRhiBuffer::build(), this
+    is the place where associated native objects (such as descriptor sets in
+    case of Vulkan) are updated to refer to the current native resources that
+    back the QRhiBuffer, QRhiTexture, QRhiSampler objects referenced from \a
+    srb. In this case setGraphicsPipeline() must be called even if \a ps and \a
+    srb are the same as in the last call.
+
+    QRhi will optimize out unneccessary invocations within a pass (taking the
+    conditions described above into account), so therefore overoptimizing to
+    avoid calls to this function is not necessary on the applications' side.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
 void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps,
                                             QRhiShaderResourceBindings *srb)
 {
     rhi->setGraphicsPipeline(this, ps, srb);
 }
 
+/*!
+    Records vertex input bindings.
+
+    The index buffer used by subsequent drawIndexed() commands is specified by
+    \a indexBuf, \a indexOffset, and \a indexFormat. \a indexBuf can be set to
+    null when indexed drawing is not needed.
+
+    Vertex buffer bindings are batched. \a startBinding specifies the first
+    binding number. The recorded command then binds each buffer from \a
+    bindings to the binding point \c{startBinding + i} where \c i is the index
+    in \a bindings. Each element in \a bindings specifies a QRhiBuffer and an
+    offset.
+
+    Superfluous vertex input and index changes in the same pass are ignored
+    automatically with most backends and therefore applications do not need to
+    overoptimize to avoid calls to this function.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+
+    As a simple example, take a vertex shader with two inputs:
+
+    \badcode
+        layout(location = 0) in vec4 position;
+        layout(location = 1) in vec3 color;
+    \endcode
+
+    and assume we have the data available in interleaved format, using only 2
+    floats for position (so 5 floats per vertex: x, y, r, g, b). A QRhiGraphicsPipeline for
+    this shader can then be created using the input layout:
+
+    \badcode
+        QRhiVertexInputLayout inputLayout;
+        inputLayout.bindings = {
+            { 5 * sizeof(float) }
+        };
+        inputLayout.attributes = {
+            { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
+            { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
+        };
+    \endcode
+
+    Here there is one buffer binding (binding number 0), with two inputs
+    referencing it. When recording the pass, once the pipeline is set, the
+    vertex bindings can be specified simply like the following (using C++11
+    initializer syntax), assuming vbuf is the QRhiBuffer with all the
+    interleaved position+color data:
+
+    \badcode
+        cb->setVertexInput(0, { { vbuf, 0 } });
+    \endcode
+ */
 void QRhiCommandBuffer::setVertexInput(int startBinding, const QVector<VertexInput> &bindings,
                                        QRhiBuffer *indexBuf, quint32 indexOffset,
                                        IndexFormat indexFormat)
@@ -1499,32 +2241,101 @@ void QRhiCommandBuffer::setVertexInput(int startBinding, const QVector<VertexInp
     rhi->setVertexInput(this, startBinding, bindings, indexBuf, indexOffset, indexFormat);
 }
 
+/*!
+    Records setting the active viewport rectangle specified in \a viewport.
+
+    \note QRhi assumes OpenGL-style viewport coordinates, meaning x and y are
+    bottom-left.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
 void QRhiCommandBuffer::setViewport(const QRhiViewport &viewport)
 {
     rhi->setViewport(this, viewport);
 }
 
+/*!
+    Records setting the active scissor rectangle specified in \a scissor.
+
+    This can only be called when the bound pipeline has
+    QRhiGraphicsPipeline::UsesScissor set.
+
+    \note QRhi assumes OpenGL-style viewport coordinates, meaning x and y are
+    bottom-left.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
 void QRhiCommandBuffer::setScissor(const QRhiScissor &scissor)
 {
     rhi->setScissor(this, scissor);
 }
 
+/*!
+    Records setting the active blend constants to \a c.
+
+    This can only be called when the bound pipeline has
+    QRhiGraphicsPipeline::UsesBlendConstants set.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
 void QRhiCommandBuffer::setBlendConstants(const QVector4D &c)
 {
     rhi->setBlendConstants(this, c);
 }
 
+/*!
+    Records setting the active stencil reference value to \a refValue.
+
+    This can only be called when the bound pipeline has
+    QRhiGraphicsPipeline::UsesStencilRef set.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
 void QRhiCommandBuffer::setStencilRef(quint32 refValue)
 {
     rhi->setStencilRef(this, refValue);
 }
 
+/*!
+    Records a non-indexed draw.
+
+    The number of vertices is specified in \a vertexCount. For instanced
+    drawing set \a instanceCount to a value other than 1. \a firstVertex is
+    the index of the first vertex to draw. \a firstInstance is the instance ID
+    of the first instance to draw.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
 void QRhiCommandBuffer::draw(quint32 vertexCount,
                              quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
     rhi->draw(this, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
+/*!
+    Records an indexed draw.
+
+    The number of vertices is specified in \a indexCount. \a firstIndex is the
+    base index. The actual offset in the index buffer is given by
+    \c{indexOffset + firstIndex * n} where \c n is 2 or 4 depending on the
+    index element type. \c indexOffset is specified in setVertexInput().
+
+    \note The actual offset in the index buffer must be 4-byte aligned with
+    some backends.
+
+    For instanced drawing set \a instanceCount to a value other than 1. \a
+    firstInstance is the instance ID of the first instance to draw.
+
+    \a vertexOffset is added to the vertex index.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
 void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
                                     quint32 instanceCount, quint32 firstIndex,
                                     qint32 vertexOffset, quint32 firstInstance)
@@ -1532,16 +2343,45 @@ void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
     rhi->drawIndexed(this, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
+/*!
+    Records a named debug group on the command buffer. This is shown in
+    graphics debugging tools such as \l{https://renderdoc.org/}{RenderDoc} and
+    \l{https://developer.apple.com/xcode/}{XCode}. The end of the grouping is
+    indicated by debugMarkEnd().
+
+    \note Ignored when QRhi::DebugMarkers are not supported or
+    QRhi::EnableDebugMarkers is not set.
+
+    \note Can be called anywhere within the frame, both inside and outside of passes.
+ */
 void QRhiCommandBuffer::debugMarkBegin(const QByteArray &name)
 {
     rhi->debugMarkBegin(this, name);
 }
 
+/*!
+    Records the end of a debug group.
+
+    \note Ignored when QRhi::DebugMarkers are not supported or
+    QRhi::EnableDebugMarkers is not set.
+
+    \note Can be called anywhere within the frame, both inside and outside of passes.
+ */
 void QRhiCommandBuffer::debugMarkEnd()
 {
     rhi->debugMarkEnd(this);
 }
 
+/*!
+    Inserts a debug message \a msg into the command stream.
+
+    \note Ignored when QRhi::DebugMarkers are not supported or
+    QRhi::EnableDebugMarkers is not set.
+
+    \note With some backends debugMarkMsg() is only supported inside a pass and
+    is ignored when called outside a pass. With others it is recorded anywhere
+    within the frame.
+ */
 void QRhiCommandBuffer::debugMarkMsg(const QByteArray &msg)
 {
     rhi->debugMarkMsg(this, msg);
@@ -1660,16 +2500,31 @@ QRhiProfiler *QRhi::profiler()
     return &d->profiler;
 }
 
+/*!
+    \return a new graphics pipeline resource.
+
+    \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
+ */
 QRhiGraphicsPipeline *QRhi::newGraphicsPipeline()
 {
     return d->createGraphicsPipeline();
 }
 
+/*!
+    \return a new shader resource binding collection resource.
+
+    \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
+ */
 QRhiShaderResourceBindings *QRhi::newShaderResourceBindings()
 {
     return d->createShaderResourceBindings();
 }
 
+/*!
+    \return a new buffer with the specified \a type, \a usage, and \a size.
+
+    \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
+ */
 QRhiBuffer *QRhi::newBuffer(QRhiBuffer::Type type,
                             QRhiBuffer::UsageFlags usage,
                             int size)
@@ -1677,6 +2532,12 @@ QRhiBuffer *QRhi::newBuffer(QRhiBuffer::Type type,
     return d->createBuffer(type, usage, size);
 }
 
+/*!
+    \return a new renderbuffer with the specified \a type, \a pixelSize, \a
+    sampleCount, and \a flags.
+
+    \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
+ */
 QRhiRenderBuffer *QRhi::newRenderBuffer(QRhiRenderBuffer::Type type,
                                         const QSize &pixelSize,
                                         int sampleCount,
@@ -1685,6 +2546,12 @@ QRhiRenderBuffer *QRhi::newRenderBuffer(QRhiRenderBuffer::Type type,
     return d->createRenderBuffer(type, pixelSize, sampleCount, flags);
 }
 
+/*!
+    \return a new texture with the specified \a format, \a pixelSize, \a
+    sampleCount, and \a flags.
+
+    \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
+ */
 QRhiTexture *QRhi::newTexture(QRhiTexture::Format format,
                               const QSize &pixelSize,
                               int sampleCount,
@@ -1693,6 +2560,13 @@ QRhiTexture *QRhi::newTexture(QRhiTexture::Format format,
     return d->createTexture(format, pixelSize, sampleCount, flags);
 }
 
+/*!
+    \return a new sampler with the specified magnification filter \a magFilter,
+    minification filter \a minFilter, mipmapping mode \a mipmapMpde, and S/T/R
+    addressing modes \a u, \a v, and \a w.
+
+    \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
+ */
 QRhiSampler *QRhi::newSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter minFilter,
                               QRhiSampler::Filter mipmapMode,
                               QRhiSampler:: AddressMode u, QRhiSampler::AddressMode v, QRhiSampler::AddressMode w)
@@ -1700,37 +2574,144 @@ QRhiSampler *QRhi::newSampler(QRhiSampler::Filter magFilter, QRhiSampler::Filter
     return d->createSampler(magFilter, minFilter, mipmapMode, u, v, w);
 }
 
+/*!
+    \return a new texture render target with color and depth/stencil
+    attachments given in \a desc, and with the specified \a flags.
+
+    \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
+ */
+
 QRhiTextureRenderTarget *QRhi::newTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                       QRhiTextureRenderTarget::Flags flags)
 {
     return d->createTextureRenderTarget(desc, flags);
 }
 
+/*!
+    \return a new swapchain.
+
+    \sa QRhiResource::release(), QRhiSwapChain::buildOrResize()
+ */
 QRhiSwapChain *QRhi::newSwapChain()
 {
     return d->createSwapChain();
 }
 
+/*!
+    Starts a new frame targeting the next available buffer of \a swapChain.
+
+    The high level pattern of rendering into a QWindow using a swapchain:
+
+    \list
+
+    \li Create a swapchain.
+
+    \li Call QRhiSwapChain::buildOrResize() whenever the surface size is
+    different than before.
+
+    \li Call QRhiSwapChain::release() on
+    QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
+
+    \li Then on every frame:
+    \badcode
+       beginFrame(sc);
+       updates = nextResourceUpdateBatch();
+       updates->...
+       QRhiCommandBuffer *cb = sc->currentFrameCommandBuffer();
+       cb->beginPass(sc->currentFrameRenderTarget(), colorClear, dsClear, updates);
+       ...
+       cb->endPass();
+       ... // more passes as neccessary
+       endFrame(sc);
+    \endcode
+
+    \endlist
+
+    \sa endFrame()
+ */
 QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
 {
     return d->beginFrame(swapChain);
 }
 
+/*!
+    Ends, commits, and presents a frame that was started in the last
+    beginFrame() on \a swapChain.
+
+    Double (or triple) buffering is managed internally by the QRhiSwapChain and
+    QRhi.
+
+    \sa beginFrame()
+ */
 QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
 {
     return d->endFrame(swapChain);
 }
 
+/*!
+    Starts a new offscreen frame. Provides a command buffer suitable for
+    recording rendering commands in \a cb.
+
+    \note The QRhiCommandBuffer stored to *cb is not owned by the caller.
+
+    Rendering without a swapchain is possible as well. The typical use case is
+    to use it in completely offscreen applications, e.g. to generate image
+    sequences by rendering and reading back without ever showing a window.
+
+    Usage in on-screen applications (so beginFrame, endFrame,
+    beginOffscreenFrame, endOffscreenFrame, beginFrame, ...) is possible too
+    but it does reduce parallelism so it should be done only infrequently.
+
+    Offscreen frames do not let the CPU - potentially - generate another frame
+    while the GPU is still processing the previous one. This has the side
+    effect that if readbacks are scheduled, the results are guaranteed to be
+    available once endOffscreenFrame() returns. That is not the case with
+    frames targeting a swapchain.
+
+    The skeleton of rendering a frame without a swapchain and then reading the
+    frame contents back could look like the following:
+
+    \badcode
+          QRhiReadbackResult rbResult;
+          QRhiCommandBuffer *cb;
+          beginOffscreenFrame(&cb);
+          beginPass
+          ...
+          u = nextResourceUpdateBatch();
+          u->readBackTexture(rb, &rbResult);
+          endPass(u);
+          endOffscreenFrame();
+          // image data available in rbResult
+   \endcode
+
+   \sa endOffscreenFrame()
+ */
 QRhi::FrameOpResult QRhi::beginOffscreenFrame(QRhiCommandBuffer **cb)
 {
     return d->beginOffscreenFrame(cb);
 }
 
+/*!
+    Ends and waits for the offscreen frame.
+
+    \sa beginOffscreenFrame()
+ */
 QRhi::FrameOpResult QRhi::endOffscreenFrame()
 {
     return d->endOffscreenFrame();
 }
 
+/*!
+    Waits for any work on the graphics queue (where applicable) to complete,
+    then executes all deferred operations, like completing readbacks and
+    resource releases. Can be called inside and outside of a frame, but not
+    inside a pass. Inside a frame it implies submitting any work on the
+    command buffer.
+
+    \note Avoid this function. One case where it may be needed is when the
+    results of an enqueued readback in a swapchain-based frame are needed at a
+    fixed given point and so waiting for the results is desired.
+ */
 QRhi::FrameOpResult QRhi::finish()
 {
     return d->finish();

@@ -367,11 +367,6 @@ public:
     virtual void release() = 0;
     void releaseAndDestroy();
 
-    // This has two uses: to get names visible in graphics debugging tools and
-    // in the profiling output. Regarding the former, the name is ignored when
-    // DebugMarkers are not supported, and may be ignored when
-    // EnableDebugMarkers is not set. May also be ignored for objects other
-    // than buffers, renderbuffers, and textures, depending on the backend.
     QByteArray name() const;
     void setName(const QByteArray &name);
 
@@ -491,15 +486,7 @@ public:
     void setSampleCount(int s) { m_sampleCount = s; }
 
     virtual bool build() = 0;
-
-    // Returns a ptr to a QRhi<backend>TextureNativeHandles struct.
-    // Ownership of the native objects is not transfered.
     virtual const QRhiNativeHandles *nativeHandles();
-
-    // Calling this instead of build() allows importing an existing native
-    // texture object (must belong to the same device or a sharing context).
-    // Note that format, pixelSize, etc. must still be set correctly (typically
-    // via QRhi::newTexture()). Ownership of the native resource is not taken.
     virtual bool buildFrom(const QRhiNativeHandles *src);
 
 protected:
@@ -912,35 +899,12 @@ public:
     QObject *target() const { return m_target; }
     void setTarget(QObject *obj) { m_target = obj; }
 
-    // Returns the size with which the swapchain was last successfully built.
-    // Use this to decide if buildOrResize() needs to be called again: if
-    // currentPixelSize() != surfacePixelSize() then the swapchain needs to
-    // be resized.
     QSize currentPixelSize() const { return m_currentPixelSize; }
 
     virtual QRhiCommandBuffer *currentFrameCommandBuffer() = 0;
     virtual QRhiRenderTarget *currentFrameRenderTarget() = 0;
-
-    // The size of the window's associated surface or layer. Do not assume this
-    // is the same as size() * devicePixelRatio()! Can be called before
-    // buildOrResize() (with window set), which allows setting the correct size
-    // for the depth-stencil buffer that is then used together with the
-    // swapchain's color buffers. Also used in combination with
-    // currentPixelSize() to detect size changes.
     virtual QSize surfacePixelSize() = 0;
-
-    // To be called before build() with relevant parameters like depthStencil
-    // and sampleCount set. As an exception to the common rules, m_depthStencil
-    // is not required to be built yet. Note setRenderPassDescriptor(), that
-    // must still be called afterwards (but before buildOrResize()).
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
-
-    // As the name suggests, this is slightly different from the typical
-    // build+release pattern: buildOrResize - buildOrResize is not the same as
-    // buildOrResize - release - buildOrResize. A swapchain is often able to,
-    // depending on the underlying APIs, accomodate changed output sizes in a
-    // manner that is more efficient than a full destroy - create. So use the
-    // former when a window is resized.
     virtual bool buildOrResize() = 0;
 
 protected:
@@ -965,9 +929,6 @@ public:
         IndexUInt32
     };
 
-    // Sometimes committing the updates is necessary without starting a render
-    // pass. Not often needed, updates should typically be passed to beginPass
-    // (or endPass, in case of readbacks) instead. Cannot be called inside a pass.
     void resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates);
 
     void beginPass(QRhiRenderTarget *rt,
@@ -976,26 +937,9 @@ public:
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiResourceUpdateBatch *resourceUpdates = nullptr);
 
-    // The set* and draw* functions can only be called inside a pass. Also,
-    // (with the exception of setGraphicsPipeline) they expect to have a
-    // pipeline set already on the command buffer. Otherwise, unspecified
-    // issues may arise, depending on the backend.
-    //
-    // Do not assume that any bindings or states persist between passes.
-
-    // When specified, srb can be different from ps' srb but the layouts must
-    // match. Basic tracking is included: no command is added to the cb when
-    // the pipeline or srb are the same as in the last call in the same frame;
-    // resource bindings are updated automatically at this point if a
-    // referenced buffer, texture, etc. has a new underlying native resource
-    // (due to rebuilding since the creation of the srb) - hence no need to
-    // rebuild the srb in case, for example, a QRhiBuffer is "resized" via
-    // setSize()+build().
     void setGraphicsPipeline(QRhiGraphicsPipeline *ps,
                              QRhiShaderResourceBindings *srb = nullptr);
 
-    // Some level of smartness can be expected from most backends: superfluous
-    // vertex input and index changes in the same pass are ignored automatically.
     using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
     void setVertexInput(int startBinding, const QVector<VertexInput> &bindings,
                         QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,
@@ -1011,19 +955,14 @@ public:
               quint32 firstVertex = 0,
               quint32 firstInstance = 0);
 
-    // final offset (indexOffset + firstIndex * n) must be 4 byte aligned with some backends
     void drawIndexed(quint32 indexCount,
                      quint32 instanceCount = 1,
                      quint32 firstIndex = 0,
                      qint32 vertexOffset = 0,
                      quint32 firstInstance = 0);
 
-    // Ignored when DebugMarkers are not supported or EnableDebugMarkers is not set.
-    // debugMarkBegin/End can be called both inside and outside a pass.
     void debugMarkBegin(const QByteArray &name);
     void debugMarkEnd();
-    // With some backends debugMarkMsg is only supported inside a pass and is
-    // ignored when called outside a begin/endPass.
     void debugMarkMsg(const QByteArray &msg);
 
 protected:
@@ -1033,37 +972,13 @@ protected:
 
 struct Q_RHI_EXPORT QRhiReadbackResult
 {
-    /*
-      When doing a readback after a pass inside a begin-endFrame (not
-      offscreen), the data may only be available in a future frame. Hence the
-      completed callback:
-          beginFrame(sc);
-          beginPass
-          ...
-          QRhiReadbackResult *rbResult = new QRhiReadbackResult;
-          rbResult->completed = [rbResult] {
-              {
-                  QImage::Format fmt = rbResult->format == QRhiTexture::BGRA8 ? QImage::Format_ARGB32_Premultiplied
-                                                                              : QImage::Format_RGBA8888_Premultiplied;
-                  const uchar *p = reinterpret_cast<const uchar *>(rbResult->data.constData());
-                  QImage image(p, rbResult->pixelSize.width(), rbResult->pixelSize.height(), fmt);
-                    ...
-              }
-              delete rbResult;
-          };
-          u = nextResourceUpdateBatch();
-          QRhiReadbackDescription rb; // no texture -> backbuffer
-          u->readBackTexture(rb, rbResult);
-          endPass(u);
-          endFrame(sc);
-     */
     std::function<void()> completed = nullptr;
     QRhiTexture::Format format;
     QSize pixelSize;
     QByteArray data;
 }; // non-movable due to the std::function
 
-class Q_RHI_EXPORT QRhiResourceUpdateBatch // sort of a command buffer for copy type of operations
+class Q_RHI_EXPORT QRhiResourceUpdateBatch
 {
 public:
     enum TexturePrepareFlag {
@@ -1075,25 +990,11 @@ public:
 #endif
 
     ~QRhiResourceUpdateBatch();
-    // Puts the batch back to the pool without any processing.
+
     void release();
 
-    // Applications do not have to defer all upload preparation to the first
-    // frame: an update batch can be prepared in advance during initialization,
-    // and afterwards, if needed, merged into another that is then submitted to
-    // beginPass(). (nb the one we merged from must be release()'d manually)
     void merge(QRhiResourceUpdateBatch *other);
 
-    // None of these execute anything, processing is deferred. What exactly
-    // then happens underneath is hidden from the applications. The caller is
-    // free to destroy or reuse the data or image right after returning from
-    // the functions.
-    //
-    // Note: Updates involving host writes - typically the dynamic buffer
-    // updates - may accumulate within a frame. Thus pass 1 reading a region
-    // changed by a batch passed to pass 2 may see the changes specified in
-    // pass 2's update batch.
-    //
     void updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
@@ -1103,8 +1004,6 @@ public:
     void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
     void generateMips(QRhiTexture *tex);
 
-    // This is not normally needed, textures that have an upload or are used
-    // with a TextureRenderTarget will be fine without it. May be more relevant later.
     void prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags);
 
 private:
@@ -1167,50 +1066,13 @@ public:
 
     static QRhi *create(Implementation impl, QRhiInitParams *params, Flags flags = Flags());
 
-    /*
-       The underlying graphics resources are created when calling build() and
-       put on the release queue by release() (so this is safe even when the
-       resource is used by the still executing/pending frame(s)).
-
-       The QRhi* instance itself is not destroyed by the release and it is safe
-       to destroy it right away after calling release().
-
-       Changing any value needs explicit release and rebuilding of the
-       underlying resource before it can take effect.
-
-       res->build(); <change something>; res->release(); res->build(); ...
-       is therefore perfectly valid and can be used to recreate things (when
-       buffer or texture size changes f.ex.)
-
-       In addition, just doing res->build(); ...; res->build() is valid too and
-       has the same effect due to an implicit release() call made by build()
-       when invoked on an object with valid resources underneath.
-     */
-
     QRhiGraphicsPipeline *newGraphicsPipeline();
     QRhiShaderResourceBindings *newShaderResourceBindings();
 
-    // Buffers are immutable like other resources but the underlying data can
-    // change. (its size cannot) Having multiple frames in flight is handled
-    // transparently, with multiple allocations, recording updates, etc.
-    // internally. The underlying memory type may differ for static and dynamic
-    // buffers. For best performance, static buffers may be copied to device
-    // local (not necessarily host visible) memory via a staging (host visible)
-    // buffer. Hence separate update-dynamic and upload-static operations.
     QRhiBuffer *newBuffer(QRhiBuffer::Type type,
                           QRhiBuffer::UsageFlags usage,
                           int size);
 
-    // To be used for depth-stencil when no access is needed afterwards.
-    // Transient image, backed by lazily allocated memory (on Vulkan at least,
-    // ideal for tiled GPUs). May also be a dummy internally depending on the
-    // backend and the flags (OpenGL, where the winsys interface provides the
-    // depth-stencil buffer via the window surface).
-    //
-    // Color is also supported. With some gfx apis (GL) this is different from
-    // textures. (cannot be sampled, but can be rendered to) This becomes
-    // important when doing msaa offscreen and the gfx api has no multisample
-    // textures.
     QRhiRenderBuffer *newRenderBuffer(QRhiRenderBuffer::Type type,
                                       const QSize &pixelSize,
                                       int sampleCount = 1,
@@ -1228,60 +1090,15 @@ public:
     QRhiTextureRenderTarget *newTextureRenderTarget(const QRhiTextureRenderTargetDescription &desc,
                                                     QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
 
-    /*
-      Rendering to a QWindow (must be Vulkan/Metal/OpenGLSurface as appropriate):
-        Create a swapchain.
-        Call buildOrResize() on the swapchain whenever the size is different than before.
-        Call release() on the swapchain on QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed.
-        Then on every frame:
-           beginFrame(sc);
-           updates = nextResourceUpdateBatch();
-           updates->...
-           QRhiCommandBuffer *cb = sc->currentFrameCommandBuffer();
-           cb->beginPass(sc->currentFrameRenderTarget(), clearValues, updates);
-           ...
-           cb->endPass();
-           endFrame(sc); // this queues the Present, begin/endFrame manages double buffering internally
-     */
     QRhiSwapChain *newSwapChain();
     FrameOpResult beginFrame(QRhiSwapChain *swapChain);
     FrameOpResult endFrame(QRhiSwapChain *swapChain);
 
-    /*
-      Rendering without a swapchain is possible as well. The typical use case
-      is to use it in completely offscreen applications, e.g. to generate image
-      sequences by rendering and reading back without ever showing a window.
-      Usage in on-screen applications (so beginFrame, endFrame,
-      beginOffscreenFrame, endOffscreenFrame, beginFrame, ...) is possible too
-      but it does reduce parallelism (offscreen frames do not let the CPU -
-      potentially - generate another frame while the GPU is still processing
-      the previous one) so should be done only infrequently.
-          QRhiReadbackResult rbResult;
-          QRhiCommandBuffer *cb; // not owned
-          beginOffscreenFrame(&cb);
-          beginPass
-          ...
-          u = nextResourceUpdateBatch();
-          u->readBackTexture(rb, &rbResult);
-          endPass(u);
-          endOffscreenFrame();
-          // image data available in rbResult
-     */
     FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
     FrameOpResult endOffscreenFrame();
 
-    // Waits for any work on the graphics queue (where applicable) to complete,
-    // then executes all deferred operations, like completing readbacks and
-    // resource releases. Can be called inside and outside of a frame, but not
-    // inside a pass. Inside a frame it implies submitting any work on the
-    // command buffer.
     QRhi::FrameOpResult finish();
 
-    // Returns an instance to which updates can be queued. Batch instances are
-    // pooled and never owned by the application. An instance is returned to
-    // the pool after a beginPass() processes it or when it is "canceled" by
-    // calling release(). Can be called outside begin-endFrame as well since
-    // a batch instance just collects data on its own.
     QRhiResourceUpdateBatch *nextResourceUpdateBatch();
 
     QVector<int> supportedSampleCounts() const;
@@ -1294,18 +1111,12 @@ public:
 
     bool isYUpInFramebuffer() const;
 
-    // Make Y up and allow using 0..1 as the depth range. This lets
-    // applications keep using OpenGL-targeted vertex data and perspective
-    // matrices regardless of the backend. (by passing this_matrix * mvp,
-    // instead of just mvp, to their vertex shaders)
     QMatrix4x4 clipSpaceCorrMatrix() const;
 
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags = QRhiTexture::Flags()) const;
     bool isFeatureSupported(QRhi::Feature feature) const;
     int resourceSizeLimit(ResourceSizeLimit limit) const;
 
-    // Returns a ptr to a QRhi<backend>NativeHandles struct.
-    // Ownership of the native objects is not transfered.
     const QRhiNativeHandles *nativeHandles();
 
     QRhiProfiler *profiler();

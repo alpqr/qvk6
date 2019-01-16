@@ -44,41 +44,169 @@ QT_BEGIN_NAMESPACE
     \inmodule QtRhi
 
     \brief Collects resource and timing information from an active QRhi.
+
+    A QRhiProfiler is present for each QRhi. Query it via QRhi::profiler(). The
+    profiler is active only when the QRhi was created with
+    QRhi::EnableProfiling. No data is collected otherwise.
+
+    \note GPU timings are only available when QRhi indicates that
+    QRhi::Timestamps is supported.
+
+    Besides collecting data from the QRhi implementations, some additional
+    values are calculated. For example, for textures and similar resources the
+    profiler gives an estimate of the complete amount of memory the resource
+    needs.
+
+    \section2 Output Format
+
+    The output is comma-separated text. Each line has a number of
+    comma-separated entries and each line ends with a comma.
+
+    For example:
+
+    \badcode
+        1,0,140446057946208,Triangle vbuf,type,0,usage,1,logical_size,84,effective_size,84,backing_gpu_buf_count,1,backing_cpu_buf_count,0,
+        1,0,140446057947376,Triangle ubuf,type,2,usage,4,logical_size,68,effective_size,256,backing_gpu_buf_count,2,backing_cpu_buf_count,0,
+        1,1,140446057950416,,type,0,usage,1,logical_size,112,effective_size,112,backing_gpu_buf_count,1,backing_cpu_buf_count,0,
+        1,1,140446057950544,,type,0,usage,2,logical_size,12,effective_size,12,backing_gpu_buf_count,1,backing_cpu_buf_count,0,
+        1,1,140446057947440,,type,2,usage,4,logical_size,68,effective_size,256,backing_gpu_buf_count,2,backing_cpu_buf_count,0,
+        1,1,140446057984784,Cube vbuf (textured),type,0,usage,1,logical_size,720,effective_size,720,backing_gpu_buf_count,1,backing_cpu_buf_count,0,
+        1,1,140446057982528,Cube ubuf (textured),type,2,usage,4,logical_size,68,effective_size,256,backing_gpu_buf_count,2,backing_cpu_buf_count,0,
+        7,8,140446058913648,Qt texture,width,256,height,256,format,1,owns_native_resource,1,mip_count,9,layer_count,1,effective_sample_count,1,approx_byte_size,349524,
+        1,8,140446058795856,Cube vbuf (textured with offscreen),type,0,usage,1,logical_size,720,effective_size,720,backing_gpu_buf_count,1,backing_cpu_buf_count,0,
+        1,8,140446058947920,Cube ubuf (textured with offscreen),type,2,usage,4,logical_size,68,effective_size,256,backing_gpu_buf_count,2,backing_cpu_buf_count,0,
+        7,8,140446058794928,Texture for offscreen content,width,512,height,512,format,1,owns_native_resource,1,mip_count,1,layer_count,1,effective_sample_count,1,approx_byte_size,1048576,
+        1,8,140446058963904,Triangle vbuf,type,0,usage,1,logical_size,84,effective_size,84,backing_gpu_buf_count,1,backing_cpu_buf_count,0,
+        1,8,140446058964560,Triangle ubuf,type,2,usage,4,logical_size,68,effective_size,256,backing_gpu_buf_count,2,backing_cpu_buf_count,0,
+        5,9,140446057945392,,type,0,width,1280,height,720,effective_sample_count,1,transient_backing,0,winsys_backing,0,approx_byte_size,3686400,
+        11,9,140446057944592,,width,1280,height,720,buffer_count,2,msaa_buffer_count,0,effective_sample_count,1,approx_total_byte_size,7372800,
+        9,9,140446058913648,Qt texture,slot,0,size,262144,
+        10,9,140446058913648,Qt texture,slot,0,
+        17,2019,140446057944592,,frames_since_resize,121,min_ms_frame_delta,9,max_ms_frame_delta,33,Favg_ms_frame_delta,16.1167,
+        18,2019,140446057944592,,frames_since_resize,121,min_ms_frame_build,0,max_ms_frame_build,1,Favg_ms_frame_build,0.00833333,
+        17,4019,140446057944592,,frames_since_resize,241,min_ms_frame_delta,15,max_ms_frame_delta,17,Favg_ms_frame_delta,16.0583,
+        18,4019,140446057944592,,frames_since_resize,241,min_ms_frame_build,0,max_ms_frame_build,0,Favg_ms_frame_build,0,
+        12,5070,140446057944592,,
+        2,5079,140446057947376,Triangle ubuf,
+        2,5079,140446057946208,Triangle vbuf,
+        2,5079,140446057947440,,
+        2,5079,140446057950544,,
+        2,5079,140446057950416,,
+        8,5079,140446058913648,Qt texture,
+        2,5079,140446057982528,Cube ubuf (textured),
+        2,5079,140446057984784,Cube vbuf (textured),
+        2,5079,140446058964560,Triangle ubuf,
+        2,5079,140446058963904,Triangle vbuf,
+        8,5079,140446058794928,Texture for offscreen content,
+        2,5079,140446058947920,Cube ubuf (textured with offscreen),
+        2,5079,140446058795856,Cube vbuf (textured with offscreen),
+        6,5079,140446057945392,,
+    \endcode
+
+    Each line starts with \c op, \c timestamp, \c res, \c name where op is a
+    value from StreamOp, timestamp is a recording timestamp in milliseconds
+    (qint64), res is a number (quint64) refering to the QRhiResource the entry
+    refers to, or 0 if not applicable. \c name is the value of
+    QRhiResource::name() and may be empty as well. The \c name will never
+    contain a comma.
+
+    This is followed by any number of \c{key, value} pairs where \c key is an
+    unspecified string and \c value is a number. If \c key starts with \c F, it
+    indicates the value is a float. Otherwise assume that the value is a
+    qint64.
  */
 
+/*!
+    \enum QRhiProfiler::StreamOp
+    Describes an entry in the profiler's output stream.
+
+    \value NewBuffer A buffer is created
+    \value ReleaseBuffer A buffer is destroyed
+    \value NewBufferStagingArea A staging buffer for buffer upload is created
+    \value ReleaseBufferStagingArea A staging buffer for buffer upload is destroyed
+    \value NewRenderBuffer A renderbuffer is created
+    \value ReleaseRenderBuffer A renderbuffer is destroyed
+    \value NewTexture A texture is created
+    \value ReleaseTexture A texture is destroyed
+    \value NewTextureStagingArea A staging buffer for texture upload is created
+    \value ReleaseTextureStagingArea A staging buffer for texture upload is destroyed
+    \value ResizeSwapChain A swapchain is created or resized
+    \value ReleaseSwapChain A swapchain is destroyed
+    \value NewReadbackBuffer A staging buffer for readback is created
+    \value ReleaseReadbackBuffer A staging buffer for readback is destroyed
+    \value VMemAllocStats GPU memory allocator statistics
+    \value GpuFrameTime GPU frame times
+    \value FrameToFrameTime CPU frame-to-frame times
+    \value FrameBuildTime CPU beginFrame-endFrame times
+ */
+
+/*!
+    \internal
+ */
 QRhiProfiler::QRhiProfiler()
     : d(new QRhiProfilerPrivate)
 {
     d->ts.start();
 }
 
+/*!
+    Destructor.
+ */
 QRhiProfiler::~QRhiProfiler()
 {
     delete d;
 }
 
+/*!
+    Sets the output \a device.
+
+    \note No output will be generated when QRhi::EnableProfiling was not set.
+ */
 void QRhiProfiler::setDevice(QIODevice *device)
 {
     d->outputDevice = device;
 }
 
+/*!
+    Requests writing a VMemAllocStats entry into the output, when applicable.
+    Backends that do not support this will ignore the request. This is an
+    explicit request since getting the allocator status and statistics may be
+    an expensive operation.
+ */
 void QRhiProfiler::addVMemAllocatorStats()
 {
     if (d->rhiD)
         d->rhiD->sendVMemStatsToProfiler();
 }
 
+/*!
+    \return the currently set frame timing writeout interval.
+ */
 int QRhiProfiler::frameTimingWriteInterval() const
 {
     return d->frameTimingWriteInterval;
 }
 
+/*!
+    Sets the number of frames that need to be rendered before the collected CPU
+    and GPU timings are processed (min, max, average are calculated) to \a
+    frameCount.
+
+    The default value is 120.
+ */
 void QRhiProfiler::setFrameTimingWriteInterval(int frameCount)
 {
     if (frameCount > 0)
         d->frameTimingWriteInterval = frameCount;
 }
 
+/*!
+   \return min, max, and avg in milliseconds for the time that elapsed between two
+   QRhi::endFrame() calls.
+
+   \note The values are all 0 until at least frameTimingWriteInterval() frames
+   have been rendered.
+ */
 QRhiProfiler::CpuTime QRhiProfiler::frameToFrameTimes(QRhiSwapChain *sc) const
 {
     auto it = d->swapchains.constFind(sc);
@@ -88,6 +216,13 @@ QRhiProfiler::CpuTime QRhiProfiler::frameToFrameTimes(QRhiSwapChain *sc) const
     return QRhiProfiler::CpuTime();
 }
 
+/*!
+   \return min, max, and avg in milliseconds for the time that elapsed between
+   a QRhi::beginFrame() and QRhi::endFrame().
+
+   \note The values are all 0 until at least frameTimingWriteInterval() frames
+   have been rendered.
+ */
 QRhiProfiler::CpuTime QRhiProfiler::frameBuildTimes(QRhiSwapChain *sc) const
 {
     auto it = d->swapchains.constFind(sc);
@@ -97,6 +232,22 @@ QRhiProfiler::CpuTime QRhiProfiler::frameBuildTimes(QRhiSwapChain *sc) const
     return QRhiProfiler::CpuTime();
 }
 
+/*!
+   \return min, max, and avg in milliseconds for the GPU time that is spent on
+   one frame.
+
+   \note The values are all 0 until at least frameTimingWriteInterval() frames
+   have been rendered.
+
+   The GPU times should only be compared between runs on the same GPU of the
+   same system with the same backend. Comparing times for different graphics
+   cards or for different backends can give misleading results. The numbers are
+   not meant to be comparable that way.
+
+   \note Some backends have no support for this, and even for those that have,
+   it is not guaranteed that the driver will support it at run time. Support
+   can be checked via QRhi::Timestamps.
+ */
 QRhiProfiler::GpuTime QRhiProfiler::gpuFrameTimes(QRhiSwapChain *sc) const
 {
     auto it = d->swapchains.constFind(sc);
@@ -114,6 +265,9 @@ void QRhiProfilerPrivate::startEntry(QRhiProfiler::StreamOp op, qint64 timestamp
     buf.append(QByteArray::number(timestamp));
     buf.append(',');
     buf.append(QByteArray::number(quint64(quintptr(res))));
+    buf.append(',');
+    if (res)
+        buf.append(res->name());
     buf.append(',');
 }
 

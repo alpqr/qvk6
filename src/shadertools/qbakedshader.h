@@ -50,9 +50,7 @@ public:
     enum Flag {
         GlslEs = 0x01
     };
-#ifndef Q_CLANG_QDOC
     Q_DECLARE_FLAGS(Flags, Flag)
-#endif
 
     QBakedShaderVersion() { }
     QBakedShaderVersion(int v, Flags f = Flags())

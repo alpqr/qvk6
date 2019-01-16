@@ -2507,7 +2507,7 @@ static QByteArray compileHlslShaderSource(const QBakedShader &shader, QString *e
 {
     QBakedShaderCode dxbc = shader.shader({ QBakedShaderKey::DxbcShader, 50 });
     if (!dxbc.shader().isEmpty())
-        return dxbc.shader;
+        return dxbc.shader();
 
     QBakedShaderCode hlslSource = shader.shader({ QBakedShaderKey::HlslShader, 50 });
     if (hlslSource.shader().isEmpty()) {

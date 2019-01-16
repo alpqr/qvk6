@@ -783,7 +783,7 @@ QT_BEGIN_NAMESPACE
     \badcode
         srb2 = rhi->newShaderResourceBindings();
         QVector<QRhiShaderResourceBinding> bindings = srb->bindings();
-        bindings[1].stex.tex = anotherTexture;
+        bindings[1] = QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, anotherTexture, sampler);
         srb2->setBindings(bindings);
         srb2->build();
         ...
@@ -1945,11 +1945,11 @@ void QRhiResourceUpdateBatch::merge(QRhiResourceUpdateBatch *other)
     \a data can safely be destroyed or changed once this function returns since
     it takes a copy internally as necessary.
 
-    \note If host writes are involved, which in case of updateDynamicBuffer()
-    typically are as such buffers are backed by host visible memory with most
-    backend, they may accumulate within a frame. Thus pass 1 reading a region
-    changed by a batch passed to pass 2 may see the changes specified in pass
-    2's update batch.
+    \note If host writes are involved, which is the case with
+    updateDynamicBuffer() typically as such buffers are backed by host visible
+    memory with most backends, they may accumulate within a frame. Thus pass 1
+    reading a region changed by a batch passed to pass 2 may see the changes
+    specified in pass 2's update batch.
 
     \note QRhi transparently manages double buffering in order to prevent
     stalling the graphics pipeline. The fact that a QRhiBuffer may have

@@ -48,6 +48,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+basic docs
 vk, d3d, mtl: minimize vertex input changes inside passes
 mtl: cbuffers, textures, samplers set should be batched too
 mtl: reduce set*

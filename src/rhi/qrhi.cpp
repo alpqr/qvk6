@@ -1413,6 +1413,9 @@ QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &p
     \return a pointer to a backend-specific QRhiNativeHandles subclass, such as
     QRhiVulkanTextureNativeHandles. The returned value is null when exposing
     the underlying native resources is not supported by the backend.
+
+    \sa QRhiVulkanTextureNativeHandles, QRhiD3D11TextureNativeHandles,
+    QRhiMetalTextureNativeHandles, QRhiGles2TextureNativeHandles
  */
 const QRhiNativeHandles *QRhiTexture::nativeHandles()
 {
@@ -1423,15 +1426,24 @@ const QRhiNativeHandles *QRhiTexture::nativeHandles()
     Similar to build() except that no new native textures are created. Instead,
     the texture from \a src is used.
 
-    // Calling this instead of build() allows importing an existing native
-    // texture object (must belong to the same device or a sharing context).
-    // Note that format, pixelSize, etc. must still be set correctly (typically
-    // via QRhi::newTexture()). Ownership of the native resource is not taken.
+    This allows importing an existing native texture object (which must belong
+    to the same device or sharing context, depending on the graphics API) from
+    an external graphics engine.
+
+    \note format(), pixelSize(), sampleCount(), and flags() must still be set
+    correctly. Passing incorrect sizes and other values to QRhi::newTexture()
+    and then following it with a buildFrom() expecting that the native texture
+    object alone is sufficient to deduce such values is \b wrong and will lead
+    to problems.
 
     \note QRhiTexture does not take ownership of the texture object. release()
     does not free the object or any associated memory.
 
-    \sa QRhiVulkanTextureNativeHandles
+    The opposite of this operation, exposing a QRhiTexture-created native
+    texture object to a foreign engine, is possible via nativeHandles().
+
+    \sa QRhiVulkanTextureNativeHandles, QRhiD3D11TextureNativeHandles,
+    QRhiMetalTextureNativeHandles, QRhiGles2TextureNativeHandles
  */
 bool QRhiTexture::buildFrom(const QRhiNativeHandles *src)
 {

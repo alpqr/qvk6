@@ -27,9 +27,15 @@ INCLUDEPATH += $$PWD/../3rdparty/SPIRV-Cross $$PWD/../3rdparty/glslang
 # They will not propagate outside of this module though so should be safe enough.
 CONFIG += exceptions
 
+!exists($$[QT_HOST_DATA]/.qmake.cache) {
+    LIBLOC = $$shadowed($$dirname(_QMAKE_CONF_))/lib
+} else {
+    LIBLOC = $$[QT_HOST_LIBS]
+}
+
 STATICLIBS = qtspirv-cross qtglslang-glslang qtglslang-spirv qtglslang-osdependent qtglslang-oglcompiler # qtglslang-hlsl
 for(libname, STATICLIBS) {
-    staticlib = $$[QT_HOST_LIBS]/$${QMAKE_PREFIX_STATICLIB}$$qtLibraryTarget($$libname).$${QMAKE_EXTENSION_STATICLIB}
+    staticlib = $$LIBLOC/$${QMAKE_PREFIX_STATICLIB}$$qtLibraryTarget($$libname).$${QMAKE_EXTENSION_STATICLIB}
     LIBS_PRIVATE += $$staticlib
     PRE_TARGETDEPS += $$staticlib
 }

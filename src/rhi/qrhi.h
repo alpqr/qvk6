@@ -60,22 +60,6 @@ class QRhiResourceUpdateBatch;
 struct QRhiResourceUpdateBatchPrivate;
 class QRhiProfiler;
 
-// C++ object ownership rules:
-//   1. new*() and create() return value owned by the caller.
-//   2. next*() return value not owned by the caller.
-//   3. Passing a pointer via set*() or the structs does not transfer ownership.
-//   4. release() does not destroy the C++ object. releaseAndDestroy() does, and is equivalent to o->release(); delete o;
-//
-// Graphics resource ownership rules:
-//   1. new*() does not create underlying graphics resources. build() does.
-//   2. Except: new*Descriptor() implicitly "builds". (no build() for QRhiRenderPassDescriptor f.ex.)
-//   3. release() schedules graphics resources for destruction. The C++ object is reusable immediately via build(), or can be destroyed.
-//   4. build() on an already built object calls release() implicitly. Except swapchains. (buildOrResize() - special semantics)
-//   5. Ownership of resources imported (QRhi*InitParams or buildFrom()) or exported (nativeHandles()) is never taken or given away.
-//
-// Other:
-//   1. QRhiResourceUpdateBatch manages no graphics resources underneath. begin/endPass() implicitly calls release() on the batch.
-
 struct Q_RHI_EXPORT QRhiColorClearValue
 {
     QRhiColorClearValue() : rgba(0, 0, 0, 1) { }
@@ -101,8 +85,6 @@ struct Q_RHI_EXPORT QRhiViewport
     QRhiViewport()
         : r(0, 0, 1280, 720), minDepth(0), maxDepth(1)
     { }
-    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says.
-    // Depth range defaults to 0..1. See clipSpaceCorrMatrix().
     QRhiViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
         : r(x, y, w, h), minDepth(minDepth_), maxDepth(maxDepth_)
     { }
@@ -116,7 +98,6 @@ Q_DECLARE_TYPEINFO(QRhiViewport, Q_MOVABLE_TYPE);
 struct Q_RHI_EXPORT QRhiScissor
 {
     QRhiScissor() { }
-    // x,y is bottom-left, like in OpenGL, regardless of what isYUpInFramebuffer() says
     QRhiScissor(int x, int y, int w, int h)
         : r(x, y, w, h)
     { }
@@ -136,7 +117,7 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
         Binding(quint32 stride_, Classification cls = PerVertex, int stepRate = 1)
             : stride(stride_), classification(cls), instanceStepRate(stepRate)
         { }
-        quint32 stride; // must be a multiple of 4
+        quint32 stride;
         Classification classification;
         int instanceStepRate;
     };
@@ -156,14 +137,12 @@ struct Q_RHI_EXPORT QRhiVertexInputLayout
             : binding(binding_), location(location_), format(format_), offset(offset_)
         { }
         int binding;
-        // With HLSL we assume the vertex shader uses TEXCOORD<location> as the
-        // semantic for each input. Hence no separate semantic name and index.
         int location;
         Format format;
         quint32 offset;
     };
 
-    QVector<Binding> bindings; // slots
+    QVector<Binding> bindings;
     QVector<Attribute> attributes;
 };
 
@@ -176,9 +155,8 @@ struct Q_RHI_EXPORT QRhiGraphicsShaderStage
     enum Type {
         Vertex,
         Fragment,
-        TessellationControl, // Hull
-        TessellationEvaluation // Domain
-        // yes, no geometry shaders (Metal does not have them)
+        TessellationControl,
+        TessellationEvaluation
     };
 
     QRhiGraphicsShaderStage() { }
@@ -208,10 +186,7 @@ struct Q_RHI_EXPORT QRhiShaderResourceBinding
     Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
     static QRhiShaderResourceBinding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_);
-
-    // Bind a region only. Up to the user to ensure offset is aligned to ubufAlignment.
     static QRhiShaderResourceBinding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_);
-
     static QRhiShaderResourceBinding sampledTexture(int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_);
 
     int binding;

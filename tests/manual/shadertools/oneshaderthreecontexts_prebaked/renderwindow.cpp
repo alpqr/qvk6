@@ -102,14 +102,14 @@ void RenderWindow::init()
     if (!es && format.profile() == QSurfaceFormat::CoreProfile)
         version = 330;
 
-    QBakedShader::ShaderSourceVersion::Flags flags = 0;
+    QBakedShaderVersion::Flags flags = 0;
     if (es) {
         version = 100;
-        flags |= QBakedShader::ShaderSourceVersion::GlslEs;
+        flags |= QBakedShaderVersion::GlslEs;
     }
 
-    const QByteArray vertexShaderSource = m_vs.shader(QBakedShader::ShaderKey(QBakedShader::GlslShader, QBakedShader::ShaderSourceVersion(version, flags))).shader;
-    const QByteArray fragmentShaderSource = m_fs.shader(QBakedShader::ShaderKey(QBakedShader::GlslShader, QBakedShader::ShaderSourceVersion(version, flags))).shader;
+    const QByteArray vertexShaderSource = m_vs.shader(QBakedShaderKey(QBakedShaderKey::GlslShader, QBakedShaderVersion(version, flags))).shader();
+    const QByteArray fragmentShaderSource = m_fs.shader(QBakedShaderKey(QBakedShaderKey::GlslShader, QBakedShaderVersion(version, flags))).shader();
 
     if (!m_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
         emit error(m_program->log());

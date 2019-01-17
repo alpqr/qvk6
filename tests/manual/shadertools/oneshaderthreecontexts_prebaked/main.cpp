@@ -130,8 +130,8 @@ int main(int argc, char **argv)
     // Vulkan
 #if QT_CONFIG(vulkan)
     QVulkanInstance inst;
-    const QByteArray vsSpv = vs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader;
-    const QByteArray fsSpv = fs.shader(QBakedShader::ShaderKey(QBakedShader::SpirvShader)).shader;
+    const QByteArray vsSpv = vs.shader({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(100) }).shader();
+    const QByteArray fsSpv = fs.shader({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(100) }).shader();
     VulkanWindow vkw(vsSpv, fsSpv);
     if (inst.create()) {
         vkw.setVulkanInstance(&inst);

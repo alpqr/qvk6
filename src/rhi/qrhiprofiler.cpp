@@ -141,6 +141,32 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    \class QRhiProfiler::CpuTime
+    \inmodule QtRhi
+    \brief Contains CPU-side frame timings.
+
+    Once sufficient number of frames have been rendered, the minimum, maximum,
+    and average values (in milliseconds) from various measurements are made
+    available in this struct queriable from QRhiProfiler::frameToFrameTimes()
+    and QRhiProfiler::frameBuildTimes().
+
+    \sa QRhiProfiler::setFrameTimingWriteInterval()
+ */
+
+/*!
+    \class QRhiProfiler::GpuTime
+    \inmodule QtRhi
+    \brief Contains GPU-side frame timings.
+
+    Once sufficient number of frames have been rendered, the minimum, maximum,
+    and average values (in milliseconds) calculated from GPU command buffer
+    timestamps are made available in this struct queriable from
+    QRhiProfiler::gpuFrameTimes().
+
+    \sa QRhiProfiler::setFrameTimingWriteInterval()
+ */
+
+/*!
     \internal
  */
 QRhiProfiler::QRhiProfiler()

@@ -320,12 +320,39 @@ QT_BEGIN_NAMESPACE
     \class QRhiViewport
     \inmodule QtRhi
     \brief Specifies a viewport rectangle.
+
+    Used with QRhiCommandBuffer::setViewport().
+
+    \note QRhi assumes OpenGL-style viewport coordinates, meaning x and y are
+    bottom-left.
+
+    Typical usage is like the following:
+
+    \badcode
+      const QSize outputSizeInPixels = swapchain->currentPixelSize();
+      const QRhiViewport viewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height());
+      cb->beginPass(swapchain->currentFrameRenderTarget(), { 0, 0, 0, 1 }, { 1, 0 });
+      cb->setGraphicsPipeline(ps);
+      cb->setViewport(viewport);
+      ...
+    \endcode
+
+    \sa QRhiCommandBuffer::setViewport(), QRhi::clipSpaceCorrMatrix(), QRhiScissor
  */
 
 /*!
     \class QRhiScissor
     \inmodule QtRhi
     \brief Specifies a scissor rectangle.
+
+    Used with QRhiCommandBuffer::setScissor(). Setting a scissor rectangle is
+    only possible with a QRhiGraphicsPipeline that has
+    QRhiGraphicsPipeline::UsesScissor set.
+
+    \note QRhi assumes OpenGL-style viewport coordinates, meaning x and y are
+    bottom-left.
+
+    \sa QRhiCommandBuffer::setScissor(), QRhiViewport
  */
 
 /*!
@@ -338,6 +365,52 @@ QT_BEGIN_NAMESPACE
     \class QRhiVertexInputLayout::Binding
     \inmodule QtRhi
     \brief Describes a vertex input binding.
+
+    Specifies the stride (in bytes, must be a multiple of 4), the
+    classification and optionally the instance step rate.
+
+    As an example, assume a vertex shader with the following inputs:
+
+    \badcode
+        layout(location = 0) in vec4 position;
+        layout(location = 1) in vec2 texcoord;
+    \endcode
+
+    Now let's assume also that 3 component vertex positions \c{(x, y, z)} and 2
+    component texture coordinates \c{(u, v)} are provided in a non-interleaved
+    format in a buffer (or separate buffers even). Definining two bindings
+    could then be done like this:
+
+    \badcode
+        QRhiVertexInputLayout inputLayout;
+        inputLayout.bindings = {
+            { 3 * sizeof(float) },
+            { 2 * sizeof(float) }
+        };
+    \endcode
+
+    Only the stride is interesting here since instancing is not used. The
+    binding number is given by the index of the QRhiVertexInputLayout::Binding
+    element in the bindings vector of the QRhiVertexInputLayout.
+
+    Once a graphics pipeline with this vertex input layout is bound, the vertex
+    inputs could be set up like the following for drawing a cube with 36
+    vertices, assuming we have a single buffer with first the positions and
+    then the texture coordinates:
+
+    \badcode
+        cb->setVertexInput(0, { { cubeBuf, 0 }, { cubeBuf, 36 * 3 * sizeof(float) } });
+    \endcode
+
+    Note how the index defined by \c {startBinding + i}, where \c i is the
+    index in the second argument of
+    \l{QRhiCommandBuffer::setVertexInput()}{setVertexInput()}, matches the
+    index of the corresponding entry in the \c bindings vector of the
+    QRhiVertexInputLayout.
+
+    \note the stride must always be a multiple of 4.
+
+    \sa QRhiCommandBuffer::setVertexInput()
  */
 
 /*!
@@ -352,6 +425,69 @@ QT_BEGIN_NAMESPACE
     \class QRhiVertexInputLayout::Attribute
     \inmodule QtRhi
     \brief Describes a single vertex input element.
+
+    The members specify the binding number, location, format, and offset for a
+    single vertex input element.
+
+    \note For HLSL it is assumed that the vertex shader uses
+    \c{TEXCOORD<location>} as the semantic for each input. Hence no separate
+    semantic name and index.
+
+    As an example, assume a vertex shader with the following inputs:
+
+    \badcode
+        layout(location = 0) in vec4 position;
+        layout(location = 1) in vec2 texcoord;
+    \endcode
+
+    Now let's assume that we have 3 component vertex positions \c{(x, y, z)}
+    and 2 component texture coordinates \c{(u, v)} are provided in a
+    non-interleaved format in a buffer (or separate buffers even). Once two
+    bindings are defined, the attributes could be specified as:
+
+    \badcode
+        QRhiVertexInputLayout inputLayout;
+        inputLayout.bindings = {
+            { 3 * sizeof(float) },
+            { 2 * sizeof(float) }
+        };
+        inputLayout.attributes = {
+            { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
+            { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
+        };
+    \endcode
+
+    Once a graphics pipeline with this vertex input layout is bound, the vertex
+    inputs could be set up like the following for drawing a cube with 36
+    vertices, assuming we have a single buffer with first the positions and
+    then the texture coordinates:
+
+    \badcode
+        cb->setVertexInput(0, { { cubeBuf, 0 }, { cubeBuf, 36 * 3 * sizeof(float) } });
+    \endcode
+
+    When working with interleaved data, there will typically be just one
+    binding, with multiple attributes refering to that same buffer binding
+    point:
+
+    \badcode
+        QRhiVertexInputLayout inputLayout;
+        inputLayout.bindings = {
+            { 5 * sizeof(float) }
+        };
+        inputLayout.attributes = {
+            { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
+            { 0, 1, QRhiVertexInputLayout::Attribute::Float2, 3 * sizeof(float) }
+        };
+    \endcode
+
+    and then:
+
+    \badcode
+        cb->setVertexInput(0, { { interleavedCubeBuf, 0 } });
+    \endcode
+
+    \sa QRhiCommandBuffer::setVertexInput()
  */
 
 /*!
@@ -371,6 +507,9 @@ QT_BEGIN_NAMESPACE
     \class QRhiGraphicsShaderStage
     \inmodule QtRhi
     \brief Specifies the type and the shader code for a shader stage in the graphics pipeline.
+
+    \note There is no geometry stage because some graphics APIs (Metal) have no support
+    for it.
  */
 
 /*!
@@ -1084,7 +1223,7 @@ QT_BEGIN_NAMESPACE
     \value NoVSync Requests disabling waiting for vertical sync, also avoiding
     throttling the rendering thread. The behavior is backend specific and
     applicable only where it is possible to control this. Some may ignore the
-    request altogether. For OpenGL, use QSurfaceFormat::setSwapInterval().
+    request altogether. For OpenGL, use QSurfaceFormat::setSwapInterval() instead.
  */
 
 /*!

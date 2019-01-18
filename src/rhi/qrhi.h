@@ -214,25 +214,17 @@ struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
 {
     struct Q_RHI_EXPORT ColorAttachment {
         ColorAttachment() { }
-        // either a texture or a renderbuffer
         ColorAttachment(QRhiTexture *texture_) : texture(texture_) { }
         ColorAttachment(QRhiRenderBuffer *renderBuffer_) : renderBuffer(renderBuffer_) { }
 
         QRhiTexture *texture = nullptr;
         QRhiRenderBuffer *renderBuffer = nullptr;
 
-        // for texture
-        int layer = 0; // face (0..5) for cubemaps
-        int level = 0; // only when non-multisample
+        int layer = 0;
+        int level = 0;
 
-        // When texture or renderBuffer is multisample. Optional. When set,
-        // samples are resolved into this non-multisample texture. Note that
-        // the msaa data may not be written out at all in this case. This is
-        // the only way to get a non-msaa texture from an msaa render target as
-        // we do not have an explicit resolve operation because it does not
-        // exist in some APIs and would not be efficient with tiled GPUs anyways.
         QRhiTexture *resolveTexture = nullptr;
-        int resolveLayer = 0; // unused for now since cubemaps cannot be multisample
+        int resolveLayer = 0;
         int resolveLevel = 0;
     };
 
@@ -248,7 +240,6 @@ struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
     { colorAttachments.append(colorAttachment); }
 
     QVector<ColorAttachment> colorAttachments;
-    // depth-stencil is is a renderbuffer, a texture, or none
     QRhiRenderBuffer *depthStencilBuffer = nullptr;
     QRhiTexture *depthTexture = nullptr;
 };
@@ -261,7 +252,6 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
     struct Q_RHI_EXPORT Layer {
         struct Q_RHI_EXPORT MipLevel {
             MipLevel() { }
-            // either a QImage or compressed data (not both)
             MipLevel(const QImage &image_) : image(image_) { }
             MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
 
@@ -269,19 +259,7 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
             QByteArray compressedData;
 
             QPoint destinationTopLeft;
-
-            // Empty = entire subresource. For uncompressed this then means the
-            // size of the source image must match the subresource. When
-            // non-empty, this size is used.
-            //
-            // Works for compressed as well, but the first compressed upload
-            // must always match the subresource size (and sourceSize can be
-            // left unset) due to gfx api limitations with some backends.
             QSize sourceSize;
-
-            // This is only supported for uncompressed. Setting sourceSize or
-            // sourceTopLeft may trigger a QImage copy internally (depending on
-            // the format and the gfx api).
             QPoint sourceTopLeft;
         };
 
@@ -292,7 +270,7 @@ struct Q_RHI_EXPORT QRhiTextureUploadDescription
 
     QRhiTextureUploadDescription() { }
     QRhiTextureUploadDescription(const QVector<Layer> &layers_) : layers(layers_) { }
-    QVector<Layer> layers; // 6 layers for cubemaps, 1 otherwise
+    QVector<Layer> layers;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer::MipLevel, Q_MOVABLE_TYPE);
@@ -301,7 +279,7 @@ Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiTextureCopyDescription
 {
-    QSize pixelSize; // empty = entire subresource
+    QSize pixelSize;
 
     int sourceLayer = 0;
     int sourceLevel = 0;
@@ -316,10 +294,8 @@ Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiReadbackDescription
 {
-    QRhiReadbackDescription() { } // source is the back buffer of the swapchain of the current frame (if the swapchain supports readback)
-    QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { } // source is the specified texture
-    // Note that reading back an msaa image is only supported for swapchains.
-    // Multisample textures cannot be read back.
+    QRhiReadbackDescription() { }
+    QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { }
 
     QRhiTexture *texture = nullptr;
     int layer = 0;
@@ -354,9 +330,9 @@ class Q_RHI_EXPORT QRhiBuffer : public QRhiResource
 {
 public:
     enum Type {
-        Immutable, // data never changes after initial upload - under the hood typically in device local (GPU) memory
-        Static,    // data changes infrequently - under the hood typically device local and updated via a separate, host visible staging buffer
-        Dynamic    // data changes frequently - under the hood typically host visible
+        Immutable,
+        Static,
+        Dynamic
     };
 
     enum UsageFlag {
@@ -372,8 +348,6 @@ public:
     UsageFlags usage() const { return m_usage; }
     void setUsage(UsageFlags u) { m_usage = u; }
 
-    // no restrictions here, up to the backend to round up if needed (that
-    // won't be visible in the user-provided size reported here)
     int size() const { return m_size; }
     void setSize(int sz) { m_size = sz; }
 
@@ -394,11 +368,11 @@ class Q_RHI_EXPORT QRhiTexture : public QRhiResource
 public:
     enum Flag {
         RenderTarget = 1 << 0,
-        ChangesFrequently = 1 << 1, // hint for backend to keep staging resources around
+        ChangesFrequently = 1 << 1,
         CubeMap = 1 << 2,
         MipMapped = 1 << 3,
         sRGB = 1 << 4,
-        UsedAsTransferSource = 1 << 5, // will (also) be used as the source of a copy or readback
+        UsedAsTransferSource = 1 << 5,
         UsedWithGenerateMips = 1 << 6
     };
     Q_DECLARE_FLAGS(Flags, Flag)
@@ -474,7 +448,7 @@ class Q_RHI_EXPORT QRhiSampler : public QRhiResource
 {
 public:
     enum Filter {
-        None, // for mipmapMode only
+        None,
         Nearest,
         Linear
     };
@@ -529,7 +503,7 @@ public:
     };
 
     enum Flag {
-        UsedWithSwapChainOnly = 1 << 0 // use implicit winsys buffers, don't create anything (GL)
+        UsedWithSwapChainOnly = 1 << 0
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -593,8 +567,6 @@ class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
 {
 public:
     enum Flag {
-        // the load-not-clear request is baked into the resources under the rpd
-        // with some backends so it cannot be more dynamic than this
         PreserveColorContents = 1 << 0,
         PreserveDepthStencilContents = 1 << 1
     };
@@ -606,12 +578,8 @@ public:
     Flags flags() const { return m_flags; }
     void setFlags(Flags f) { m_flags = f; }
 
-    // To be called before build() with description and flags set.
-    // Textures in desc must already be built.
-    // Note setRenderPassDescriptor() in the base class, that must still be called afterwards (but before build()).
     virtual QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() = 0;
 
-    // as usual, textures in desc must be built before calling build() on the rt
     virtual bool build() = 0;
 
 protected:
@@ -654,7 +622,7 @@ public:
         Points
     };
 
-    enum CullMode { // not a bitmask since some apis use a mask, some don't
+    enum CullMode {
         None,
         Front,
         Back
@@ -805,19 +773,19 @@ protected:
     Topology m_topology = Triangles;
     CullMode m_cullMode = None;
     FrontFace m_frontFace = CCW;
-    QVector<TargetBlend> m_targetBlends; // no blend when empty
+    QVector<TargetBlend> m_targetBlends;
     bool m_depthTest = false;
     bool m_depthWrite = false;
     CompareOp m_depthOp = Less;
     bool m_stencilTest = false;
     StencilOpState m_stencilFront;
     StencilOpState m_stencilBack;
-    quint32 m_stencilReadMask = 0xFF; // applies to both faces
-    quint32 m_stencilWriteMask = 0xFF; // applies to both faces
-    int m_sampleCount = 1; // MSAA, swapchain+depthstencil must match
+    quint32 m_stencilReadMask = 0xFF;
+    quint32 m_stencilWriteMask = 0xFF;
+    int m_sampleCount = 1;
     QVector<QRhiGraphicsShaderStage> m_shaderStages;
     QRhiVertexInputLayout m_vertexInputLayout;
-    QRhiShaderResourceBindings *m_shaderResourceBindings = nullptr; // must be built by the time ps' build() is called
+    QRhiShaderResourceBindings *m_shaderResourceBindings = nullptr;
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
     void *m_reserved;
 };
@@ -833,8 +801,8 @@ public:
         SurfaceHasPreMulAlpha = 1 << 0,
         SurfaceHasNonPreMulAlpha = 1 << 1,
         sRGB = 1 << 2,
-        UsedAsTransferSource = 1 << 3, // will be read back
-        NoVSync = 1 << 4 // may be implementation specific what this results in
+        UsedAsTransferSource = 1 << 3,
+        NoVSync = 1 << 4
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -853,8 +821,6 @@ public:
     QRhiRenderPassDescriptor *renderPassDescriptor() const { return m_renderPassDesc; }
     void setRenderPassDescriptor(QRhiRenderPassDescriptor *desc) { m_renderPassDesc = desc; }
 
-    // Alternatively, integrate with an existing swapchain, f.ex.
-    // QVulkanWindow. Other settings have no effect when this is set.
     QObject *target() const { return m_target; }
     void setTarget(QObject *obj) { m_target = obj; }
 
@@ -891,8 +857,8 @@ public:
     void resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates);
 
     void beginPass(QRhiRenderTarget *rt,
-                   const QRhiColorClearValue &colorClearValue, // ignored when rt has PreserveColorContents
-                   const QRhiDepthStencilClearValue &depthStencilClearValue, // ignored when no ds attachment
+                   const QRhiColorClearValue &colorClearValue,
+                   const QRhiDepthStencilClearValue &depthStencilClearValue,
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiResourceUpdateBatch *resourceUpdates = nullptr);
 
@@ -956,7 +922,7 @@ public:
     void uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data);
     void uploadStaticBuffer(QRhiBuffer *buf, const void *data);
     void uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc);
-    void uploadTexture(QRhiTexture *tex, const QImage &image); // shortcut
+    void uploadTexture(QRhiTexture *tex, const QImage &image);
     void copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc = QRhiTextureCopyDescription());
     void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
     void generateMips(QRhiTexture *tex);
@@ -977,8 +943,6 @@ struct Q_RHI_EXPORT QRhiInitParams
 {
 };
 
-// A QRhi instance can be created and used on any thread but all usage must be
-// limited to that one single thread.
 class Q_RHI_EXPORT QRhi
 {
 public:

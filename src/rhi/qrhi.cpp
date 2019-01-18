@@ -223,6 +223,13 @@ QT_BEGIN_NAMESPACE
     QRhiTexture::nativeHandles(). Most importantly, passing pointers in structs
     and via setters does not transfer ownership.
 
+    \section3 Threading
+
+    A QRhi instance can be created and used on any thread but all usage must be
+    limited to that one single thread. When it comes to native objects, such as
+    OpenGL contexts, passed in in QRhiInitParams, it is up to the application
+    to ensure they are not misused by other threads.
+
     \sa {Qt Shader Tools}
  */
 
@@ -275,24 +282,25 @@ QT_BEGIN_NAMESPACE
     \enum QRhi::Feature
     Flag values to indicate what features are supported by the backend currently in use.
 
-    \value MultisampleTexture Textures with sample count larger than 1 are
-    supported.
+    \value MultisampleTexture Indicates that textures with a sample count larger
+    than 1 are supported.
 
-    \value MultisampleRenderBuffer Renderbuffers with sample count larger than
-    1 are supported.
+    \value MultisampleRenderBuffer Indicates that renderbuffers with a sample
+    count larger than 1 are supported.
 
-    \value DebugMarkers Debug marker groups (and so
+    \value DebugMarkers Indicates that debug marker groups (and so
     QRhiCommandBuffer::debugMarkBegin()) are supported.
 
-    \value Timestamps Command buffer timestamps are supported. Relevant for
-    QRhiProfiler::gpuFrameTimes().
+    \value Timestamps Indicates that command buffer timestamps are supported.
+    Relevant for QRhiProfiler::gpuFrameTimes().
 
-    \value Instancing Instanced drawing is supported.
+    \value Instancing Indicates that instanced drawing is supported.
 
-    \value CustomInstanceStepRate Instance step rate other than 1 is supported.
+    \value CustomInstanceStepRate Indicates that instance step rates other than
+    1 are supported.
 
-    \value PrimitiveRestart Restarting the assembly of primitives when
-    encountering an index value of 0xFFFF
+    \value PrimitiveRestart Indicates that restarting the assembly of
+    primitives when encountering an index value of 0xFFFF
     (\l{QRhiCommandBuffer::IndexUInt16}{IndexUInt16}) or 0xFFFFFFFF
     (\l{QRhiCommandBuffer::IndexUInt32}{IndexUInt32}) is always enabled, for
     certain primitive topologies at least. Due to the wildly varying primitive
@@ -573,18 +581,54 @@ QT_BEGIN_NAMESPACE
     \class QRhiTextureRenderTargetDescription
     \inmodule QtRhi
     \brief Describes the color and depth or depth/stencil attachments of a render target.
+
+    A texture render target has zero or more textures as color attachments,
+    zero or one renderbuffer as combined depth/stencil buffer or zero or one
+    texture as depth buffer.
+
+    \note \l depthStencilBuffer and \l depthTexture cannot be both set.
  */
 
 /*!
     \class QRhiTextureRenderTargetDescription::ColorAttachment
     \inmodule QtRhi
-    \brief Describes the color attachments of a render target.
+    \brief Describes the a single color attachment of a render target.
+
+    A color attachment is either a QRhiTexture or a QRhiRenderBuffer. The
+    former, when \l texture is set, is used in most cases.
+
+    \note \l texture and \l renderBuffer cannot be both set.
+
+    Setting renderBuffer instead is recommended only when multisampling is
+    needed. Relying on QRhi::MultisampleRenderBuffer is a better choice than
+    QRhi::MultisampleTexture in practice since the former is available in more
+    run time configurations (e.g. when running on OpenGL ES 3.0 which has no
+    support for multisample textures, but does support multisample
+    renderbuffers).
+
+    When targeting a non-multisample texture, the \l layer and \l level
+    indicate the targeted layer (face index \c{0-5} for cubemaps) and mip
+    level.
+
+    When \l texture or \l renderBuffer is multisample, \l resolveTexture can be
+    set optionally. When set, samples are resolved automatically into that
+    (non-multisample) texture at the end of the render pass. When rendering
+    into a multisample renderbuffers, this is the only way to get resolved,
+    non-multisample content out of them. Multisample textures allow sampling in
+    shaders so for them this is just one option.
+
+    \note when resolving is enabled, the multisample data may not be written
+    out at all. This means that the multisample \l texture must not be used
+    afterwards with shaders for sampling when \l resolveTexture is set.
  */
 
 /*!
     \class QRhiTextureUploadDescription
     \inmodule QtRhi
     \brief Describes a texture upload operation.
+
+    \note Cubemaps have one layer for each of the six faces in the order +X,
+    -X, +Y, -Y, +Z, -Z.
  */
 
 /*!
@@ -597,24 +641,73 @@ QT_BEGIN_NAMESPACE
     \class QRhiTextureUploadDescription::Layer::MipLevel
     \inmodule QtRhi
     \brief Describes one mip level in a layer in a texture upload operation.
+
+    The source content is specified either as a QImage or as a raw blob. The
+    former is only allowed for uncompressed textures, while the latter is only
+    supported for compressed ones.
+
+    \note \l image and \l compressedData cannot be both set.
+
+    \l destinationTopLeft specifies the top-left corner of the target
+    rectangle. Defaults to (0, 0).
+
+    An empty \l sourceSize (the default) indicates that size is assumed to be
+    the size of the subresource. For uncompressed textures this implies that
+    the size of the source \l image must match the subresource. For compressed
+    textures sufficient amount of data must be provided in \l compressedData.
+
+    \note With compressed textures the first upload must always match the
+    subresource size due to graphics API limitations with some backends.
+
+    \l sourceTopLeft is is only supported for uncompressed textures, and
+    specifies the top-left corner of the source rectangle.
+
+    \note Setting \l sourceSize or \l sourceTopLeft may trigger a QImage copy
+    internally, depending on the format and the backend.
  */
 
 /*!
     \class QRhiTextureCopyDescription
     \inmodule QtRhi
     \brief Describes a texture-to-texture copy operation.
+
+    An empty \l pixelSize (the default) indicates that the entire subresource
+    is to be copied.
+
+    \note The source texture must be created with
+    QRhiTexture::UsedAsTransferSource.
  */
 
 /*!
     \class QRhiReadbackDescription
     \inmodule QtRhi
     \brief Describes a readback (reading back texture contents from possibly GPU-only memory) operation.
+
+    The source of the readback operation is either a QRhiTexture or the
+    current backbuffer of the currently targeted QRhiSwapChain. When \l
+    texture is not set, the swapchain is used. Otherwise the specified
+    QRhiTexture is treated as the source.
+
+    \note Textures used in readbacks must be created with
+    QRhiTexture::UsedAsTransferSource.
+
+    \note Swapchains used in readbacks must be created with
+    QRhiSwapChain::UsedAsTransferSource.
+
+    \l layer and \l level are only applicable when the source is a QRhiTexture.
+
+    \note Multisample textures cannot be read back. Readbacks are supported for
+    multisample swapchain buffers however.
  */
 
 /*!
     \class QRhiReadbackResult
     \inmodule QtRhi
     \brief Describes the results of a potentially asynchronous readback operation.
+
+    When \l completed is set, the function is invoked when the \l data is
+    available. \l format and \l pixelSize are set upon completion together with
+    \l data.
  */
 
 /*!
@@ -633,6 +726,20 @@ QT_BEGIN_NAMESPACE
     \class QRhiBuffer
     \inmodule QtRhi
     \brief Vertex, index, or uniform (constant) buffer resource.
+ */
+
+/*!
+    \fn void QRhiBuffer::setSize(int sz)
+
+    Sets the size of the buffer in bytes. The size is normally specified in
+    QRhi::newBuffer() so this function is only used when the size has to be
+    changed. As with other setters, the size only takes effect when calling
+    build(), and for already built buffers this involves releasing the previous
+    native resource and creating new ones under the hood.
+
+    Backends may choose to allocate buffers bigger than \a sz in order to
+    fulfill alignment requirements. This is hidden from the applications and
+    size() will always report the size requested in \a sz.
  */
 
 /*!
@@ -868,7 +975,12 @@ QT_BEGIN_NAMESPACE
 
 /*!
     \enum QRhiTextureRenderTarget::Flag
-    Flag values describing the load/store behavior for the render target
+
+    Flag values describing the load/store behavior for the render target. The
+    load/store behavior may be baked into native resources under the hood,
+    depending on the backend, and therefore it needs to be known upfront and
+    cannot be changed without rebuilding (and so releasing and creating new
+    native resources).
 
     \value PreserveColorContents Indicates that the contents of the color
     attachments is to be loaded when starting a render pass, instead of
@@ -957,6 +1069,39 @@ QT_BEGIN_NAMESPACE
     \class QRhiGraphicsPipeline
     \inmodule QtRhi
     \brief Graphics pipeline state resource.
+
+    \note Setting the shader resource bindings is mandatory but the referenced
+    QRhiShaderResourceBindings is not required to be built when build() is
+    called. Instead, QRhiShaderResourceBindings::build() must be done at latest
+    before QRhiCommandBuffer::setGraphicsPipeline().
+
+    \note Setting the render pass descriptor is mandatory. To obtain a
+    QRhiRenderPassDescriptor that can be passed to setRenderPassDescriptor(),
+    use either QRhiTextureRenderTarget::newCompatibleRenderPassDescriptor() or
+    QRhiSwapChain::newCompatibleRenderPassDescriptor().
+
+    \note Setting the vertex input layout is mandatory.
+
+    \note Setting the shader stages is mandatory.
+
+    \note sampleCount() defaults to 1 and must match the sample count of the
+    render target's color and depth stencil attachments.
+
+    \note The depth test, depth write, and stencil test are disabled by
+    default.
+
+    \note stencilReadMask() and stencilWriteMask() apply to both faces. They
+    both default to 0xFF.
+ */
+
+/*!
+    \fn void QRhiGraphicsPipeline::setTargetBlends(const QVector<TargetBlend> &blends)
+
+    Sets the blend specification for color attachments. Each element in \a
+    blends corresponds to a color attachment of the render target.
+
+    By default no blends are set, which is a shortcut to disabling blending and
+    enabling color write for all four channels.
  */
 
 /*!
@@ -1084,11 +1229,6 @@ QT_BEGIN_NAMESPACE
     Defaults to color write enabled, blending disabled. The blend values are
     set up for pre-multiplied alpha (One, OneMinusSrcAlpha, One,
     OneMinusSrcAlpha) by default.
-
-    Not having any TargetBlend specified in
-    QRhiGraphicsPipeline::setTargetBlends() disables blending and is a
-    convenient shortcut when having only one color attachment and no blending
-    is desired. Otherwise a TargetBlend for each color attachment is expected.
  */
 
 /*!
@@ -1563,6 +1703,9 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
     the render pass descriptor so those can differ in the two
     QRhiTextureRenderTarget intances.
 
+    \note resources, such as QRhiTexture instances, referenced in description()
+    must already be built
+
     \sa build()
  */
 
@@ -1582,6 +1725,9 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
     render pass descriptor is only possible when the render targets have the
     same number and type of attachments (the actual textures can differ) and
     the same flags.
+
+    \note resources, such as QRhiTexture instances, referenced in description()
+    must already be built
 
     \return \c true when successful, \c false when a graphics operation failed.
     Regardless of the return value, calling release() is always safe.

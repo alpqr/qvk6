@@ -477,12 +477,13 @@ void QRhiD3D11::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QV
         cmd.cmd = QD3D11CommandBuffer::Command::BindVertexBuffers;
         cmd.args.bindVertexBuffers.startSlot = startBinding;
         cmd.args.bindVertexBuffers.slotCount = bindings.count();
+        const QVector<QRhiVertexInputBinding> inputBindings =
+                QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline)->m_vertexInputLayout.bindings();
         for (int i = 0, ie = bindings.count(); i != ie; ++i) {
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, bindings[i].first);
             cmd.args.bindVertexBuffers.buffers[i] = bufD->buffer;
             cmd.args.bindVertexBuffers.offsets[i] = bindings[i].second;
-            cmd.args.bindVertexBuffers.strides[i] =
-                    QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline)->m_vertexInputLayout.bindings[i].stride;
+            cmd.args.bindVertexBuffers.strides[i] = inputBindings[i].stride();
         }
         cbD->commands.append(cmd);
     }
@@ -526,8 +527,8 @@ void QRhiD3D11::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
     cmd.args.viewport.y = cbD->currentTarget->sizeInPixels().height() - (r.y() + r.w());
     cmd.args.viewport.w = r.z();
     cmd.args.viewport.h = r.w();
-    cmd.args.viewport.d0 = viewport.minDepth;
-    cmd.args.viewport.d1 = viewport.maxDepth;
+    cmd.args.viewport.d0 = viewport.minDepth();
+    cmd.args.viewport.d1 = viewport.maxDepth();
     cbD->commands.append(cmd);
 }
 

@@ -1,5 +1,4 @@
 multiwindow_threaded should demo pulling out the device and importing to another rhi
-primitive restart
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -21,7 +20,6 @@ gl: ubuf structs, arrays
 test cubemap face as target
 test cubemap face readback
 object names for other than buf/rb/tex
-clang_qdoc ifdefs for q_declare_flags to be removed once qdoc does not choke on them
 
 optional:
 compute?
@@ -48,6 +46,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+primitive restart
+fix independent builds
 basic docs
 vk, d3d, mtl: minimize vertex input changes inside passes
 mtl: cbuffers, textures, samplers set should be batched too

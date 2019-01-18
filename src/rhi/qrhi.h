@@ -1009,7 +1009,8 @@ public:
         DebugMarkers,
         Timestamps,
         Instancing,
-        CustomInstanceStepRate
+        CustomInstanceStepRate,
+        PrimitiveRestart
     };
 
     enum ResourceSizeLimit {

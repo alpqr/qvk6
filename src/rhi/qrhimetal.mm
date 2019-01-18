@@ -437,6 +437,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::CustomInstanceStepRate:
         return true;
+    case QRhi::PrimitiveRestart:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

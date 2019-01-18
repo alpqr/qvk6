@@ -323,6 +323,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::CustomInstanceStepRate:
         return false;
+    case QRhi::PrimitiveRestart:
+        return false; // say no to madness
     default:
         Q_UNREACHABLE();
         return false;

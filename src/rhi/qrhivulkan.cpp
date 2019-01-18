@@ -2863,6 +2863,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::CustomInstanceStepRate:
         return vertexAttribDivisorAvailable;
+    case QRhi::PrimitiveRestart:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -4452,6 +4454,7 @@ bool QVkGraphicsPipeline::build()
     memset(&inputAsmInfo, 0, sizeof(inputAsmInfo));
     inputAsmInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
     inputAsmInfo.topology = toVkTopology(m_topology);
+    inputAsmInfo.primitiveRestartEnable = (m_topology == TriangleStrip || m_topology == LineStrip);
     pipelineInfo.pInputAssemblyState = &inputAsmInfo;
 
     VkPipelineRasterizationStateCreateInfo rastInfo;

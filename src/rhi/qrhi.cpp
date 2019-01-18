@@ -275,12 +275,35 @@ QT_BEGIN_NAMESPACE
     \enum QRhi::Feature
     Flag values to indicate what features are supported by the backend currently in use.
 
-    \value MultisampleTexture Textures with sample count larger than 1 are supported.
-    \value MultisampleRenderBuffer Renderbuffers with sample count larger than 1 are supported.
-    \value DebugMarkers Debug marker groups (and so QRhiCommandBuffer::debugMarkBegin()) are supported.
-    \value Timestamps Command buffer timestamps are supported. Relevant for QRhiProfiler::gpuFrameTimes().
+    \value MultisampleTexture Textures with sample count larger than 1 are
+    supported.
+
+    \value MultisampleRenderBuffer Renderbuffers with sample count larger than
+    1 are supported.
+
+    \value DebugMarkers Debug marker groups (and so
+    QRhiCommandBuffer::debugMarkBegin()) are supported.
+
+    \value Timestamps Command buffer timestamps are supported. Relevant for
+    QRhiProfiler::gpuFrameTimes().
+
     \value Instancing Instanced drawing is supported.
+
     \value CustomInstanceStepRate Instance step rate other than 1 is supported.
+
+    \value PrimitiveRestart Restarting the assembly of primitives when
+    encountering an index value of 0xFFFF
+    (\l{QRhiCommandBuffer::IndexUInt16}{IndexUInt16}) or 0xFFFFFFFF
+    (\l{QRhiCommandBuffer::IndexUInt32}{IndexUInt32}) is always enabled, for
+    certain primitive topologies at least. Due to the wildly varying primitive
+    restart behavior and support in the underlying graphics APIs, primitive
+    restart cannot be controlled with QRhi. Instead, applications must assume
+    that whenever this feature is reported as supported, the above mentioned
+    index values \c may be treated specially, depending on the topology. The
+    only two topologies where primitive restart is guaranteed to behave
+    identically across backends, as long as this feature is reported as
+    supported, are \l{QRhiGraphicsPipeline::LineStrip}{LineStrip} and
+    \l{QRhiGraphicsPipeline::TriangleStrip}{TriangleStrip}.
  */
 
 /*!

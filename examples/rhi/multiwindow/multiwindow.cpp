@@ -248,13 +248,13 @@ void ensureSharedResources(QRhiRenderPassDescriptor *rp)
                               });
 
         QRhiVertexInputLayout inputLayout;
-        inputLayout.bindings = {
+        inputLayout.setBindings({
             { 5 * sizeof(float) }
-        };
-        inputLayout.attributes = {
-            { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-            { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
-        };
+        });
+        inputLayout.setAttributes({
+            { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+            { 0, 1, QRhiVertexInputAttribute::Float3, 2 * sizeof(float) }
+        });
 
         d.ps->setVertexInputLayout(inputLayout);
         d.ps->setShaderResourceBindings(d.srb);

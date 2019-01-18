@@ -155,6 +155,7 @@ void Window::customInit()
     qDebug("isFeatureSupported(Timestamps): %d", m_r->isFeatureSupported(QRhi::Timestamps));
     qDebug("isFeatureSupported(Instancing): %d", m_r->isFeatureSupported(QRhi::Instancing));
     qDebug("isFeatureSupported(CustomInstanceStepRate): %d", m_r->isFeatureSupported(QRhi::CustomInstanceStepRate));
+    qDebug("isFeatureSupported(PrimitiveRestart): %d", m_r->isFeatureSupported(QRhi::PrimitiveRestart));
     qDebug("Min 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMin));
     qDebug("Max 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMax));
 }

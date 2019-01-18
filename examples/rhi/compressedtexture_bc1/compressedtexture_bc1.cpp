@@ -118,14 +118,14 @@ void Window::customInit()
     });
 
     QRhiVertexInputLayout inputLayout;
-    inputLayout.bindings = {
+    inputLayout.setBindings({
         { 3 * sizeof(float) },
         { 2 * sizeof(float) }
-    };
-    inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
-        { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
-    };
+    });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
+        { 1, 1, QRhiVertexInputAttribute::Float2, 0 }
+    });
 
     d.ps->setVertexInputLayout(inputLayout);
     d.ps->setShaderResourceBindings(d.srb);

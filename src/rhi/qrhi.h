@@ -57,101 +57,176 @@ class QRhiTexture;
 class QRhiSampler;
 class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
-struct QRhiResourceUpdateBatchPrivate;
+class QRhiResourceUpdateBatchPrivate;
 class QRhiProfiler;
 
-struct Q_RHI_EXPORT QRhiColorClearValue
+class Q_RHI_EXPORT QRhiColorClearValue
 {
-    QRhiColorClearValue() : rgba(0, 0, 0, 1) { }
-    explicit QRhiColorClearValue(const QVector4D &rgba_) : rgba(rgba_) { }
-    QRhiColorClearValue(float r, float g, float b, float a) : rgba(r, g, b, a) { }
-    QVector4D rgba;
+public:
+    QRhiColorClearValue() : m_rgba(0, 0, 0, 1) { }
+    explicit QRhiColorClearValue(const QVector4D &c) : m_rgba(c) { }
+    QRhiColorClearValue(float r, float g, float b, float a) : m_rgba(r, g, b, a) { }
+
+    QVector4D rgba() const { return m_rgba; }
+    void setRgba(const QVector4D &c) { m_rgba = c; }
+
+private:
+    QVector4D m_rgba;
 };
 
 Q_DECLARE_TYPEINFO(QRhiColorClearValue, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiDepthStencilClearValue
+class Q_RHI_EXPORT QRhiDepthStencilClearValue
 {
-    QRhiDepthStencilClearValue() : d(1), s(0) { }
-    QRhiDepthStencilClearValue(float d_, quint32 s_) : d(d_), s(s_) { }
-    float d;
-    quint32 s;
+public:
+    QRhiDepthStencilClearValue() : m_d(1), m_s(0) { }
+    QRhiDepthStencilClearValue(float d, quint32 s) : m_d(d), m_s(s) { }
+
+    float depthClearValue() const { return m_d; }
+    void setDepthClearValue(float d) { m_d = d; }
+
+    quint32 stencilClearValue() const { return m_s; }
+    void setStencilClearValue(quint32 s) { m_s = s; }
+
+private:
+    float m_d;
+    quint32 m_s;
 };
 
 Q_DECLARE_TYPEINFO(QRhiDepthStencilClearValue, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiViewport
+class Q_RHI_EXPORT QRhiViewport
 {
+public:
     QRhiViewport()
-        : r(0, 0, 1280, 720), minDepth(0), maxDepth(1)
+        : m_rect(0, 0, 1280, 720), m_minDepth(0), m_maxDepth(1)
     { }
-    QRhiViewport(float x, float y, float w, float h, float minDepth_ = 0.0f, float maxDepth_ = 1.0f)
-        : r(x, y, w, h), minDepth(minDepth_), maxDepth(maxDepth_)
+    QRhiViewport(float x, float y, float w, float h, float minDepth = 0.0f, float maxDepth = 1.0f)
+        : m_rect(x, y, w, h), m_minDepth(minDepth), m_maxDepth(maxDepth)
     { }
-    QVector4D r;
-    float minDepth;
-    float maxDepth;
+
+    QVector4D viewport() const { return m_rect; }
+    void setViewport(const QVector4D &v) { m_rect = v; }
+
+    float minDepth() const { return m_minDepth; }
+    void setMinDepth(float minDepth) { m_minDepth = minDepth; }
+
+    float maxDepth() const { return m_maxDepth; }
+    void setMaxDepth(float maxDepth) { m_maxDepth = maxDepth; }
+
+private:
+    QVector4D m_rect;
+    float m_minDepth;
+    float m_maxDepth;
 };
 
 Q_DECLARE_TYPEINFO(QRhiViewport, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiScissor
+class Q_RHI_EXPORT QRhiScissor
 {
+public:
     QRhiScissor() { }
     QRhiScissor(int x, int y, int w, int h)
-        : r(x, y, w, h)
+        : m_rect(x, y, w, h)
     { }
-    QVector4D r;
+
+    QVector4D scissor() const { return m_rect; }
+    void setScissor(const QVector4D &v) { m_rect = v; }
+
+private:
+    QVector4D m_rect;
 };
 
 Q_DECLARE_TYPEINFO(QRhiScissor, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiVertexInputLayout
+class Q_RHI_EXPORT QRhiVertexInputBinding
 {
-    struct Q_RHI_EXPORT Binding {
-        enum Classification {
-            PerVertex,
-            PerInstance
-        };
-        Binding() { }
-        Binding(quint32 stride_, Classification cls = PerVertex, int stepRate = 1)
-            : stride(stride_), classification(cls), instanceStepRate(stepRate)
-        { }
-        quint32 stride;
-        Classification classification;
-        int instanceStepRate;
+public:
+    enum Classification {
+        PerVertex,
+        PerInstance
     };
 
-    struct Q_RHI_EXPORT Attribute {
-        enum Format {
-            Float4,
-            Float3,
-            Float2,
-            Float,
-            UNormByte4,
-            UNormByte2,
-            UNormByte
-        };
-        Attribute() { }
-        Attribute(int binding_, int location_, Format format_, quint32 offset_)
-            : binding(binding_), location(location_), format(format_), offset(offset_)
-        { }
-        int binding;
-        int location;
-        Format format;
-        quint32 offset;
-    };
+    QRhiVertexInputBinding() { }
+    QRhiVertexInputBinding(quint32 stride, Classification cls = PerVertex, int stepRate = 1)
+        : m_stride(stride), m_classification(cls), m_instanceStepRate(stepRate)
+    { }
 
-    QVector<Binding> bindings;
-    QVector<Attribute> attributes;
+    quint32 stride() const { return m_stride; }
+    void setStride(quint32 s) { m_stride = s; }
+
+    Classification classification() const { return m_classification; }
+    void setClassification(Classification c) { m_classification = c; }
+
+    int instanceStepRate() const { return m_instanceStepRate; }
+    void setInstanceStepRate(int rate) { m_instanceStepRate = rate; }
+
+private:
+    quint32 m_stride;
+    Classification m_classification;
+    int m_instanceStepRate;
 };
 
-Q_DECLARE_TYPEINFO(QRhiVertexInputLayout::Binding, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiVertexInputLayout::Attribute, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiVertexInputBinding, Q_MOVABLE_TYPE);
+
+class Q_RHI_EXPORT QRhiVertexInputAttribute
+{
+public:
+    enum Format {
+        Float4,
+        Float3,
+        Float2,
+        Float,
+        UNormByte4,
+        UNormByte2,
+        UNormByte
+    };
+
+    QRhiVertexInputAttribute() { }
+    QRhiVertexInputAttribute(int binding, int location, Format format, quint32 offset)
+        : m_binding(binding), m_location(location), m_format(format), m_offset(offset)
+    { }
+
+    int binding() const { return m_binding; }
+    void setBinding(int b) { m_binding = b; }
+
+    int location() const { return m_location; }
+    void setLocation(int loc) { m_location = loc; }
+
+    Format format() const { return m_format; }
+    void setFormt(Format f) { m_format = f; }
+
+    quint32 offset() const { return m_offset; }
+    void setOffset(quint32 ofs) { m_offset = ofs; }
+
+private:
+    int m_binding;
+    int m_location;
+    Format m_format;
+    quint32 m_offset;
+};
+
+Q_DECLARE_TYPEINFO(QRhiVertexInputAttribute, Q_MOVABLE_TYPE);
+
+class Q_RHI_EXPORT QRhiVertexInputLayout
+{
+public:
+    QVector<QRhiVertexInputBinding> bindings() const { return m_bindings; }
+    void setBindings(const QVector<QRhiVertexInputBinding> &v) { m_bindings = v; }
+
+    QVector<QRhiVertexInputAttribute> attributes() const { return m_attributes; }
+    void setAttributes(const QVector<QRhiVertexInputAttribute> &v) { m_attributes = v; }
+
+private:
+    QVector<QRhiVertexInputBinding> m_bindings;
+    QVector<QRhiVertexInputAttribute> m_attributes;
+};
+
 Q_DECLARE_TYPEINFO(QRhiVertexInputLayout, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiGraphicsShaderStage
+class Q_RHI_EXPORT QRhiGraphicsShaderStage
 {
+public:
     enum Type {
         Vertex,
         Fragment,
@@ -160,12 +235,19 @@ struct Q_RHI_EXPORT QRhiGraphicsShaderStage
     };
 
     QRhiGraphicsShaderStage() { }
-    QRhiGraphicsShaderStage(Type type_, const QBakedShader &shader_)
-        : type(type_), shader(shader_)
+    QRhiGraphicsShaderStage(Type type, const QBakedShader &shader)
+        : m_type(type), m_shader(shader)
     { }
 
-    Type type;
-    QBakedShader shader;
+    Type type() const { return m_type; }
+    void setType(Type t) { m_type = t; }
+
+    QBakedShader shader() const { return m_shader; }
+    void setShader(const QBakedShader &s) { m_shader = s; }
+
+private:
+    Type m_type;
+    QBakedShader m_shader;
 };
 
 Q_DECLARE_TYPEINFO(QRhiGraphicsShaderStage, Q_MOVABLE_TYPE);
@@ -210,41 +292,77 @@ struct Q_RHI_EXPORT QRhiShaderResourceBinding
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBinding::StageFlags)
 Q_DECLARE_TYPEINFO(QRhiShaderResourceBinding, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiTextureRenderTargetDescription
+class Q_RHI_EXPORT QRhiColorAttachment
 {
-    struct Q_RHI_EXPORT ColorAttachment {
-        ColorAttachment() { }
-        ColorAttachment(QRhiTexture *texture_) : texture(texture_) { }
-        ColorAttachment(QRhiRenderBuffer *renderBuffer_) : renderBuffer(renderBuffer_) { }
+public:
+    QRhiColorAttachment() { }
+    QRhiColorAttachment(QRhiTexture *texture) : m_texture(texture) { }
+    QRhiColorAttachment(QRhiRenderBuffer *renderBuffer) : m_renderBuffer(renderBuffer) { }
 
-        QRhiTexture *texture = nullptr;
-        QRhiRenderBuffer *renderBuffer = nullptr;
+    QRhiTexture *texture() const { return m_texture; }
+    void setTexture(QRhiTexture *tex) { m_texture = tex; }
 
-        int layer = 0;
-        int level = 0;
+    QRhiRenderBuffer *renderBuffer() const { return m_renderBuffer; }
+    void setRenderBuffer(QRhiRenderBuffer *rb) { m_renderBuffer = rb; }
 
-        QRhiTexture *resolveTexture = nullptr;
-        int resolveLayer = 0;
-        int resolveLevel = 0;
-    };
+    int layer() const { return m_layer; }
+    void setLayer(int layer) { m_layer = layer; }
 
-    QRhiTextureRenderTargetDescription()
-    { }
-    QRhiTextureRenderTargetDescription(const ColorAttachment &colorAttachment)
-    { colorAttachments.append(colorAttachment); }
-    QRhiTextureRenderTargetDescription(const ColorAttachment &colorAttachment, QRhiRenderBuffer *depthStencilBuffer_)
-        : depthStencilBuffer(depthStencilBuffer_)
-    { colorAttachments.append(colorAttachment); }
-    QRhiTextureRenderTargetDescription(const ColorAttachment &colorAttachment, QRhiTexture *depthTexture_)
-        : depthTexture(depthTexture_)
-    { colorAttachments.append(colorAttachment); }
+    int level() const { return m_level; }
+    void setLevel(int level) { m_level = level; }
 
-    QVector<ColorAttachment> colorAttachments;
-    QRhiRenderBuffer *depthStencilBuffer = nullptr;
-    QRhiTexture *depthTexture = nullptr;
+    QRhiTexture *resolveTexture() const { return m_resolveTexture; }
+    void setResolveTexture(QRhiTexture *tex) { m_resolveTexture = tex; }
+
+    int resolveLayer() const { return m_resolveLayer; }
+    void setResolveLayer(int layer) { m_resolveLayer = layer; }
+
+    int resolveLevel() const { return m_resolveLevel; }
+    void setResolveLevel(int level) { m_resolveLevel = level; }
+
+private:
+    QRhiTexture *m_texture = nullptr;
+    QRhiRenderBuffer *m_renderBuffer = nullptr;
+
+    int m_layer = 0;
+    int m_level = 0;
+
+    QRhiTexture *m_resolveTexture = nullptr;
+    int m_resolveLayer = 0;
+    int m_resolveLevel = 0;
 };
 
-Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription::ColorAttachment, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiColorAttachment, Q_MOVABLE_TYPE);
+
+class Q_RHI_EXPORT QRhiTextureRenderTargetDescription
+{
+public:
+    QRhiTextureRenderTargetDescription()
+    { }
+    QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment)
+    { m_colorAttachments.append(colorAttachment); }
+    QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment, QRhiRenderBuffer *depthStencilBuffer)
+        : m_depthStencilBuffer(depthStencilBuffer)
+    { m_colorAttachments.append(colorAttachment); }
+    QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment, QRhiTexture *depthTexture)
+        : m_depthTexture(depthTexture)
+    { m_colorAttachments.append(colorAttachment); }
+
+    QVector<QRhiColorAttachment> colorAttachments() const { return m_colorAttachments; }
+    void setColorAttachments(const QVector<QRhiColorAttachment> &att) { m_colorAttachments = att; }
+
+    QRhiRenderBuffer *depthStencilBuffer() const { return m_depthStencilBuffer; }
+    void setDepthStencilBuffer(QRhiRenderBuffer *renderBuffer) { m_depthStencilBuffer = renderBuffer; }
+
+    QRhiTexture *depthTexture() const { return m_depthTexture; }
+    void setDepthTexture(QRhiTexture *texture) { m_depthTexture = texture; }
+
+private:
+    QVector<QRhiColorAttachment> m_colorAttachments;
+    QRhiRenderBuffer *m_depthStencilBuffer = nullptr;
+    QRhiTexture *m_depthTexture = nullptr;
+};
+
 Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiTextureUploadDescription
@@ -933,7 +1051,7 @@ private:
     QRhiResourceUpdateBatch(QRhiImplementation *rhi);
     Q_DISABLE_COPY(QRhiResourceUpdateBatch)
     QRhiResourceUpdateBatchPrivate *d;
-    friend struct QRhiResourceUpdateBatchPrivate;
+    friend class QRhiResourceUpdateBatchPrivate;
     friend class QRhi;
 };
 

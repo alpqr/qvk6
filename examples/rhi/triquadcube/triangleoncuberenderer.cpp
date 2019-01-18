@@ -143,14 +143,14 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
     });
 
     QRhiVertexInputLayout inputLayout;
-    inputLayout.bindings = {
+    inputLayout.setBindings({
         { 3 * sizeof(float) },
         { 2 * sizeof(float) }
-    };
-    inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
-        { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
-    };
+    });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
+        { 1, 1, QRhiVertexInputAttribute::Float2, 0 }
+    });
 
     m_ps->setVertexInputLayout(inputLayout);
     m_ps->setShaderResourceBindings(m_srb);
@@ -164,15 +164,19 @@ void TriangleOnCubeRenderer::initResources(QRhiRenderPassDescriptor *rp)
 
     if (DEPTH_TEXTURE) {
         QRhiTextureRenderTargetDescription desc;
-        desc.depthTexture = m_depthTex;
+        desc.setDepthTexture(m_depthTex);
         m_rt = m_r->newTextureRenderTarget(desc, rtFlags);
     } else {
-        QRhiTextureRenderTargetDescription desc { m_tex };
+        QRhiTextureRenderTargetDescription desc;
+        QRhiColorAttachment color0 { m_tex };
         if (DS_ATT)
-            desc.depthStencilBuffer = m_ds;
+            desc.setDepthStencilBuffer(m_ds);
         if (MRT) {
             m_offscreenTriangle.setColorAttCount(2);
-            desc.colorAttachments.append(m_tex2);
+            QRhiColorAttachment color1 { m_tex2 };
+            desc.setColorAttachments({ color0, color1 });
+        } else {
+            desc.setColorAttachments({ color0 });
         }
         m_rt = m_r->newTextureRenderTarget(desc, rtFlags);
     }

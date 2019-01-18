@@ -178,14 +178,14 @@ bool QRhiImgui::prepareFrame(QRhiRenderTarget *rt, QRhiRenderPassDescriptor *rp,
         });
 
         QRhiVertexInputLayout inputLayout;
-        inputLayout.bindings = {
+        inputLayout.setBindings({
             { 4 * sizeof(float) + sizeof(quint32) }
-        };
-        inputLayout.attributes = {
-            { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-            { 0, 1, QRhiVertexInputLayout::Attribute::Float2, 2 * sizeof(float) },
-            { 0, 2, QRhiVertexInputLayout::Attribute::UNormByte4, 4 * sizeof(float) }
-        };
+        });
+        inputLayout.setAttributes({
+            { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+            { 0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float) },
+            { 0, 2, QRhiVertexInputAttribute::UNormByte4, 4 * sizeof(float) }
+        });
 
         d->ps->setVertexInputLayout(inputLayout);
         d->ps->setShaderResourceBindings(d->textures[0].srb);

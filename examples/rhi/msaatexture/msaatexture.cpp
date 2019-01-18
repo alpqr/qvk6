@@ -168,13 +168,11 @@ void Window::customInit()
         { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/texture.frag.qsb")) }
     });
     QRhiVertexInputLayout inputLayout;
-    inputLayout.bindings = {
-        { 4 * sizeof(float) }
-    };
-    inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-        { 0, 1, QRhiVertexInputLayout::Attribute::Float2, 2 * sizeof(float) }
-    };
+    inputLayout.setBindings({ { 4 * sizeof(float) } });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float) }
+    });
     d.psLeft->setVertexInputLayout(inputLayout);
     d.psLeft->setShaderResourceBindings(d.srbLeft);
     d.psLeft->setRenderPassDescriptor(m_rp);
@@ -224,13 +222,13 @@ void Window::customInit()
         { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/color.vert.qsb")) },
         { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/color.frag.qsb")) }
     });
-    inputLayout.bindings = {
+    inputLayout.setBindings({
         { 5 * sizeof(float) }
-    };
-    inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
-    };
+    });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float3, 2 * sizeof(float) }
+    });
     d.triPs->setVertexInputLayout(inputLayout);
     d.triPs->setShaderResourceBindings(d.triSrb);
     d.triPs->setRenderPassDescriptor(d.rtRp);

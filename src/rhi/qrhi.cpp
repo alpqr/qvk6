@@ -380,7 +380,7 @@ QT_BEGIN_NAMESPACE
     only possible with a QRhiGraphicsPipeline that has
     QRhiGraphicsPipeline::UsesScissor set.
 
-    \note QRhi assumes OpenGL-style viewport coordinates, meaning x and y are
+    \note QRhi assumes OpenGL-style scissor coordinates, meaning x and y are
     bottom-left.
 
     \sa QRhiCommandBuffer::setScissor(), QRhiViewport
@@ -393,7 +393,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiVertexInputLayout::Binding
+    \class QRhiVertexInputBinding
     \inmodule QtRhi
     \brief Describes a vertex input binding.
 
@@ -414,14 +414,14 @@ QT_BEGIN_NAMESPACE
 
     \badcode
         QRhiVertexInputLayout inputLayout;
-        inputLayout.bindings = {
+        inputLayout.setBindings({
             { 3 * sizeof(float) },
             { 2 * sizeof(float) }
-        };
+        });
     \endcode
 
     Only the stride is interesting here since instancing is not used. The
-    binding number is given by the index of the QRhiVertexInputLayout::Binding
+    binding number is given by the index of the QRhiVertexInputBinding
     element in the bindings vector of the QRhiVertexInputLayout.
 
     Once a graphics pipeline with this vertex input layout is bound, the vertex
@@ -445,7 +445,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \enum QRhiVertexInputLayout::Binding::Classification
+    \enum QRhiVertexInputBinding::Classification
     Describes the input data classification.
 
     \value PerVertex Data is per-vertex
@@ -453,7 +453,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiVertexInputLayout::Attribute
+    \class QRhiVertexInputAttribute
     \inmodule QtRhi
     \brief Describes a single vertex input element.
 
@@ -478,14 +478,14 @@ QT_BEGIN_NAMESPACE
 
     \badcode
         QRhiVertexInputLayout inputLayout;
-        inputLayout.bindings = {
+        inputLayout.setBindings({
             { 3 * sizeof(float) },
             { 2 * sizeof(float) }
-        };
-        inputLayout.attributes = {
-            { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
-            { 1, 1, QRhiVertexInputLayout::Attribute::Float2, 0 }
-        };
+        });
+        inputLayout.setAttributes({
+            { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
+            { 1, 1, QRhiVertexInputAttribute::Float2, 0 }
+        });
     \endcode
 
     Once a graphics pipeline with this vertex input layout is bound, the vertex
@@ -503,13 +503,13 @@ QT_BEGIN_NAMESPACE
 
     \badcode
         QRhiVertexInputLayout inputLayout;
-        inputLayout.bindings = {
+        inputLayout.setBindings({
             { 5 * sizeof(float) }
-        };
-        inputLayout.attributes = {
-            { 0, 0, QRhiVertexInputLayout::Attribute::Float3, 0 },
-            { 0, 1, QRhiVertexInputLayout::Attribute::Float2, 3 * sizeof(float) }
-        };
+        });
+        inputLayout.setAttributes({
+            { 0, 0, QRhiVertexInputAttribute::Float3, 0 },
+            { 0, 1, QRhiVertexInputAttribute::Float2, 3 * sizeof(float) }
+        });
     \endcode
 
     and then:
@@ -522,7 +522,7 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \enum QRhiVertexInputLayout::Attribute::Format
+    \enum QRhiVertexInputAttribute::Format
     Specifies the type of the element data.
 
     \value Float4 Four component float vector
@@ -586,18 +586,20 @@ QT_BEGIN_NAMESPACE
     zero or one renderbuffer as combined depth/stencil buffer or zero or one
     texture as depth buffer.
 
-    \note \l depthStencilBuffer and \l depthTexture cannot be both set.
+    \note depthStencilBuffer() and depthTexture() cannot be both set (cannot be
+    non-null at the same time).
  */
 
 /*!
-    \class QRhiTextureRenderTargetDescription::ColorAttachment
+    \class QRhiColorAttachment
     \inmodule QtRhi
     \brief Describes the a single color attachment of a render target.
 
     A color attachment is either a QRhiTexture or a QRhiRenderBuffer. The
-    former, when \l texture is set, is used in most cases.
+    former, when texture() is set, is used in most cases.
 
-    \note \l texture and \l renderBuffer cannot be both set.
+    \note texture() and renderBuffer() cannot be both set (be non-null at the
+    same time).
 
     Setting renderBuffer instead is recommended only when multisampling is
     needed. Relying on QRhi::MultisampleRenderBuffer is a better choice than
@@ -606,11 +608,11 @@ QT_BEGIN_NAMESPACE
     support for multisample textures, but does support multisample
     renderbuffers).
 
-    When targeting a non-multisample texture, the \l layer and \l level
+    When targeting a non-multisample texture, the layer() and level()
     indicate the targeted layer (face index \c{0-5} for cubemaps) and mip
     level.
 
-    When \l texture or \l renderBuffer is multisample, \l resolveTexture can be
+    When texture() or renderBuffer() is multisample, resolveTexture() can be
     set optionally. When set, samples are resolved automatically into that
     (non-multisample) texture at the end of the render pass. When rendering
     into a multisample renderbuffers, this is the only way to get resolved,
@@ -618,8 +620,8 @@ QT_BEGIN_NAMESPACE
     shaders so for them this is just one option.
 
     \note when resolving is enabled, the multisample data may not be written
-    out at all. This means that the multisample \l texture must not be used
-    afterwards with shaders for sampling when \l resolveTexture is set.
+    out at all. This means that the multisample texture() must not be used
+    afterwards with shaders for sampling when resolveTexture() is set.
  */
 
 /*!
@@ -990,7 +992,7 @@ QT_BEGIN_NAMESPACE
     \value PreserveDepthStencilContents Indicates that the contents of the
     depth texture is to be loaded when starting a render pass, instead
     clearing. Only applicable when a texture is used as the depth buffer
-    (QRhiTextureRenderTargetDescription::depthTexture is set) because
+    (QRhiTextureRenderTargetDescription::depthTexture() is set) because
     depth/stencil renderbuffers may not have any physical backing and data may
     not be written out in the first place.
  */
@@ -1862,7 +1864,7 @@ QRhiSwapChain::QRhiSwapChain(QRhiImplementation *rhi)
     \fn QRhiCommandBuffer *QRhiSwapChain::currentFrameCommandBuffer()
 
     \return a command buffer on which rendering commands can be recorded. Only
-    valid within a Rhi::beginFrame() - QRhi::endFrame() block where
+    valid within a QRhi::beginFrame() - QRhi::endFrame() block where
     beginFrame() was called with this swapchain.
 
     \note the value must not be cached and reused between frames
@@ -2598,13 +2600,13 @@ void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps,
 
     \badcode
         QRhiVertexInputLayout inputLayout;
-        inputLayout.bindings = {
+        inputLayout.setBindings({
             { 5 * sizeof(float) }
-        };
-        inputLayout.attributes = {
-            { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-            { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
-        };
+        });
+        inputLayout.setAttributes({
+            { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+            { 0, 1, QRhiVertexInputAttribute::Float3, 2 * sizeof(float) }
+        });
     \endcode
 
     Here there is one buffer binding (binding number 0), with two inputs

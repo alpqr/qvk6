@@ -942,7 +942,7 @@ bool QRhiVulkan::createDefaultRenderPass(VkRenderPass *rp, bool hasDepthStencil,
 }
 
 bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
-                                           const QVector<QRhiTextureRenderTargetDescription::ColorAttachment> &colorAttachments,
+                                           const QVector<QRhiColorAttachment> &colorAttachments,
                                            bool preserveColor,
                                            bool preserveDs,
                                            QRhiRenderBuffer *depthStencilBuffer,
@@ -956,8 +956,8 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
     // attachment list layout is color (0-8), ds (0-1), resolve (0-8)
 
     for (int i = 0; i < colorAttCount; ++i) {
-        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture);
-        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachments[i].renderBuffer);
+        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture());
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachments[i].renderBuffer());
         Q_ASSERT(texD || rbD);
         const VkFormat vkformat = texD ? texD->vkformat : rbD->vkformat;
         const VkSampleCountFlagBits samples = texD ? texD->samples : rbD->samples;
@@ -967,11 +967,11 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
         attDesc.format = vkformat;
         attDesc.samples = samples;
         attDesc.loadOp = preserveColor ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-        attDesc.storeOp = colorAttachments[i].resolveTexture ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
+        attDesc.storeOp = colorAttachments[i].resolveTexture() ? VK_ATTACHMENT_STORE_OP_DONT_CARE : VK_ATTACHMENT_STORE_OP_STORE;
         attDesc.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         attDesc.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attDesc.initialLayout = preserveColor ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
-        attDesc.finalLayout = colorAttachments[i].resolveTexture ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        attDesc.finalLayout = colorAttachments[i].resolveTexture() ? VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         attDescs.append(attDesc);
 
         const VkAttachmentReference ref = { uint32_t(attDescs.count() - 1), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
@@ -1001,8 +1001,8 @@ bool QRhiVulkan::createOffscreenRenderPass(VkRenderPass *rp,
     VkAttachmentReference dsRef = { uint32_t(attDescs.count() - 1), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
     for (int i = 0; i < colorAttCount; ++i) {
-        if (colorAttachments[i].resolveTexture) {
-            QVkTexture *rtexD = QRHI_RES(QVkTexture, colorAttachments[i].resolveTexture);
+        if (colorAttachments[i].resolveTexture()) {
+            QVkTexture *rtexD = QRHI_RES(QVkTexture, colorAttachments[i].resolveTexture());
             if (rtexD->samples > VK_SAMPLE_COUNT_1_BIT)
                 qWarning("Resolving into a multisample texture is not supported");
 
@@ -1776,9 +1776,10 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
     rtD->lastActiveFrameSlot = currentFrameSlot;
     rtD->d.rp->lastActiveFrameSlot = currentFrameSlot;
     // the renderpass will implicitly transition so no barrier needed here
-    for (const QRhiTextureRenderTargetDescription::ColorAttachment &colorAttachment : qAsConst(rtD->m_desc.colorAttachments)) {
-        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachment.texture);
-        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachment.renderBuffer);
+    const QVector<QRhiColorAttachment> colorAttachments = rtD->m_desc.colorAttachments();
+    for (const QRhiColorAttachment &colorAttachment : colorAttachments) {
+        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachment.texture());
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachment.renderBuffer());
         if (texD) {
             texD->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             texD->lastActiveFrameSlot = currentFrameSlot;
@@ -1787,8 +1788,8 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
             rbD->lastActiveFrameSlot = currentFrameSlot;
         }
     }
-    if (rtD->m_desc.depthTexture) {
-        QVkTexture *depthTexD = QRHI_RES(QVkTexture, rtD->m_desc.depthTexture);
+    if (rtD->m_desc.depthTexture()) {
+        QVkTexture *depthTexD = QRHI_RES(QVkTexture, rtD->m_desc.depthTexture());
         depthTexD->layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
         depthTexD->lastActiveFrameSlot = currentFrameSlot;
     }
@@ -1798,16 +1799,17 @@ void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureR
 {
     QVkTextureRenderTarget *rtD = QRHI_RES(QVkTextureRenderTarget, rt);
     // already in the right layout when the renderpass ends
-    for (const QRhiTextureRenderTargetDescription::ColorAttachment &colorAttachment : qAsConst(rtD->m_desc.colorAttachments)) {
-        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachment.texture);
-        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachment.renderBuffer);
+    const QVector<QRhiColorAttachment> colorAttachments = rtD->m_desc.colorAttachments();
+    for (const QRhiColorAttachment &colorAttachment : colorAttachments) {
+        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachment.texture());
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachment.renderBuffer());
         if (texD)
             texD->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         else if (rbD)
             rbD->backingTexture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
-    if (rtD->m_desc.depthTexture)
-        QRHI_RES(QVkTexture, rtD->m_desc.depthTexture)->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    if (rtD->m_desc.depthTexture())
+        QRHI_RES(QVkTexture, rtD->m_desc.depthTexture())->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 }
 
 void QRhiVulkan::prepareNewFrame(QRhiCommandBuffer *cb)
@@ -1884,20 +1886,21 @@ void QRhiVulkan::beginPass(QRhiCommandBuffer *cb,
     rpBeginInfo.renderArea.extent.width = rtD->pixelSize.width();
     rpBeginInfo.renderArea.extent.height = rtD->pixelSize.height();
 
+    const QVector4D rgba = colorClearValue.rgba();
     QVarLengthArray<VkClearValue, 4> cvs;
     for (int i = 0; i < rtD->colorAttCount; ++i) {
         VkClearValue cv;
-        cv.color = { { colorClearValue.rgba.x(), colorClearValue.rgba.y(), colorClearValue.rgba.z(), colorClearValue.rgba.w() } };
+        cv.color = { { rgba.x(), rgba.y(), rgba.z(), rgba.w() } };
         cvs.append(cv);
     }
     for (int i = 0; i < rtD->dsAttCount; ++i) {
         VkClearValue cv;
-        cv.depthStencil = { depthStencilClearValue.d, depthStencilClearValue.s };
+        cv.depthStencil = { depthStencilClearValue.depthClearValue(), depthStencilClearValue.stencilClearValue() };
         cvs.append(cv);
     }
     for (int i = 0; i < rtD->resolveAttCount; ++i) {
         VkClearValue cv;
-        cv.color = { { colorClearValue.rgba.x(), colorClearValue.rgba.y(), colorClearValue.rgba.z(), colorClearValue.rgba.w() } };
+        cv.color = { { rgba.x(), rgba.y(), rgba.z(), rgba.w() } };
         cvs.append(cv);
     }
     rpBeginInfo.clearValueCount = cvs.count();
@@ -3094,12 +3097,13 @@ static inline VkViewport toVkViewport(const QRhiViewport &viewport, const QSize 
 {
     // x,y is top-left in VkViewport but bottom-left in QRhiViewport
     VkViewport vp;
-    vp.x = viewport.r.x();
-    vp.y = outputSize.height() - (viewport.r.y() + viewport.r.w());
-    vp.width = viewport.r.z();
-    vp.height = viewport.r.w();
-    vp.minDepth = viewport.minDepth;
-    vp.maxDepth = viewport.maxDepth;
+    const QVector4D r = viewport.viewport();
+    vp.x = r.x();
+    vp.y = outputSize.height() - (r.y() + r.w());
+    vp.width = r.z();
+    vp.height = r.w();
+    vp.minDepth = viewport.minDepth();
+    vp.maxDepth = viewport.maxDepth();
     return vp;
 }
 
@@ -3107,10 +3111,11 @@ static inline VkRect2D toVkScissor(const QRhiScissor &scissor, const QSize &outp
 {
     // x,y is top-left in VkRect2D but bottom-left in QRhiScissor
     VkRect2D s;
-    s.offset.x = scissor.r.x();
-    s.offset.y = outputSize.height() - (scissor.r.y() + scissor.r.w());
-    s.extent.width = scissor.r.z();
-    s.extent.height = scissor.r.w();
+    const QVector4D r = scissor.scissor();
+    s.offset.x = r.x();
+    s.offset.y = outputSize.height() - (r.y() + r.w());
+    s.extent.width = r.z();
+    s.extent.height = r.w();
     return s;
 }
 
@@ -3124,7 +3129,8 @@ void QRhiVulkan::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport
     df->vkCmdSetViewport(cbD->cb, 0, 1, &vp);
 
     if (!QRHI_RES(QVkGraphicsPipeline, cbD->currentPipeline)->m_flags.testFlag(QRhiGraphicsPipeline::UsesScissor)) {
-        const VkRect2D s = toVkScissor(QRhiScissor(viewport.r.x(), viewport.r.y(), viewport.r.z(), viewport.r.w()), outputSize);
+        const QVector4D v = viewport.viewport();
+        const VkRect2D s = toVkScissor(QRhiScissor(v.x(), v.y(), v.z(), v.w()), outputSize);
         df->vkCmdSetScissor(cbD->cb, 0, 1, &s);
     }
 }
@@ -3293,22 +3299,22 @@ static inline VkShaderStageFlagBits toVkShaderStage(QRhiGraphicsShaderStage::Typ
     }
 }
 
-static inline VkFormat toVkAttributeFormat(QRhiVertexInputLayout::Attribute::Format format)
+static inline VkFormat toVkAttributeFormat(QRhiVertexInputAttribute::Format format)
 {
     switch (format) {
-    case QRhiVertexInputLayout::Attribute::Float4:
+    case QRhiVertexInputAttribute::Float4:
         return VK_FORMAT_R32G32B32A32_SFLOAT;
-    case QRhiVertexInputLayout::Attribute::Float3:
+    case QRhiVertexInputAttribute::Float3:
         return VK_FORMAT_R32G32B32_SFLOAT;
-    case QRhiVertexInputLayout::Attribute::Float2:
+    case QRhiVertexInputAttribute::Float2:
         return VK_FORMAT_R32G32_SFLOAT;
-    case QRhiVertexInputLayout::Attribute::Float:
+    case QRhiVertexInputAttribute::Float:
         return VK_FORMAT_R32_SFLOAT;
-    case QRhiVertexInputLayout::Attribute::UNormByte4:
+    case QRhiVertexInputAttribute::UNormByte4:
         return VK_FORMAT_R8G8B8A8_UNORM;
-    case QRhiVertexInputLayout::Attribute::UNormByte2:
+    case QRhiVertexInputAttribute::UNormByte2:
         return VK_FORMAT_R8G8_UNORM;
-    case QRhiVertexInputLayout::Attribute::UNormByte:
+    case QRhiVertexInputAttribute::UNormByte:
         return VK_FORMAT_R8_UNORM;
     default:
         Q_UNREACHABLE();
@@ -4081,11 +4087,11 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
     QRHI_RES_RHI(QRhiVulkan);
     QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
     if (!rhiD->createOffscreenRenderPass(&rp->rp,
-                                         m_desc.colorAttachments,
+                                         m_desc.colorAttachments(),
                                          m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
                                          m_flags.testFlag(QRhiTextureRenderTarget::PreserveDepthStencilContents),
-                                         m_desc.depthStencilBuffer,
-                                         m_desc.depthTexture))
+                                         m_desc.depthStencilBuffer(),
+                                         m_desc.depthTexture()))
     {
         delete rp;
         return nullptr;
@@ -4100,17 +4106,18 @@ bool QVkTextureRenderTarget::build()
     if (d.fb)
         release();
 
-    Q_ASSERT(!m_desc.colorAttachments.isEmpty() || m_desc.depthTexture);
-    Q_ASSERT(!m_desc.depthStencilBuffer || !m_desc.depthTexture);
-    const bool hasDepthStencil = m_desc.depthStencilBuffer || m_desc.depthTexture;
+    const QVector<QRhiColorAttachment> colorAttachments = m_desc.colorAttachments();
+    Q_ASSERT(!colorAttachments.isEmpty() || m_desc.depthTexture());
+    Q_ASSERT(!m_desc.depthStencilBuffer() || !m_desc.depthTexture());
+    const bool hasDepthStencil = m_desc.depthStencilBuffer() || m_desc.depthTexture();
 
     QRHI_RES_RHI(QRhiVulkan);
     QVarLengthArray<VkImageView, 8> views;
 
-    d.colorAttCount = m_desc.colorAttachments.count();
+    d.colorAttCount = colorAttachments.count();
     for (int i = 0; i < d.colorAttCount; ++i) {
-        QVkTexture *texD = QRHI_RES(QVkTexture, m_desc.colorAttachments[i].texture);
-        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, m_desc.colorAttachments[i].renderBuffer);
+        QVkTexture *texD = QRHI_RES(QVkTexture, colorAttachments[i].texture());
+        QVkRenderBuffer *rbD = QRHI_RES(QVkRenderBuffer, colorAttachments[i].renderBuffer());
         Q_ASSERT(texD || rbD);
         if (texD) {
             Q_ASSERT(texD->flags().testFlag(QRhiTexture::RenderTarget));
@@ -4125,9 +4132,9 @@ bool QVkTextureRenderTarget::build()
             viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
             viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
             viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            viewInfo.subresourceRange.baseMipLevel = m_desc.colorAttachments[i].level;
+            viewInfo.subresourceRange.baseMipLevel = colorAttachments[i].level();
             viewInfo.subresourceRange.levelCount = 1;
-            viewInfo.subresourceRange.baseArrayLayer = m_desc.colorAttachments[i].layer;
+            viewInfo.subresourceRange.baseArrayLayer = colorAttachments[i].layer();
             viewInfo.subresourceRange.layerCount = 1;
             VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &rtv[i]);
             if (err != VK_SUCCESS) {
@@ -4150,20 +4157,20 @@ bool QVkTextureRenderTarget::build()
 
     if (hasDepthStencil) {
         d.dsAttCount = 1;
-        views.append(m_desc.depthTexture ? QRHI_RES(QVkTexture, m_desc.depthTexture)->imageView
-                                         : QRHI_RES(QVkRenderBuffer, m_desc.depthStencilBuffer)->imageView);
+        views.append(m_desc.depthTexture() ? QRHI_RES(QVkTexture, m_desc.depthTexture())->imageView
+                                           : QRHI_RES(QVkRenderBuffer, m_desc.depthStencilBuffer())->imageView);
 
         if (d.colorAttCount == 0)
-            d.pixelSize = m_desc.depthTexture ? m_desc.depthTexture->pixelSize() : m_desc.depthStencilBuffer->pixelSize();
+            d.pixelSize = m_desc.depthTexture() ? m_desc.depthTexture()->pixelSize() : m_desc.depthStencilBuffer()->pixelSize();
     } else {
         d.dsAttCount = 0;
     }
 
     d.resolveAttCount = 0;
     for (int i = 0; i < d.colorAttCount; ++i) {
-        if (m_desc.colorAttachments[i].resolveTexture) {
+        if (colorAttachments[i].resolveTexture()) {
             d.resolveAttCount += 1;
-            QVkTexture *resTexD = QRHI_RES(QVkTexture, m_desc.colorAttachments[i].resolveTexture);
+            QVkTexture *resTexD = QRHI_RES(QVkTexture, colorAttachments[i].resolveTexture());
 
             VkImageViewCreateInfo viewInfo;
             memset(&viewInfo, 0, sizeof(viewInfo));
@@ -4176,9 +4183,9 @@ bool QVkTextureRenderTarget::build()
             viewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
             viewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
             viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            viewInfo.subresourceRange.baseMipLevel = m_desc.colorAttachments[i].resolveLevel;
+            viewInfo.subresourceRange.baseMipLevel = colorAttachments[i].resolveLevel();
             viewInfo.subresourceRange.levelCount = 1;
-            viewInfo.subresourceRange.baseArrayLayer = m_desc.colorAttachments[i].resolveLayer;
+            viewInfo.subresourceRange.baseArrayLayer = colorAttachments[i].resolveLayer();
             viewInfo.subresourceRange.layerCount = 1;
             VkResult err = rhiD->df->vkCreateImageView(rhiD->dev, &viewInfo, nullptr, &resrtv[i]);
             if (err != VK_SUCCESS) {
@@ -4359,9 +4366,10 @@ bool QVkGraphicsPipeline::build()
     QVarLengthArray<VkShaderModule, 4> shaders;
     QVarLengthArray<VkPipelineShaderStageCreateInfo, 4> shaderStageCreateInfos;
     for (const QRhiGraphicsShaderStage &shaderStage : m_shaderStages) {
-        const QBakedShaderCode spirv = shaderStage.shader.shader({ QBakedShaderKey::SpirvShader, 100 });
+        const QBakedShader bakedShader = shaderStage.shader();
+        const QBakedShaderCode spirv = bakedShader.shader({ QBakedShaderKey::SpirvShader, 100 });
         if (spirv.shader().isEmpty()) {
-            qWarning() << "No SPIR-V 1.0 shader code found in baked shader" << shaderStage.shader;
+            qWarning() << "No SPIR-V 1.0 shader code found in baked shader" << bakedShader;
             return false;
         }
         VkShaderModule shader = rhiD->createShader(spirv.shader());
@@ -4370,7 +4378,7 @@ bool QVkGraphicsPipeline::build()
             VkPipelineShaderStageCreateInfo shaderInfo;
             memset(&shaderInfo, 0, sizeof(shaderInfo));
             shaderInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-            shaderInfo.stage = toVkShaderStage(shaderStage.type);
+            shaderInfo.stage = toVkShaderStage(shaderStage.type());
             shaderInfo.module = shader;
             shaderInfo.pName = spirv.entryPoint().constData();
             shaderStageCreateInfos.append(shaderInfo);
@@ -4379,21 +4387,22 @@ bool QVkGraphicsPipeline::build()
     pipelineInfo.stageCount = shaderStageCreateInfos.count();
     pipelineInfo.pStages = shaderStageCreateInfos.constData();
 
+    const QVector<QRhiVertexInputBinding> bindings = m_vertexInputLayout.bindings();
     QVarLengthArray<VkVertexInputBindingDescription, 4> vertexBindings;
     QVarLengthArray<VkVertexInputBindingDivisorDescriptionEXT> nonOneStepRates;
-    for (int i = 0, ie = m_vertexInputLayout.bindings.count(); i != ie; ++i) {
-        const QRhiVertexInputLayout::Binding &binding(m_vertexInputLayout.bindings[i]);
+    for (int i = 0, ie = bindings.count(); i != ie; ++i) {
+        const QRhiVertexInputBinding &binding(bindings[i]);
         VkVertexInputBindingDescription bindingInfo = {
             uint32_t(i),
-            binding.stride,
-            binding.classification == QRhiVertexInputLayout::Binding::PerVertex
+            binding.stride(),
+            binding.classification() == QRhiVertexInputBinding::PerVertex
                 ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE
         };
-        if (binding.classification == QRhiVertexInputLayout::Binding::PerInstance
-                && binding.instanceStepRate != 1)
+        if (binding.classification() == QRhiVertexInputBinding::PerInstance
+                && binding.instanceStepRate() != 1)
         {
             if (rhiD->vertexAttribDivisorAvailable) {
-                nonOneStepRates.append({ uint32_t(i), uint32_t(binding.instanceStepRate) });
+                nonOneStepRates.append({ uint32_t(i), uint32_t(binding.instanceStepRate()) });
             } else {
                 qWarning("QRhiVulkan: Instance step rates other than 1 not supported without "
                          "VK_EXT_vertex_attribute_divisor on the device and "
@@ -4402,13 +4411,14 @@ bool QVkGraphicsPipeline::build()
         }
         vertexBindings.append(bindingInfo);
     }
+    const QVector<QRhiVertexInputAttribute> attributes = m_vertexInputLayout.attributes();
     QVarLengthArray<VkVertexInputAttributeDescription, 4> vertexAttributes;
-    for (const QRhiVertexInputLayout::Attribute &attribute : m_vertexInputLayout.attributes) {
+    for (const QRhiVertexInputAttribute &attribute : attributes) {
         VkVertexInputAttributeDescription attributeInfo = {
-            uint32_t(attribute.location),
-            uint32_t(attribute.binding),
-            toVkAttributeFormat(attribute.format),
-            attribute.offset
+            uint32_t(attribute.location()),
+            uint32_t(attribute.binding()),
+            toVkAttributeFormat(attribute.format()),
+            attribute.offset()
         };
         vertexAttributes.append(attributeInfo);
     }

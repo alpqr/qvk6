@@ -119,8 +119,10 @@ void Window::customInit()
 
     // rb is multisample, instead of writing out the msaa data into it,
     // resolve into d.tex at the end of each render pass
-    QRhiTextureRenderTargetDescription rtDesc { d.rb };
-    rtDesc.colorAttachments[0].resolveTexture = d.tex;
+    QRhiTextureRenderTargetDescription rtDesc;
+    QRhiColorAttachment rtAtt(d.rb);
+    rtAtt.setResolveTexture(d.tex);
+    rtDesc.setColorAttachments({ rtAtt });
 
     d.rt = m_r->newTextureRenderTarget(rtDesc);
     d.releasePool << d.rt;
@@ -148,13 +150,13 @@ void Window::customInit()
         { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/color.frag.qsb")) }
     });
     QRhiVertexInputLayout inputLayout;
-    inputLayout.bindings = {
+    inputLayout.setBindings({
         { 5 * sizeof(float) }
-    };
-    inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
-    };
+    });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float3, 2 * sizeof(float) }
+    });
     d.triPs->setVertexInputLayout(inputLayout);
     d.triPs->setShaderResourceBindings(d.triSrb);
     d.triPs->setRenderPassDescriptor(d.rtRp);
@@ -179,13 +181,13 @@ void Window::customInit()
         { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/texture.vert.qsb")) },
         { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/texture.frag.qsb")) }
     });
-    inputLayout.bindings = {
+    inputLayout.setBindings({
         { 4 * sizeof(float) }
-    };
-    inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-        { 0, 1, QRhiVertexInputLayout::Attribute::Float2, 2 * sizeof(float) }
-    };
+    });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float) }
+    });
     d.ps->setVertexInputLayout(inputLayout);
     d.ps->setShaderResourceBindings(d.srb);
     d.ps->setRenderPassDescriptor(m_rp);

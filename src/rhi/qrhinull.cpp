@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhinull_p.h"
+#include <qmath.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -476,14 +477,15 @@ QRhiRenderPassDescriptor *QNullTextureRenderTarget::newCompatibleRenderPassDescr
 bool QNullTextureRenderTarget::build()
 {
     d.rp = QRHI_RES(QNullRenderPassDescriptor, m_renderPassDesc);
-    if (!m_desc.colorAttachments.isEmpty()) {
-        QRhiTexture *tex = m_desc.colorAttachments.first().texture;
-        QRhiRenderBuffer *rb = m_desc.colorAttachments.first().renderBuffer;
+    const QVector<QRhiColorAttachment> colorAttachments = m_desc.colorAttachments();
+    if (!colorAttachments.isEmpty()) {
+        QRhiTexture *tex = colorAttachments.first().texture();
+        QRhiRenderBuffer *rb = colorAttachments.first().renderBuffer();
         d.pixelSize = tex ? tex->pixelSize() : rb->pixelSize();
-    } else if (m_desc.depthStencilBuffer) {
-        d.pixelSize = m_desc.depthStencilBuffer->pixelSize();
-    } else if (m_desc.depthTexture) {
-        d.pixelSize = m_desc.depthTexture->pixelSize();
+    } else if (m_desc.depthStencilBuffer()) {
+        d.pixelSize = m_desc.depthStencilBuffer()->pixelSize();
+    } else if (m_desc.depthTexture()) {
+        d.pixelSize = m_desc.depthTexture()->pixelSize();
     }
     return true;
 }

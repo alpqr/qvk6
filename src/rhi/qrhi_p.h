@@ -160,11 +160,12 @@ protected:
     bool debugMarkers = false;
 
     friend class QRhi;
-    friend struct QRhiResourceUpdateBatchPrivate;
+    friend class QRhiResourceUpdateBatchPrivate;
 };
 
-struct QRhiResourceUpdateBatchPrivate
+class QRhiResourceUpdateBatchPrivate
 {
+public:
     struct DynamicBufferUpdate {
         DynamicBufferUpdate() { }
         DynamicBufferUpdate(QRhiBuffer *buf_, int offset_, int size_, const void *data_)

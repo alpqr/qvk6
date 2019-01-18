@@ -117,13 +117,13 @@ void TriangleRenderer::initResources(QRhiRenderPassDescriptor *rp)
     });
 
     QRhiVertexInputLayout inputLayout;
-    inputLayout.bindings = {
+    inputLayout.setBindings({
         { 7 * sizeof(float) }
-    };
-    inputLayout.attributes = {
-        { 0, 0, QRhiVertexInputLayout::Attribute::Float2, 0 },
-        { 0, 1, QRhiVertexInputLayout::Attribute::Float3, 2 * sizeof(float) }
-    };
+    });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float3, 2 * sizeof(float) }
+    });
 
     m_ps->setVertexInputLayout(inputLayout);
     m_ps->setShaderResourceBindings(m_srb);

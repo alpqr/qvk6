@@ -1070,10 +1070,9 @@ QT_BEGIN_NAMESPACE
     \inmodule QtRhi
     \brief Graphics pipeline state resource.
 
-    \note Setting the shader resource bindings is mandatory but the referenced
-    QRhiShaderResourceBindings is not required to be built when build() is
-    called. Instead, QRhiShaderResourceBindings::build() must be done at latest
-    before QRhiCommandBuffer::setGraphicsPipeline().
+    \note Setting the shader resource bindings is mandatory. The referenced
+    QRhiShaderResourceBindings must already be built by the time build() is
+    called.
 
     \note Setting the render pass descriptor is mandatory. To obtain a
     QRhiRenderPassDescriptor that can be passed to setRenderPassDescriptor(),

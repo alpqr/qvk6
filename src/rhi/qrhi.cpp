@@ -629,8 +629,42 @@ QT_BEGIN_NAMESPACE
     \inmodule QtRhi
     \brief Describes a texture upload operation.
 
+    Used with QRhiResourceUpdateBatch::uploadTexture(). That function has two
+    variants: one taking a QImage and one taking a
+    QRhiTextureUploadDescription. The former is a convenience version,
+    internally creating a QRhiTextureUploadDescription with a single layer and
+    a single image in that layer. However, when cubemaps, pre-generated mip
+    images, or compressed textures are involved, applications will have to work
+    directly with this class instead.
+
     \note Cubemaps have one layer for each of the six faces in the order +X,
     -X, +Y, -Y, +Z, -Z.
+
+    For example, specifying the faces of a cubemap could look like the following:
+
+    \badcode
+        QImage faces[6];
+        ...
+        QVector<QRhiTextureLayer> layers;
+        for (int i = 0; i < 6; ++i)
+          layers.append(QRhiTextureLayer({ QRhiTextureMipLevel(faces[i]) });
+        QRhiTextureUploadDescription desc(layers);
+        resourceUpdates->uploadTexture(texture, desc);
+    \endcode
+
+    Another example that specifies mip images for a compressed texture:
+
+    \badcode
+        QVector<QRhiTextureMipLevel> mipImages;
+        const int mipCount = rhi->mipLevelsForSize(compressedTexture->pixelSize());
+        for (int level = 0; level < mipCount; ++level) {
+            const QByteArray compressedDataForLevel = ...
+            mipImages.append(QRhiTextureMipLevel(compressedDataForLevel));
+        }
+        QRhiTextureLayer layer(mipImages);
+        QRhiTextureUploadDescription desc({ layer });
+        resourceUpdates->uploadTexture(compressedTexture, desc);
+    \endcode
  */
 
 /*!

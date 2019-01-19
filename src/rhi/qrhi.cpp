@@ -634,13 +634,13 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiTextureUploadDescription::Layer
+    \class QRhiTextureLayer
     \inmodule QtRhi
     \brief Describes one layer (face for cubemaps) in a texture upload operation.
  */
 
 /*!
-    \class QRhiTextureUploadDescription::Layer::MipLevel
+    \class QRhiTextureMipLevel
     \inmodule QtRhi
     \brief Describes one mip level in a layer in a texture upload operation.
 
@@ -648,23 +648,23 @@ QT_BEGIN_NAMESPACE
     former is only allowed for uncompressed textures, while the latter is only
     supported for compressed ones.
 
-    \note \l image and \l compressedData cannot be both set.
+    \note image() and compressedData() cannot be both set at the same time.
 
-    \l destinationTopLeft specifies the top-left corner of the target
+    destinationTopLeft() specifies the top-left corner of the target
     rectangle. Defaults to (0, 0).
 
-    An empty \l sourceSize (the default) indicates that size is assumed to be
+    An empty sourceSize() (the default) indicates that size is assumed to be
     the size of the subresource. For uncompressed textures this implies that
-    the size of the source \l image must match the subresource. For compressed
-    textures sufficient amount of data must be provided in \l compressedData.
+    the size of the source image() must match the subresource. For compressed
+    textures sufficient amount of data must be provided in compressedData().
 
     \note With compressed textures the first upload must always match the
     subresource size due to graphics API limitations with some backends.
 
-    \l sourceTopLeft is is only supported for uncompressed textures, and
+    sourceTopLeft() is is only supported for uncompressed textures, and
     specifies the top-left corner of the source rectangle.
 
-    \note Setting \l sourceSize or \l sourceTopLeft may trigger a QImage copy
+    \note Setting sourceSize() or sourceTopLeft() may trigger a QImage copy
     internally, depending on the format and the backend.
  */
 

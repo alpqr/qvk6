@@ -708,20 +708,21 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         const bool isCompressed = isCompressedFormat(texD->m_format);
         const bool isCubeMap = texD->m_flags.testFlag(QRhiTexture::CubeMap);
         const GLenum faceTargetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
-        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const int dx = mipDesc.destinationTopLeft.x();
-                const int dy = mipDesc.destinationTopLeft.y();
-                if (isCompressed && !mipDesc.compressedData.isEmpty()) {
-                    int w, h;
-                    if (mipDesc.sourceSize.isEmpty()) {
-                        w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
-                        h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+        const QVector<QRhiTextureLayer> layers = u.desc.layers();
+        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureLayer &layerDesc(layers[layer]);
+            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                const QPoint dp = mipDesc.destinationTopLeft();
+                const QByteArray compressedData = mipDesc.compressedData();
+                if (isCompressed && !compressedData.isEmpty()) {
+                    QSize size;
+                    if (mipDesc.sourceSize().isEmpty()) {
+                        size.setWidth(qFloor(float(qMax(1, texD->m_pixelSize.width() >> level))));
+                        size.setHeight(qFloor(float(qMax(1, texD->m_pixelSize.height() >> level))));
                     } else {
-                        w = mipDesc.sourceSize.width();
-                        h = mipDesc.sourceSize.height();
+                        size = mipDesc.sourceSize();
                     }
                     if (texD->specified) {
                         QGles2CommandBuffer::Command cmd;
@@ -729,13 +730,13 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                         cmd.args.compressedSubImage.dst = texD;
                         cmd.args.compressedSubImage.faceTarget = faceTargetBase + layer;
                         cmd.args.compressedSubImage.level = level;
-                        cmd.args.compressedSubImage.dx = dx;
-                        cmd.args.compressedSubImage.dy = dy;
-                        cmd.args.compressedSubImage.w = w;
-                        cmd.args.compressedSubImage.h = h;
+                        cmd.args.compressedSubImage.dx = dp.x();
+                        cmd.args.compressedSubImage.dy = dp.y();
+                        cmd.args.compressedSubImage.w = size.width();
+                        cmd.args.compressedSubImage.h = size.height();
                         cmd.args.compressedSubImage.glintformat = texD->glintformat;
-                        cmd.args.compressedSubImage.size = mipDesc.compressedData.size();
-                        cmd.args.compressedSubImage.data = cbD->retainData(mipDesc.compressedData);
+                        cmd.args.compressedSubImage.size = compressedData.size();
+                        cmd.args.compressedSubImage.data = cbD->retainData(compressedData);
                         cbD->commands.append(cmd);
                     } else {
                         QGles2CommandBuffer::Command cmd;
@@ -744,34 +745,30 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                         cmd.args.compressedImage.faceTarget = faceTargetBase + layer;
                         cmd.args.compressedImage.level = level;
                         cmd.args.compressedImage.glintformat = texD->glintformat;
-                        cmd.args.compressedImage.w = w;
-                        cmd.args.compressedImage.h = h;
-                        cmd.args.compressedImage.size = mipDesc.compressedData.size();
-                        cmd.args.compressedImage.data = cbD->retainData(mipDesc.compressedData);
+                        cmd.args.compressedImage.w = size.width();
+                        cmd.args.compressedImage.h = size.height();
+                        cmd.args.compressedImage.size = compressedData.size();
+                        cmd.args.compressedImage.data = cbD->retainData(compressedData);
                         cbD->commands.append(cmd);
                     }
                 } else {
-                    QImage img = mipDesc.image;
-                    int w = img.width();
-                    int h = img.height();
+                    QImage img = mipDesc.image();
+                    QSize size = img.size();
                     QGles2CommandBuffer::Command cmd;
                     cmd.cmd = QGles2CommandBuffer::Command::SubImage;
-                    if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
-                        const int sx = mipDesc.sourceTopLeft.x();
-                        const int sy = mipDesc.sourceTopLeft.y();
-                        if (!mipDesc.sourceSize.isEmpty()) {
-                            w = mipDesc.sourceSize.width();
-                            h = mipDesc.sourceSize.height();
-                        }
-                        img = img.copy(sx, sy, w, h);
+                    if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                        const QPoint sp = mipDesc.sourceTopLeft();
+                        if (!mipDesc.sourceSize().isEmpty())
+                            size = mipDesc.sourceSize();
+                        img = img.copy(sp.x(), sp.y(), size.width(), size.height());
                     }
                     cmd.args.subImage.dst = texD;
                     cmd.args.subImage.faceTarget = faceTargetBase + layer;
                     cmd.args.subImage.level = level;
-                    cmd.args.subImage.dx = dx;
-                    cmd.args.subImage.dy = dy;
-                    cmd.args.subImage.w = w;
-                    cmd.args.subImage.h = h;
+                    cmd.args.subImage.dx = dp.x();
+                    cmd.args.subImage.dy = dp.y();
+                    cmd.args.subImage.w = size.width();
+                    cmd.args.subImage.h = size.height();
                     cmd.args.subImage.glformat = texD->glformat;
                     cmd.args.subImage.gltype = texD->gltype;
                     cmd.args.subImage.data = cbD->retainImage(img);

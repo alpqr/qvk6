@@ -932,13 +932,14 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.tex);
-        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+        const QVector<QRhiTextureLayer> layers = u.desc.layers();
+        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureLayer &layerDesc(layers[layer]);
+            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
                 UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
-                const int dx = mipDesc.destinationTopLeft.x();
-                const int dy = mipDesc.destinationTopLeft.y();
+                const QPoint dp = mipDesc.destinationTopLeft();
                 D3D11_BOX box;
                 box.front = 0;
                 // back, right, bottom are exclusive
@@ -948,58 +949,53 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 cmd.args.updateSubRes.dst = texD->tex;
                 cmd.args.updateSubRes.dstSubRes = subres;
 
-                if (!mipDesc.image.isNull()) {
-                    QImage img = mipDesc.image;
-                    int w = img.width();
-                    int h = img.height();
+                if (!mipDesc.image().isNull()) {
+                    QImage img = mipDesc.image();
+                    QSize size = img.size();
                     int bpl = img.bytesPerLine();
-                    if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
-                        const int sx = mipDesc.sourceTopLeft.x();
-                        const int sy = mipDesc.sourceTopLeft.y();
-                        if (!mipDesc.sourceSize.isEmpty()) {
-                            w = mipDesc.sourceSize.width();
-                            h = mipDesc.sourceSize.height();
-                        }
+                    if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                        const QPoint sp = mipDesc.sourceTopLeft();
+                        if (!mipDesc.sourceSize().isEmpty())
+                            size = mipDesc.sourceSize();
                         if (img.depth() == 32) {
-                            const int offset = sy * img.bytesPerLine() + sx * 4;
+                            const int offset = sp.y() * img.bytesPerLine() + sp.x() * 4;
                             cmd.args.updateSubRes.src = cbD->retainImage(img) + offset;
                         } else {
-                            img = img.copy(sx, sy, w, h);
+                            img = img.copy(sp.x(), sp.y(), size.width(), size.height());
                             bpl = img.bytesPerLine();
                             cmd.args.updateSubRes.src = cbD->retainImage(img);
                         }
                     } else {
                         cmd.args.updateSubRes.src = cbD->retainImage(img);
                     }
-                    box.left = dx;
-                    box.top = dy;
-                    box.right = dx + w;
-                    box.bottom = dy + h;
+                    box.left = dp.x();
+                    box.top = dp.y();
+                    box.right = dp.x() + size.width();
+                    box.bottom = dp.y() + size.height();
                     cmd.args.updateSubRes.hasDstBox = true;
                     cmd.args.updateSubRes.dstBox = box;
                     cmd.args.updateSubRes.srcRowPitch = bpl;
-                } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(texD->m_format)) {
-                    int w, h;
-                    if (mipDesc.sourceSize.isEmpty()) {
-                        w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
-                        h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+                } else if (!mipDesc.compressedData().isEmpty() && isCompressedFormat(texD->m_format)) {
+                    QSize size;
+                    if (mipDesc.sourceSize().isEmpty()) {
+                        size.setWidth(qFloor(float(qMax(1, texD->m_pixelSize.width() >> level))));
+                        size.setHeight(qFloor(float(qMax(1, texD->m_pixelSize.height() >> level))));
                     } else {
-                        w = mipDesc.sourceSize.width();
-                        h = mipDesc.sourceSize.height();
+                        size = mipDesc.sourceSize();
                     }
                     quint32 bpl = 0;
                     QSize blockDim;
-                    compressedFormatInfo(texD->m_format, QSize(w, h), &bpl, nullptr, &blockDim);
+                    compressedFormatInfo(texD->m_format, size, &bpl, nullptr, &blockDim);
                     // Everything must be a multiple of the block width and
                     // height, so e.g. a mip level of size 2x2 will be 4x4 when it
                     // comes to the actual data.
-                    box.left = aligned(dx, blockDim.width());
-                    box.top = aligned(dy, blockDim.height());
-                    box.right = aligned(dx + w, blockDim.width());
-                    box.bottom = aligned(dy + h, blockDim.height());
+                    box.left = aligned(dp.x(), blockDim.width());
+                    box.top = aligned(dp.y(), blockDim.height());
+                    box.right = aligned(dp.x() + size.width(), blockDim.width());
+                    box.bottom = aligned(dp.y() + size.height(), blockDim.height());
                     cmd.args.updateSubRes.hasDstBox = true;
                     cmd.args.updateSubRes.dstBox = box;
-                    cmd.args.updateSubRes.src = cbD->retainData(mipDesc.compressedData);
+                    cmd.args.updateSubRes.src = cbD->retainData(mipDesc.compressedData());
                     cmd.args.updateSubRes.srcRowPitch = bpl;
                 }
                 cbD->commands.append(cmd);

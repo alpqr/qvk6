@@ -2236,19 +2236,21 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        if (u.desc.layers.isEmpty() || u.desc.layers[0].mipImages.isEmpty())
+        const QVector<QRhiTextureLayer> layers = u.desc.layers();
+        if (layers.isEmpty() || layers[0].mipImages().isEmpty())
             continue;
 
         QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
         VkDeviceSize stagingSize = 0;
 
-        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            Q_ASSERT(layerDesc.mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
-            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image.isNull() ?
-                            mipDesc.compressedData.size() : mipDesc.image.sizeInBytes();
+        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureLayer &layerDesc(layers[layer]);
+            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+            Q_ASSERT(mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
+            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                const qsizetype imageSizeBytes = mipDesc.image().isNull() ?
+                            mipDesc.compressedData().size() : mipDesc.image().sizeInBytes();
                 if (imageSizeBytes > 0)
                     stagingSize += aligned(imageSizeBytes, texbufAlign);
             }
@@ -2286,10 +2288,11 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             continue;
         }
         QVector<QImage> tempImages; // yes, we rely heavily on implicit sharing in QImage
-        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureLayer &layerDesc(layers[layer]);
+            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
                 qsizetype imageSizeBytes = 0;
                 const void *src = nullptr;
                 VkBufferImageCopy copyInfo;
@@ -2301,62 +2304,57 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 copyInfo.imageSubresource.layerCount = 1;
                 copyInfo.imageExtent.depth = 1;
 
-                const int dx = mipDesc.destinationTopLeft.x();
-                const int dy = mipDesc.destinationTopLeft.y();
-                if (!mipDesc.image.isNull()) {
-                    imageSizeBytes = mipDesc.image.sizeInBytes();
+                const QPoint dp = mipDesc.destinationTopLeft();
+                const QImage image = mipDesc.image();
+                const QByteArray compressedData = mipDesc.compressedData();
+                if (!image.isNull()) {
+                    imageSizeBytes = image.sizeInBytes();
                     if (imageSizeBytes > 0) {
-                        QImage img = mipDesc.image;
-                        int w = img.width();
-                        int h = img.height();
+                        QImage img = image;
+                        QSize size = img.size();
                         src = img.constBits();
-                        copyInfo.bufferRowLength = w; // this is in pixels, not bytes
-                        if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
-                            const int sx = mipDesc.sourceTopLeft.x();
-                            const int sy = mipDesc.sourceTopLeft.y();
-                            if (!mipDesc.sourceSize.isEmpty()) {
-                                w = mipDesc.sourceSize.width();
-                                h = mipDesc.sourceSize.height();
-                            }
+                        copyInfo.bufferRowLength = size.width(); // this is in pixels, not bytes
+                        if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                            const int sx = mipDesc.sourceTopLeft().x();
+                            const int sy = mipDesc.sourceTopLeft().y();
+                            if (!mipDesc.sourceSize().isEmpty())
+                                size = mipDesc.sourceSize();
                             if (img.depth() == 32) {
                                 src = img.constBits() + sy * img.bytesPerLine() + sx * 4;
                                 // bufferRowLength remains set to the original image's width
                             } else {
-                                img = img.copy(sx, sy, w, h);
+                                img = img.copy(sx, sy, size.width(), size.height());
                                 src = img.constBits();
-                                copyInfo.bufferRowLength = w;
+                                copyInfo.bufferRowLength = size.width();
                                 tempImages.append(img); // keep the new, temporary image alive until the vkCmdCopy
                             }
                         }
-                        copyInfo.imageOffset.x = dx;
-                        copyInfo.imageOffset.y = dy;
-                        copyInfo.imageExtent.width = w;
-                        copyInfo.imageExtent.height = h;
+                        copyInfo.imageOffset.x = dp.x();
+                        copyInfo.imageOffset.y = dp.y();
+                        copyInfo.imageExtent.width = size.width();
+                        copyInfo.imageExtent.height = size.height();
                         copyInfos.append(copyInfo);
                     }
                 } else {
-                    imageSizeBytes = mipDesc.compressedData.size();
+                    imageSizeBytes = compressedData.size();
                     if (imageSizeBytes > 0) {
-                        src = mipDesc.compressedData.constData();
+                        src = compressedData.constData();
                         const int subresw = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
                         const int subresh = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
-                        int w, h;
-                        if (mipDesc.sourceSize.isEmpty()) {
-                            w = subresw;
-                            h = subresh;
-                        } else {
-                            w = mipDesc.sourceSize.width();
-                            h = mipDesc.sourceSize.height();
-                        }
+                        QSize size(subresw, subresh);
+                        if (!mipDesc.sourceSize().isEmpty())
+                            size = mipDesc.sourceSize();
+                        const int w = size.width();
+                        const int h = size.height();
                         QSize blockDim;
                         compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
                         // x and y must be multiples of the block width and height
-                        copyInfo.imageOffset.x = aligned(dx, blockDim.width());
-                        copyInfo.imageOffset.y = aligned(dy, blockDim.height());
+                        copyInfo.imageOffset.x = aligned(dp.x(), blockDim.width());
+                        copyInfo.imageOffset.y = aligned(dp.y(), blockDim.height());
                         // width and height must be multiples of the block width and height
                         // or x + width and y + height must equal the subresource width and height
-                        copyInfo.imageExtent.width = dx + w == subresw ? w : aligned(w, blockDim.width());
-                        copyInfo.imageExtent.height = dy + h == subresh ? h : aligned(h, blockDim.height());
+                        copyInfo.imageExtent.width = dp.x() + w == subresw ? w : aligned(w, blockDim.width());
+                        copyInfo.imageExtent.height = dp.y() + h == subresh ? h : aligned(h, blockDim.height());
                         copyInfos.append(copyInfo);
                     }
                 }

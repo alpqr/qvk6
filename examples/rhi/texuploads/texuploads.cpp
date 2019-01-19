@@ -184,17 +184,12 @@ void Window::customRender()
 
         // Partially change the texture.
         if (d.testStage == 1) {
-            QRhiTextureUploadDescription desc;
-            QRhiTextureUploadDescription::Layer layer;
-            QRhiTextureUploadDescription::Layer::MipLevel mipDesc;
-
-            mipDesc.image = d.customImage;
+            QRhiTextureMipLevel mipDesc(d.customImage);
             // The image here is smaller than the original. Use a non-zero position
             // to make it more interesting.
-            mipDesc.destinationTopLeft = QPoint(100, 20);
-
-            layer.mipImages.append(mipDesc);
-            desc.layers.append(layer);
+            mipDesc.setDestinationTopLeft(QPoint(100, 20));
+            QRhiTextureLayer layer({ mipDesc });
+            QRhiTextureUploadDescription desc({ layer });
             u->uploadTexture(d.tex, desc);
         }
 
@@ -235,17 +230,12 @@ void Window::customRender()
 
         // Now again upload customImage but this time only a part of it.
         if (d.testStage == 5) {
-            QRhiTextureUploadDescription desc;
-            QRhiTextureUploadDescription::Layer layer;
-            QRhiTextureUploadDescription::Layer::MipLevel mipDesc;
-
-            mipDesc.image = d.customImage;
-            mipDesc.destinationTopLeft = QPoint(10, 120);
-            mipDesc.sourceSize = QSize(50, 40);
-            mipDesc.sourceTopLeft = QPoint(20, 10);
-
-            layer.mipImages.append(mipDesc);
-            desc.layers.append(layer);
+            QRhiTextureMipLevel mipDesc(d.customImage);
+            mipDesc.setDestinationTopLeft(QPoint(10, 120));
+            mipDesc.setSourceSize(QSize(50, 40));
+            mipDesc.setSourceTopLeft(QPoint(20, 10));
+            QRhiTextureLayer layer({ mipDesc });
+            QRhiTextureUploadDescription desc({ layer });
             u->uploadTexture(d.newTex, desc);
         }
 

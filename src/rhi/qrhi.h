@@ -365,34 +365,66 @@ private:
 
 Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiTextureUploadDescription
+class Q_RHI_EXPORT QRhiTextureMipLevel
 {
-    struct Q_RHI_EXPORT Layer {
-        struct Q_RHI_EXPORT MipLevel {
-            MipLevel() { }
-            MipLevel(const QImage &image_) : image(image_) { }
-            MipLevel(const QByteArray &compressedData_) : compressedData(compressedData_) { }
+public:
+    QRhiTextureMipLevel() { }
+    QRhiTextureMipLevel(const QImage &image) : m_image(image) { }
+    QRhiTextureMipLevel(const QByteArray &compressedData) : m_compressedData(compressedData) { }
 
-            QImage image;
-            QByteArray compressedData;
+    QImage image() const { return m_image; }
+    void setImage(const QImage &image) { m_image = image; }
 
-            QPoint destinationTopLeft;
-            QSize sourceSize;
-            QPoint sourceTopLeft;
-        };
+    QByteArray compressedData() const { return m_compressedData; }
+    void setCompressedData(const QByteArray &data) { m_compressedData = data; }
 
-        Layer() { }
-        Layer(const QVector<MipLevel> &mipImages_) : mipImages(mipImages_) { }
-        QVector<MipLevel> mipImages;
-    };
+    QPoint destinationTopLeft() const { return m_destinationTopLeft; }
+    void setDestinationTopLeft(const QPoint &p) { m_destinationTopLeft = p; }
 
-    QRhiTextureUploadDescription() { }
-    QRhiTextureUploadDescription(const QVector<Layer> &layers_) : layers(layers_) { }
-    QVector<Layer> layers;
+    QSize sourceSize() const { return m_sourceSize; }
+    void setSourceSize(const QSize &size) { m_sourceSize = size; }
+
+    QPoint sourceTopLeft() const { return m_sourceTopLeft; }
+    void setSourceTopLeft(const QPoint &p) { m_sourceTopLeft = p; }
+
+private:
+    QImage m_image;
+    QByteArray m_compressedData;
+    QPoint m_destinationTopLeft;
+    QSize m_sourceSize;
+    QPoint m_sourceTopLeft;
 };
 
-Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer::MipLevel, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription::Layer, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiTextureMipLevel, Q_MOVABLE_TYPE);
+
+class Q_RHI_EXPORT QRhiTextureLayer
+{
+public:
+    QRhiTextureLayer() { }
+    QRhiTextureLayer(const QVector<QRhiTextureMipLevel> &mipImages) : m_mipImages(mipImages) { }
+
+    QVector<QRhiTextureMipLevel> mipImages() const { return m_mipImages; }
+    void setMipImages(const QVector<QRhiTextureMipLevel> &images) { m_mipImages = images; }
+
+private:
+    QVector<QRhiTextureMipLevel> m_mipImages;
+};
+
+Q_DECLARE_TYPEINFO(QRhiTextureLayer, Q_MOVABLE_TYPE);
+
+class Q_RHI_EXPORT QRhiTextureUploadDescription
+{
+public:
+    QRhiTextureUploadDescription() { }
+    QRhiTextureUploadDescription(const QVector<QRhiTextureLayer> &layers) : m_layers(layers) { }
+
+    QVector<QRhiTextureLayer> layers() const { return m_layers; }
+    void setLayers(const QVector<QRhiTextureLayer> &layers) { m_layers = layers; }
+
+private:
+    QVector<QRhiTextureLayer> m_layers;
+};
+
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
 struct Q_RHI_EXPORT QRhiTextureCopyDescription

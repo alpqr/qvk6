@@ -82,7 +82,7 @@ void Window::customInit()
 
     QRhiTextureUploadDescription desc;
     QImage img = QImage(":/c.png").mirrored().convertToFormat(QImage::Format_RGBA8888); // just use the same image for all faces for now
-    QRhiTextureLayer texLayer({ { img } });
+    QRhiTextureLayer texLayer({ QRhiTextureMipLevel(img) });
     desc.setLayers({
                        texLayer,  // +X
                        texLayer,  // -X

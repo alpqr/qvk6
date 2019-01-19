@@ -199,7 +199,7 @@ void TexturedCubeRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourc
                 QVector<QRhiTextureMipLevel> mipImages;
                 for (int i = 0, ie = m_r->mipLevelsForSize(m_image.size()); i != ie; ++i) {
                     QImage image = m_image.scaled(m_r->sizeForMipLevel(i, m_image.size()));
-                    mipImages.append({ image });
+                    mipImages.append(QRhiTextureMipLevel(image));
                 }
                 layer.setMipImages(mipImages);
             } else {

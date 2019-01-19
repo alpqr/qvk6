@@ -1099,7 +1099,7 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         const QVector<QRhiTextureLayer> layers = u.desc.layers();
-        if (layers.isEmpty() || layers[0].mipImages.isEmpty())
+        if (layers.isEmpty() || layers[0].mipImages().isEmpty())
             continue;
 
         QMetalTexture *utexD = QRHI_RES(QMetalTexture, u.tex);
@@ -1112,8 +1112,8 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             Q_ASSERT(mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
             for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
                 const QRhiTextureMipLevel &mipDesc(mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image.isNull() ?
-                            mipDesc.compressedData.size() : mipDesc.image.sizeInBytes();
+                const qsizetype imageSizeBytes = mipDesc.image().isNull() ?
+                            mipDesc.compressedData().size() : mipDesc.image().sizeInBytes();
                 if (imageSizeBytes > 0)
                     stagingSize += aligned(imageSizeBytes, texbufAlign);
             }

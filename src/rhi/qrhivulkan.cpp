@@ -2399,22 +2399,22 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         memset(&region, 0, sizeof(region));
 
         region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.srcSubresource.mipLevel = u.desc.sourceLevel;
-        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer;
+        region.srcSubresource.mipLevel = u.desc.sourceLevel();
+        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer();
         region.srcSubresource.layerCount = 1;
 
-        region.srcOffset.x = u.desc.sourceTopLeft.x();
-        region.srcOffset.y = u.desc.sourceTopLeft.y();
+        region.srcOffset.x = u.desc.sourceTopLeft().x();
+        region.srcOffset.y = u.desc.sourceTopLeft().y();
 
         region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.dstSubresource.mipLevel = u.desc.destinationLevel;
-        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer;
+        region.dstSubresource.mipLevel = u.desc.destinationLevel();
+        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer();
         region.dstSubresource.layerCount = 1;
 
-        region.dstOffset.x = u.desc.destinationTopLeft.x();
-        region.dstOffset.y = u.desc.destinationTopLeft.y();
+        region.dstOffset.x = u.desc.destinationTopLeft().x();
+        region.dstOffset.y = u.desc.destinationTopLeft().y();
 
-        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
         region.extent.width = size.width();
         region.extent.height = size.height();
         region.extent.depth = 1;
@@ -2437,7 +2437,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         aRb.desc = u.rb;
         aRb.result = u.result;
 
-        QVkTexture *texD = QRHI_RES(QVkTexture, aRb.desc.texture);
+        QVkTexture *texD = QRHI_RES(QVkTexture, u.rb.texture());
         QVkSwapChain *swapChainD = nullptr;
         if (texD) {
             if (texD->samples > VK_SAMPLE_COUNT_1_BIT) {
@@ -2445,9 +2445,9 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 continue;
             }
             aRb.pixelSize = texD->m_pixelSize;
-            if (u.rb.level > 0) {
-                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level))));
-                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level))));
+            if (u.rb.level() > 0) {
+                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level()))));
+                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level()))));
             }
             aRb.format = texD->m_format;
         } else {
@@ -2495,8 +2495,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         memset(&copyDesc, 0, sizeof(copyDesc));
         copyDesc.bufferOffset = 0;
         copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyDesc.imageSubresource.mipLevel = aRb.desc.level;
-        copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
+        copyDesc.imageSubresource.mipLevel = u.rb.level();
+        copyDesc.imageSubresource.baseArrayLayer = u.rb.layer();
         copyDesc.imageSubresource.layerCount = 1;
         copyDesc.imageExtent.width = aRb.pixelSize.width();
         copyDesc.imageExtent.height = aRb.pixelSize.height();

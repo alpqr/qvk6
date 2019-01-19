@@ -204,14 +204,13 @@ void Window::customRender()
             empty.fill(Qt::blue);
             u->uploadTexture(d.newTex, empty);
 
-            QRhiTextureCopyDescription desc;
             // Copy the left-half of tex to the right-half of newTex, while
             // leaving the left-half of newTex blue. Keep a 20 pixel gap at
             // the top.
-            desc.sourceTopLeft = QPoint(0, 20);
-            desc.pixelSize = QSize(sz.width() / 2, sz.height() - 20);
-            desc.destinationTopLeft = QPoint(sz.width() / 2, 20);
-
+            QRhiTextureCopyDescription desc;
+            desc.setSourceTopLeft(QPoint(0, 20));
+            desc.setPixelSize(QSize(sz.width() / 2, sz.height() - 20));
+            desc.setDestinationTopLeft(QPoint(sz.width() / 2, 20));
             u->copyTexture(d.newTex, d.tex, desc);
 
             // Now replace d.tex with d.newTex as the shader resource.

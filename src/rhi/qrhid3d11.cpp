@@ -1007,14 +1007,14 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(u.src && u.dst);
         QD3D11Texture *srcD = QRHI_RES(QD3D11Texture, u.src);
         QD3D11Texture *dstD = QRHI_RES(QD3D11Texture, u.dst);
-        UINT srcSubRes = D3D11CalcSubresource(u.desc.sourceLevel, u.desc.sourceLayer, srcD->mipLevelCount);
-        UINT dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel, u.desc.destinationLayer, dstD->mipLevelCount);
-        const float dx = u.desc.destinationTopLeft.x();
-        const float dy = u.desc.destinationTopLeft.y();
-        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        UINT srcSubRes = D3D11CalcSubresource(u.desc.sourceLevel(), u.desc.sourceLayer(), srcD->mipLevelCount);
+        UINT dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel(), u.desc.destinationLayer(), dstD->mipLevelCount);
+        const QPoint dp = u.desc.destinationTopLeft();
+        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
+        const QPoint sp = u.desc.sourceTopLeft();
         D3D11_BOX srcBox;
-        srcBox.left = u.desc.sourceTopLeft.x();
-        srcBox.top = u.desc.sourceTopLeft.y();
+        srcBox.left = sp.x();
+        srcBox.top = sp.y();
         srcBox.front = 0;
         // back, right, bottom are exclusive
         srcBox.right = srcBox.left + size.width();
@@ -1024,8 +1024,8 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cmd.cmd = QD3D11CommandBuffer::Command::CopySubRes;
         cmd.args.copySubRes.dst = dstD->tex;
         cmd.args.copySubRes.dstSubRes = dstSubRes;
-        cmd.args.copySubRes.dstX = dx;
-        cmd.args.copySubRes.dstY = dy;
+        cmd.args.copySubRes.dstX = dp.x();
+        cmd.args.copySubRes.dstY = dp.y();
         cmd.args.copySubRes.src = srcD->tex;
         cmd.args.copySubRes.srcSubRes = srcSubRes;
         cmd.args.copySubRes.hasSrcBox = true;
@@ -1043,7 +1043,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         QSize pixelSize;
         QRhiTexture::Format format;
         UINT subres = 0;
-        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.rb.texture);
+        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.rb.texture());
         QD3D11SwapChain *swapChainD = nullptr;
 
         if (texD) {
@@ -1054,12 +1054,12 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             src = texD->tex;
             dxgiFormat = texD->dxgiFormat;
             pixelSize = texD->m_pixelSize;
-            if (u.rb.level > 0) {
-                pixelSize.setWidth(qFloor(float(qMax(1, pixelSize.width() >> u.rb.level))));
-                pixelSize.setHeight(qFloor(float(qMax(1, pixelSize.height() >> u.rb.level))));
+            if (u.rb.level() > 0) {
+                pixelSize.setWidth(qFloor(float(qMax(1, pixelSize.width() >> u.rb.level()))));
+                pixelSize.setHeight(qFloor(float(qMax(1, pixelSize.height() >> u.rb.level()))));
             }
             format = texD->m_format;
-            subres = D3D11CalcSubresource(u.rb.level, u.rb.layer, texD->mipLevelCount);
+            subres = D3D11CalcSubresource(u.rb.level(), u.rb.layer(), texD->mipLevelCount);
         } else {
             Q_ASSERT(contextState.currentSwapChain);
             swapChainD = QRHI_RES(QD3D11SwapChain, contextState.currentSwapChain);

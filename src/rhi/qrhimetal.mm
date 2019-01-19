@@ -1234,22 +1234,20 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(u.src && u.dst);
         QMetalTexture *srcD = QRHI_RES(QMetalTexture, u.src);
         QMetalTexture *dstD = QRHI_RES(QMetalTexture, u.dst);
-        const float dx = u.desc.destinationTopLeft.x();
-        const float dy = u.desc.destinationTopLeft.y();
-        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
-        const float sx = u.desc.sourceTopLeft.x();
-        const float sy = u.desc.sourceTopLeft.y();
+        const QPoint dp = u.desc.destinationTopLeft();
+        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
+        const QPoint sp = u.desc.sourceTopLeft();
 
         ensureBlit();
         [blitEnc copyFromTexture: srcD->d->tex
-                                  sourceSlice: u.desc.sourceLayer
-                                  sourceLevel: u.desc.sourceLevel
-                                  sourceOrigin: MTLOriginMake(sx, sy, 0)
+                                  sourceSlice: u.desc.sourceLayer()
+                                  sourceLevel: u.desc.sourceLevel()
+                                  sourceOrigin: MTLOriginMake(sp.x(), sp.y(), 0)
                                   sourceSize: MTLSizeMake(size.width(), size.height(), 1)
                                   toTexture: dstD->d->tex
-                                  destinationSlice: u.desc.destinationLayer
-                                  destinationLevel: u.desc.destinationLevel
-                                  destinationOrigin: MTLOriginMake(dx, dy, 0)];
+                                  destinationSlice: u.desc.destinationLayer()
+                                  destinationLevel: u.desc.destinationLevel()
+                                  destinationOrigin: MTLOriginMake(dp.x(), dp.y(), 0)];
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
@@ -1258,7 +1256,7 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         aRb.desc = u.rb;
         aRb.result = u.result;
 
-        QMetalTexture *texD = QRHI_RES(QMetalTexture, aRb.desc.texture);
+        QMetalTexture *texD = QRHI_RES(QMetalTexture, u.rb.texture());
         QMetalSwapChain *swapChainD = nullptr;
         id<MTLTexture> src;
         QSize srcSize;
@@ -1268,9 +1266,9 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 continue;
             }
             aRb.pixelSize = texD->m_pixelSize;
-            if (u.rb.level > 0) {
-                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level))));
-                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level))));
+            if (u.rb.level() > 0) {
+                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level()))));
+                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level()))));
             }
             aRb.format = texD->m_format;
             src = texD->d->tex;
@@ -1297,8 +1295,8 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
         ensureBlit();
         [blitEnc copyFromTexture: src
-                                  sourceSlice: aRb.desc.layer
-                                  sourceLevel: aRb.desc.level
+                                  sourceSlice: u.rb.layer()
+                                  sourceLevel: u.rb.level()
                                   sourceOrigin: MTLOriginMake(0, 0, 0)
                                   sourceSize: MTLSizeMake(srcSize.width(), srcSize.height(), 1)
                                   toBuffer: aRb.buf

@@ -427,29 +427,65 @@ private:
 
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiTextureCopyDescription
+class Q_RHI_EXPORT QRhiTextureCopyDescription
 {
-    QSize pixelSize;
+public:
+    QRhiTextureCopyDescription() { }
 
-    int sourceLayer = 0;
-    int sourceLevel = 0;
-    QPoint sourceTopLeft;
+    QSize pixelSize() const { return m_pixelSize; }
+    void setPixelSize(const QSize &sz) { m_pixelSize = sz; }
 
-    int destinationLayer = 0;
-    int destinationLevel = 0;
-    QPoint destinationTopLeft;
+    int sourceLayer() const { return m_sourceLayer; }
+    void setSourceLayer(int layer) { m_sourceLayer = layer; }
+
+    int sourceLevel() const { return m_sourceLevel; }
+    void setSourceLevel(int level) { m_sourceLevel = level; }
+
+    QPoint sourceTopLeft() const { return m_sourceTopLeft; }
+    void setSourceTopLeft(const QPoint &p) { m_sourceTopLeft = p; }
+
+    int destinationLayer() const { return m_destinationLayer; }
+    void setDestinationLayer(int layer) { m_destinationLayer = layer; }
+
+    int destinationLevel() const { return m_destinationLevel; }
+    void setDestinationLevel(int level) { m_destinationLevel = level; }
+
+    QPoint destinationTopLeft() const { return m_destinationTopLeft; }
+    void setDestinationTopLeft(const QPoint &p) { m_destinationTopLeft = p; }
+
+private:
+    QSize m_pixelSize;
+
+    int m_sourceLayer = 0;
+    int m_sourceLevel = 0;
+    QPoint m_sourceTopLeft;
+
+    int m_destinationLayer = 0;
+    int m_destinationLevel = 0;
+    QPoint m_destinationTopLeft;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiReadbackDescription
+class Q_RHI_EXPORT QRhiReadbackDescription
 {
+public:
     QRhiReadbackDescription() { }
-    QRhiReadbackDescription(QRhiTexture *texture_) : texture(texture_) { }
+    QRhiReadbackDescription(QRhiTexture *texture) : m_texture(texture) { }
 
-    QRhiTexture *texture = nullptr;
-    int layer = 0;
-    int level = 0;
+    QRhiTexture *texture() const { return m_texture; }
+    void setTexture(QRhiTexture *tex) { m_texture = tex; }
+
+    int layer() const { return m_layer; }
+    void setLayer(int layer) { m_layer = layer; }
+
+    int level() const { return m_level; }
+    void setLevel(int level) { m_level = level; }
+
+private:
+    QRhiTexture *m_texture = nullptr;
+    int m_layer = 0;
+    int m_level = 0;
 };
 
 Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);

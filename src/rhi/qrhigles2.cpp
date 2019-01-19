@@ -784,13 +784,13 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         QGles2Texture *srcD = QRHI_RES(QGles2Texture, u.src);
         QGles2Texture *dstD = QRHI_RES(QGles2Texture, u.dst);
 
-        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
         // source offset is bottom-left
-        const float sx = u.desc.sourceTopLeft.x();
-        const float sy = srcD->m_pixelSize.height() - (u.desc.sourceTopLeft.y() + size.height() - 1);
+        const float sx = u.desc.sourceTopLeft().x();
+        const float sy = srcD->m_pixelSize.height() - (u.desc.sourceTopLeft().y() + size.height() - 1);
         // destination offset is top-left
-        const float dx = u.desc.destinationTopLeft.x();
-        const float dy = u.desc.destinationTopLeft.y();
+        const float dx = u.desc.destinationTopLeft().x();
+        const float dy = u.desc.destinationTopLeft().y();
 
         const GLenum srcFaceTargetBase = srcD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : srcD->target;
         const GLenum dstFaceTargetBase = dstD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : dstD->target;
@@ -798,15 +798,15 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::CopyTex;
 
-        cmd.args.copyTex.srcFaceTarget = srcFaceTargetBase + u.desc.sourceLayer;
+        cmd.args.copyTex.srcFaceTarget = srcFaceTargetBase + u.desc.sourceLayer();
         cmd.args.copyTex.srcTexture = srcD->texture;
-        cmd.args.copyTex.srcLevel = u.desc.sourceLevel;
+        cmd.args.copyTex.srcLevel = u.desc.sourceLevel();
         cmd.args.copyTex.srcX = sx;
         cmd.args.copyTex.srcY = sy;
 
         cmd.args.copyTex.dst = dstD;
-        cmd.args.copyTex.dstFaceTarget = dstFaceTargetBase + u.desc.destinationLayer;
-        cmd.args.copyTex.dstLevel = u.desc.destinationLevel;
+        cmd.args.copyTex.dstFaceTarget = dstFaceTargetBase + u.desc.destinationLayer();
+        cmd.args.copyTex.dstLevel = u.desc.destinationLevel();
         cmd.args.copyTex.dstX = dx;
         cmd.args.copyTex.dstY = dy;
 
@@ -820,9 +820,9 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         QGles2CommandBuffer::Command cmd;
         cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
         cmd.args.readPixels.result = u.result;
-        cmd.args.readPixels.texture = QRHI_RES(QGles2Texture, u.rb.texture);
-        cmd.args.readPixels.layer = u.rb.layer;
-        cmd.args.readPixels.level = u.rb.level;
+        cmd.args.readPixels.texture = QRHI_RES(QGles2Texture, u.rb.texture());
+        cmd.args.readPixels.layer = u.rb.layer();
+        cmd.args.readPixels.level = u.rb.level();
         cbD->commands.append(cmd);
     }
 

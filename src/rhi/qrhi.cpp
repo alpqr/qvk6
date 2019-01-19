@@ -707,11 +707,16 @@ QT_BEGIN_NAMESPACE
     \inmodule QtRhi
     \brief Describes a texture-to-texture copy operation.
 
-    An empty \l pixelSize (the default) indicates that the entire subresource
-    is to be copied.
+    An empty pixelSize() indicates that the entire subresource is to be copied.
+    A default constructed copy description therefore leads to copying the
+    entire subresource at level 0 of layer 0.
 
     \note The source texture must be created with
     QRhiTexture::UsedAsTransferSource.
+
+    \note The source and destination rectangles defined by pixelSize(),
+    sourceTopLeft(), and destinationTopLeft() must fit the source and
+    destination textures, respectively. The behavior is undefined otherwise.
  */
 
 /*!
@@ -720,8 +725,8 @@ QT_BEGIN_NAMESPACE
     \brief Describes a readback (reading back texture contents from possibly GPU-only memory) operation.
 
     The source of the readback operation is either a QRhiTexture or the
-    current backbuffer of the currently targeted QRhiSwapChain. When \l
-    texture is not set, the swapchain is used. Otherwise the specified
+    current backbuffer of the currently targeted QRhiSwapChain. When
+    texture() is not set, the swapchain is used. Otherwise the specified
     QRhiTexture is treated as the source.
 
     \note Textures used in readbacks must be created with
@@ -730,7 +735,7 @@ QT_BEGIN_NAMESPACE
     \note Swapchains used in readbacks must be created with
     QRhiSwapChain::UsedAsTransferSource.
 
-    \l layer and \l level are only applicable when the source is a QRhiTexture.
+    layer() and level() are only applicable when the source is a QRhiTexture.
 
     \note Multisample textures cannot be read back. Readbacks are supported for
     multisample swapchain buffers however.

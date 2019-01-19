@@ -215,7 +215,7 @@ void Window::customRender()
 
             // Now replace d.tex with d.newTex as the shader resource.
             auto bindings = d.srb->bindings();
-            bindings[1].stex.tex = d.newTex; // see customInit, this was d.tex originally
+            bindings[1] = QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, d.newTex, d.sampler);
             d.srb->setBindings(bindings);
             // "rebuild", whatever that means for a given backend. This srb is
             // already live as the ps in the setGraphicsPipeline references it,
@@ -264,7 +264,7 @@ void Window::customRender()
 
                 // switch to showing d.importedTex
                 auto bindings = d.srb->bindings();
-                bindings[1].stex.tex = d.importedTex;
+                bindings[1] = QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, d.importedTex, d.sampler);
                 d.srb->setBindings(bindings);
                 d.srb->build();
             } else {

@@ -59,6 +59,7 @@ class QRhiCommandBuffer;
 class QRhiResourceUpdateBatch;
 class QRhiResourceUpdateBatchPrivate;
 class QRhiProfiler;
+class QRhiShaderResourceBindingPrivate;
 
 class Q_RHI_EXPORT QRhiColorClearValue
 {
@@ -165,6 +166,7 @@ private:
     quint32 m_stride;
     Classification m_classification;
     int m_instanceStepRate;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputBinding, Q_MOVABLE_TYPE);
@@ -204,6 +206,7 @@ private:
     int m_location;
     Format m_format;
     quint32 m_offset;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputAttribute, Q_MOVABLE_TYPE);
@@ -220,6 +223,7 @@ public:
 private:
     QVector<QRhiVertexInputBinding> m_bindings;
     QVector<QRhiVertexInputAttribute> m_attributes;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputLayout, Q_MOVABLE_TYPE);
@@ -248,12 +252,14 @@ public:
 private:
     Type m_type;
     QBakedShader m_shader;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiGraphicsShaderStage, Q_MOVABLE_TYPE);
 
-struct Q_RHI_EXPORT QRhiShaderResourceBinding
+class Q_RHI_EXPORT QRhiShaderResourceBinding
 {
+public:
     enum Type {
         UniformBuffer,
         SampledTexture
@@ -267,26 +273,19 @@ struct Q_RHI_EXPORT QRhiShaderResourceBinding
     };
     Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
-    static QRhiShaderResourceBinding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_);
-    static QRhiShaderResourceBinding uniformBuffer(int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_);
-    static QRhiShaderResourceBinding sampledTexture(int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_);
+    QRhiShaderResourceBinding();
+    QRhiShaderResourceBinding(const QRhiShaderResourceBinding &other);
+    QRhiShaderResourceBinding &operator=(const QRhiShaderResourceBinding &other);
+    ~QRhiShaderResourceBinding();
+    void detach();
 
-    int binding;
-    StageFlags stage;
-    Type type;
-    struct UniformBufferData {
-        QRhiBuffer *buf;
-        int offset;
-        int maybeSize;
-    };
-    struct SampledTextureData {
-        QRhiTexture *tex;
-        QRhiSampler *sampler;
-    };
-    union {
-        UniformBufferData ubuf;
-        SampledTextureData stex;
-    };
+    static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf);
+    static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size);
+    static QRhiShaderResourceBinding sampledTexture(int binding, StageFlags stage, QRhiTexture *tex, QRhiSampler *sampler);
+
+private:
+    QRhiShaderResourceBindingPrivate *d;
+    friend class QRhiShaderResourceBindingPrivate;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBinding::StageFlags)
@@ -323,13 +322,12 @@ public:
 private:
     QRhiTexture *m_texture = nullptr;
     QRhiRenderBuffer *m_renderBuffer = nullptr;
-
     int m_layer = 0;
     int m_level = 0;
-
     QRhiTexture *m_resolveTexture = nullptr;
     int m_resolveLayer = 0;
     int m_resolveLevel = 0;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiColorAttachment, Q_MOVABLE_TYPE);
@@ -361,6 +359,7 @@ private:
     QVector<QRhiColorAttachment> m_colorAttachments;
     QRhiRenderBuffer *m_depthStencilBuffer = nullptr;
     QRhiTexture *m_depthTexture = nullptr;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription, Q_MOVABLE_TYPE);
@@ -393,6 +392,7 @@ private:
     QPoint m_destinationTopLeft;
     QSize m_sourceSize;
     QPoint m_sourceTopLeft;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureMipLevel, Q_MOVABLE_TYPE);
@@ -408,6 +408,7 @@ public:
 
 private:
     QVector<QRhiTextureMipLevel> m_mipImages;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureLayer, Q_MOVABLE_TYPE);
@@ -423,6 +424,7 @@ public:
 
 private:
     QVector<QRhiTextureLayer> m_layers;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
@@ -455,14 +457,13 @@ public:
 
 private:
     QSize m_pixelSize;
-
     int m_sourceLayer = 0;
     int m_sourceLevel = 0;
     QPoint m_sourceTopLeft;
-
     int m_destinationLayer = 0;
     int m_destinationLevel = 0;
     QPoint m_destinationTopLeft;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
@@ -486,6 +487,7 @@ private:
     QRhiTexture *m_texture = nullptr;
     int m_layer = 0;
     int m_level = 0;
+    void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);

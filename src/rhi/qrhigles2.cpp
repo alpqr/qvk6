@@ -1378,19 +1378,19 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
     QGles2ShaderResourceBindings *srbD = QRHI_RES(QGles2ShaderResourceBindings, srb);
 
     for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(srbD->m_bindings[i]);
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->m_bindings[i]);
         QGles2ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
 
-        switch (b.type) {
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
-            QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b.ubuf.buf);
+            QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b->u.ubuf.buf);
             if (changedOnly && bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
                 break;
-            const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b.ubuf.offset,
-                                                               b.ubuf.maybeSize ? b.ubuf.maybeSize : bufD->m_size);
+            const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + b->u.ubuf.offset,
+                                                               b->u.ubuf.maybeSize ? b->u.ubuf.maybeSize : bufD->m_size);
             for (QGles2GraphicsPipeline::Uniform &uniform : psD->uniforms) {
-                if (uniform.binding == b.binding
+                if (uniform.binding == b->binding
                         && (!changedOnly ||
                             (uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)
                              && uniform.offset < uint(bufD->ubufChangeRange.changeEnd))))
@@ -1443,19 +1443,19 @@ void QRhiGles2::setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResour
             break;
         case QRhiShaderResourceBinding::SampledTexture:
         {
-            QGles2Texture *texD = QRHI_RES(QGles2Texture, b.stex.tex);
-            QGles2Sampler *samplerD = QRHI_RES(QGles2Sampler, b.stex.sampler);
+            QGles2Texture *texD = QRHI_RES(QGles2Texture, b->u.stex.tex);
+            QGles2Sampler *samplerD = QRHI_RES(QGles2Sampler, b->u.stex.sampler);
 
-            const bool textureChanged = QRHI_RES(QGles2Texture, b.stex.tex)->generation != bd.stex.texGeneration;
+            const bool textureChanged = QRHI_RES(QGles2Texture, b->u.stex.tex)->generation != bd.stex.texGeneration;
             if (textureChanged)
-                bd.stex.texGeneration = QRHI_RES(QGles2Texture, b.stex.tex)->generation;
-            const bool samplerChanged = QRHI_RES(QGles2Sampler, b.stex.sampler)->generation != bd.stex.samplerGeneration;
+                bd.stex.texGeneration = QRHI_RES(QGles2Texture, b->u.stex.tex)->generation;
+            const bool samplerChanged = QRHI_RES(QGles2Sampler, b->u.stex.sampler)->generation != bd.stex.samplerGeneration;
             if (samplerChanged)
-                bd.stex.samplerGeneration = QRHI_RES(QGles2Sampler, b.stex.sampler)->generation;
+                bd.stex.samplerGeneration = QRHI_RES(QGles2Sampler, b->u.stex.sampler)->generation;
 
             int texUnit = 0;
             for (QGles2GraphicsPipeline::Sampler &sampler : psD->samplers) {
-                if (sampler.binding == b.binding) {
+                if (sampler.binding == b->binding) {
                     f->glActiveTexture(GL_TEXTURE0 + texUnit);
                     f->glBindTexture(texD->target, texD->texture);
 
@@ -2053,9 +2053,9 @@ bool QGles2ShaderResourceBindings::build()
     boundResourceData.resize(m_bindings.count());
 
     for (int i = 0, ie = m_bindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(m_bindings[i]);
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&m_bindings[i]);
         BoundResourceData &bd(boundResourceData[i]);
-        switch (b.type) {
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
             // nothing, we do not track buffer generations
             break;

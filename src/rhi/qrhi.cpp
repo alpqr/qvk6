@@ -1516,7 +1516,7 @@ void QRhiResource::releaseAndDestroy()
 }
 
 /*!
-    Returns the currently set object name. By default the name is empty.
+    \return the currently set object name. By default the name is empty.
  */
 QByteArray QRhiResource::name() const
 {
@@ -1782,58 +1782,117 @@ QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
 }
 
 /*!
-    Returns a shader resource binding for the given binding number, pipeline
-    stage, and buffer specified by \a binding_, \a stage_, and \a buf_.
+    \internal
+ */
+QRhiShaderResourceBinding::QRhiShaderResourceBinding()
+    : d(new QRhiShaderResourceBindingPrivate)
+{
+}
+
+/*!
+    \internal
+ */
+void QRhiShaderResourceBinding::detach()
+{
+    if (d->ref.load() != 1) {
+        QRhiShaderResourceBindingPrivate *newd = new QRhiShaderResourceBindingPrivate(d);
+        if (!d->ref.deref())
+            delete d;
+        d = newd;
+    }
+}
+
+/*!
+    \internal
+ */
+QRhiShaderResourceBinding::QRhiShaderResourceBinding(const QRhiShaderResourceBinding &other)
+{
+    d = other.d;
+    d->ref.ref();
+}
+
+/*!
+    \internal
+ */
+QRhiShaderResourceBinding &QRhiShaderResourceBinding::operator=(const QRhiShaderResourceBinding &other)
+{
+    if (d != other.d) {
+        other.d->ref.ref();
+        if (!d->ref.deref())
+            delete d;
+        d = other.d;
+    }
+    return *this;
+}
+
+/*!
+    Destructor.
+ */
+QRhiShaderResourceBinding::~QRhiShaderResourceBinding()
+{
+    if (!d->ref.deref())
+        delete d;
+}
+
+/*!
+    \return a shader resource binding for the given binding number, pipeline
+    stage, and buffer specified by \a binding, \a stage, and \a buf.
  */
 QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
-        int binding_, StageFlags stage_, QRhiBuffer *buf_)
+        int binding, StageFlags stage, QRhiBuffer *buf)
 {
     QRhiShaderResourceBinding b;
-    b.binding = binding_;
-    b.stage = stage_;
-    b.type = UniformBuffer;
-    b.ubuf.buf = buf_;
-    b.ubuf.offset = 0;
-    b.ubuf.maybeSize = 0; // entire buffer
+    QRhiShaderResourceBindingPrivate *d = QRhiShaderResourceBindingPrivate::get(&b);
+    Q_ASSERT(d->ref.load() == 1);
+    d->binding = binding;
+    d->stage = stage;
+    d->type = UniformBuffer;
+    d->u.ubuf.buf = buf;
+    d->u.ubuf.offset = 0;
+    d->u.ubuf.maybeSize = 0; // entire buffer
     return b;
 }
 
 /*!
-    Returns a shader resource binding for the given binding number, pipeline
-    stage, and buffer specified by \a binding_, \a stage_, and \a buf_. This
-    overload binds a region only, as specified by \a offset_ and \a size_.
+    \return a shader resource binding for the given binding number, pipeline
+    stage, and buffer specified by \a binding, \a stage, and \a buf. This
+    overload binds a region only, as specified by \a offset and \a size.
 
     \note It is up to the user to ensure the offset is aligned to
     QRhi::ubufAlignment().
  */
 QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
-        int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_)
+        int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size)
 {
-    Q_ASSERT(size_ > 0);
+    Q_ASSERT(size > 0);
     QRhiShaderResourceBinding b;
-    b.binding = binding_;
-    b.stage = stage_;
-    b.type = UniformBuffer;
-    b.ubuf.buf = buf_;
-    b.ubuf.offset = offset_;
-    b.ubuf.maybeSize = size_;
+    QRhiShaderResourceBindingPrivate *d = QRhiShaderResourceBindingPrivate::get(&b);
+    Q_ASSERT(d->ref.load() == 1);
+    d->binding = binding;
+    d->stage = stage;
+    d->type = UniformBuffer;
+    d->u.ubuf.buf = buf;
+    d->u.ubuf.offset = offset;
+    d->u.ubuf.maybeSize = size;
     return b;
 }
 
 /*!
-    Returns a shader resource binding for the given binding number, pipeline
-    stage, texture, and sampler specified by \a binding_, \a stage_, \a tex_,
-    \a sampler_.
+    \return a shader resource binding for the given binding number, pipeline
+    stage, texture, and sampler specified by \a binding, \a stage, \a tex,
+    \a sampler.
  */
 QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
-        int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_)
+        int binding, StageFlags stage, QRhiTexture *tex, QRhiSampler *sampler)
 {
     QRhiShaderResourceBinding b;
-    b.binding = binding_;
-    b.stage = stage_;
-    b.type = SampledTexture;
-    b.stex.tex = tex_;
-    b.stex.sampler = sampler_;
+    QRhiShaderResourceBindingPrivate *d = QRhiShaderResourceBindingPrivate::get(&b);
+    Q_ASSERT(d->ref.load() == 1);
+    d->binding = binding;
+    d->stage = stage;
+    d->type = SampledTexture;
+    d->u.stex.tex = tex;
+    d->u.stex.sampler = sampler;
     return b;
 }
 
@@ -2851,7 +2910,7 @@ bool QRhi::isYUpInFramebuffer() const
 }
 
 /*!
-    Returns a matrix that can be used allow applications keep using
+    \return a matrix that can be used allow applications keep using
     OpenGL-targeted vertex data and projection matrices (for example, the ones
     generated by QMatrix4x4::perspective()) regardless of the backed. Once
     \c{this_matrix * mvp} is used instead of just \c mvp, vertex data with Y up

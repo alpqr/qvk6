@@ -97,7 +97,8 @@ QT_BEGIN_NAMESPACE
     included in it.
 
     QBakedShader uses implicit sharing similarly to many core Qt types, and so
-    can be returned or passed by value.
+    can be returned or passed by value. Detach happens implicitly when calling
+    a setter.
 
     For reference, QRhi expects that a QBakedShader suitable for all its
     backends contains at least the following:

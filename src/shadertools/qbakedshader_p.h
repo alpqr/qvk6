@@ -72,6 +72,7 @@ struct Q_SHADERTOOLS_PRIVATE_EXPORT QBakedShaderPrivate
     }
 
     static QBakedShaderPrivate *get(QBakedShader *s) { return s->d; }
+    static const QBakedShaderPrivate *get(const QBakedShader *s) { return s->d; }
 
     QAtomicInt ref;
     QBakedShader::ShaderStage stage = QBakedShader::VertexStage;

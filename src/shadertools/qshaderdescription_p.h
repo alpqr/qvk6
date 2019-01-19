@@ -74,11 +74,12 @@ struct Q_SHADERTOOLS_PRIVATE_EXPORT QShaderDescriptionPrivate
     }
 
     static QShaderDescriptionPrivate *get(QShaderDescription *desc) { return desc->d; }
+    static const QShaderDescriptionPrivate *get(const QShaderDescription *desc) { return desc->d; }
+
     QJsonDocument makeDoc();
     void loadDoc(const QJsonDocument &doc);
 
     QAtomicInt ref;
-
     QVector<QShaderDescription::InOutVariable> inVars;
     QVector<QShaderDescription::InOutVariable> outVars;
     QVector<QShaderDescription::UniformBlock> uniformBlocks;

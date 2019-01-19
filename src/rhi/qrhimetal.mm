@@ -2209,7 +2209,7 @@ bool QMetalShaderResourceBindings::build()
     std::sort(sortedBindings.begin(), sortedBindings.end(),
               [](const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
     {
-        return a.binding < b.binding;
+        return QRhiShaderResourceBindingPrivate::get(&a)->binding < QRhiShaderResourceBindingPrivate::get(&b)->binding;
     });
     if (!sortedBindings.isEmpty())
         maxBinding = sortedBindings.last().binding;

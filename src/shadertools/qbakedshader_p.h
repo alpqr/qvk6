@@ -48,6 +48,7 @@
 // We mean it.
 //
 
+#include "qtshadertoolsglobal_p.h"
 #include "qbakedshader.h"
 #include <QtCore/QAtomicInt>
 #include <QtCore/QHash>
@@ -55,7 +56,7 @@
 
 QT_BEGIN_NAMESPACE
 
-struct QBakedShaderPrivate
+struct Q_SHADERTOOLS_PRIVATE_EXPORT QBakedShaderPrivate
 {
     QBakedShaderPrivate()
         : ref(1)
@@ -64,7 +65,9 @@ struct QBakedShaderPrivate
 
     QBakedShaderPrivate(const QBakedShaderPrivate *other)
         : ref(1),
-          desc(other->desc)
+          stage(other->stage),
+          desc(other->desc),
+          shaders(other->shaders)
     {
     }
 

@@ -48,6 +48,7 @@
 // We mean it.
 //
 
+#include "qtshadertoolsglobal_p.h"
 #include "qshaderdescription.h"
 #include <QtCore/QVector>
 #include <QtCore/QAtomicInt>
@@ -55,7 +56,7 @@
 
 QT_BEGIN_NAMESPACE
 
-struct QShaderDescriptionPrivate
+struct Q_SHADERTOOLS_PRIVATE_EXPORT QShaderDescriptionPrivate
 {
     QShaderDescriptionPrivate()
         : ref(1)

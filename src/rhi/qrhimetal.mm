@@ -508,33 +508,34 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
         QRhiBatchedBindings<id<MTLSamplerState> > samplers;
     } res[KNOWN_STAGES];
 
-    for (const QRhiShaderResourceBinding &b : qAsConst(srbD->sortedBindings)) {
-        switch (b.type) {
+    for (const QRhiShaderResourceBinding &binding : qAsConst(srbD->sortedBindings)) {
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&binding);
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
-            QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
+            QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b->u.ubuf.buf);
             id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
-            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                res[0].buffers.feed(b.binding, mtlbuf);
-                res[0].bufferOffsets.feed(b.binding, b.ubuf.offset);
+            if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
+                res[0].buffers.feed(b->binding, mtlbuf);
+                res[0].bufferOffsets.feed(b->binding, b->u.ubuf.offset);
             }
-            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                res[1].buffers.feed(b.binding, mtlbuf);
-                res[1].bufferOffsets.feed(b.binding, b.ubuf.offset);
+            if (b->stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
+                res[1].buffers.feed(b->binding, mtlbuf);
+                res[1].bufferOffsets.feed(b->binding, b->u.ubuf.offset);
             }
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
         {
-            QMetalTexture *texD = QRHI_RES(QMetalTexture, b.stex.tex);
-            QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b.stex.sampler);
-            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                res[0].textures.feed(b.binding, texD->d->tex);
-                res[0].samplers.feed(b.binding, samplerD->d->samplerState);
+            QMetalTexture *texD = QRHI_RES(QMetalTexture, b->u.stex.tex);
+            QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b->u.stex.sampler);
+            if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
+                res[0].textures.feed(b->binding, texD->d->tex);
+                res[0].samplers.feed(b->binding, samplerD->d->samplerState);
             }
-            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                res[1].textures.feed(b.binding, texD->d->tex);
-                res[1].samplers.feed(b.binding, samplerD->d->samplerState);
+            if (b->stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
+                res[1].textures.feed(b->binding, texD->d->tex);
+                res[1].samplers.feed(b->binding, samplerD->d->samplerState);
             }
         }
             break;
@@ -617,12 +618,12 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
 
     // do buffer writes, figure out if we need to rebind, and mark as in-use
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->sortedBindings[i]);
         QMetalShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
-        switch (b.type) {
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
-            QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b.ubuf.buf);
+            QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b->u.ubuf.buf);
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             executeBufferHostWritesForCurrentFrame(bufD);
             if (bufD->m_type != QRhiBuffer::Immutable)
@@ -636,8 +637,8 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             break;
         case QRhiShaderResourceBinding::SampledTexture:
         {
-            QMetalTexture *texD = QRHI_RES(QMetalTexture, b.stex.tex);
-            QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b.stex.sampler);
+            QMetalTexture *texD = QRHI_RES(QMetalTexture, b->u.stex.tex);
+            QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b->u.stex.sampler);
             if (texD->generation != bd.stex.texGeneration
                     || samplerD->generation != bd.stex.samplerGeneration)
             {
@@ -2212,22 +2213,22 @@ bool QMetalShaderResourceBindings::build()
         return QRhiShaderResourceBindingPrivate::get(&a)->binding < QRhiShaderResourceBindingPrivate::get(&b)->binding;
     });
     if (!sortedBindings.isEmpty())
-        maxBinding = sortedBindings.last().binding;
+        maxBinding = QRhiShaderResourceBindingPrivate::get(&sortedBindings.last())->binding;
     else
         maxBinding = -1;
 
     boundResourceData.resize(sortedBindings.count());
 
     for (int i = 0, ie = sortedBindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(sortedBindings[i]);
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&sortedBindings[i]);
         QMetalShaderResourceBindings::BoundResourceData &bd(boundResourceData[i]);
-        switch (b.type) {
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
-            bd.ubuf.generation = QRHI_RES(QMetalBuffer, b.ubuf.buf)->generation;
+            bd.ubuf.generation = QRHI_RES(QMetalBuffer, b->u.ubuf.buf)->generation;
             break;
         case QRhiShaderResourceBinding::SampledTexture:
-            bd.stex.texGeneration = QRHI_RES(QMetalTexture, b.stex.tex)->generation;
-            bd.stex.samplerGeneration = QRHI_RES(QMetalSampler, b.stex.sampler)->generation;
+            bd.stex.texGeneration = QRHI_RES(QMetalTexture, b->u.stex.tex)->generation;
+            bd.stex.samplerGeneration = QRHI_RES(QMetalSampler, b->u.stex.sampler)->generation;
             break;
         default:
             Q_UNREACHABLE();

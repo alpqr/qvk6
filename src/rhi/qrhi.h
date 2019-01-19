@@ -166,7 +166,7 @@ private:
     quint32 m_stride;
     Classification m_classification;
     int m_instanceStepRate;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputBinding, Q_MOVABLE_TYPE);
@@ -206,7 +206,7 @@ private:
     int m_location;
     Format m_format;
     quint32 m_offset;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputAttribute, Q_MOVABLE_TYPE);
@@ -223,7 +223,7 @@ public:
 private:
     QVector<QRhiVertexInputBinding> m_bindings;
     QVector<QRhiVertexInputAttribute> m_attributes;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputLayout, Q_MOVABLE_TYPE);
@@ -252,7 +252,7 @@ public:
 private:
     Type m_type;
     QBakedShader m_shader;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiGraphicsShaderStage, Q_MOVABLE_TYPE);
@@ -327,7 +327,7 @@ private:
     QRhiTexture *m_resolveTexture = nullptr;
     int m_resolveLayer = 0;
     int m_resolveLevel = 0;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiColorAttachment, Q_MOVABLE_TYPE);
@@ -359,7 +359,7 @@ private:
     QVector<QRhiColorAttachment> m_colorAttachments;
     QRhiRenderBuffer *m_depthStencilBuffer = nullptr;
     QRhiTexture *m_depthTexture = nullptr;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureRenderTargetDescription, Q_MOVABLE_TYPE);
@@ -392,7 +392,7 @@ private:
     QPoint m_destinationTopLeft;
     QSize m_sourceSize;
     QPoint m_sourceTopLeft;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureMipLevel, Q_MOVABLE_TYPE);
@@ -408,7 +408,7 @@ public:
 
 private:
     QVector<QRhiTextureMipLevel> m_mipImages;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureLayer, Q_MOVABLE_TYPE);
@@ -424,7 +424,7 @@ public:
 
 private:
     QVector<QRhiTextureLayer> m_layers;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureUploadDescription, Q_MOVABLE_TYPE);
@@ -463,7 +463,7 @@ private:
     int m_destinationLayer = 0;
     int m_destinationLevel = 0;
     QPoint m_destinationTopLeft;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiTextureCopyDescription, Q_MOVABLE_TYPE);
@@ -487,7 +487,7 @@ private:
     QRhiTexture *m_texture = nullptr;
     int m_layer = 0;
     int m_level = 0;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_TYPEINFO(QRhiReadbackDescription, Q_MOVABLE_TYPE);
@@ -546,7 +546,7 @@ protected:
     Type m_type;
     UsageFlags m_usage;
     int m_size;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiBuffer::UsageFlags)
@@ -627,7 +627,7 @@ protected:
     QSize m_pixelSize;
     int m_sampleCount;
     Flags m_flags;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiTexture::Flags)
@@ -679,7 +679,7 @@ protected:
     AddressMode m_addressU;
     AddressMode m_addressV;
     AddressMode m_addressW;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 class Q_RHI_EXPORT QRhiRenderBuffer : public QRhiResource
@@ -718,7 +718,7 @@ protected:
     QSize m_pixelSize;
     int m_sampleCount;
     Flags m_flags;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiRenderBuffer::Flags)
@@ -727,7 +727,7 @@ class Q_RHI_EXPORT QRhiRenderPassDescriptor : public QRhiResource
 {
 protected:
     QRhiRenderPassDescriptor(QRhiImplementation *rhi);
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 class Q_RHI_EXPORT QRhiRenderTarget : public QRhiResource
@@ -748,7 +748,7 @@ public:
 protected:
     QRhiRenderTarget(QRhiImplementation *rhi);
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 class Q_RHI_EXPORT QRhiTextureRenderTarget : public QRhiRenderTarget
@@ -789,7 +789,7 @@ public:
 protected:
     QRhiShaderResourceBindings(QRhiImplementation *rhi);
     QVector<QRhiShaderResourceBinding> m_bindings;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 class Q_RHI_EXPORT QRhiGraphicsPipeline : public QRhiResource
@@ -975,7 +975,7 @@ protected:
     QRhiVertexInputLayout m_vertexInputLayout;
     QRhiShaderResourceBindings *m_shaderResourceBindings = nullptr;
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiGraphicsPipeline::Flags)
@@ -1029,7 +1029,7 @@ protected:
     QRhiRenderPassDescriptor *m_renderPassDesc = nullptr;
     QObject *m_target = nullptr;
     QSize m_currentPixelSize;
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiSwapChain::Flags)
@@ -1080,7 +1080,7 @@ public:
 
 protected:
     QRhiCommandBuffer(QRhiImplementation *rhi);
-    void *m_reserved;
+    Q_DECL_UNUSED_MEMBER void *m_reserved;
 };
 
 struct Q_RHI_EXPORT QRhiReadbackResult

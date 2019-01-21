@@ -46,6 +46,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+revise create() and importing external device objects
 revise structs in api
 primitive restart
 fix independent builds

@@ -440,7 +440,7 @@ struct QGles2SwapChain : public QRhiSwapChain
 class QRhiGles2 : public QRhiImplementation
 {
 public:
-    QRhiGles2(QRhiInitParams *params);
+    QRhiGles2(QRhiGles2InitParams *params);
 
     bool create(QRhi::Flags flags) override;
     void destroy() override;

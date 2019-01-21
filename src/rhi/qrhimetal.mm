@@ -89,11 +89,9 @@ QT_BEGIN_NAMESPACE
 
     When interoperating with another graphics engine, it may be necessary to
     get a QRhi instance that uses the same Metal device. This can be achieved
-    by setting importExistingDevice to \c true and providing dev.
-
-    \note The class uses \c{void *} as the type since including the Objective C
-    headers is not acceptable here. The actual type is \c{id<MTLDevice>} or
-    \c{MTLDevice *}.
+    by passing a pointer to a QRhiMetalNativeHandles to QRhi::create(). The
+    device must be set to a non-null value then. Optionally, a command queue
+    object can be specified as well.
 
     The QRhi does not take ownership of any of the external objects.
  */
@@ -102,20 +100,27 @@ QT_BEGIN_NAMESPACE
     \class QRhiMetalNativeHandles
     \inmodule QtRhi
     \brief Holds the Metal device used by the QRhi.
+
+    \note The class uses \c{void *} as the type since including the Objective C
+    headers is not acceptable here. The actual types are \c{id<MTLDevice>} and
+    \c{id<MTLCommandQueue>}.
  */
 
 /*!
     \class QRhiMetalTextureNativeHandles
     \inmodule QtRhi
     \brief Holds the Metal texture object that is backing a QRhiTexture instance.
+
+    \note The class uses \c{void *} as the type since including the Objective C
+    headers is not acceptable here. The actual type is \c{id<MTLTexture>}.
  */
 
 struct QRhiMetalData
 {
     QRhiMetalData(QRhiImplementation *rhi) : ofr(rhi) { }
 
-    id<MTLDevice> dev;
-    id<MTLCommandQueue> cmdQueue;
+    id<MTLDevice> dev = nil;
+    id<MTLCommandQueue> cmdQueue = nil;
 
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
                                                      const QRhiColorClearValue &colorClearValue,
@@ -264,15 +269,23 @@ struct QMetalSwapChainData
     MTLPixelFormat colorFormat;
 };
 
-QRhiMetal::QRhiMetal(QRhiInitParams *params)
+QRhiMetal::QRhiMetal(QRhiMetalInitParams *params, QRhiMetalNativeHandles *importDevice)
 {
     d = new QRhiMetalData(this);
 
-    QRhiMetalInitParams *metalparams = static_cast<QRhiMetalInitParams *>(params);
-    importedDevice = metalparams->importExistingDevice;
+    Q_UNUSED(params);
+
+    importedDevice = importDevice != nullptr;
     if (importedDevice) {
-        d->dev = (id<MTLDevice>) metalparams->dev;
-        [d->dev retain];
+        if (d->dev) {
+            d->dev = (id<MTLDevice>) importDevice->dev;
+            importedCmdQueue = importDevice->cmdQueue != nullptr;
+            if (importedCmdQueue)
+                d->cmdQueue = (id<MTLCommandQueue>) importDevice->cmdQueue;
+        } else {
+            qWarning("No MTLDevice given, cannot import");
+            importedDevice = false;
+        }
     }
 }
 
@@ -290,12 +303,17 @@ bool QRhiMetal::create(QRhi::Flags flags)
 {
     Q_UNUSED(flags);
 
-    if (!importedDevice)
+    if (importedDevice)
+        [d->dev retain];
+    else
         d->dev = MTLCreateSystemDefaultDevice();
 
     qDebug("Metal device: %s", qPrintable(QString::fromNSString([d->dev name])));
 
-    d->cmdQueue = [d->dev newCommandQueue];
+    if (importedCmdQueue)
+        [d->cmdQueue retain];
+    else
+        d->cmdQueue = [d->dev newCommandQueue];
 
     if (@available(macOS 10.13, iOS 11.0, *)) {
         d->captureMgr = [MTLCaptureManager sharedCaptureManager];
@@ -338,21 +356,17 @@ void QRhiMetal::destroy()
     finishActiveReadbacks(true);
 
     if (@available(macOS 10.13, iOS 11.0, *)) {
-        if (d->captureScope) {
-            [d->captureScope release];
-            d->captureScope = nil;
-        }
+        [d->captureScope release];
+        d->captureScope = nil;
     }
 
-    if (d->cmdQueue) {
-        [d->cmdQueue release];
+    [d->cmdQueue release];
+    if (!importedCmdQueue)
         d->cmdQueue = nil;
-    }
 
-    if (d->dev) {
-        [d->dev release];
+    [d->dev release];
+    if (!importedDevice)
         d->dev = nil;
-    }
 }
 
 QVector<int> QRhiMetal::supportedSampleCounts() const

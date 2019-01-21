@@ -1155,7 +1155,10 @@ public:
 
     ~QRhi();
 
-    static QRhi *create(Implementation impl, QRhiInitParams *params, Flags flags = Flags());
+    static QRhi *create(Implementation impl,
+                        QRhiInitParams *params,
+                        Flags flags = Flags(),
+                        QRhiNativeHandles *importDevice = nullptr);
 
     QRhiGraphicsPipeline *newGraphicsPipeline();
     QRhiShaderResourceBindings *newShaderResourceBindings();

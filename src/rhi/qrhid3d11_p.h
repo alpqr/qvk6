@@ -445,7 +445,7 @@ struct QD3D11SwapChain : public QRhiSwapChain
 class QRhiD3D11 : public QRhiImplementation
 {
 public:
-    QRhiD3D11(QRhiInitParams *params);
+    QRhiD3D11(QRhiD3D11InitParams *params, QRhiD3D11NativeHandles *importDevice = nullptr);
 
     bool create(QRhi::Flags flags) override;
     void destroy() override;

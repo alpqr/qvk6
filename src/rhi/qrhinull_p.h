@@ -164,7 +164,7 @@ struct QNullSwapChain : public QRhiSwapChain
 class QRhiNull : public QRhiImplementation
 {
 public:
-    QRhiNull(QRhiInitParams *params);
+    QRhiNull(QRhiNullInitParams *params);
 
     bool create(QRhi::Flags flags) override;
     void destroy() override;

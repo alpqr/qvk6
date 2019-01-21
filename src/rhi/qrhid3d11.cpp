@@ -78,18 +78,15 @@ QT_BEGIN_NAMESPACE
     \section2 Working with existing Direct3D 11 devices
 
     When interoperating with another graphics engine, it may be necessary to
-    get a QRhi instance that uses the same Direct3D device and device context.
-    This can be achieved by setting importExistingDevice to \c true and
-    providing both dev and context.
+    get a QRhi instance that uses the same Direct3D device. This can be
+    achieved by passing a pointer to a QRhiD3D11NativeHandles to
+    QRhi::create(). Both the device and the device context must be set to a
+    non-null value then.
 
     The QRhi does not take ownership of any of the external objects.
 
     \note QRhi works with immediate contexts only. Deferred contexts are not
     used in any way.
-
-    \note The class uses \c{void *} as the type since including the COM-based
-    \c{d3d11.h} headers is not acceptable here. The actual types are
-    \c{ID3D11Device *} and \c{ID3D11DeviceContext *}.
 
     \note Regardless of using an imported or a QRhi-created device context, the
     \c ID3D11DeviceContext1 interface (Direct3D 11.1) must be supported.
@@ -111,28 +108,40 @@ QT_BEGIN_NAMESPACE
     \class QRhiD3D11NativeHandles
     \inmodule QtRhi
     \brief Holds the D3D device and device context used by the QRhi.
+
+    \note The class uses \c{void *} as the type since including the COM-based
+    \c{d3d11.h} headers is not acceptable here. The actual types are
+    \c{ID3D11Device *} and \c{ID3D11DeviceContext *}.
  */
 
 /*!
     \class QRhiD3D11TextureNativeHandles
     \inmodule QtRhi
     \brief Holds the D3D texture object that is backing a QRhiTexture instance.
+
+    \note The class uses \c{void *} as the type since including the COM-based
+    \c{d3d11.h} headers is not acceptable here. The actual type is
+    \c{ID3D11Texture2D *}.
  */
 
-QRhiD3D11::QRhiD3D11(QRhiInitParams *params)
+QRhiD3D11::QRhiD3D11(QRhiD3D11InitParams *params, QRhiD3D11NativeHandles *importDevice)
     : ofr(this)
 {
-    QRhiD3D11InitParams *d3dparams = static_cast<QRhiD3D11InitParams *>(params);
-    debugLayer = d3dparams->enableDebugLayer;
-    importedDevice = d3dparams->importExistingDevice;
+    debugLayer = params->enableDebugLayer;
+    importedDevice = importDevice != nullptr;
     if (importedDevice) {
-        dev = reinterpret_cast<ID3D11Device *>(d3dparams->dev);
-        ID3D11DeviceContext *ctx = reinterpret_cast<ID3D11DeviceContext *>(d3dparams->context);
-        if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
-            // get rid of the ref added by QueryInterface
-            ctx->Release();
+        dev = reinterpret_cast<ID3D11Device *>(importDevice->dev);
+        if (dev) {
+            ID3D11DeviceContext *ctx = reinterpret_cast<ID3D11DeviceContext *>(importDevice->context);
+            if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
+                // get rid of the ref added by QueryInterface
+                ctx->Release();
+            } else {
+                qWarning("ID3D11DeviceContext1 not supported by context, cannot import");
+                importedDevice = false;
+            }
         } else {
-            qWarning("ID3D11DeviceContext1 not supported by context, cannot import");
+            qWarning("No ID3D11Device given, cannot import");
             importedDevice = false;
         }
     }

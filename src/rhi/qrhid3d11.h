@@ -47,16 +47,12 @@ QT_BEGIN_NAMESPACE
 struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
 {
     bool enableDebugLayer = false;
-
-    bool importExistingDevice = false;
-    void *dev = nullptr;
-    void *context = nullptr;
 };
 
 struct Q_RHI_EXPORT QRhiD3D11NativeHandles : public QRhiNativeHandles
 {
-    void *dev;
-    void *context;
+    void *dev = nullptr;
+    void *context = nullptr;
 };
 
 struct Q_RHI_EXPORT QRhiD3D11TextureNativeHandles : public QRhiNativeHandles

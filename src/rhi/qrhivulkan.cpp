@@ -128,13 +128,14 @@ QT_BEGIN_NAMESPACE
 
     When interoperating with another graphics engine, it may be necessary to
     get a QRhi instance that uses the same Vulkan device. This can be achieved
-    by setting importExistingDevice to \c true and providing the already
-    created physical device and device objects. In addition, either the
-    graphics queue family index or the graphics queue object itself is
-    required. Prefer the former, whenever possible since deducing the index is
-    not possible afterwards. Optionally, an existing command pool object can be
-    specified as well, and, also optionally, vmemAllocator can be used to share
-    the same
+    by passing a pointer to a QRhiVulkanNativeHandles to QRhi::create().
+
+    The physical device and device object must then be set to a non-null value.
+    In addition, either the graphics queue family index or the graphics queue
+    object itself is required. Prefer the former, whenever possible since
+    deducing the index is not possible afterwards. Optionally, an existing
+    command pool object can be specified as well, and, also optionally,
+    vmemAllocator can be used to share the same
     \l{https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator}{Vulkan
     memory allocator} between two QRhi instances.
 
@@ -250,21 +251,32 @@ static inline VmaAllocator toVmaAllocator(QVkAllocator a)
     return reinterpret_cast<VmaAllocator>(a);
 }
 
-QRhiVulkan::QRhiVulkan(QRhiInitParams *params)
+QRhiVulkan::QRhiVulkan(QRhiVulkanInitParams *params, QRhiVulkanNativeHandles *importDevice)
     : ofr(this)
 {
-    QRhiVulkanInitParams *vkparams = static_cast<QRhiVulkanInitParams *>(params);
-    inst = vkparams->inst;
-    importedDevPoolQueue = vkparams->importExistingDevice;
-    if (importedDevPoolQueue) {
-        physDev = vkparams->physDev;
-        dev = vkparams->dev;
-        gfxQueueFamilyIdx = vkparams->gfxQueueFamilyIdx;
-        gfxQueue = vkparams->gfxQueue;
-        cmdPool = vkparams->cmdPool;
-        allocator = vkparams->vmemAllocator;
+    inst = params->inst;
+    maybeWindow = params->window; // may be null
+
+    importedDevice = importDevice != nullptr;
+    if (importedDevice) {
+        physDev = importDevice->physDev;
+        dev = importDevice->dev;
+        if (physDev && dev) {
+            gfxQueueFamilyIdx = importDevice->gfxQueueFamilyIdx;
+            gfxQueue = importDevice->gfxQueue;
+            if (importDevice->cmdPool) {
+                importedCmdPool = true;
+                cmdPool = importDevice->cmdPool;
+            }
+            if (importDevice->vmemAllocator) {
+                importedAllocator = true;
+                allocator = importDevice->vmemAllocator;
+            }
+        } else {
+            qWarning("No (physical) Vulkan device is given, cannot import");
+            importedDevice = false;
+        }
     }
-    maybeWindow = vkparams->window; // may be null
 }
 
 bool QRhiVulkan::create(QRhi::Flags flags)
@@ -276,7 +288,7 @@ bool QRhiVulkan::create(QRhi::Flags flags)
 
     f = inst->functions();
 
-    if (!importedDevPoolQueue) {
+    if (!importedDevice) {
         uint32_t devCount = 0;
         f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, nullptr);
         qDebug("%d physical devices", devCount);
@@ -386,7 +398,8 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     }
 
     df = inst->deviceFunctions(dev);
-    if (!cmdPool) {
+
+    if (!importedCmdPool) {
         VkCommandPoolCreateInfo poolInfo;
         memset(&poolInfo, 0, sizeof(poolInfo));
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -397,6 +410,7 @@ bool QRhiVulkan::create(QRhi::Flags flags)
             return false;
         }
     }
+
     if (gfxQueueFamilyIdx != -1 && !gfxQueue)
         df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
 
@@ -409,7 +423,7 @@ bool QRhiVulkan::create(QRhi::Flags flags)
            VK_VERSION_MINOR(physDevProperties.driverVersion),
            VK_VERSION_PATCH(physDevProperties.driverVersion));
 
-    if (!allocator) {
+    if (!importedAllocator) {
         VmaVulkanFunctions afuncs;
         afuncs.vkGetPhysicalDeviceProperties = wrap_vkGetPhysicalDeviceProperties;
         afuncs.vkGetPhysicalDeviceMemoryProperties = wrap_vkGetPhysicalDeviceMemoryProperties;
@@ -514,17 +528,20 @@ void QRhiVulkan::destroy()
         timestampQueryPool = VK_NULL_HANDLE;
     }
 
-    if (!importedDevPoolQueue) {
+    if (!importedAllocator && allocator) {
         vmaDestroyAllocator(toVmaAllocator(allocator));
-        if (cmdPool) {
-            df->vkDestroyCommandPool(dev, cmdPool, nullptr);
-            cmdPool = VK_NULL_HANDLE;
-        }
-        if (dev) {
-            df->vkDestroyDevice(dev, nullptr);
-            inst->resetDeviceFunctions(dev);
-            dev = VK_NULL_HANDLE;
-        }
+        allocator = nullptr;
+    }
+
+    if (!importedCmdPool && cmdPool) {
+        df->vkDestroyCommandPool(dev, cmdPool, nullptr);
+        cmdPool = VK_NULL_HANDLE;
+    }
+
+    if (!importedDevice && dev) {
+        df->vkDestroyDevice(dev, nullptr);
+        inst->resetDeviceFunctions(dev);
+        dev = VK_NULL_HANDLE;
     }
 
     f = nullptr;

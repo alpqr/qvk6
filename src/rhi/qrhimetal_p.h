@@ -272,7 +272,7 @@ struct QRhiMetalData;
 class QRhiMetal : public QRhiImplementation
 {
 public:
-    QRhiMetal(QRhiInitParams *params);
+    QRhiMetal(QRhiMetalInitParams *params, QRhiMetalNativeHandles *importDevice = nullptr);
     ~QRhiMetal();
 
     bool create(QRhi::Flags flags) override;
@@ -356,6 +356,7 @@ public:
     int effectiveSampleCount(int sampleCount) const;
 
     bool importedDevice = false;
+    bool importedCmdQueue = false;
     bool inFrame = false;
     int currentFrameSlot = 0;
     bool inPass = false;

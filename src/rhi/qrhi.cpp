@@ -2529,17 +2529,18 @@ QRhi::~QRhi()
     features that are potentially expensive and should only be used during
     development.
  */
-QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
+QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags, QRhiNativeHandles *importDevice)
 {
     QScopedPointer<QRhi> r(new QRhi);
 
     switch (impl) {
     case Null:
-        r->d = new QRhiNull(params);
+        r->d = new QRhiNull(static_cast<QRhiNullInitParams *>(params));
         break;
     case Vulkan:
 #if QT_CONFIG(vulkan)
-        r->d = new QRhiVulkan(params);
+        r->d = new QRhiVulkan(static_cast<QRhiVulkanInitParams *>(params),
+                              static_cast<QRhiVulkanNativeHandles *>(importDevice));
         break;
 #else
         qWarning("This build of Qt has no Vulkan support");
@@ -2547,7 +2548,7 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
 #endif
     case OpenGLES2:
 #ifndef QT_NO_OPENGL
-        r->d = new QRhiGles2(params);
+        r->d = new QRhiGles2(static_cast<QRhiGles2InitParams *>(params));
         break;
 #else
         qWarning("This build of Qt has no OpenGL support");
@@ -2555,7 +2556,8 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
 #endif
     case D3D11:
 #ifdef Q_OS_WIN
-        r->d = new QRhiD3D11(params);
+        r->d = new QRhiD3D11(static_cast<QRhiD3D11InitParams *>(params),
+                             static_cast<QRhiD3D11NativeHandles *>(importDevice));
         break;
 #else
         qWarning("This platform has no Direct3D 11 support");
@@ -2563,7 +2565,8 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
 #endif
     case Metal:
 #ifdef Q_OS_DARWIN
-        r->d = new QRhiMetal(params);
+        r->d = new QRhiMetal(static_cast<QRhiMetalInitParams *>(params),
+                             static_cast<QRhiMetalNativeHandles *>(importDevice));
         break;
 #else
         qWarning("This platform has no Metal support");

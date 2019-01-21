@@ -64,12 +64,12 @@ void Renderer::initResources()
 {
     QRhiVulkanInitParams params;
     params.inst = m_window->vulkanInstance();
-    params.importExistingDevice = true;
-    params.physDev = m_window->physicalDevice();
-    params.dev = m_window->device();
-    params.cmdPool = m_window->graphicsCommandPool();
-    params.gfxQueue = m_window->graphicsQueue();
-    m_r = QRhi::create(QRhi::Vulkan, &params);
+    QRhiVulkanNativeHandles importDev;
+    importDev.physDev = m_window->physicalDevice();
+    importDev.dev = m_window->device();
+    importDev.cmdPool = m_window->graphicsCommandPool();
+    importDev.gfxQueue = m_window->graphicsQueue();
+    m_r = QRhi::create(QRhi::Vulkan, &params, 0, &importDev);
 
     m_sc = m_r->newSwapChain();
     m_sc->setTarget(m_window); // note: very different from setWindow(m_window)

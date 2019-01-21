@@ -70,7 +70,7 @@ QT_BEGIN_NAMESPACE
     \brief Empty.
  */
 
-QRhiNull::QRhiNull(QRhiInitParams *params)
+QRhiNull::QRhiNull(QRhiNullInitParams *params)
 {
     Q_UNUSED(params);
 }

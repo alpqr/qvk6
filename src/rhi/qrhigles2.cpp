@@ -122,13 +122,12 @@ QT_BEGIN_NAMESPACE
     \brief Holds the OpenGL texture object that is backing a QRhiTexture instance.
  */
 
-QRhiGles2::QRhiGles2(QRhiInitParams *params)
+QRhiGles2::QRhiGles2(QRhiGles2InitParams *params)
     : ofr(this)
 {
-    QRhiGles2InitParams *glparams = static_cast<QRhiGles2InitParams *>(params);
-    ctx = glparams->context;
-    maybeWindow = glparams->window; // may be null
-    fallbackSurface = glparams->fallbackSurface;
+    ctx = params->context;
+    maybeWindow = params->window; // may be null
+    fallbackSurface = params->fallbackSurface;
 }
 
 bool QRhiGles2::ensureContext(QSurface *surface) const

@@ -45,14 +45,12 @@ QT_BEGIN_NAMESPACE
 
 struct Q_RHI_EXPORT QRhiMetalInitParams : public QRhiInitParams
 {
-    bool importExistingDevice = false;
-    void *dev = nullptr;
 };
 
 struct Q_RHI_EXPORT QRhiMetalNativeHandles : public QRhiNativeHandles
 {
-    void *dev;
-    void *cmdQueue;
+    void *dev = nullptr;
+    void *cmdQueue = nullptr;
 };
 
 struct Q_RHI_EXPORT QRhiMetalTextureNativeHandles : public QRhiNativeHandles

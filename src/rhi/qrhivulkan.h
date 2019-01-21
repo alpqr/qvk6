@@ -46,24 +46,16 @@ struct Q_RHI_EXPORT QRhiVulkanInitParams : public QRhiInitParams
 {
     QVulkanInstance *inst = nullptr;
     QWindow *window = nullptr;
+};
 
-    bool importExistingDevice = false;
+struct Q_RHI_EXPORT QRhiVulkanNativeHandles : public QRhiNativeHandles
+{
     VkPhysicalDevice physDev = VK_NULL_HANDLE;
     VkDevice dev = VK_NULL_HANDLE;
     int gfxQueueFamilyIdx = -1;
     VkQueue gfxQueue = VK_NULL_HANDLE;
     VkCommandPool cmdPool = VK_NULL_HANDLE;
     void *vmemAllocator = nullptr;
-};
-
-struct Q_RHI_EXPORT QRhiVulkanNativeHandles : public QRhiNativeHandles
-{
-    VkPhysicalDevice physDev;
-    VkDevice dev;
-    int gfxQueueFamilyIdx;
-    VkQueue gfxQueue;
-    VkCommandPool cmdPool;
-    void *vmemAllocator;
 };
 
 struct Q_RHI_EXPORT QRhiVulkanTextureNativeHandles : public QRhiNativeHandles

@@ -333,6 +333,17 @@ QT_BEGIN_NAMESPACE
     \class QRhiInitParams
     \inmodule QtRhi
     \brief Base class for backend-specific initialization parameters.
+
+    Contains fields that are relevant to all backends.
+
+    \l resourceSharingHost is set to null by default. Setting it to an actual
+    QRhiResourceSharingHost instance is optional. When set, it causes the QRhi
+    to share either the graphics device, or, in case of OpenGL, use a context
+    that shares resources, with all other QRhi instances that have the same
+    QRhiResourceSharingHost set in their QRhiInitParams. This makes the
+    underlying graphics resources of QRhiResource subclasses such as
+    QRhiTexture visible to all the QRhi instances that use the same
+    QRhiResourceSharingHost.
  */
 
 /*!
@@ -2497,6 +2508,64 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     }
     approxSize *= layerCount;
     return approxSize;
+}
+
+/*!
+    \class QRhiResourceSharingHost
+    \inmodule QtRhi
+    \brief Enables resource sharing and synchronization between QRhi instances.
+
+    When a QRhi is created with QRhiInitParams::resourceSharingHost set, it
+    causes the QRhi to share either the graphics device, or, in case of OpenGL,
+    use a context that shares resources, with all other QRhi instances that
+    have the same QRhiResourceSharingHost set in their QRhiInitParams.
+
+    Sharing the same device means that when two or more QRhi instances have the
+    same QhiResourceSharingHost set, there will only be one native graphics
+    device object, such as, \c VkDevice, \c MTLDevice, or \c ID3D11Device,
+    created, and that device will be available as long as the
+    QRhiResourceSharingHost is alive, thus avoiding lifetime and ownership
+    issues.
+
+    This makes the underlying graphics resources of QRhiResource subclasses
+    such as QRhiTexture available to all the QRhi instances that use the same
+    QRhiResourceSharingHost.
+
+    With some backends the resource sharing host has more tasks than merely
+    facilitating the reuse of the device objects. With Direct3D 11 for example,
+    it also performs synchronizing submission to the device context (of which
+    there is only one, regardless of the number of threads submitting to it).
+
+    \note There is no further synchronization performed for resources like
+    buffers or textures. If the QRhi instances operate on different threads, it
+    is up to those threads to ensure the QRhiResource usages on the threads
+    are done as appropriate for the underlying graphics APIs.
+
+    \note The QRhiResourceSharingHost can be created on a thread that is
+    different than the threads on which the associated QRhi instances will be
+    created. It is however up to the application to organize those threads in a
+    way that the construction and destruction of the QRhiResourceSharingHost is
+    performed (and completed) before and after all associated QRhi instances
+    and created and destroyed, respectively.
+  */
+
+/*!
+    Constructs a new QRhiResourceSharingHost.
+ */
+QRhiResourceSharingHost::QRhiResourceSharingHost()
+    : d(new QRhiResourceSharingHostPrivate)
+{
+}
+
+/*!
+    Destructor.
+
+    \note Destroying a QRhiResourceSharingHost before all the associated QRhi
+    instances are destroyed is not allowed and will lead to undefined behavior.
+ */
+QRhiResourceSharingHost::~QRhiResourceSharingHost()
+{
+    delete d;
 }
 
 /*!

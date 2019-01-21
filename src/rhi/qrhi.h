@@ -60,6 +60,7 @@ class QRhiResourceUpdateBatch;
 class QRhiResourceUpdateBatchPrivate;
 class QRhiProfiler;
 class QRhiShaderResourceBindingPrivate;
+class QRhiResourceSharingHostPrivate;
 
 class Q_RHI_EXPORT QRhiColorClearValue
 {
@@ -1110,8 +1111,20 @@ private:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiResourceUpdateBatch::TexturePrepareFlags)
 
+class Q_RHI_EXPORT QRhiResourceSharingHost
+{
+public:
+    QRhiResourceSharingHost();
+    ~QRhiResourceSharingHost();
+
+private:
+    Q_DISABLE_COPY(QRhiResourceSharingHost)
+    QRhiResourceSharingHostPrivate *d;
+};
+
 struct Q_RHI_EXPORT QRhiInitParams
 {
+    QRhiResourceSharingHost *resourceSharingHost = nullptr;
 };
 
 class Q_RHI_EXPORT QRhi

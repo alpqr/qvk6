@@ -68,7 +68,7 @@ QT_BEGIN_NAMESPACE
     QRhiSwapChain will target is passed in as well.
 
     \badcode
-        fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
+        QOffscreenSurface *fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
         QRhiGles2InitParams params;
         params.fallbackSurface = fallbackSurface;
         params.window = window;

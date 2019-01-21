@@ -49,8 +49,6 @@ struct Q_RHI_EXPORT QRhiD3D11InitParams : public QRhiInitParams
     bool enableDebugLayer = false;
 
     bool importExistingDevice = false;
-    // both must be given when importExistingDevice is true. ownership not taken.
-    // leave them unset otherwise.
     void *dev = nullptr;
     void *context = nullptr;
 };
@@ -63,7 +61,7 @@ struct Q_RHI_EXPORT QRhiD3D11NativeHandles : public QRhiNativeHandles
 
 struct Q_RHI_EXPORT QRhiD3D11TextureNativeHandles : public QRhiNativeHandles
 {
-    void *texture = nullptr; // ID3D11Texture2D
+    void *texture = nullptr; // ID3D11Texture2D*
 };
 
 QT_END_NAMESPACE

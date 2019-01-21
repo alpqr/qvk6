@@ -45,12 +45,8 @@ QT_BEGIN_NAMESPACE
 
 struct Q_RHI_EXPORT QRhiMetalInitParams : public QRhiInitParams
 {
-    // Not sure how validation could be enabled from here. Instead, do qmake
-    // -spec macx-xcode and run the project (debug build) in XCode to get Metal
-    // API validation.
-
     bool importExistingDevice = false;
-    void *dev = nullptr; // ownership not taken
+    void *dev = nullptr;
 };
 
 struct Q_RHI_EXPORT QRhiMetalNativeHandles : public QRhiNativeHandles

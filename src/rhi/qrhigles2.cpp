@@ -97,6 +97,13 @@ QT_BEGIN_NAMESPACE
     \note QRhiSwapChain can only target QWindow instances that have their
     surface type set to QSurface::OpenGLSurface.
 
+    \note \l window is optional. It is recommended to specify it whever
+    possible, in order to avoid problems on multi-adapter and multi-screen
+    systems. When \l window is not set, the very first
+    QOpenGLContext::makeCurrent() happens with \l fallbackSurface which may be
+    an invisible window on some platforms (for example, Windows) and that may
+    trigger unexpected problems in some cases.
+
     \note A QRhi instance can be created and used on any thread but all usage
     must be limited to that one single thread. When it comes to native objects,
     such as OpenGL contexts, passed in in QRhiInitParams, it is up to the

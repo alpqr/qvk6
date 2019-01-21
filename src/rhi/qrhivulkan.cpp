@@ -133,7 +133,8 @@ QT_BEGIN_NAMESPACE
     graphics queue family index or the graphics queue object itself is
     required. Prefer the former, whenever possible since deducing the index is
     not possible afterwards. Optionally, an existing command pool object can be
-    specified as well. Finally, vmemAllocator can be used to share the same
+    specified as well, and, also optionally, vmemAllocator can be used to share
+    the same
     \l{https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator}{Vulkan
     memory allocator} between two QRhi instances.
 

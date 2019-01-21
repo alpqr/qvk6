@@ -182,27 +182,23 @@ void Window::customRender()
     }
     if (!d.compressedData.isEmpty()) {
         {
-            QRhiTextureUploadDescription desc;
-            QRhiTextureUploadDescription::Layer layer;
-            QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData[0]);
-            layer.mipImages.append(image);
-            desc.layers.append(layer);
+            QRhiTextureMipLevel image(d.compressedData[0]);
+            QRhiTextureLayer layer({ image });
+            QRhiTextureUploadDescription desc({ layer });
             u->uploadTexture(d.tex, desc);
             d.compressedData.clear();
         }
 
         // now exercise uploading a smaller compressed image into the same texture
         {
-            QRhiTextureUploadDescription desc;
-            QRhiTextureUploadDescription::Layer layer;
-            QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData2[0]);
+            QRhiTextureMipLevel image(d.compressedData2[0]);
             // positions and sizes must be multiples of 4 here (for BC1)
-            image.destinationTopLeft = QPoint(16, 32);
+            image.setDestinationTopLeft(QPoint(16, 32));
             // the image is smaller than the subresource size (224x64 vs
             // 256x256) so the size must be specified manually
-            image.sourceSize = QSize(224, 64);
-            layer.mipImages.append(image);
-            desc.layers.append(layer);
+            image.setSourceSize(QSize(224, 64));
+            QRhiTextureLayer layer({ image });
+            QRhiTextureUploadDescription desc({ layer });
             u->uploadTexture(d.tex, desc);
             d.compressedData2.clear();
         }

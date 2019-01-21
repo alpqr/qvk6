@@ -177,13 +177,13 @@ void Window::customRender()
         u->updateDynamicBuffer(d.ubuf, 64, 4, &flip);
     }
     if (!d.compressedData.isEmpty()) {
-        QRhiTextureUploadDescription desc;
-        QRhiTextureUploadDescription::Layer layer;
+        QVector<QRhiTextureMipLevel> mipImages;
         for (int i = 0; i < d.compressedData.count(); ++i) {
-            QRhiTextureUploadDescription::Layer::MipLevel image(d.compressedData[i]);
-            layer.mipImages.append(image);
+            QRhiTextureMipLevel image(d.compressedData[i]);
+            mipImages.append(image);
         }
-        desc.layers.append(layer);
+        QRhiTextureLayer layer(mipImages);
+        QRhiTextureUploadDescription desc({ layer });
         u->uploadTexture(d.tex, desc);
         d.compressedData.clear();
     }

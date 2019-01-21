@@ -29,6 +29,8 @@
 #include <QtTest/QtTest>
 #include <QFile>
 #include <QtShaderTools/QShaderBaker>
+#include <QtShaderTools/private/qshaderdescription_p.h>
+#include <QtShaderTools/private/qbakedshader_p.h>
 
 class tst_QShaderBaker : public QObject
 {
@@ -51,6 +53,8 @@ private slots:
     void compileError();
     void translateError();
     void genVariants();
+    void shaderDescImplicitSharing();
+    void bakedShaderImplicitSharing();
 };
 
 void tst_QShaderBaker::initTestCase()
@@ -165,6 +169,18 @@ void tst_QShaderBaker::simpleCompileCheckResults()
             break;
         case 1:
             QCOMPARE(v.name, QLatin1String("color"));
+            QCOMPARE(v.type, QShaderDescription::Vec3);
+            break;
+        default:
+            QVERIFY(false);
+            break;
+        }
+    }
+    QCOMPARE(desc.outputVariables().count(), 1);
+    for (const QShaderDescription::InOutVariable &v : desc.outputVariables()) {
+        switch (v.location) {
+        case 0:
+            QCOMPARE(v.name, QLatin1String("v_color"));
             QCOMPARE(v.type, QShaderDescription::Vec3);
             break;
         default:
@@ -357,6 +373,99 @@ void tst_QShaderBaker::genVariants()
     }
     QCOMPARE(batchableVariantCount, 6);
     QCOMPARE(batchableGlslVariantCount, 2);
+}
+
+void tst_QShaderBaker::shaderDescImplicitSharing()
+{
+    QShaderBaker baker;
+    baker.setSourceFileName(QLatin1String(":/data/color.vert"));
+    baker.setGeneratedShaderVariants({ QBakedShaderKey::StandardShader });
+    QVector<QShaderBaker::GeneratedShader> targets;
+    targets.append({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(100) });
+    baker.setGeneratedShaders(targets);
+    QBakedShader s = baker.bake();
+    QVERIFY(s.isValid());
+    QVERIFY(baker.errorMessage().isEmpty());
+    QCOMPARE(s.availableShaders().count(), 1);
+    QVERIFY(s.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+
+    QShaderDescription d0 = s.description();
+    QVERIFY(d0.isValid());
+    QCOMPARE(d0.inputVariables().count(), 2);
+    QCOMPARE(d0.outputVariables().count(), 1);
+    QCOMPARE(d0.uniformBlocks().count(), 1);
+
+    QShaderDescription d1 = d0;
+    QVERIFY(QShaderDescriptionPrivate::get(&d0) == QShaderDescriptionPrivate::get(&d1));
+    QCOMPARE(d0.inputVariables().count(), 2);
+    QCOMPARE(d0.outputVariables().count(), 1);
+    QCOMPARE(d0.uniformBlocks().count(), 1);
+    QCOMPARE(d1.inputVariables().count(), 2);
+    QCOMPARE(d1.outputVariables().count(), 1);
+    QCOMPARE(d1.uniformBlocks().count(), 1);
+
+    d1.detach();
+    QVERIFY(QShaderDescriptionPrivate::get(&d0) != QShaderDescriptionPrivate::get(&d1));
+    QCOMPARE(d0.inputVariables().count(), 2);
+    QCOMPARE(d0.outputVariables().count(), 1);
+    QCOMPARE(d0.uniformBlocks().count(), 1);
+    QCOMPARE(d1.inputVariables().count(), 2);
+    QCOMPARE(d1.outputVariables().count(), 1);
+    QCOMPARE(d1.uniformBlocks().count(), 1);
+}
+
+void tst_QShaderBaker::bakedShaderImplicitSharing()
+{
+    QShaderBaker baker;
+    baker.setSourceFileName(QLatin1String(":/data/color.vert"));
+    baker.setGeneratedShaderVariants({ QBakedShaderKey::StandardShader });
+    QVector<QShaderBaker::GeneratedShader> targets;
+    targets.append({ QBakedShaderKey::SpirvShader, QBakedShaderVersion(100) });
+    baker.setGeneratedShaders(targets);
+    QBakedShader s0 = baker.bake();
+    QVERIFY(s0.isValid());
+    QVERIFY(baker.errorMessage().isEmpty());
+    QCOMPARE(s0.availableShaders().count(), 1);
+    QVERIFY(s0.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+
+    {
+        QBakedShader s1 = s0;
+        QVERIFY(QBakedShaderPrivate::get(&s0) == QBakedShaderPrivate::get(&s1));
+        QCOMPARE(s0.availableShaders().count(), 1);
+        QVERIFY(s0.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+        QCOMPARE(s1.availableShaders().count(), 1);
+        QVERIFY(s1.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+        QCOMPARE(s0.stage(), s1.stage());
+
+        s1.detach();
+        QVERIFY(QBakedShaderPrivate::get(&s0) != QBakedShaderPrivate::get(&s1));
+        QCOMPARE(s0.availableShaders().count(), 1);
+        QVERIFY(s0.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+        QCOMPARE(s1.availableShaders().count(), 1);
+        QVERIFY(s1.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+        QCOMPARE(s0.stage(), s1.stage());
+    }
+
+    {
+        QBakedShader s1 = s0;
+        QVERIFY(QBakedShaderPrivate::get(&s0) == QBakedShaderPrivate::get(&s1));
+        QCOMPARE(s0.stage(), s1.stage());
+
+        s1.setStage(QBakedShader::FragmentStage); // call a setter to trigger a detach
+        QVERIFY(QBakedShaderPrivate::get(&s0) != QBakedShaderPrivate::get(&s1));
+        QCOMPARE(s0.availableShaders().count(), 1);
+        QVERIFY(s0.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+        QCOMPARE(s1.availableShaders().count(), 1);
+        QVERIFY(s1.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
+        QShaderDescription d0 = s0.description();
+        QCOMPARE(d0.inputVariables().count(), 2);
+        QCOMPARE(d0.outputVariables().count(), 1);
+        QCOMPARE(d0.uniformBlocks().count(), 1);
+        QShaderDescription d1 = s1.description();
+        QCOMPARE(d1.inputVariables().count(), 2);
+        QCOMPARE(d1.outputVariables().count(), 1);
+        QCOMPARE(d1.uniformBlocks().count(), 1);
+    }
 }
 
 #include <tst_qshaderbaker.moc>

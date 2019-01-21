@@ -1971,27 +1971,27 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
     while (frameSlot < (updateAll ? QVK_FRAMES_IN_FLIGHT : descSetIdx + 1)) {
         srbD->boundResourceData[frameSlot].resize(srbD->m_bindings.count());
         for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
-            const QRhiShaderResourceBinding &b(srbD->m_bindings[i]);
+            const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->m_bindings[i]);
             QVkShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[frameSlot][i]);
 
             VkWriteDescriptorSet writeInfo;
             memset(&writeInfo, 0, sizeof(writeInfo));
             writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             writeInfo.dstSet = srbD->descSets[frameSlot];
-            writeInfo.dstBinding = b.binding;
+            writeInfo.dstBinding = b->binding;
             writeInfo.descriptorCount = 1;
 
-            switch (b.type) {
+            switch (b->type) {
             case QRhiShaderResourceBinding::UniformBuffer:
             {
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                QRhiBuffer *buf = b.ubuf.buf;
+                QRhiBuffer *buf = b->u.ubuf.buf;
                 QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
                 bd.ubuf.generation = bufD->generation;
                 VkDescriptorBufferInfo bufInfo;
                 bufInfo.buffer = bufD->m_type == QRhiBuffer::Dynamic ? bufD->buffers[frameSlot] : bufD->buffers[0];
-                bufInfo.offset = b.ubuf.offset;
-                bufInfo.range = b.ubuf.maybeSize ? b.ubuf.maybeSize : bufD->m_size;
+                bufInfo.offset = b->u.ubuf.offset;
+                bufInfo.range = b->u.ubuf.maybeSize ? b->u.ubuf.maybeSize : bufD->m_size;
                 // be nice and assert when we know the vulkan device would die a horrible death due to non-aligned reads
                 Q_ASSERT(aligned(bufInfo.offset, ubufAlign) == bufInfo.offset);
                 bufferInfos.append(bufInfo);
@@ -2000,8 +2000,8 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
                 break;
             case QRhiShaderResourceBinding::SampledTexture:
             {
-                QVkTexture *texD = QRHI_RES(QVkTexture, b.stex.tex);
-                QVkSampler *samplerD = QRHI_RES(QVkSampler, b.stex.sampler);
+                QVkTexture *texD = QRHI_RES(QVkTexture, b->u.stex.tex);
+                QVkSampler *samplerD = QRHI_RES(QVkSampler, b->u.stex.sampler);
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                 bd.stex.texGeneration = texD->generation;
                 bd.stex.samplerGeneration = samplerD->generation;
@@ -2236,19 +2236,21 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        if (u.desc.layers.isEmpty() || u.desc.layers[0].mipImages.isEmpty())
+        const QVector<QRhiTextureLayer> layers = u.desc.layers();
+        if (layers.isEmpty() || layers[0].mipImages().isEmpty())
             continue;
 
         QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
         VkDeviceSize stagingSize = 0;
 
-        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            Q_ASSERT(layerDesc.mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
-            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image.isNull() ?
-                            mipDesc.compressedData.size() : mipDesc.image.sizeInBytes();
+        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureLayer &layerDesc(layers[layer]);
+            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+            Q_ASSERT(mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
+            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                const qsizetype imageSizeBytes = mipDesc.image().isNull() ?
+                            mipDesc.compressedData().size() : mipDesc.image().sizeInBytes();
                 if (imageSizeBytes > 0)
                     stagingSize += aligned(imageSizeBytes, texbufAlign);
             }
@@ -2286,10 +2288,11 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             continue;
         }
         QVector<QImage> tempImages; // yes, we rely heavily on implicit sharing in QImage
-        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureLayer &layerDesc(layers[layer]);
+            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
                 qsizetype imageSizeBytes = 0;
                 const void *src = nullptr;
                 VkBufferImageCopy copyInfo;
@@ -2301,62 +2304,57 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 copyInfo.imageSubresource.layerCount = 1;
                 copyInfo.imageExtent.depth = 1;
 
-                const int dx = mipDesc.destinationTopLeft.x();
-                const int dy = mipDesc.destinationTopLeft.y();
-                if (!mipDesc.image.isNull()) {
-                    imageSizeBytes = mipDesc.image.sizeInBytes();
+                const QPoint dp = mipDesc.destinationTopLeft();
+                const QImage image = mipDesc.image();
+                const QByteArray compressedData = mipDesc.compressedData();
+                if (!image.isNull()) {
+                    imageSizeBytes = image.sizeInBytes();
                     if (imageSizeBytes > 0) {
-                        QImage img = mipDesc.image;
-                        int w = img.width();
-                        int h = img.height();
+                        QImage img = image;
+                        QSize size = img.size();
                         src = img.constBits();
-                        copyInfo.bufferRowLength = w; // this is in pixels, not bytes
-                        if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
-                            const int sx = mipDesc.sourceTopLeft.x();
-                            const int sy = mipDesc.sourceTopLeft.y();
-                            if (!mipDesc.sourceSize.isEmpty()) {
-                                w = mipDesc.sourceSize.width();
-                                h = mipDesc.sourceSize.height();
-                            }
+                        copyInfo.bufferRowLength = size.width(); // this is in pixels, not bytes
+                        if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                            const int sx = mipDesc.sourceTopLeft().x();
+                            const int sy = mipDesc.sourceTopLeft().y();
+                            if (!mipDesc.sourceSize().isEmpty())
+                                size = mipDesc.sourceSize();
                             if (img.depth() == 32) {
                                 src = img.constBits() + sy * img.bytesPerLine() + sx * 4;
                                 // bufferRowLength remains set to the original image's width
                             } else {
-                                img = img.copy(sx, sy, w, h);
+                                img = img.copy(sx, sy, size.width(), size.height());
                                 src = img.constBits();
-                                copyInfo.bufferRowLength = w;
+                                copyInfo.bufferRowLength = size.width();
                                 tempImages.append(img); // keep the new, temporary image alive until the vkCmdCopy
                             }
                         }
-                        copyInfo.imageOffset.x = dx;
-                        copyInfo.imageOffset.y = dy;
-                        copyInfo.imageExtent.width = w;
-                        copyInfo.imageExtent.height = h;
+                        copyInfo.imageOffset.x = dp.x();
+                        copyInfo.imageOffset.y = dp.y();
+                        copyInfo.imageExtent.width = size.width();
+                        copyInfo.imageExtent.height = size.height();
                         copyInfos.append(copyInfo);
                     }
                 } else {
-                    imageSizeBytes = mipDesc.compressedData.size();
+                    imageSizeBytes = compressedData.size();
                     if (imageSizeBytes > 0) {
-                        src = mipDesc.compressedData.constData();
+                        src = compressedData.constData();
                         const int subresw = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
                         const int subresh = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
-                        int w, h;
-                        if (mipDesc.sourceSize.isEmpty()) {
-                            w = subresw;
-                            h = subresh;
-                        } else {
-                            w = mipDesc.sourceSize.width();
-                            h = mipDesc.sourceSize.height();
-                        }
+                        QSize size(subresw, subresh);
+                        if (!mipDesc.sourceSize().isEmpty())
+                            size = mipDesc.sourceSize();
+                        const int w = size.width();
+                        const int h = size.height();
                         QSize blockDim;
                         compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
                         // x and y must be multiples of the block width and height
-                        copyInfo.imageOffset.x = aligned(dx, blockDim.width());
-                        copyInfo.imageOffset.y = aligned(dy, blockDim.height());
+                        copyInfo.imageOffset.x = aligned(dp.x(), blockDim.width());
+                        copyInfo.imageOffset.y = aligned(dp.y(), blockDim.height());
                         // width and height must be multiples of the block width and height
                         // or x + width and y + height must equal the subresource width and height
-                        copyInfo.imageExtent.width = dx + w == subresw ? w : aligned(w, blockDim.width());
-                        copyInfo.imageExtent.height = dy + h == subresh ? h : aligned(h, blockDim.height());
+                        copyInfo.imageExtent.width = dp.x() + w == subresw ? w : aligned(w, blockDim.width());
+                        copyInfo.imageExtent.height = dp.y() + h == subresh ? h : aligned(h, blockDim.height());
                         copyInfos.append(copyInfo);
                     }
                 }
@@ -2401,22 +2399,22 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         memset(&region, 0, sizeof(region));
 
         region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.srcSubresource.mipLevel = u.desc.sourceLevel;
-        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer;
+        region.srcSubresource.mipLevel = u.desc.sourceLevel();
+        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer();
         region.srcSubresource.layerCount = 1;
 
-        region.srcOffset.x = u.desc.sourceTopLeft.x();
-        region.srcOffset.y = u.desc.sourceTopLeft.y();
+        region.srcOffset.x = u.desc.sourceTopLeft().x();
+        region.srcOffset.y = u.desc.sourceTopLeft().y();
 
         region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.dstSubresource.mipLevel = u.desc.destinationLevel;
-        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer;
+        region.dstSubresource.mipLevel = u.desc.destinationLevel();
+        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer();
         region.dstSubresource.layerCount = 1;
 
-        region.dstOffset.x = u.desc.destinationTopLeft.x();
-        region.dstOffset.y = u.desc.destinationTopLeft.y();
+        region.dstOffset.x = u.desc.destinationTopLeft().x();
+        region.dstOffset.y = u.desc.destinationTopLeft().y();
 
-        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
         region.extent.width = size.width();
         region.extent.height = size.height();
         region.extent.depth = 1;
@@ -2439,7 +2437,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         aRb.desc = u.rb;
         aRb.result = u.result;
 
-        QVkTexture *texD = QRHI_RES(QVkTexture, aRb.desc.texture);
+        QVkTexture *texD = QRHI_RES(QVkTexture, u.rb.texture());
         QVkSwapChain *swapChainD = nullptr;
         if (texD) {
             if (texD->samples > VK_SAMPLE_COUNT_1_BIT) {
@@ -2447,9 +2445,9 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 continue;
             }
             aRb.pixelSize = texD->m_pixelSize;
-            if (u.rb.level > 0) {
-                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level))));
-                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level))));
+            if (u.rb.level() > 0) {
+                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level()))));
+                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level()))));
             }
             aRb.format = texD->m_format;
         } else {
@@ -2497,8 +2495,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         memset(&copyDesc, 0, sizeof(copyDesc));
         copyDesc.bufferOffset = 0;
         copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyDesc.imageSubresource.mipLevel = aRb.desc.level;
-        copyDesc.imageSubresource.baseArrayLayer = aRb.desc.layer;
+        copyDesc.imageSubresource.mipLevel = u.rb.level();
+        copyDesc.imageSubresource.baseArrayLayer = u.rb.layer();
         copyDesc.imageSubresource.layerCount = 1;
         copyDesc.imageExtent.width = aRb.pixelSize.width();
         copyDesc.imageExtent.height = aRb.pixelSize.height();
@@ -2951,10 +2949,11 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
     bool hasSlottedResourceInSrb = false;
 
-    for (const QRhiShaderResourceBinding &b : qAsConst(srbD->m_bindings)) {
-        switch (b.type) {
+    for (const QRhiShaderResourceBinding &binding : qAsConst(srbD->m_bindings)) {
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&binding);
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
-            if (QRHI_RES(QVkBuffer, b.ubuf.buf)->m_type == QRhiBuffer::Dynamic)
+            if (QRHI_RES(QVkBuffer, b->u.ubuf.buf)->m_type == QRhiBuffer::Dynamic)
                 hasSlottedResourceInSrb = true;
             break;
         default:
@@ -2968,12 +2967,12 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     // Do host writes and mark referenced shader resources as in-use.
     // Also prepare to ensure the descriptor set we are going to bind refers to up-to-date Vk objects.
     for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(srbD->m_bindings[i]);
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->m_bindings[i]);
         QVkShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[descSetIdx][i]);
-        switch (b.type) {
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
-            QVkBuffer *bufD = QRHI_RES(QVkBuffer, b.ubuf.buf);
+            QVkBuffer *bufD = QRHI_RES(QVkBuffer, b->u.ubuf.buf);
             Q_ASSERT(bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer));
             bufD->lastActiveFrameSlot = currentFrameSlot;
 
@@ -2988,8 +2987,8 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
             break;
         case QRhiShaderResourceBinding::SampledTexture:
         {
-            QVkTexture *texD = QRHI_RES(QVkTexture, b.stex.tex);
-            QVkSampler *samplerD = QRHI_RES(QVkSampler, b.stex.sampler);
+            QVkTexture *texD = QRHI_RES(QVkTexture, b->u.stex.tex);
+            QVkSampler *samplerD = QRHI_RES(QVkSampler, b->u.stex.sampler);
             texD->lastActiveFrameSlot = currentFrameSlot;
             samplerD->lastActiveFrameSlot = currentFrameSlot;
 
@@ -4272,14 +4271,15 @@ bool QVkShaderResourceBindings::build()
         descSets[i] = VK_NULL_HANDLE;
 
     QVarLengthArray<VkDescriptorSetLayoutBinding, 4> vkbindings;
-    for (const QRhiShaderResourceBinding &b : qAsConst(m_bindings)) {
-        VkDescriptorSetLayoutBinding binding;
-        memset(&binding, 0, sizeof(binding));
-        binding.binding = b.binding;
-        binding.descriptorType = toVkDescriptorType(b.type);
-        binding.descriptorCount = 1; // no array support yet
-        binding.stageFlags = toVkShaderStageFlags(b.stage);
-        vkbindings.append(binding);
+    for (const QRhiShaderResourceBinding &binding : qAsConst(m_bindings)) {
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&binding);
+        VkDescriptorSetLayoutBinding vkbinding;
+        memset(&vkbinding, 0, sizeof(vkbinding));
+        vkbinding.binding = b->binding;
+        vkbinding.descriptorType = toVkDescriptorType(b->type);
+        vkbinding.descriptorCount = 1; // no array support yet
+        vkbinding.stageFlags = toVkShaderStageFlags(b->stage);
+        vkbindings.append(vkbinding);
     }
 
     VkDescriptorSetLayoutCreateInfo layoutInfo;

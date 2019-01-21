@@ -45,6 +45,7 @@
 #include "qrhi.h"
 #include "qrhiprofiler_p.h"
 #include <QBitArray>
+#include <QAtomicInt>
 
 QT_BEGIN_NAMESPACE
 
@@ -262,6 +263,45 @@ Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureCopy, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureRead, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureMipGen, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TexturePrepare, Q_MOVABLE_TYPE);
+
+class Q_RHI_PRIVATE_EXPORT QRhiShaderResourceBindingPrivate
+{
+public:
+    QRhiShaderResourceBindingPrivate()
+        : ref(1)
+    {
+    }
+
+    QRhiShaderResourceBindingPrivate(const QRhiShaderResourceBindingPrivate *other)
+        : ref(1),
+          binding(other->binding),
+          stage(other->stage),
+          type(other->type),
+          u(other->u)
+    {
+    }
+
+    static QRhiShaderResourceBindingPrivate *get(QRhiShaderResourceBinding *s) { return s->d; }
+    static const QRhiShaderResourceBindingPrivate *get(const QRhiShaderResourceBinding *s) { return s->d; }
+
+    QAtomicInt ref;
+    int binding;
+    QRhiShaderResourceBinding::StageFlags stage;
+    QRhiShaderResourceBinding::Type type;
+    struct UniformBufferData {
+        QRhiBuffer *buf;
+        int offset;
+        int maybeSize;
+    };
+    struct SampledTextureData {
+        QRhiTexture *tex;
+        QRhiSampler *sampler;
+    };
+    union {
+        UniformBufferData ubuf;
+        SampledTextureData stex;
+    } u;
+};
 
 template<typename T>
 struct QRhiBatchedBindings

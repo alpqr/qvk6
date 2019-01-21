@@ -48,6 +48,7 @@
 // We mean it.
 //
 
+#include "qtshadertoolsglobal_p.h"
 #include "qshaderdescription.h"
 #include <QtCore/QVector>
 #include <QtCore/QAtomicInt>
@@ -55,7 +56,7 @@
 
 QT_BEGIN_NAMESPACE
 
-struct QShaderDescriptionPrivate
+struct Q_SHADERTOOLS_PRIVATE_EXPORT QShaderDescriptionPrivate
 {
     QShaderDescriptionPrivate()
         : ref(1)
@@ -73,11 +74,12 @@ struct QShaderDescriptionPrivate
     }
 
     static QShaderDescriptionPrivate *get(QShaderDescription *desc) { return desc->d; }
+    static const QShaderDescriptionPrivate *get(const QShaderDescription *desc) { return desc->d; }
+
     QJsonDocument makeDoc();
     void loadDoc(const QJsonDocument &doc);
 
     QAtomicInt ref;
-
     QVector<QShaderDescription::InOutVariable> inVars;
     QVector<QShaderDescription::InOutVariable> outVars;
     QVector<QShaderDescription::UniformBlock> uniformBlocks;

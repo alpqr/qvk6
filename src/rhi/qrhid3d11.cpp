@@ -82,6 +82,8 @@ QT_BEGIN_NAMESPACE
     This can be achieved by setting importExistingDevice to \c true and
     providing both dev and context.
 
+    The QRhi does not take ownership of any of the external objects.
+
     \note QRhi works with immediate contexts only. Deferred contexts are not
     used in any way.
 
@@ -89,10 +91,20 @@ QT_BEGIN_NAMESPACE
     \c{d3d11.h} headers is not acceptable here. The actual types are
     \c{ID3D11Device *} and \c{ID3D11DeviceContext *}.
 
-    \note Regardless of using an imported or a QRhi-created device context,
-    \c ID3D11DeviceContext1 must be supported. Initialization will fail otherwise.
+    \note Regardless of using an imported or a QRhi-created device context, the
+    \c ID3D11DeviceContext1 interface (Direct3D 11.1) must be supported.
+    Initialization will fail otherwise.
 
-    The QRhi does not take ownership of any of the external objects.
+    \note Advanced usages involving multiple threads should be aware of the
+    differences in OpenGL and Direct3D when it comes to how threading works
+    with contexts and device contexts. There can be multiple QOpenGLContext
+    instances and one of those can be current on each thread at a time,
+    assuming that one context is not current on any other threads. Direct 3D
+    however has just one (immediate) device context per device and it is not
+    thread local. Rather, the same device context allows command submission
+    from multiple threads, but those threads then need to synchronize their
+    operations between themselves in order to not to interfere with each others
+    commands on the context.
  */
 
 /*!
@@ -394,12 +406,12 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
 
     bool srbUpdate = false;
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->sortedBindings[i]);
         QD3D11ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
-        switch (b.type) {
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
-            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
+            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b->u.ubuf.buf);
             if (bufD->m_type == QRhiBuffer::Dynamic)
                 executeBufferHostWritesForCurrentFrame(bufD);
 
@@ -411,8 +423,8 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             break;
         case QRhiShaderResourceBinding::SampledTexture:
         {
-            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b.stex.tex);
-            QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b.stex.sampler);
+            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b->u.stex.tex);
+            QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b->u.stex.sampler);
             if (texD->generation != bd.stex.texGeneration
                     || samplerD->generation != bd.stex.samplerGeneration)
             {
@@ -932,13 +944,14 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
     for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
         QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.tex);
-        for (int layer = 0, layerCount = u.desc.layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureUploadDescription::Layer &layerDesc(u.desc.layers[layer]);
-            for (int level = 0, levelCount = layerDesc.mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureUploadDescription::Layer::MipLevel mipDesc(layerDesc.mipImages[level]);
+        const QVector<QRhiTextureLayer> layers = u.desc.layers();
+        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+            const QRhiTextureLayer &layerDesc(layers[layer]);
+            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
                 UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
-                const int dx = mipDesc.destinationTopLeft.x();
-                const int dy = mipDesc.destinationTopLeft.y();
+                const QPoint dp = mipDesc.destinationTopLeft();
                 D3D11_BOX box;
                 box.front = 0;
                 // back, right, bottom are exclusive
@@ -948,58 +961,53 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 cmd.args.updateSubRes.dst = texD->tex;
                 cmd.args.updateSubRes.dstSubRes = subres;
 
-                if (!mipDesc.image.isNull()) {
-                    QImage img = mipDesc.image;
-                    int w = img.width();
-                    int h = img.height();
+                if (!mipDesc.image().isNull()) {
+                    QImage img = mipDesc.image();
+                    QSize size = img.size();
                     int bpl = img.bytesPerLine();
-                    if (!mipDesc.sourceSize.isEmpty() || !mipDesc.sourceTopLeft.isNull()) {
-                        const int sx = mipDesc.sourceTopLeft.x();
-                        const int sy = mipDesc.sourceTopLeft.y();
-                        if (!mipDesc.sourceSize.isEmpty()) {
-                            w = mipDesc.sourceSize.width();
-                            h = mipDesc.sourceSize.height();
-                        }
+                    if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                        const QPoint sp = mipDesc.sourceTopLeft();
+                        if (!mipDesc.sourceSize().isEmpty())
+                            size = mipDesc.sourceSize();
                         if (img.depth() == 32) {
-                            const int offset = sy * img.bytesPerLine() + sx * 4;
+                            const int offset = sp.y() * img.bytesPerLine() + sp.x() * 4;
                             cmd.args.updateSubRes.src = cbD->retainImage(img) + offset;
                         } else {
-                            img = img.copy(sx, sy, w, h);
+                            img = img.copy(sp.x(), sp.y(), size.width(), size.height());
                             bpl = img.bytesPerLine();
                             cmd.args.updateSubRes.src = cbD->retainImage(img);
                         }
                     } else {
                         cmd.args.updateSubRes.src = cbD->retainImage(img);
                     }
-                    box.left = dx;
-                    box.top = dy;
-                    box.right = dx + w;
-                    box.bottom = dy + h;
+                    box.left = dp.x();
+                    box.top = dp.y();
+                    box.right = dp.x() + size.width();
+                    box.bottom = dp.y() + size.height();
                     cmd.args.updateSubRes.hasDstBox = true;
                     cmd.args.updateSubRes.dstBox = box;
                     cmd.args.updateSubRes.srcRowPitch = bpl;
-                } else if (!mipDesc.compressedData.isEmpty() && isCompressedFormat(texD->m_format)) {
-                    int w, h;
-                    if (mipDesc.sourceSize.isEmpty()) {
-                        w = qFloor(float(qMax(1, texD->m_pixelSize.width() >> level)));
-                        h = qFloor(float(qMax(1, texD->m_pixelSize.height() >> level)));
+                } else if (!mipDesc.compressedData().isEmpty() && isCompressedFormat(texD->m_format)) {
+                    QSize size;
+                    if (mipDesc.sourceSize().isEmpty()) {
+                        size.setWidth(qFloor(float(qMax(1, texD->m_pixelSize.width() >> level))));
+                        size.setHeight(qFloor(float(qMax(1, texD->m_pixelSize.height() >> level))));
                     } else {
-                        w = mipDesc.sourceSize.width();
-                        h = mipDesc.sourceSize.height();
+                        size = mipDesc.sourceSize();
                     }
                     quint32 bpl = 0;
                     QSize blockDim;
-                    compressedFormatInfo(texD->m_format, QSize(w, h), &bpl, nullptr, &blockDim);
+                    compressedFormatInfo(texD->m_format, size, &bpl, nullptr, &blockDim);
                     // Everything must be a multiple of the block width and
                     // height, so e.g. a mip level of size 2x2 will be 4x4 when it
                     // comes to the actual data.
-                    box.left = aligned(dx, blockDim.width());
-                    box.top = aligned(dy, blockDim.height());
-                    box.right = aligned(dx + w, blockDim.width());
-                    box.bottom = aligned(dy + h, blockDim.height());
+                    box.left = aligned(dp.x(), blockDim.width());
+                    box.top = aligned(dp.y(), blockDim.height());
+                    box.right = aligned(dp.x() + size.width(), blockDim.width());
+                    box.bottom = aligned(dp.y() + size.height(), blockDim.height());
                     cmd.args.updateSubRes.hasDstBox = true;
                     cmd.args.updateSubRes.dstBox = box;
-                    cmd.args.updateSubRes.src = cbD->retainData(mipDesc.compressedData);
+                    cmd.args.updateSubRes.src = cbD->retainData(mipDesc.compressedData());
                     cmd.args.updateSubRes.srcRowPitch = bpl;
                 }
                 cbD->commands.append(cmd);
@@ -1011,14 +1019,14 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(u.src && u.dst);
         QD3D11Texture *srcD = QRHI_RES(QD3D11Texture, u.src);
         QD3D11Texture *dstD = QRHI_RES(QD3D11Texture, u.dst);
-        UINT srcSubRes = D3D11CalcSubresource(u.desc.sourceLevel, u.desc.sourceLayer, srcD->mipLevelCount);
-        UINT dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel, u.desc.destinationLayer, dstD->mipLevelCount);
-        const float dx = u.desc.destinationTopLeft.x();
-        const float dy = u.desc.destinationTopLeft.y();
-        const QSize size = u.desc.pixelSize.isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize;
+        UINT srcSubRes = D3D11CalcSubresource(u.desc.sourceLevel(), u.desc.sourceLayer(), srcD->mipLevelCount);
+        UINT dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel(), u.desc.destinationLayer(), dstD->mipLevelCount);
+        const QPoint dp = u.desc.destinationTopLeft();
+        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
+        const QPoint sp = u.desc.sourceTopLeft();
         D3D11_BOX srcBox;
-        srcBox.left = u.desc.sourceTopLeft.x();
-        srcBox.top = u.desc.sourceTopLeft.y();
+        srcBox.left = sp.x();
+        srcBox.top = sp.y();
         srcBox.front = 0;
         // back, right, bottom are exclusive
         srcBox.right = srcBox.left + size.width();
@@ -1028,8 +1036,8 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cmd.cmd = QD3D11CommandBuffer::Command::CopySubRes;
         cmd.args.copySubRes.dst = dstD->tex;
         cmd.args.copySubRes.dstSubRes = dstSubRes;
-        cmd.args.copySubRes.dstX = dx;
-        cmd.args.copySubRes.dstY = dy;
+        cmd.args.copySubRes.dstX = dp.x();
+        cmd.args.copySubRes.dstY = dp.y();
         cmd.args.copySubRes.src = srcD->tex;
         cmd.args.copySubRes.srcSubRes = srcSubRes;
         cmd.args.copySubRes.hasSrcBox = true;
@@ -1047,7 +1055,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         QSize pixelSize;
         QRhiTexture::Format format;
         UINT subres = 0;
-        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.rb.texture);
+        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.rb.texture());
         QD3D11SwapChain *swapChainD = nullptr;
 
         if (texD) {
@@ -1058,12 +1066,12 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             src = texD->tex;
             dxgiFormat = texD->dxgiFormat;
             pixelSize = texD->m_pixelSize;
-            if (u.rb.level > 0) {
-                pixelSize.setWidth(qFloor(float(qMax(1, pixelSize.width() >> u.rb.level))));
-                pixelSize.setHeight(qFloor(float(qMax(1, pixelSize.height() >> u.rb.level))));
+            if (u.rb.level() > 0) {
+                pixelSize.setWidth(qFloor(float(qMax(1, pixelSize.width() >> u.rb.level()))));
+                pixelSize.setHeight(qFloor(float(qMax(1, pixelSize.height() >> u.rb.level()))));
             }
             format = texD->m_format;
-            subres = D3D11CalcSubresource(u.rb.level, u.rb.layer, texD->mipLevelCount);
+            subres = D3D11CalcSubresource(u.rb.level(), u.rb.layer(), texD->mipLevelCount);
         } else {
             Q_ASSERT(contextState.currentSwapChain);
             swapChainD = QRHI_RES(QD3D11SwapChain, contextState.currentSwapChain);
@@ -1318,28 +1326,28 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
     srbD->fsshaderresources.clear();
 
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBinding &b(srbD->sortedBindings[i]);
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->sortedBindings[i]);
         QD3D11ShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[i]);
-        switch (b.type) {
+        switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
-            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b.ubuf.buf);
-            Q_ASSERT(aligned(b.ubuf.offset, 256) == b.ubuf.offset);
+            QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b->u.ubuf.buf);
+            Q_ASSERT(aligned(b->u.ubuf.offset, 256) == b->u.ubuf.offset);
             bd.ubuf.generation = bufD->generation;
-            const uint offsetInConstants = b.ubuf.offset / 16;
+            const uint offsetInConstants = b->u.ubuf.offset / 16;
             // size must be 16 mult. (in constants, i.e. multiple of 256 bytes).
             // We can round up if needed since the buffers's actual size
             // (ByteWidth) is always a multiple of 256.
-            const uint sizeInConstants = aligned(b.ubuf.maybeSize ? b.ubuf.maybeSize : bufD->m_size, 256) / 16;
-            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                srbD->vsubufs.feed(b.binding, bufD->buffer);
-                srbD->vsubufoffsets.feed(b.binding, offsetInConstants);
-                srbD->vsubufsizes.feed(b.binding, sizeInConstants);
+            const uint sizeInConstants = aligned(b->u.ubuf.maybeSize ? b->u.ubuf.maybeSize : bufD->m_size, 256) / 16;
+            if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
+                srbD->vsubufs.feed(b->binding, bufD->buffer);
+                srbD->vsubufoffsets.feed(b->binding, offsetInConstants);
+                srbD->vsubufsizes.feed(b->binding, sizeInConstants);
             }
-            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                srbD->fsubufs.feed(b.binding, bufD->buffer);
-                srbD->fsubufoffsets.feed(b.binding, offsetInConstants);
-                srbD->fsubufsizes.feed(b.binding, sizeInConstants);
+            if (b->stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
+                srbD->fsubufs.feed(b->binding, bufD->buffer);
+                srbD->fsubufoffsets.feed(b->binding, offsetInConstants);
+                srbD->fsubufsizes.feed(b->binding, sizeInConstants);
             }
         }
             break;
@@ -1347,17 +1355,17 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
         {
             // A sampler with binding N is mapped to a HLSL sampler and texture
             // with registers sN and tN by SPIRV-Cross.
-            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b.stex.tex);
-            QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b.stex.sampler);
+            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b->u.stex.tex);
+            QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b->u.stex.sampler);
             bd.stex.texGeneration = texD->generation;
             bd.stex.samplerGeneration = samplerD->generation;
-            if (b.stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
-                srbD->vssamplers.feed(b.binding, samplerD->samplerState);
-                srbD->vsshaderresources.feed(b.binding, texD->srv);
+            if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
+                srbD->vssamplers.feed(b->binding, samplerD->samplerState);
+                srbD->vsshaderresources.feed(b->binding, texD->srv);
             }
-            if (b.stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
-                srbD->fssamplers.feed(b.binding, samplerD->samplerState);
-                srbD->fsshaderresources.feed(b.binding, texD->srv);
+            if (b->stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
+                srbD->fssamplers.feed(b->binding, samplerD->samplerState);
+                srbD->fsshaderresources.feed(b->binding, texD->srv);
             }
         }
             break;
@@ -2273,7 +2281,7 @@ bool QD3D11ShaderResourceBindings::build()
     std::sort(sortedBindings.begin(), sortedBindings.end(),
               [](const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
     {
-        return a.binding < b.binding;
+        return QRhiShaderResourceBindingPrivate::get(&a)->binding < QRhiShaderResourceBindingPrivate::get(&b)->binding;
     });
 
     boundResourceData.resize(sortedBindings.count());

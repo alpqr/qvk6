@@ -184,17 +184,12 @@ void Window::customRender()
 
         // Partially change the texture.
         if (d.testStage == 1) {
-            QRhiTextureUploadDescription desc;
-            QRhiTextureUploadDescription::Layer layer;
-            QRhiTextureUploadDescription::Layer::MipLevel mipDesc;
-
-            mipDesc.image = d.customImage;
+            QRhiTextureMipLevel mipDesc(d.customImage);
             // The image here is smaller than the original. Use a non-zero position
             // to make it more interesting.
-            mipDesc.destinationTopLeft = QPoint(100, 20);
-
-            layer.mipImages.append(mipDesc);
-            desc.layers.append(layer);
+            mipDesc.setDestinationTopLeft(QPoint(100, 20));
+            QRhiTextureLayer layer({ mipDesc });
+            QRhiTextureUploadDescription desc({ layer });
             u->uploadTexture(d.tex, desc);
         }
 
@@ -209,19 +204,18 @@ void Window::customRender()
             empty.fill(Qt::blue);
             u->uploadTexture(d.newTex, empty);
 
-            QRhiTextureCopyDescription desc;
             // Copy the left-half of tex to the right-half of newTex, while
             // leaving the left-half of newTex blue. Keep a 20 pixel gap at
             // the top.
-            desc.sourceTopLeft = QPoint(0, 20);
-            desc.pixelSize = QSize(sz.width() / 2, sz.height() - 20);
-            desc.destinationTopLeft = QPoint(sz.width() / 2, 20);
-
+            QRhiTextureCopyDescription desc;
+            desc.setSourceTopLeft(QPoint(0, 20));
+            desc.setPixelSize(QSize(sz.width() / 2, sz.height() - 20));
+            desc.setDestinationTopLeft(QPoint(sz.width() / 2, 20));
             u->copyTexture(d.newTex, d.tex, desc);
 
             // Now replace d.tex with d.newTex as the shader resource.
             auto bindings = d.srb->bindings();
-            bindings[1].stex.tex = d.newTex; // see customInit, this was d.tex originally
+            bindings[1] = QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, d.newTex, d.sampler);
             d.srb->setBindings(bindings);
             // "rebuild", whatever that means for a given backend. This srb is
             // already live as the ps in the setGraphicsPipeline references it,
@@ -235,17 +229,12 @@ void Window::customRender()
 
         // Now again upload customImage but this time only a part of it.
         if (d.testStage == 5) {
-            QRhiTextureUploadDescription desc;
-            QRhiTextureUploadDescription::Layer layer;
-            QRhiTextureUploadDescription::Layer::MipLevel mipDesc;
-
-            mipDesc.image = d.customImage;
-            mipDesc.destinationTopLeft = QPoint(10, 120);
-            mipDesc.sourceSize = QSize(50, 40);
-            mipDesc.sourceTopLeft = QPoint(20, 10);
-
-            layer.mipImages.append(mipDesc);
-            desc.layers.append(layer);
+            QRhiTextureMipLevel mipDesc(d.customImage);
+            mipDesc.setDestinationTopLeft(QPoint(10, 120));
+            mipDesc.setSourceSize(QSize(50, 40));
+            mipDesc.setSourceTopLeft(QPoint(20, 10));
+            QRhiTextureLayer layer({ mipDesc });
+            QRhiTextureUploadDescription desc({ layer });
             u->uploadTexture(d.newTex, desc);
         }
 
@@ -275,7 +264,7 @@ void Window::customRender()
 
                 // switch to showing d.importedTex
                 auto bindings = d.srb->bindings();
-                bindings[1].stex.tex = d.importedTex;
+                bindings[1] = QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, d.importedTex, d.sampler);
                 d.srb->setBindings(bindings);
                 d.srb->build();
             } else {

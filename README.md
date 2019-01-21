@@ -47,7 +47,3 @@ shaders, with the only difference being in the QWindow setup.
 Additionally, check
 https://github.com/alpqr/qvk6/blob/master/examples/rhi/hellominimalcrossgfxtriangle/hellominimalcrossgfxtriangle.cpp
 for a single-source, cross-API example of drawing a triangle.
-
-The https://github.com/alpqr/qvk6/tree/master/examples/rhi/multiwindow_threaded demo, it being a minimal reimplementation of
-QSGThreadedRenderLoop, represents a milestone in the sense that it proves that implementing the traditional threaded Qt Quick
-rendering model is possible with QRhi as well.

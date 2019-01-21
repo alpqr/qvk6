@@ -342,10 +342,56 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    Constructs a color clear value with \c{(0, 0, 0, 1)} (opaque black).
+ */
+QRhiColorClearValue::QRhiColorClearValue()
+    : m_rgba(0, 0, 0, 1)
+{
+}
+
+/*!
+    Constructs a color clear value with the floating point color components
+    (\c{0.0f - 1.0f}) specified in \a c.
+  */
+QRhiColorClearValue::QRhiColorClearValue(const QVector4D &c)
+    : m_rgba(c)
+{
+}
+
+/*!
+    Constructs a color clear value with the floating point color components
+    (\c{0.0f - 1.0f}) specified in \a r, \a g, \a b, and \a a.
+ */
+QRhiColorClearValue::QRhiColorClearValue(float r, float g, float b, float a)
+    : m_rgba(r, g, b, a)
+{
+}
+
+/*!
     \class QRhiDepthStencilClearValue
     \inmodule QtRhi
     \brief Specifies clear values for a depth or stencil buffer.
  */
+
+/*!
+    Constructs a depth/stencil clear value with depth clear value 1.0f and
+    stencil clear value 0.
+ */
+QRhiDepthStencilClearValue::QRhiDepthStencilClearValue()
+    : m_d(1),
+      m_s(0)
+{
+}
+
+/*!
+    Constructs a depth/stencil clear value with depth clear value \a d and
+    stencil clear value \a s.
+ */
+QRhiDepthStencilClearValue::QRhiDepthStencilClearValue(float d, quint32 s)
+    : m_d(d),
+      m_s(s)
+{
+}
 
 /*!
     \class QRhiViewport
@@ -372,6 +418,34 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    Constructs a viewport description with a default rectangle and depth range.
+    The default depth range is 0.0f - 1.0f.
+
+    \sa QRhi::clipSpaceCorrMatrix()
+ */
+QRhiViewport::QRhiViewport()
+    : m_rect(0, 0, 1280, 720),
+      m_minDepth(0),
+      m_maxDepth(1)
+{
+}
+
+/*!
+    Constructs a viewport description with the rectangle specified by \a x, \a
+    y, \a w, \a h and the depth range \a minDepth and \a maxDepth.
+
+    \note x and y are assumed to be the bottom-left position.
+
+    \sa QRhi::clipSpaceCorrMatrix()
+ */
+QRhiViewport::QRhiViewport(float x, float y, float w, float h, float minDepth, float maxDepth)
+    : m_rect(x, y, w, h),
+      m_minDepth(minDepth),
+      m_maxDepth(maxDepth)
+{
+}
+
+/*!
     \class QRhiScissor
     \inmodule QtRhi
     \brief Specifies a scissor rectangle.
@@ -387,10 +461,22 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiVertexInputLayout
-    \inmodule QtRhi
-    \brief Describes the layout of vertex inputs consumed by a vertex shader.
+    Constructs an empty scissor.
  */
+QRhiScissor::QRhiScissor()
+{
+}
+
+/*!
+    Constructs a scissor with the rectangle specified by \a x, \a y, \a w, and
+    \a h.
+
+    \note x and y are assumed to be the bottom-left position.
+ */
+QRhiScissor::QRhiScissor(int x, int y, int w, int h)
+    : m_rect(x, y, w, h)
+{
+}
 
 /*!
     \class QRhiVertexInputBinding
@@ -451,6 +537,27 @@ QT_BEGIN_NAMESPACE
     \value PerVertex Data is per-vertex
     \value PerInstance Data is per-instance
  */
+
+/*!
+    Constructs an empty vertex input binding description.
+ */
+QRhiVertexInputBinding::QRhiVertexInputBinding()
+{
+}
+
+/*!
+    Constructs a vertex input binding description with the specified \a stride,
+    classification \a cls, and instance step rate \a stepRate.
+
+    \note \a stepRate other than 1 is only supported when
+    QRhi::CustomInstanceStepRate is reported to be supported.
+ */
+QRhiVertexInputBinding::QRhiVertexInputBinding(quint32 stride, Classification cls, int stepRate)
+    : m_stride(stride),
+      m_classification(cls),
+      m_instanceStepRate(stepRate)
+{
+}
 
 /*!
     \class QRhiVertexInputAttribute
@@ -535,6 +642,41 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    Constructs an empty vertex input attribute description.
+ */
+QRhiVertexInputAttribute::QRhiVertexInputAttribute()
+{
+}
+
+/*!
+    Constructs a vertex input attribute description with the specified \a
+    binding number, \a location, \a format, and \a offset.
+ */
+QRhiVertexInputAttribute::QRhiVertexInputAttribute(int binding, int location, Format format, quint32 offset)
+    : m_binding(binding),
+      m_location(location),
+      m_format(format),
+      m_offset(offset)
+{
+}
+
+/*!
+    \class QRhiVertexInputLayout
+    \inmodule QtRhi
+    \brief Describes the layout of vertex inputs consumed by a vertex shader.
+
+    The vertex input layout is defined by the collections of
+    QRhiVertexInputBinding and QRhiVertexInputAttribute.
+ */
+
+/*!
+    Constructs an empty vertex input layout description.
+ */
+QRhiVertexInputLayout::QRhiVertexInputLayout()
+{
+}
+
+/*!
     \class QRhiGraphicsShaderStage
     \inmodule QtRhi
     \brief Specifies the type and the shader code for a shader stage in the graphics pipeline.
@@ -554,41 +696,21 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiShaderResourceBinding
-    \inmodule QtRhi
-    \brief Specifies the shader resources that are made visible to one or more shader stages.
+    Constructs an empty shader stage description.
  */
+QRhiGraphicsShaderStage::QRhiGraphicsShaderStage()
+{
+}
 
 /*!
-    \enum QRhiShaderResourceBinding::Type
-    Specifies type of the shader resource bound to a binding point
-
-    \value UniformBuffer Uniform buffer
-    \value SampledTexture Combined image sampler
+    Constructs a shader stage description with the \a type of the stage and the
+    \a shader.
  */
-
-/*!
-    \enum QRhiShaderResourceBinding::StageFlag
-    Flag values to indicate which stages the shader resource is visible in
-
-    \value VertexStage Vertex stage
-    \value FragmentStage Fragment (pixel) stage
-    \value TessellationControlStage Tessellation control (hull) stage
-    \value TessellationEvaluationStage Tessellation evaluation (domain) stage
- */
-
-/*!
-    \class QRhiTextureRenderTargetDescription
-    \inmodule QtRhi
-    \brief Describes the color and depth or depth/stencil attachments of a render target.
-
-    A texture render target has zero or more textures as color attachments,
-    zero or one renderbuffer as combined depth/stencil buffer or zero or one
-    texture as depth buffer.
-
-    \note depthStencilBuffer() and depthTexture() cannot be both set (cannot be
-    non-null at the same time).
- */
+QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &shader)
+    : m_type(type),
+      m_shader(shader)
+{
+}
 
 /*!
     \class QRhiColorAttachment
@@ -625,22 +747,88 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiTextureUploadDescription
-    \inmodule QtRhi
-    \brief Describes a texture upload operation.
+    Constructs an empty color attachment description.
+ */
+QRhiColorAttachment::QRhiColorAttachment()
+{
+}
 
-    \note Cubemaps have one layer for each of the six faces in the order +X,
-    -X, +Y, -Y, +Z, -Z.
+/*!
+    Constructs a color attachment description that specifies \a texture as the
+    associated color buffer.
+ */
+QRhiColorAttachment::QRhiColorAttachment(QRhiTexture *texture)
+    : m_texture(texture)
+{
+}
+
+/*!
+    Constructs a color attachment description that specifies \a renderBuffer as
+    the associated color buffer.
+ */
+QRhiColorAttachment::QRhiColorAttachment(QRhiRenderBuffer *renderBuffer)
+    : m_renderBuffer(renderBuffer)
+{
+}
+
+/*!
+    \class QRhiTextureRenderTargetDescription
+    \inmodule QtRhi
+    \brief Describes the color and depth or depth/stencil attachments of a render target.
+
+    A texture render target has zero or more textures as color attachments,
+    zero or one renderbuffer as combined depth/stencil buffer or zero or one
+    texture as depth buffer.
+
+    \note depthStencilBuffer() and depthTexture() cannot be both set (cannot be
+    non-null at the same time).
  */
 
 /*!
-    \class QRhiTextureUploadDescription::Layer
-    \inmodule QtRhi
-    \brief Describes one layer (face for cubemaps) in a texture upload operation.
+    Constructs an empty texture render target description.
  */
+QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription()
+{
+}
 
 /*!
-    \class QRhiTextureUploadDescription::Layer::MipLevel
+    Constructs a texture render target description with one attachment
+    described by \a colorAttachment.
+ */
+QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment)
+{
+    m_colorAttachments.append(colorAttachment);
+}
+
+/*!
+    Constructs a texture render target description with two attachments, a
+    color attachment described by \a colorAttachment, and a depth/stencil
+    attachment with \a depthStencilBuffer.
+ */
+QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment,
+                                                                       QRhiRenderBuffer *depthStencilBuffer)
+    : m_depthStencilBuffer(depthStencilBuffer)
+{
+    m_colorAttachments.append(colorAttachment);
+}
+
+/*!
+    Constructs a texture render target description with two attachments, a
+    color attachment described by \a colorAttachment, and a depth attachment
+    with \a depthTexture.
+
+    \note \a depthTexture must have a suitable format, such as QRhiTexture::D16
+    or QRhiTexture::D32.
+ */
+QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment,
+                                                                       QRhiTexture *depthTexture)
+    : m_depthTexture(depthTexture)
+{
+    m_colorAttachments.append(colorAttachment);
+}
+
+/*!
+    \class QRhiTextureMipLevel
     \inmodule QtRhi
     \brief Describes one mip level in a layer in a texture upload operation.
 
@@ -648,37 +836,163 @@ QT_BEGIN_NAMESPACE
     former is only allowed for uncompressed textures, while the latter is only
     supported for compressed ones.
 
-    \note \l image and \l compressedData cannot be both set.
+    \note image() and compressedData() cannot be both set at the same time.
 
-    \l destinationTopLeft specifies the top-left corner of the target
+    destinationTopLeft() specifies the top-left corner of the target
     rectangle. Defaults to (0, 0).
 
-    An empty \l sourceSize (the default) indicates that size is assumed to be
+    An empty sourceSize() (the default) indicates that size is assumed to be
     the size of the subresource. For uncompressed textures this implies that
-    the size of the source \l image must match the subresource. For compressed
-    textures sufficient amount of data must be provided in \l compressedData.
+    the size of the source image() must match the subresource. For compressed
+    textures sufficient amount of data must be provided in compressedData().
 
     \note With compressed textures the first upload must always match the
     subresource size due to graphics API limitations with some backends.
 
-    \l sourceTopLeft is is only supported for uncompressed textures, and
+    sourceTopLeft() is is only supported for uncompressed textures, and
     specifies the top-left corner of the source rectangle.
 
-    \note Setting \l sourceSize or \l sourceTopLeft may trigger a QImage copy
+    \note Setting sourceSize() or sourceTopLeft() may trigger a QImage copy
     internally, depending on the format and the backend.
  */
+
+/*!
+    Constructs an empty mip level description.
+ */
+QRhiTextureMipLevel::QRhiTextureMipLevel()
+{
+}
+
+/*!
+    Constructs a mip level description with a \a image.
+
+    The \l{QImage::size()}{size} of \a image must match the size of the mip
+    level. For level 0 that is the \l{QRhiTexture::pixelSize()}{texture size}.
+
+    The bit depth of \a image must be compatible with the
+    \l{QRhiTexture::Format}{texture format}.
+
+    To describe a partial upload, call setSourceSize(), setSourceTopLeft(), or
+    setDestinationTopLeft() afterwards.
+ */
+QRhiTextureMipLevel::QRhiTextureMipLevel(const QImage &image)
+    : m_image(image)
+{
+}
+
+/*!
+    Constructs a mip level description suitable for compressed textures. The
+    compressed data is specified in \a compressedData.
+ */
+QRhiTextureMipLevel::QRhiTextureMipLevel(const QByteArray &compressedData)
+    : m_compressedData(compressedData)
+{
+}
+
+/*!
+    \class QRhiTextureLayer
+    \inmodule QtRhi
+    \brief Describes one layer (face for cubemaps) in a texture upload operation.
+ */
+
+/*!
+    Constructs an empty texture layer description.
+ */
+QRhiTextureLayer::QRhiTextureLayer()
+{
+}
+
+/*!
+    Constructs a texture layer description with the specified list of \a
+    mipImages.
+ */
+QRhiTextureLayer::QRhiTextureLayer(const QVector<QRhiTextureMipLevel> &mipImages)
+    : m_mipImages(mipImages)
+{
+}
+
+/*!
+    \class QRhiTextureUploadDescription
+    \inmodule QtRhi
+    \brief Describes a texture upload operation.
+
+    Used with QRhiResourceUpdateBatch::uploadTexture(). That function has two
+    variants: one taking a QImage and one taking a
+    QRhiTextureUploadDescription. The former is a convenience version,
+    internally creating a QRhiTextureUploadDescription with a single layer and
+    a single image in that layer. However, when cubemaps, pre-generated mip
+    images, or compressed textures are involved, applications will have to work
+    directly with this class instead.
+
+    \note Cubemaps have one layer for each of the six faces in the order +X,
+    -X, +Y, -Y, +Z, -Z.
+
+    For example, specifying the faces of a cubemap could look like the following:
+
+    \badcode
+        QImage faces[6];
+        ...
+        QVector<QRhiTextureLayer> layers;
+        for (int i = 0; i < 6; ++i)
+          layers.append(QRhiTextureLayer({ QRhiTextureMipLevel(faces[i]) });
+        QRhiTextureUploadDescription desc(layers);
+        resourceUpdates->uploadTexture(texture, desc);
+    \endcode
+
+    Another example that specifies mip images for a compressed texture:
+
+    \badcode
+        QVector<QRhiTextureMipLevel> mipImages;
+        const int mipCount = rhi->mipLevelsForSize(compressedTexture->pixelSize());
+        for (int level = 0; level < mipCount; ++level) {
+            const QByteArray compressedDataForLevel = ...
+            mipImages.append(QRhiTextureMipLevel(compressedDataForLevel));
+        }
+        QRhiTextureLayer layer(mipImages);
+        QRhiTextureUploadDescription desc({ layer });
+        resourceUpdates->uploadTexture(compressedTexture, desc);
+    \endcode
+ */
+
+/*!
+    Constructs an empty texture upload description.
+ */
+QRhiTextureUploadDescription::QRhiTextureUploadDescription()
+{
+}
+
+/*!
+    Constructs a texture upload description with the specified list of \a
+    layers.
+ */
+QRhiTextureUploadDescription::QRhiTextureUploadDescription(const QVector<QRhiTextureLayer> &layers)
+    : m_layers(layers)
+{
+}
 
 /*!
     \class QRhiTextureCopyDescription
     \inmodule QtRhi
     \brief Describes a texture-to-texture copy operation.
 
-    An empty \l pixelSize (the default) indicates that the entire subresource
-    is to be copied.
+    An empty pixelSize() indicates that the entire subresource is to be copied.
+    A default constructed copy description therefore leads to copying the
+    entire subresource at level 0 of layer 0.
 
     \note The source texture must be created with
     QRhiTexture::UsedAsTransferSource.
+
+    \note The source and destination rectangles defined by pixelSize(),
+    sourceTopLeft(), and destinationTopLeft() must fit the source and
+    destination textures, respectively. The behavior is undefined otherwise.
  */
+
+/*!
+    Constructs an empty texture copy description.
+ */
+QRhiTextureCopyDescription::QRhiTextureCopyDescription()
+{
+}
 
 /*!
     \class QRhiReadbackDescription
@@ -686,8 +1000,8 @@ QT_BEGIN_NAMESPACE
     \brief Describes a readback (reading back texture contents from possibly GPU-only memory) operation.
 
     The source of the readback operation is either a QRhiTexture or the
-    current backbuffer of the currently targeted QRhiSwapChain. When \l
-    texture is not set, the swapchain is used. Otherwise the specified
+    current backbuffer of the currently targeted QRhiSwapChain. When
+    texture() is not set, the swapchain is used. Otherwise the specified
     QRhiTexture is treated as the source.
 
     \note Textures used in readbacks must be created with
@@ -696,11 +1010,36 @@ QT_BEGIN_NAMESPACE
     \note Swapchains used in readbacks must be created with
     QRhiSwapChain::UsedAsTransferSource.
 
-    \l layer and \l level are only applicable when the source is a QRhiTexture.
+    layer() and level() are only applicable when the source is a QRhiTexture.
 
     \note Multisample textures cannot be read back. Readbacks are supported for
     multisample swapchain buffers however.
  */
+
+/*!
+    Constructs an empty texture readback description.
+
+    \note The source texture is set to null by default, which is still a valid
+    readback: it specifies that the backbuffer of the current swapchain is to
+    be read back. (current meaning the frame's target swapchain at the time of
+    committing the QRhiResourceUpdateBatch with the
+    \l{QRhiResourceUpdateBatch::readBackTexture()}{texture readback} on it)
+ */
+QRhiReadbackDescription::QRhiReadbackDescription()
+{
+}
+
+/*!
+    Constructs an texture readback description that specifies that level 0 of
+    layer 0 of \a texture is to be read back.
+
+    \note \a texture can also be null in which case this constructor is
+    identical to the argumentless variant.
+ */
+QRhiReadbackDescription::QRhiReadbackDescription(QRhiTexture *texture)
+    : m_texture(texture)
+{
+}
 
 /*!
     \class QRhiReadbackResult
@@ -725,23 +1064,79 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiBuffer
-    \inmodule QtRhi
-    \brief Vertex, index, or uniform (constant) buffer resource.
+    \internal
+ */
+QRhiResource::QRhiResource(QRhiImplementation *rhi_)
+    : rhi(rhi_)
+{
+}
+
+/*!
+   Destructor.
+ */
+QRhiResource::~QRhiResource()
+{
+}
+
+/*!
+    \fn void QRhiResource::release()
+
+    Releases the underlying native graphics resources. Safe to call multiple
+    times, subsequent invocations will be a no-op then.
+
+    Once release() is called, the QRhiResource instance can be reused, by
+    calling the appropriate \c build() function again, or destroyed.
  */
 
 /*!
-    \fn void QRhiBuffer::setSize(int sz)
+    Releases native graphics resources, if there is any, and destroys the
+    QRhiResource. Equivalent to \c{r->release(); delete r; }.
+ */
+void QRhiResource::releaseAndDestroy()
+{
+    release();
+    delete this;
+}
 
-    Sets the size of the buffer in bytes. The size is normally specified in
-    QRhi::newBuffer() so this function is only used when the size has to be
-    changed. As with other setters, the size only takes effect when calling
-    build(), and for already built buffers this involves releasing the previous
-    native resource and creating new ones under the hood.
+/*!
+    \return the currently set object name. By default the name is empty.
+ */
+QByteArray QRhiResource::name() const
+{
+    return objectName;
+}
 
-    Backends may choose to allocate buffers bigger than \a sz in order to
-    fulfill alignment requirements. This is hidden from the applications and
-    size() will always report the size requested in \a sz.
+/*!
+    Sets a \a name for the object.
+
+    This has two uses: to get descriptive names for the native graphics
+    resources visible in graphics debugging tools, such as
+    \l{https://renderdoc.org/}{RenderDoc} and
+    \l{https://developer.apple.com/xcode/}{XCode}, and in the output stream of
+    QRhiProfiler.
+
+    When it comes to naming native objects by relaying the name via the
+    appropriate graphics API, note that the name is ignored when
+    QRhi::DebugMarkers are not supported, and may, depending on the backend,
+    also be ignored when QRhi::EnableDebugMarkers is not set.
+
+    \note The name may be ignored for objects other than buffers,
+    renderbuffers, and textures, depending on the backend.
+
+    \note The name may be modified. For slotted resources, such as a QRhiBuffer
+    backed by multiple native buffers, QRhi will append a suffix to make the
+    underlying native buffers easily distinguishable from each other.
+ */
+void QRhiResource::setName(const QByteArray &name)
+{
+    objectName = name;
+    objectName.replace(',', '_'); // cannot contain comma for QRhiProfiler
+}
+
+/*!
+    \class QRhiBuffer
+    \inmodule QtRhi
+    \brief Vertex, index, or uniform (constant) buffer resource.
  */
 
 /*!
@@ -777,6 +1172,102 @@ QT_BEGIN_NAMESPACE
     \value VertexBuffer Vertex buffer
     \value IndexBuffer Index buffer
     \value UniformBuffer Uniform (constant) buffer
+ */
+
+/*!
+    \fn void QRhiBuffer::setSize(int sz)
+
+    Sets the size of the buffer in bytes. The size is normally specified in
+    QRhi::newBuffer() so this function is only used when the size has to be
+    changed. As with other setters, the size only takes effect when calling
+    build(), and for already built buffers this involves releasing the previous
+    native resource and creating new ones under the hood.
+
+    Backends may choose to allocate buffers bigger than \a sz in order to
+    fulfill alignment requirements. This is hidden from the applications and
+    size() will always report the size requested in \a sz.
+ */
+
+/*!
+    \internal
+ */
+QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
+    : QRhiResource(rhi),
+      m_type(type_), m_usage(usage_), m_size(size_)
+{
+}
+
+/*!
+    \fn bool QRhiBuffer::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \class QRhiRenderBuffer
+    \inmodule QtRhi
+    \brief Renderbuffer resource.
+
+    Renderbuffers cannot be sampled or read but have some benefits over
+    textures in some cases:
+
+    A DepthStencil renderbuffer may be lazily allocated and be backed by
+    transient memory with some APIs. On some platforms this may mean the
+    depth/stencil buffer uses no physical backing at all.
+
+    Color renderbuffers are useful since QRhi::MultisampleRenderBuffer may be
+    supported even when QRhi::MultisampleTexture is not.
+
+    How the renderbuffer is implemented by a backend is not exposed to the
+    applications. In some cases it may be backed by ordinary textures, while in
+    others there may be a different kind of native resource used.
+ */
+
+/*!
+    \enum QRhiRenderBuffer::Type
+    Specifies the type of the renderbuffer
+
+    \value DepthStencil Combined depth/stencil
+    \value Color Color
+ */
+
+/*!
+    \enum QRhiRenderBuffer::Flag
+    Flag values for flags() and setFlags()
+
+    \value UsedWithSwapChainOnly For DepthStencil renderbuffers this indicates
+    that the renderbuffer is only used in combination with a QRhiSwapChain and
+    never in other ways. Relevant with some backends, while others ignore it.
+    With OpenGL where a separate windowing system interface API is in use (EGL,
+    GLX, etc.), the flag is important since it avoids creating any actual
+    resource as there is already a windowing system provided depth/stencil
+    buffer as requested by QSurfaceFormat.
+ */
+
+/*!
+    \internal
+ */
+QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
+                                   int sampleCount_, Flags flags_)
+    : QRhiResource(rhi),
+      m_type(type_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_flags(flags_)
+{
+}
+
+/*!
+    \fn bool QRhiRenderBuffer::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
  */
 
 /*!
@@ -862,6 +1353,69 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    \internal
+ */
+QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
+                         int sampleCount_, Flags flags_)
+    : QRhiResource(rhi),
+      m_format(format_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_flags(flags_)
+{
+}
+
+/*!
+    \fn bool QRhiTexture::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
+    \return a pointer to a backend-specific QRhiNativeHandles subclass, such as
+    QRhiVulkanTextureNativeHandles. The returned value is null when exposing
+    the underlying native resources is not supported by the backend.
+
+    \sa QRhiVulkanTextureNativeHandles, QRhiD3D11TextureNativeHandles,
+    QRhiMetalTextureNativeHandles, QRhiGles2TextureNativeHandles
+ */
+const QRhiNativeHandles *QRhiTexture::nativeHandles()
+{
+    return nullptr;
+}
+
+/*!
+    Similar to build() except that no new native textures are created. Instead,
+    the texture from \a src is used.
+
+    This allows importing an existing native texture object (which must belong
+    to the same device or sharing context, depending on the graphics API) from
+    an external graphics engine.
+
+    \note format(), pixelSize(), sampleCount(), and flags() must still be set
+    correctly. Passing incorrect sizes and other values to QRhi::newTexture()
+    and then following it with a buildFrom() expecting that the native texture
+    object alone is sufficient to deduce such values is \b wrong and will lead
+    to problems.
+
+    \note QRhiTexture does not take ownership of the texture object. release()
+    does not free the object or any associated memory.
+
+    The opposite of this operation, exposing a QRhiTexture-created native
+    texture object to a foreign engine, is possible via nativeHandles().
+
+    \sa QRhiVulkanTextureNativeHandles, QRhiD3D11TextureNativeHandles,
+    QRhiMetalTextureNativeHandles, QRhiGles2TextureNativeHandles
+ */
+bool QRhiTexture::buildFrom(const QRhiNativeHandles *src)
+{
+    Q_UNUSED(src);
+    return false;
+}
+
+/*!
     \class QRhiSampler
     \inmodule QtRhi
     \brief Sampler resource.
@@ -888,51 +1442,30 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiRenderBuffer
-    \inmodule QtRhi
-    \brief Renderbuffer resource.
-
-    Renderbuffers cannot be sampled or read but have some benefits over
-    textures in some cases:
-
-    A DepthStencil renderbuffer may be lazily allocated and be backed by
-    transient memory with some APIs. On some platforms this may mean the
-    depth/stencil buffer uses no physical backing at all.
-
-    Color renderbuffers are useful since QRhi::MultisampleRenderBuffer may be
-    supported even when QRhi::MultisampleTexture is not.
-
-    How the renderbuffer is implemented by a backend is not exposed to the
-    applications. In some cases it may be backed by ordinary textures, while in
-    others there may be a different kind of native resource used.
+    \internal
  */
-
-/*!
-    \enum QRhiRenderBuffer::Type
-    Specifies the type of the renderbuffer
-
-    \value DepthStencil Combined depth/stencil
-    \value Color Color
- */
-
-/*!
-    \enum QRhiRenderBuffer::Flag
-    Flag values for flags() and setFlags()
-
-    \value UsedWithSwapChainOnly For DepthStencil renderbuffers this indicates
-    that the renderbuffer is only used in combination with a QRhiSwapChain and
-    never in other ways. Relevant with some backends, while others ignore it.
-    With OpenGL where a separate windowing system interface API is in use (EGL,
-    GLX, etc.), the flag is important since it avoids creating any actual
-    resource as there is already a windowing system provided depth/stencil
-    buffer as requested by QSurfaceFormat.
- */
+QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
+                         Filter magFilter_, Filter minFilter_, Filter mipmapMode_,
+                         AddressMode u_, AddressMode v_, AddressMode w_)
+    : QRhiResource(rhi),
+      m_magFilter(magFilter_), m_minFilter(minFilter_), m_mipmapMode(mipmapMode_),
+      m_addressU(u_), m_addressV(v_), m_addressW(w_)
+{
+}
 
 /*!
     \class QRhiRenderPassDescriptor
     \inmodule QtRhi
     \brief Render pass resource.
  */
+
+/*!
+    \internal
+ */
+QRhiRenderPassDescriptor::QRhiRenderPassDescriptor(QRhiImplementation *rhi)
+    : QRhiResource(rhi)
+{
+}
 
 /*!
     \class QRhiRenderTarget
@@ -949,6 +1482,43 @@ QT_BEGIN_NAMESPACE
 
     \value RtTexture This is a QRhiTextureRenderTarget.
  */
+
+/*!
+    \internal
+ */
+QRhiRenderTarget::QRhiRenderTarget(QRhiImplementation *rhi)
+    : QRhiResource(rhi)
+{
+}
+
+/*!
+    \fn QRhiRenderTarget::Type QRhiRenderTarget::type() const
+
+    \return the type of the render target.
+ */
+
+/*!
+    \fn QSize QRhiRenderTarget::sizeInPixels() const
+
+    \return the size in pixels.
+ */
+
+/*!
+    \fn float QRhiRenderTarget::devicePixelRatio() const
+
+    \return the device pixel ratio. For QRhiTextureRenderTarget this is always
+    1. For targets retrieved from a QRhiSwapChain the value reflects the
+    \l{QWindow::devicePixelRatio()}{device pixel ratio} of the targeted
+    QWindow.
+ */
+
+/*!
+    \internal
+ */
+QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhiImplementation *rhi)
+    : QRhiRenderTarget(rhi)
+{
+}
 
 /*!
     \class QRhiTextureRenderTarget
@@ -995,6 +1565,68 @@ QT_BEGIN_NAMESPACE
     (QRhiTextureRenderTargetDescription::depthTexture() is set) because
     depth/stencil renderbuffers may not have any physical backing and data may
     not be written out in the first place.
+ */
+
+/*!
+    \internal
+ */
+QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
+                                                 const QRhiTextureRenderTargetDescription &desc_,
+                                                 Flags flags_)
+    : QRhiRenderTarget(rhi),
+      m_desc(desc_),
+      m_flags(flags_)
+{
+}
+
+/*!
+    \fn QRhiRenderPassDescriptor *QRhiTextureRenderTarget::newCompatibleRenderPassDescriptor()
+
+    \return a new QRhiRenderPassDescriptor that is compatible with this render
+    target.
+
+    The returned value is used in two ways: it can be passed to
+    setRenderPassDescriptor() and
+    QRhiGraphicsPipeline::setRenderPassDescriptor(). A render pass descriptor
+    describes the attachments (color, depth/stencil) and the load/store
+    behavior that can be affected by flags(). A QRhiGraphicsPipeline can only
+    be used in combination with a render target that has the same
+    QRhiRenderPassDescriptor set.
+
+    Two QRhiTextureRenderTarget instances can share the same render pass
+    descriptor as long as they have the same number and type of attachments.
+    The associated QRhiTexture or QRhiRenderBuffer instances are not part of
+    the render pass descriptor so those can differ in the two
+    QRhiTextureRenderTarget intances.
+
+    \note resources, such as QRhiTexture instances, referenced in description()
+    must already be built
+
+    \sa build()
+ */
+
+/*!
+    \fn bool QRhiTextureRenderTarget::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \note renderPassDescriptor() must be set before calling build(). To obtain
+    a QRhiRenderPassDescriptor compatible with the render target, call
+    newCompatibleRenderPassDescriptor() before build() but after setting all
+    other parameters, such as description() and flags(). To save resources,
+    reuse the same QRhiRenderPassDescriptor with multiple
+    QRhiTextureRenderTarget instances, whenever possible. Sharing the same
+    render pass descriptor is only possible when the render targets have the
+    same number and type of attachments (the actual textures can differ) and
+    the same flags.
+
+    \note resources, such as QRhiTexture instances, referenced in description()
+    must already be built
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
  */
 
 /*!
@@ -1066,6 +1698,156 @@ QT_BEGIN_NAMESPACE
         cb->setGraphicsPipeline(ps, srb2);
     \endcode
  */
+
+/*!
+    \internal
+ */
+QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
+    : QRhiResource(rhi)
+{
+}
+
+/*!
+    \class QRhiShaderResourceBinding
+    \inmodule QtRhi
+    \brief Specifies the shader resources that are made visible to one or more shader stages.
+
+    A QRhiShaderResourceBinding cannot be constructed directly. Instead, use
+    the static functions uniformBuffer(), sampledTexture() to get an instance.
+ */
+
+/*!
+    \enum QRhiShaderResourceBinding::Type
+    Specifies type of the shader resource bound to a binding point
+
+    \value UniformBuffer Uniform buffer
+    \value SampledTexture Combined image sampler
+ */
+
+/*!
+    \enum QRhiShaderResourceBinding::StageFlag
+    Flag values to indicate which stages the shader resource is visible in
+
+    \value VertexStage Vertex stage
+    \value FragmentStage Fragment (pixel) stage
+    \value TessellationControlStage Tessellation control (hull) stage
+    \value TessellationEvaluationStage Tessellation evaluation (domain) stage
+ */
+
+/*!
+    \internal
+ */
+QRhiShaderResourceBinding::QRhiShaderResourceBinding()
+    : d(new QRhiShaderResourceBindingPrivate)
+{
+}
+
+/*!
+    \internal
+ */
+void QRhiShaderResourceBinding::detach()
+{
+    if (d->ref.load() != 1) {
+        QRhiShaderResourceBindingPrivate *newd = new QRhiShaderResourceBindingPrivate(d);
+        if (!d->ref.deref())
+            delete d;
+        d = newd;
+    }
+}
+
+/*!
+    \internal
+ */
+QRhiShaderResourceBinding::QRhiShaderResourceBinding(const QRhiShaderResourceBinding &other)
+{
+    d = other.d;
+    d->ref.ref();
+}
+
+/*!
+    \internal
+ */
+QRhiShaderResourceBinding &QRhiShaderResourceBinding::operator=(const QRhiShaderResourceBinding &other)
+{
+    if (d != other.d) {
+        other.d->ref.ref();
+        if (!d->ref.deref())
+            delete d;
+        d = other.d;
+    }
+    return *this;
+}
+
+/*!
+    Destructor.
+ */
+QRhiShaderResourceBinding::~QRhiShaderResourceBinding()
+{
+    if (!d->ref.deref())
+        delete d;
+}
+
+/*!
+    \return a shader resource binding for the given binding number, pipeline
+    stage, and buffer specified by \a binding, \a stage, and \a buf.
+ */
+QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
+        int binding, StageFlags stage, QRhiBuffer *buf)
+{
+    QRhiShaderResourceBinding b;
+    QRhiShaderResourceBindingPrivate *d = QRhiShaderResourceBindingPrivate::get(&b);
+    Q_ASSERT(d->ref.load() == 1);
+    d->binding = binding;
+    d->stage = stage;
+    d->type = UniformBuffer;
+    d->u.ubuf.buf = buf;
+    d->u.ubuf.offset = 0;
+    d->u.ubuf.maybeSize = 0; // entire buffer
+    return b;
+}
+
+/*!
+    \return a shader resource binding for the given binding number, pipeline
+    stage, and buffer specified by \a binding, \a stage, and \a buf. This
+    overload binds a region only, as specified by \a offset and \a size.
+
+    \note It is up to the user to ensure the offset is aligned to
+    QRhi::ubufAlignment().
+ */
+QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
+        int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size)
+{
+    Q_ASSERT(size > 0);
+    QRhiShaderResourceBinding b;
+    QRhiShaderResourceBindingPrivate *d = QRhiShaderResourceBindingPrivate::get(&b);
+    Q_ASSERT(d->ref.load() == 1);
+    d->binding = binding;
+    d->stage = stage;
+    d->type = UniformBuffer;
+    d->u.ubuf.buf = buf;
+    d->u.ubuf.offset = offset;
+    d->u.ubuf.maybeSize = size;
+    return b;
+}
+
+/*!
+    \return a shader resource binding for the given binding number, pipeline
+    stage, texture, and sampler specified by \a binding, \a stage, \a tex,
+    \a sampler.
+ */
+QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
+        int binding, StageFlags stage, QRhiTexture *tex, QRhiSampler *sampler)
+{
+    QRhiShaderResourceBinding b;
+    QRhiShaderResourceBindingPrivate *d = QRhiShaderResourceBindingPrivate::get(&b);
+    Q_ASSERT(d->ref.load() == 1);
+    d->binding = binding;
+    d->stage = stage;
+    d->type = SampledTexture;
+    d->u.stex.tex = tex;
+    d->u.stex.sampler = sampler;
+    return b;
+}
 
 /*!
     \class QRhiGraphicsPipeline
@@ -1239,6 +2021,25 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    \internal
+ */
+QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhiImplementation *rhi)
+    : QRhiResource(rhi)
+{
+}
+
+/*!
+    \fn bool QRhiGraphicsPipeline::build()
+
+    Creates the corresponding native graphics resources. If there are already
+    resources present due to an earlier build() with no corresponding
+    release(), then release() is called implicitly first.
+
+    \return \c true when successful, \c false when a graphics operation failed.
+    Regardless of the return value, calling release() is always safe.
+ */
+
+/*!
     \class QRhiSwapChain
     \inmodule QtRhi
     \brief Swapchain resource.
@@ -1391,433 +2192,6 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
-    \class QRhiCommandBuffer
-    \inmodule QtRhi
-    \brief Command buffer resource.
-
-    Not creatable by applications at the moment. The only ways to obtain a
-    valid QRhiCommandBuffer are to get it from the targeted swapchain via
-    QRhiSwapChain::currentFrameCommandBuffer(), or, in case of rendering
-    completely offscreen, initializing one via QRhi::beginOffscreenFrame().
- */
-
-/*!
-    \enum QRhiCommandBuffer::IndexFormat
-    Specifies the index data type
-
-    \value IndexUInt16 Unsigned 16-bit (quint16)
-    \value IndexUInt32 Unsigned 32-bit (quint32)
- */
-
-/*!
-    \typedef QRhiCommandBuffer::VertexInput
-
-    Synonym for QPair<QRhiBuffer *, quint32>. The second entry is an offset in
-    the buffer specified by the first.
-*/
-
-/*!
-    \class QRhiResourceUpdateBatch
-    \inmodule QtRhi
-    \brief Records upload and copy type of operations.
-
-    With QRhi it is no longer possible to perform copy type of operations at
-    arbitrary times. Instead, all such operations are recorded into batches
-    that are then passed, most commonly, to QRhiCommandBuffer::beginPass().
-    What then happens under the hood is hidden from the application: the
-    underlying implementations can defer and implement these operations in
-    various different ways.
-
-    A resource update batch owns no graphics resources and does not perform any
-    actual operations on its own. It should rather be viewed as a command
-    buffer for update, upload, and copy type of commands.
-
-    To get an available, empty batch from the pool, call
-    QRhi::nextResourceUpdateBatch().
- */
-
-/*!
-    \enum QRhiResourceUpdateBatch::TexturePrepareFlag
-    \internal
- */
-
-/*!
-    \internal
- */
-QRhiResource::QRhiResource(QRhiImplementation *rhi_)
-    : rhi(rhi_)
-{
-}
-
-/*!
-   Destructor.
- */
-QRhiResource::~QRhiResource()
-{
-}
-
-/*!
-    \fn void QRhiResource::release()
-
-    Releases the underlying native graphics resources. Safe to call multiple
-    times, subsequent invocations will be a no-op then.
-
-    Once release() is called, the QRhiResource instance can be reused, by
-    calling the appropriate \c build() function again, or destroyed.
- */
-
-/*!
-    Releases native graphics resources, if there is any, and destroys the
-    QRhiResource. Equivalent to \c{r->release(); delete r; }.
- */
-void QRhiResource::releaseAndDestroy()
-{
-    release();
-    delete this;
-}
-
-/*!
-    Returns the currently set object name. By default the name is empty.
- */
-QByteArray QRhiResource::name() const
-{
-    return objectName;
-}
-
-/*!
-    Sets a \a name for the object.
-
-    This has two uses: to get descriptive names for the native graphics
-    resources visible in graphics debugging tools, such as
-    \l{https://renderdoc.org/}{RenderDoc} and
-    \l{https://developer.apple.com/xcode/}{XCode}, and in the output stream of
-    QRhiProfiler.
-
-    When it comes to naming native objects by relaying the name via the
-    appropriate graphics API, note that the name is ignored when
-    QRhi::DebugMarkers are not supported, and may, depending on the backend,
-    also be ignored when QRhi::EnableDebugMarkers is not set.
-
-    \note The name may be ignored for objects other than buffers,
-    renderbuffers, and textures, depending on the backend.
-
-    \note The name may be modified. For slotted resources, such as a QRhiBuffer
-    backed by multiple native buffers, QRhi will append a suffix to make the
-    underlying native buffers easily distinguishable from each other.
- */
-void QRhiResource::setName(const QByteArray &name)
-{
-    objectName = name;
-    objectName.replace(',', '_'); // cannot contain comma for QRhiProfiler
-}
-
-/*!
-    \internal
- */
-QRhiBuffer::QRhiBuffer(QRhiImplementation *rhi, Type type_, UsageFlags usage_, int size_)
-    : QRhiResource(rhi),
-      m_type(type_), m_usage(usage_), m_size(size_)
-{
-}
-
-/*!
-    \fn bool QRhiBuffer::build()
-
-    Creates the corresponding native graphics resources. If there are already
-    resources present due to an earlier build() with no corresponding
-    release(), then release() is called implicitly first.
-
-    \return \c true when successful, \c false when a graphics operation failed.
-    Regardless of the return value, calling release() is always safe.
- */
-
-/*!
-    \internal
- */
-QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QSize &pixelSize_,
-                                   int sampleCount_, Flags flags_)
-    : QRhiResource(rhi),
-      m_type(type_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_flags(flags_)
-{
-}
-
-/*!
-    \fn bool QRhiRenderBuffer::build()
-
-    Creates the corresponding native graphics resources. If there are already
-    resources present due to an earlier build() with no corresponding
-    release(), then release() is called implicitly first.
-
-    \return \c true when successful, \c false when a graphics operation failed.
-    Regardless of the return value, calling release() is always safe.
- */
-
-/*!
-    \internal
- */
-QRhiTexture::QRhiTexture(QRhiImplementation *rhi, Format format_, const QSize &pixelSize_,
-                         int sampleCount_, Flags flags_)
-    : QRhiResource(rhi),
-      m_format(format_), m_pixelSize(pixelSize_), m_sampleCount(sampleCount_), m_flags(flags_)
-{
-}
-
-/*!
-    \fn bool QRhiTexture::build()
-
-    Creates the corresponding native graphics resources. If there are already
-    resources present due to an earlier build() with no corresponding
-    release(), then release() is called implicitly first.
-
-    \return \c true when successful, \c false when a graphics operation failed.
-    Regardless of the return value, calling release() is always safe.
- */
-
-/*!
-    \return a pointer to a backend-specific QRhiNativeHandles subclass, such as
-    QRhiVulkanTextureNativeHandles. The returned value is null when exposing
-    the underlying native resources is not supported by the backend.
-
-    \sa QRhiVulkanTextureNativeHandles, QRhiD3D11TextureNativeHandles,
-    QRhiMetalTextureNativeHandles, QRhiGles2TextureNativeHandles
- */
-const QRhiNativeHandles *QRhiTexture::nativeHandles()
-{
-    return nullptr;
-}
-
-/*!
-    Similar to build() except that no new native textures are created. Instead,
-    the texture from \a src is used.
-
-    This allows importing an existing native texture object (which must belong
-    to the same device or sharing context, depending on the graphics API) from
-    an external graphics engine.
-
-    \note format(), pixelSize(), sampleCount(), and flags() must still be set
-    correctly. Passing incorrect sizes and other values to QRhi::newTexture()
-    and then following it with a buildFrom() expecting that the native texture
-    object alone is sufficient to deduce such values is \b wrong and will lead
-    to problems.
-
-    \note QRhiTexture does not take ownership of the texture object. release()
-    does not free the object or any associated memory.
-
-    The opposite of this operation, exposing a QRhiTexture-created native
-    texture object to a foreign engine, is possible via nativeHandles().
-
-    \sa QRhiVulkanTextureNativeHandles, QRhiD3D11TextureNativeHandles,
-    QRhiMetalTextureNativeHandles, QRhiGles2TextureNativeHandles
- */
-bool QRhiTexture::buildFrom(const QRhiNativeHandles *src)
-{
-    Q_UNUSED(src);
-    return false;
-}
-
-/*!
-    \internal
- */
-QRhiSampler::QRhiSampler(QRhiImplementation *rhi,
-                         Filter magFilter_, Filter minFilter_, Filter mipmapMode_,
-                         AddressMode u_, AddressMode v_, AddressMode w_)
-    : QRhiResource(rhi),
-      m_magFilter(magFilter_), m_minFilter(minFilter_), m_mipmapMode(mipmapMode_),
-      m_addressU(u_), m_addressV(v_), m_addressW(w_)
-{
-}
-
-/*!
-    \internal
- */
-QRhiRenderPassDescriptor::QRhiRenderPassDescriptor(QRhiImplementation *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-/*!
-    \internal
- */
-QRhiRenderTarget::QRhiRenderTarget(QRhiImplementation *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-/*!
-    \fn QRhiRenderTarget::Type QRhiRenderTarget::type() const
-
-    \return the type of the render target.
- */
-
-/*!
-    \fn QSize QRhiRenderTarget::sizeInPixels() const
-
-    \return the size in pixels.
- */
-
-/*!
-    \fn float QRhiRenderTarget::devicePixelRatio() const
-
-    \return the device pixel ratio. For QRhiTextureRenderTarget this is always
-    1. For targets retrieved from a QRhiSwapChain the value reflects the
-    \l{QWindow::devicePixelRatio()}{device pixel ratio} of the targeted
-    QWindow.
- */
-
-/*!
-    \internal
- */
-QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiRenderTarget(rhi)
-{
-}
-
-/*!
-    \internal
- */
-QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
-                                                 const QRhiTextureRenderTargetDescription &desc_,
-                                                 Flags flags_)
-    : QRhiRenderTarget(rhi),
-      m_desc(desc_),
-      m_flags(flags_)
-{
-}
-
-/*!
-    \fn QRhiRenderPassDescriptor *QRhiTextureRenderTarget::newCompatibleRenderPassDescriptor()
-
-    \return a new QRhiRenderPassDescriptor that is compatible with this render
-    target.
-
-    The returned value is used in two ways: it can be passed to
-    setRenderPassDescriptor() and
-    QRhiGraphicsPipeline::setRenderPassDescriptor(). A render pass descriptor
-    describes the attachments (color, depth/stencil) and the load/store
-    behavior that can be affected by flags(). A QRhiGraphicsPipeline can only
-    be used in combination with a render target that has the same
-    QRhiRenderPassDescriptor set.
-
-    Two QRhiTextureRenderTarget instances can share the same render pass
-    descriptor as long as they have the same number and type of attachments.
-    The associated QRhiTexture or QRhiRenderBuffer instances are not part of
-    the render pass descriptor so those can differ in the two
-    QRhiTextureRenderTarget intances.
-
-    \note resources, such as QRhiTexture instances, referenced in description()
-    must already be built
-
-    \sa build()
- */
-
-/*!
-    \fn bool QRhiTextureRenderTarget::build()
-
-    Creates the corresponding native graphics resources. If there are already
-    resources present due to an earlier build() with no corresponding
-    release(), then release() is called implicitly first.
-
-    \note renderPassDescriptor() must be set before calling build(). To obtain
-    a QRhiRenderPassDescriptor compatible with the render target, call
-    newCompatibleRenderPassDescriptor() before build() but after setting all
-    other parameters, such as description() and flags(). To save resources,
-    reuse the same QRhiRenderPassDescriptor with multiple
-    QRhiTextureRenderTarget instances, whenever possible. Sharing the same
-    render pass descriptor is only possible when the render targets have the
-    same number and type of attachments (the actual textures can differ) and
-    the same flags.
-
-    \note resources, such as QRhiTexture instances, referenced in description()
-    must already be built
-
-    \return \c true when successful, \c false when a graphics operation failed.
-    Regardless of the return value, calling release() is always safe.
- */
-
-/*!
-    \internal
- */
-QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-/*!
-    Returns a shader resource binding for the given binding number, pipeline
-    stage, and buffer specified by \a binding_, \a stage_, and \a buf_.
- */
-QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
-        int binding_, StageFlags stage_, QRhiBuffer *buf_)
-{
-    QRhiShaderResourceBinding b;
-    b.binding = binding_;
-    b.stage = stage_;
-    b.type = UniformBuffer;
-    b.ubuf.buf = buf_;
-    b.ubuf.offset = 0;
-    b.ubuf.maybeSize = 0; // entire buffer
-    return b;
-}
-
-/*!
-    Returns a shader resource binding for the given binding number, pipeline
-    stage, and buffer specified by \a binding_, \a stage_, and \a buf_. This
-    overload binds a region only, as specified by \a offset_ and \a size_.
-
-    \note It is up to the user to ensure the offset is aligned to
-    QRhi::ubufAlignment().
- */
-QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
-        int binding_, StageFlags stage_, QRhiBuffer *buf_, int offset_, int size_)
-{
-    Q_ASSERT(size_ > 0);
-    QRhiShaderResourceBinding b;
-    b.binding = binding_;
-    b.stage = stage_;
-    b.type = UniformBuffer;
-    b.ubuf.buf = buf_;
-    b.ubuf.offset = offset_;
-    b.ubuf.maybeSize = size_;
-    return b;
-}
-
-/*!
-    Returns a shader resource binding for the given binding number, pipeline
-    stage, texture, and sampler specified by \a binding_, \a stage_, \a tex_,
-    \a sampler_.
- */
-QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
-        int binding_, StageFlags stage_, QRhiTexture *tex_, QRhiSampler *sampler_)
-{
-    QRhiShaderResourceBinding b;
-    b.binding = binding_;
-    b.stage = stage_;
-    b.type = SampledTexture;
-    b.stex.tex = tex_;
-    b.stex.sampler = sampler_;
-    return b;
-}
-
-/*!
-    \internal
- */
-QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhiImplementation *rhi)
-    : QRhiResource(rhi)
-{
-}
-
-/*!
-    \fn bool QRhiGraphicsPipeline::build()
-
-    Creates the corresponding native graphics resources. If there are already
-    resources present due to an earlier build() with no corresponding
-    release(), then release() is called implicitly first.
-
-    \return \c true when successful, \c false when a graphics operation failed.
-    Regardless of the return value, calling release() is always safe.
- */
-
-/*!
     \internal
  */
 QRhiSwapChain::QRhiSwapChain(QRhiImplementation *rhi)
@@ -1896,6 +2270,32 @@ QRhiSwapChain::QRhiSwapChain(QRhiImplementation *rhi)
     \return \c true when successful, \c false when a graphics operation failed.
     Regardless of the return value, calling release() is always safe.
  */
+
+/*!
+    \class QRhiCommandBuffer
+    \inmodule QtRhi
+    \brief Command buffer resource.
+
+    Not creatable by applications at the moment. The only ways to obtain a
+    valid QRhiCommandBuffer are to get it from the targeted swapchain via
+    QRhiSwapChain::currentFrameCommandBuffer(), or, in case of rendering
+    completely offscreen, initializing one via QRhi::beginOffscreenFrame().
+ */
+
+/*!
+    \enum QRhiCommandBuffer::IndexFormat
+    Specifies the index data type
+
+    \value IndexUInt16 Unsigned 16-bit (quint16)
+    \value IndexUInt32 Unsigned 32-bit (quint32)
+ */
+
+/*!
+    \typedef QRhiCommandBuffer::VertexInput
+
+    Synonym for QPair<QRhiBuffer *, quint32>. The second entry is an offset in
+    the buffer specified by the first.
+*/
 
 /*!
     \internal
@@ -2186,6 +2586,31 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags)
 
     return nullptr;
 }
+
+/*!
+    \class QRhiResourceUpdateBatch
+    \inmodule QtRhi
+    \brief Records upload and copy type of operations.
+
+    With QRhi it is no longer possible to perform copy type of operations at
+    arbitrary times. Instead, all such operations are recorded into batches
+    that are then passed, most commonly, to QRhiCommandBuffer::beginPass().
+    What then happens under the hood is hidden from the application: the
+    underlying implementations can defer and implement these operations in
+    various different ways.
+
+    A resource update batch owns no graphics resources and does not perform any
+    actual operations on its own. It should rather be viewed as a command
+    buffer for update, upload, and copy type of commands.
+
+    To get an available, empty batch from the pool, call
+    QRhi::nextResourceUpdateBatch().
+ */
+
+/*!
+    \enum QRhiResourceUpdateBatch::TexturePrepareFlag
+    \internal
+ */
 
 /*!
     \internal
@@ -2812,7 +3237,7 @@ bool QRhi::isYUpInFramebuffer() const
 }
 
 /*!
-    Returns a matrix that can be used allow applications keep using
+    \return a matrix that can be used allow applications keep using
     OpenGL-targeted vertex data and projection matrices (for example, the ones
     generated by QMatrix4x4::perspective()) regardless of the backed. Once
     \c{this_matrix * mvp} is used instead of just \c mvp, vertex data with Y up

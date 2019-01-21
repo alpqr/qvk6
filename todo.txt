@@ -1,4 +1,4 @@
-multiwindow_threaded should demo pulling out the device and importing to another rhi
+multiple qrhis on threads with shared resources - how
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -46,6 +46,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+revise structs in api
 primitive restart
 fix independent builds
 basic docs

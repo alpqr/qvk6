@@ -63,7 +63,6 @@
 
 #ifndef QT_NO_OPENGL
 #include <QRhiGles2InitParams>
-#include <QOpenGLContext>
 #include <QOffscreenSurface>
 #endif
 
@@ -165,7 +164,6 @@ protected:
     int m_elapsedCount;
 
 #ifndef QT_NO_OPENGL
-    QOpenGLContext *m_context = nullptr;
     QOffscreenSurface *m_fallbackSurface = nullptr;
 #endif
 };
@@ -245,18 +243,10 @@ void Window::init()
 {
 #ifndef QT_NO_OPENGL
     if (graphicsApi == OpenGL) {
-        m_context = new QOpenGLContext;
-        if (!m_context->create())
-            qFatal("Failed to get OpenGL context");
-
-        m_fallbackSurface = new QOffscreenSurface;
-        m_fallbackSurface->setFormat(m_context->format());
-        m_fallbackSurface->create();
-
+        m_fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
         QRhiGles2InitParams params;
-        params.context = m_context;
-        params.window = this;
         params.fallbackSurface = m_fallbackSurface;
+        params.window = this;
         m_r = QRhi::create(QRhi::OpenGLES2, &params);
     }
 #endif
@@ -368,7 +358,6 @@ void Window::releaseResources()
     delete m_r;
 
 #ifndef QT_NO_OPENGL
-    delete m_context;
     delete m_fallbackSurface;
 #endif
 }
@@ -511,12 +500,6 @@ int main(int argc, char **argv)
         graphicsApi = D3D11;
     if (cmdLineParser.isSet(mtlOption))
         graphicsApi = Metal;
-
-    // OpenGL specifics.
-    QSurfaceFormat fmt;
-    fmt.setDepthBufferSize(24);
-    fmt.setStencilBufferSize(8);
-    QSurfaceFormat::setDefaultFormat(fmt);
 
     // Vulkan setup.
 #if QT_CONFIG(vulkan)

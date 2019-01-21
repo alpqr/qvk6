@@ -63,51 +63,84 @@ QT_BEGIN_NAMESPACE
     \inmodule QtRhi
     \brief OpenGL specific initialization parameters.
 
-    An OpenGL-based QRhi needs an already initialized QOpenGLContext and
-    QOffscreenSurface. Additionally, while optional, it is recommended that the
-    QWindow the first QRhiSwapChain will target is passed in as well.
+    An OpenGL-based QRhi needs an already created QOffscreenSurface at minimum.
+    Additionally, while optional, it is recommended that the QWindow the first
+    QRhiSwapChain will target is passed in as well.
 
     \badcode
-        QSurfaceFormat format;
-        format.setDepthBufferSize(24);
-        format.setStencilBufferSize(8);
-        QSurfaceFormat::setDefaultFormat(format);
-
-        context = new QOpenGLContext;
-        if (!context->create())
-            qFatal("Failed to get OpenGL context");
-
-        fallbackSurface = new QOffscreenSurface;
-        fallbackSurface->setFormat(context->format());
-        fallbackSurface->create();
-
+        fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
         QRhiGles2InitParams params;
-        params.context = context;
-        params.window = window;
         params.fallbackSurface = fallbackSurface;
+        params.window = window;
         rhi = QRhi::create(QRhi::OpenGLES2, &params);
     \endcode
 
-    The example here shows the creation of the context and fallback surface as
-    well. Watch out for the fact that, unlike QOpenGLContext, a
-    QOffscreenSurface can only be created on the gui/main thread.
+    By default QRhi creates a QOpenGLContext on its own. The QSurfaceFormat for
+    this context is based on what was set via
+    QSurfaceFormat::setDefaultSurfaceFormat().
 
-    The QRhi does not take ownership of any of the external objects.
+    \note The depth and stencil buffer sizes are set automatically to 24 and 8
+    when no size was explicitly set for these buffers in the default surface
+    format.
+
+    This approach works well in most cases, included threaded scenarios, where
+    there is a dedicated QRhi for each rendering thread. As there will be a
+    QOpenGLContext for each QRhi, the OpenGL context requirements (a context
+    can only be current on one thread) are satisfied. The implicitly created
+    context is destroyed automatically together with the QRhi.
+
+    A QOffscreenSurface has to be specified in \l fallbackSurface. In order to
+    prevent mistakes in threaded situations, this is never created
+    automatically by the QRhi since, like QWindow, QOffscreenSurface can only
+    be created on the gui/main thread.
+
+    As a convenience, applications can use newFallbackSurface() which creates
+    and returns a QOffscreenSurface that is compatible with the QOpenGLContext
+    that is going to be created by the QRhi afterwards. Note that the ownership
+    of the returned QOffscreenSurface is transfered to the caller and the QRhi
+    will not destroy it.
 
     \note QRhiSwapChain can only target QWindow instances that have their
     surface type set to QSurface::OpenGLSurface.
 
-    \note \l window is optional. It is recommended to specify it whever
+    \note \l window is optional. It is recommended to specify it whenever
     possible, in order to avoid problems on multi-adapter and multi-screen
     systems. When \l window is not set, the very first
     QOpenGLContext::makeCurrent() happens with \l fallbackSurface which may be
     an invisible window on some platforms (for example, Windows) and that may
     trigger unexpected problems in some cases.
 
-    \note A QRhi instance can be created and used on any thread but all usage
-    must be limited to that one single thread. When it comes to native objects,
-    such as OpenGL contexts, passed in in QRhiInitParams, it is up to the
-    application to ensure they are not misused by other threads.
+    \section2 Working with existing OpenGL contexts
+
+    When interoperating with another graphics engine, it may be necessary to
+    get a QRhi instance that uses the same OpenGL context. This can be achieved
+    by passing a pointer to a QRhiGles2NativeHandles to QRhi::create(). The
+    \l{QRhiGles2NativeHandles::context}{context} must be set to a non-null
+    value.
+
+    An alternative approach is to create a QOpenGLContext that
+    \l{QOpenGLContext::setShareContext()}{shares resources} with the other
+    engine's context and passing in that context via QRhiGles2NativeHandles.
+
+    The QRhi does not take ownership of the QOpenGLContext passed in via
+    QRhiGles2NativeHandles.
+ */
+
+/*!
+    \fn QOffscreenSurface *QRhiGles2InitParams::newFallbackSurface()
+
+    \return a new QOffscreenSurface that can be used with a QRhi by passing it
+    via a QRhiGles2InitParams.
+
+    The \l{QOffscreenSurface::format()}{format} is adjusted as appropriate in
+    order to avoid having problems afterwards due to an incompatible context
+    and surface.
+
+    \note This function must only be called on the gui/main thread.
+
+    \note It is the application's responsibility to destroy the returned
+    QOffscreenSurface on the gui/main thread once the associated QRhi has been
+    destroyed. The QRhi will not destroy the QOffscreenSurface.
  */
 
 /*!
@@ -122,12 +155,52 @@ QT_BEGIN_NAMESPACE
     \brief Holds the OpenGL texture object that is backing a QRhiTexture instance.
  */
 
-QRhiGles2::QRhiGles2(QRhiGles2InitParams *params)
+static QSurfaceFormat qrhigles2_effectiveFormat()
+{
+    QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
+
+    if (fmt.depthBufferSize() == -1)
+        fmt.setDepthBufferSize(24);
+    if (fmt.stencilBufferSize() == -1)
+        fmt.setStencilBufferSize(8);
+
+    return fmt;
+}
+
+QOffscreenSurface *QRhiGles2InitParams::newFallbackSurface()
+{
+    QSurfaceFormat fmt = qrhigles2_effectiveFormat();
+
+    // To resolve all fields in the format as much as possible, create a context.
+    // This may be heavy, but allows avoiding BAD_MATCH on some systems.
+    QOpenGLContext tempContext;
+    tempContext.setFormat(fmt);
+    if (tempContext.create())
+        fmt = tempContext.format();
+    else
+        qWarning("QRhiGles2: Failed to create temporary context");
+
+    QOffscreenSurface *s = new QOffscreenSurface;
+    s->setFormat(fmt);
+    s->create();
+
+    return s;
+}
+
+QRhiGles2::QRhiGles2(QRhiGles2InitParams *params, QRhiGles2NativeHandles *importDevice)
     : ofr(this)
 {
-    ctx = params->context;
-    maybeWindow = params->window; // may be null
     fallbackSurface = params->fallbackSurface;
+    maybeWindow = params->window; // may be null
+
+    importedContext = importDevice != nullptr;
+    if (importedContext) {
+        ctx = importDevice->context;
+        if (!ctx) {
+            qWarning("No OpenGL context given, cannot import");
+            importedContext = false;
+        }
+    }
 }
 
 bool QRhiGles2::ensureContext(QSurface *surface) const
@@ -157,8 +230,18 @@ bool QRhiGles2::ensureContext(QSurface *surface) const
 bool QRhiGles2::create(QRhi::Flags flags)
 {
     Q_UNUSED(flags);
-    Q_ASSERT(ctx);
     Q_ASSERT(fallbackSurface);
+
+    if (!importedContext) {
+        ctx = new QOpenGLContext;
+        ctx->setFormat(qrhigles2_effectiveFormat());
+        if (!ctx->create()) {
+            qWarning("QRhiGles2: Failed to create context");
+            delete ctx;
+            ctx = nullptr;
+            return false;
+        }
+    }
 
     if (!ensureContext(maybeWindow ? maybeWindow : fallbackSurface)) // see 'window' discussion in QRhiGles2InitParams comments
         return false;
@@ -196,6 +279,11 @@ void QRhiGles2::destroy()
     executeDeferredReleases();
 
     f = nullptr;
+
+    if (!importedContext) {
+        delete ctx;
+        ctx = nullptr;
+    }
 }
 
 // Strictly speaking this is not necessary since we could do the deletes in

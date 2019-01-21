@@ -66,7 +66,6 @@
 
 #ifndef QT_NO_OPENGL
 #include <QRhiGles2InitParams>
-#include <QOpenGLContext>
 #include <QOffscreenSurface>
 #endif
 
@@ -162,7 +161,6 @@ protected:
     int m_frameCount;
 
 #ifndef QT_NO_OPENGL
-    QOpenGLContext *m_context = nullptr;
     QOffscreenSurface *m_fallbackSurface = nullptr;
 #endif
 };
@@ -247,18 +245,10 @@ void Window::init()
 
 #ifndef QT_NO_OPENGL
     if (graphicsApi == OpenGL) {
-        m_context = new QOpenGLContext;
-        if (!m_context->create())
-            qFatal("Failed to get OpenGL context");
-
-        m_fallbackSurface = new QOffscreenSurface;
-        m_fallbackSurface->setFormat(m_context->format());
-        m_fallbackSurface->create();
-
+        m_fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
         QRhiGles2InitParams params;
-        params.context = m_context;
-        params.window = this;
         params.fallbackSurface = m_fallbackSurface;
+        params.window = this;
         m_r = QRhi::create(QRhi::OpenGLES2, &params, rhiFlags);
     }
 #endif
@@ -329,8 +319,6 @@ void Window::releaseResources()
     m_r = nullptr;
 
 #ifndef QT_NO_OPENGL
-    delete m_context;
-    m_context = nullptr;
     delete m_fallbackSurface;
     m_fallbackSurface = nullptr;
 #endif

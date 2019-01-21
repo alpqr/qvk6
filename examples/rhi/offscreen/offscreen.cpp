@@ -160,23 +160,11 @@ int main(int argc, char **argv)
     QRhi *r = nullptr;
 
 #ifndef QT_NO_OPENGL
-    QOpenGLContext context;
-    QOffscreenSurface offscreenSurface;
+    QScopedPointer<QOffscreenSurface> offscreenSurface;
     if (graphicsApi == OpenGL) {
-        QSurfaceFormat fmt;
-        fmt.setDepthBufferSize(24);
-        fmt.setStencilBufferSize(8);
-        QSurfaceFormat::setDefaultFormat(fmt);
-
-        if (!context.create())
-            qFatal("Failed to get OpenGL context");
-
-        offscreenSurface.setFormat(context.format());
-        offscreenSurface.create();
-
+        offscreenSurface.reset(QRhiGles2InitParams::newFallbackSurface());
         QRhiGles2InitParams params;
-        params.context = &context;
-        params.fallbackSurface = &offscreenSurface;
+        params.fallbackSurface = offscreenSurface.data();
         r = QRhi::create(QRhi::OpenGLES2, &params);
     }
 #endif

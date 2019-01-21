@@ -440,7 +440,7 @@ struct QGles2SwapChain : public QRhiSwapChain
 class QRhiGles2 : public QRhiImplementation
 {
 public:
-    QRhiGles2(QRhiGles2InitParams *params);
+    QRhiGles2(QRhiGles2InitParams *params, QRhiGles2NativeHandles *importDevice = nullptr);
 
     bool create(QRhi::Flags flags) override;
     void destroy() override;
@@ -523,6 +523,7 @@ public:
     void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly);
 
     QOpenGLContext *ctx = nullptr;
+    bool importedContext = false;
     QWindow *maybeWindow = nullptr;
     QSurface *fallbackSurface = nullptr;
     mutable bool buffersSwapped = false;

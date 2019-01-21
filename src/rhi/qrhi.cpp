@@ -2548,7 +2548,8 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags, QRh
 #endif
     case OpenGLES2:
 #ifndef QT_NO_OPENGL
-        r->d = new QRhiGles2(static_cast<QRhiGles2InitParams *>(params));
+        r->d = new QRhiGles2(static_cast<QRhiGles2InitParams *>(params),
+                             static_cast<QRhiGles2NativeHandles *>(importDevice));
         break;
 #else
         qWarning("This build of Qt has no OpenGL support");

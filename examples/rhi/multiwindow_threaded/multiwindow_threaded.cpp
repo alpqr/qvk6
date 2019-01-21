@@ -68,7 +68,6 @@
 
 #ifndef QT_NO_OPENGL
 #include <QRhiGles2InitParams>
-#include <QOpenGLContext>
 #include <QOffscreenSurface>
 #endif
 
@@ -253,7 +252,6 @@ struct Renderer
     Thread *thread;
     QRhi *r = nullptr;
 #ifndef QT_NO_OPENGL
-    QOpenGLContext *context = nullptr;
     QOffscreenSurface *fallbackSurface = nullptr;
 #endif
 
@@ -311,11 +309,6 @@ void Thread::run()
             sleeping = false;
         }
     }
-
-#ifndef QT_NO_OPENGL
-    if (renderer->context)
-        renderer->context->moveToThread(qGuiApp->thread());
-#endif
 }
 
 Renderer::Renderer(QWindow *w, const QColor &bgColor, int rotationAxis)
@@ -326,17 +319,8 @@ Renderer::Renderer(QWindow *w, const QColor &bgColor, int rotationAxis)
     thread = new Thread(this);
 
 #ifndef QT_NO_OPENGL
-    if (graphicsApi == OpenGL) {
-        context = new QOpenGLContext;
-        if (!context->create())
-            qFatal("Failed to get OpenGL context");
-
-        fallbackSurface = new QOffscreenSurface;
-        fallbackSurface->setFormat(context->format());
-        fallbackSurface->create();
-
-        context->moveToThread(thread);
-    }
+    if (graphicsApi == OpenGL)
+        fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
 #endif
 }
 
@@ -347,7 +331,6 @@ Renderer::~Renderer()
     delete thread;
 
 #ifndef QT_NO_OPENGL
-    delete context;
     delete fallbackSurface;
 #endif
 }
@@ -362,9 +345,8 @@ void Renderer::createRhi()
 #ifndef QT_NO_OPENGL
     if (graphicsApi == OpenGL) {
         QRhiGles2InitParams params;
-        params.context = context;
-        params.window = window;
         params.fallbackSurface = fallbackSurface;
+        params.window = window;
         r = QRhi::create(QRhi::OpenGLES2, &params);
     }
 #endif
@@ -748,11 +730,6 @@ int main(int argc, char **argv)
 
     qDebug("Selected graphics API is %s", qPrintable(graphicsApiName()));
     qDebug("This is a multi-api example, use command line arguments to override:\n%s", qPrintable(cmdLineParser.helpText()));
-
-    QSurfaceFormat fmt;
-    fmt.setDepthBufferSize(24);
-    fmt.setStencilBufferSize(8);
-    QSurfaceFormat::setDefaultFormat(fmt);
 
 #if QT_CONFIG(vulkan)
     instance = new QVulkanInstance;

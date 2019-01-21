@@ -82,6 +82,8 @@ QT_BEGIN_NAMESPACE
     This can be achieved by setting importExistingDevice to \c true and
     providing both dev and context.
 
+    The QRhi does not take ownership of any of the external objects.
+
     \note QRhi works with immediate contexts only. Deferred contexts are not
     used in any way.
 
@@ -89,10 +91,20 @@ QT_BEGIN_NAMESPACE
     \c{d3d11.h} headers is not acceptable here. The actual types are
     \c{ID3D11Device *} and \c{ID3D11DeviceContext *}.
 
-    \note Regardless of using an imported or a QRhi-created device context,
-    \c ID3D11DeviceContext1 must be supported. Initialization will fail otherwise.
+    \note Regardless of using an imported or a QRhi-created device context, the
+    \c ID3D11DeviceContext1 interface (Direct3D 11.1) must be supported.
+    Initialization will fail otherwise.
 
-    The QRhi does not take ownership of any of the external objects.
+    \note Advanced usages involving multiple threads should be aware of the
+    differences in OpenGL and Direct3D when it comes to how threading works
+    with contexts and device contexts. There can be multiple QOpenGLContext
+    instances and one of those can be current on each thread at a time,
+    assuming that one context is not current on any other threads. Direct 3D
+    however has just one (immediate) device context per device and it is not
+    thread local. Rather, the same device context allows command submission
+    from multiple threads, but those threads then need to synchronize their
+    operations between themselves in order to not to interfere with each others
+    commands on the context.
  */
 
 /*!

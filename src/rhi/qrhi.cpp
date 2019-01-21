@@ -341,16 +341,27 @@ QT_BEGIN_NAMESPACE
     \brief Specifies a clear color for a color buffer.
  */
 
+/*!
+    Constructs a color clear value with \c{(0, 0, 0, 1)} (opaque black).
+ */
 QRhiColorClearValue::QRhiColorClearValue()
     : m_rgba(0, 0, 0, 1)
 {
 }
 
+/*!
+    Constructs a color clear value with the floating point color components
+    (\c{0.0f - 1.0f}) specified in \a c.
+  */
 QRhiColorClearValue::QRhiColorClearValue(const QVector4D &c)
     : m_rgba(c)
 {
 }
 
+/*!
+    Constructs a color clear value with the floating point color components
+    (\c{0.0f - 1.0f}) specified in \a r, \a g, \a b, and \a a.
+ */
 QRhiColorClearValue::QRhiColorClearValue(float r, float g, float b, float a)
     : m_rgba(r, g, b, a)
 {
@@ -362,12 +373,20 @@ QRhiColorClearValue::QRhiColorClearValue(float r, float g, float b, float a)
     \brief Specifies clear values for a depth or stencil buffer.
  */
 
+/*!
+    Constructs a depth/stencil clear value with depth clear value 1.0f and
+    stencil clear value 0.
+ */
 QRhiDepthStencilClearValue::QRhiDepthStencilClearValue()
     : m_d(1),
       m_s(0)
 {
 }
 
+/*!
+    Constructs a depth/stencil clear value with depth clear value \a d and
+    stencil clear value \a s.
+ */
 QRhiDepthStencilClearValue::QRhiDepthStencilClearValue(float d, quint32 s)
     : m_d(d),
       m_s(s)
@@ -398,6 +417,12 @@ QRhiDepthStencilClearValue::QRhiDepthStencilClearValue(float d, quint32 s)
     \sa QRhiCommandBuffer::setViewport(), QRhi::clipSpaceCorrMatrix(), QRhiScissor
  */
 
+/*!
+    Constructs a viewport description with a default rectangle and depth range.
+    The default depth range is 0.0f - 1.0f.
+
+    \sa QRhi::clipSpaceCorrMatrix()
+ */
 QRhiViewport::QRhiViewport()
     : m_rect(0, 0, 1280, 720),
       m_minDepth(0),
@@ -405,6 +430,14 @@ QRhiViewport::QRhiViewport()
 {
 }
 
+/*!
+    Constructs a viewport description with the rectangle specified by \a x, \a
+    y, \a w, \a h and the depth range \a minDepth and \a maxDepth.
+
+    \note x and y are assumed to be the bottom-left position.
+
+    \sa QRhi::clipSpaceCorrMatrix()
+ */
 QRhiViewport::QRhiViewport(float x, float y, float w, float h, float minDepth, float maxDepth)
     : m_rect(x, y, w, h),
       m_minDepth(minDepth),
@@ -427,10 +460,19 @@ QRhiViewport::QRhiViewport(float x, float y, float w, float h, float minDepth, f
     \sa QRhiCommandBuffer::setScissor(), QRhiViewport
  */
 
+/*!
+    Constructs an empty scissor.
+ */
 QRhiScissor::QRhiScissor()
 {
 }
 
+/*!
+    Constructs a scissor with the rectangle specified by \a x, \a y, \a w, and
+    \a h.
+
+    \note x and y are assumed to be the bottom-left position.
+ */
 QRhiScissor::QRhiScissor(int x, int y, int w, int h)
     : m_rect(x, y, w, h)
 {
@@ -496,10 +538,20 @@ QRhiScissor::QRhiScissor(int x, int y, int w, int h)
     \value PerInstance Data is per-instance
  */
 
+/*!
+    Constructs an empty vertex input binding description.
+ */
 QRhiVertexInputBinding::QRhiVertexInputBinding()
 {
 }
 
+/*!
+    Constructs a vertex input binding description with the specified \a stride,
+    classification \a cls, and instance step rate \a stepRate.
+
+    \note \a stepRate other than 1 is only supported when
+    QRhi::CustomInstanceStepRate is reported to be supported.
+ */
 QRhiVertexInputBinding::QRhiVertexInputBinding(quint32 stride, Classification cls, int stepRate)
     : m_stride(stride),
       m_classification(cls),
@@ -589,10 +641,17 @@ QRhiVertexInputBinding::QRhiVertexInputBinding(quint32 stride, Classification cl
     \value UNormByte Normalized unsigned byte
  */
 
+/*!
+    Constructs an empty vertex input attribute description.
+ */
 QRhiVertexInputAttribute::QRhiVertexInputAttribute()
 {
 }
 
+/*!
+    Constructs a vertex input attribute description with the specified \a
+    binding number, \a location, \a format, and \a offset.
+ */
 QRhiVertexInputAttribute::QRhiVertexInputAttribute(int binding, int location, Format format, quint32 offset)
     : m_binding(binding),
       m_location(location),
@@ -605,8 +664,14 @@ QRhiVertexInputAttribute::QRhiVertexInputAttribute(int binding, int location, Fo
     \class QRhiVertexInputLayout
     \inmodule QtRhi
     \brief Describes the layout of vertex inputs consumed by a vertex shader.
+
+    The vertex input layout is defined by the collections of
+    QRhiVertexInputBinding and QRhiVertexInputAttribute.
  */
 
+/*!
+    Constructs an empty vertex input layout description.
+ */
 QRhiVertexInputLayout::QRhiVertexInputLayout()
 {
 }
@@ -630,10 +695,17 @@ QRhiVertexInputLayout::QRhiVertexInputLayout()
     \value TessellationEvaluation Tessellation evaluation (domain) stage
  */
 
+/*!
+    Constructs an empty shader stage description.
+ */
 QRhiGraphicsShaderStage::QRhiGraphicsShaderStage()
 {
 }
 
+/*!
+    Constructs a shader stage description with the \a type of the stage and the
+    \a shader.
+ */
 QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &shader)
     : m_type(type),
       m_shader(shader)
@@ -674,15 +746,26 @@ QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &
     afterwards with shaders for sampling when resolveTexture() is set.
  */
 
+/*!
+    Constructs an empty color attachment description.
+ */
 QRhiColorAttachment::QRhiColorAttachment()
 {
 }
 
+/*!
+    Constructs a color attachment description that specifies \a texture as the
+    associated color buffer.
+ */
 QRhiColorAttachment::QRhiColorAttachment(QRhiTexture *texture)
     : m_texture(texture)
 {
 }
 
+/*!
+    Constructs a color attachment description that specifies \a renderBuffer as
+    the associated color buffer.
+ */
 QRhiColorAttachment::QRhiColorAttachment(QRhiRenderBuffer *renderBuffer)
     : m_renderBuffer(renderBuffer)
 {
@@ -701,15 +784,27 @@ QRhiColorAttachment::QRhiColorAttachment(QRhiRenderBuffer *renderBuffer)
     non-null at the same time).
  */
 
+/*!
+    Constructs an empty texture render target description.
+ */
 QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription()
 {
 }
 
+/*!
+    Constructs a texture render target description with one attachment
+    described by \a colorAttachment.
+ */
 QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment)
 {
     m_colorAttachments.append(colorAttachment);
 }
 
+/*!
+    Constructs a texture render target description with two attachments, a
+    color attachment described by \a colorAttachment, and a depth/stencil
+    attachment with \a depthStencilBuffer.
+ */
 QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment,
                                                                        QRhiRenderBuffer *depthStencilBuffer)
     : m_depthStencilBuffer(depthStencilBuffer)
@@ -717,6 +812,14 @@ QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRh
     m_colorAttachments.append(colorAttachment);
 }
 
+/*!
+    Constructs a texture render target description with two attachments, a
+    color attachment described by \a colorAttachment, and a depth attachment
+    with \a depthTexture.
+
+    \note \a depthTexture must have a suitable format, such as QRhiTexture::D16
+    or QRhiTexture::D32.
+ */
 QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRhiColorAttachment &colorAttachment,
                                                                        QRhiTexture *depthTexture)
     : m_depthTexture(depthTexture)
@@ -753,15 +856,34 @@ QRhiTextureRenderTargetDescription::QRhiTextureRenderTargetDescription(const QRh
     internally, depending on the format and the backend.
  */
 
+/*!
+    Constructs an empty mip level description.
+ */
 QRhiTextureMipLevel::QRhiTextureMipLevel()
 {
 }
 
+/*!
+    Constructs a mip level description with a \a image.
+
+    The \l{QImage::size()}{size} of \a image must match the size of the mip
+    level. For level 0 that is the \l{QRhiTexture::pixelSize()}{texture size}.
+
+    The bit depth of \a image must be compatible with the
+    \l{QRhiTexture::Format}{texture format}.
+
+    To describe a partial upload, call setSourceSize(), setSourceTopLeft(), or
+    setDestinationTopLeft() afterwards.
+ */
 QRhiTextureMipLevel::QRhiTextureMipLevel(const QImage &image)
     : m_image(image)
 {
 }
 
+/*!
+    Constructs a mip level description suitable for compressed textures. The
+    compressed data is specified in \a compressedData.
+ */
 QRhiTextureMipLevel::QRhiTextureMipLevel(const QByteArray &compressedData)
     : m_compressedData(compressedData)
 {
@@ -773,10 +895,17 @@ QRhiTextureMipLevel::QRhiTextureMipLevel(const QByteArray &compressedData)
     \brief Describes one layer (face for cubemaps) in a texture upload operation.
  */
 
+/*!
+    Constructs an empty texture layer description.
+ */
 QRhiTextureLayer::QRhiTextureLayer()
 {
 }
 
+/*!
+    Constructs a texture layer description with the specified list of \a
+    mipImages.
+ */
 QRhiTextureLayer::QRhiTextureLayer(const QVector<QRhiTextureMipLevel> &mipImages)
     : m_mipImages(mipImages)
 {
@@ -825,10 +954,17 @@ QRhiTextureLayer::QRhiTextureLayer(const QVector<QRhiTextureMipLevel> &mipImages
     \endcode
  */
 
+/*!
+    Constructs an empty texture upload description.
+ */
 QRhiTextureUploadDescription::QRhiTextureUploadDescription()
 {
 }
 
+/*!
+    Constructs a texture upload description with the specified list of \a
+    layers.
+ */
 QRhiTextureUploadDescription::QRhiTextureUploadDescription(const QVector<QRhiTextureLayer> &layers)
     : m_layers(layers)
 {
@@ -851,6 +987,9 @@ QRhiTextureUploadDescription::QRhiTextureUploadDescription(const QVector<QRhiTex
     destination textures, respectively. The behavior is undefined otherwise.
  */
 
+/*!
+    Constructs an empty texture copy description.
+ */
 QRhiTextureCopyDescription::QRhiTextureCopyDescription()
 {
 }
@@ -877,10 +1016,26 @@ QRhiTextureCopyDescription::QRhiTextureCopyDescription()
     multisample swapchain buffers however.
  */
 
+/*!
+    Constructs an empty texture readback description.
+
+    \note The source texture is set to null by default, which is still a valid
+    readback: it specifies that the backbuffer of the current swapchain is to
+    be read back. (current meaning the frame's target swapchain at the time of
+    committing the QRhiResourceUpdateBatch with the
+    \l{QRhiResourceUpdateBatch::readBackTexture()}{texture readback} on it)
+ */
 QRhiReadbackDescription::QRhiReadbackDescription()
 {
 }
 
+/*!
+    Constructs an texture readback description that specifies that level 0 of
+    layer 0 of \a texture is to be read back.
+
+    \note \a texture can also be null in which case this constructor is
+    identical to the argumentless variant.
+ */
 QRhiReadbackDescription::QRhiReadbackDescription(QRhiTexture *texture)
     : m_texture(texture)
 {

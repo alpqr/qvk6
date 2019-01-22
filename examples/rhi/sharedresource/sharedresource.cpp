@@ -394,8 +394,9 @@ void Window::releaseResources()
         m_sc = nullptr;
     }
 
+    // ### this is wrong
     if (activeRhiCount == 1) {
-        delete tex;
+        tex->releaseAndDestroy();
         tex = nullptr;
     }
     delete m_rhi;

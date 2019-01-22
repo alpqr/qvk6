@@ -88,6 +88,8 @@
 
 #include "../shared/cube.h"
 
+//#define USE_RSH
+
 static QBakedShader getShader(const QString &name)
 {
     QFile f(name);
@@ -335,6 +337,8 @@ Renderer::~Renderer()
 #endif
 }
 
+QRhiResourceSharingHost *rsh = nullptr;
+
 void Renderer::createRhi()
 {
     if (r)
@@ -342,9 +346,18 @@ void Renderer::createRhi()
 
     qDebug() << "renderer" << this << "creating rhi";
 
+#ifdef USE_RSH
+    qDebug("Using QRhiResourceSharingHost");
+    if (!rsh)
+        rsh = new QRhiResourceSharingHost;
+#endif
+
 #ifndef QT_NO_OPENGL
     if (graphicsApi == OpenGL) {
         QRhiGles2InitParams params;
+#ifdef USE_RSH
+        params.resourceSharingHost = rsh;
+#endif
         params.fallbackSurface = fallbackSurface;
         params.window = window;
         r = QRhi::create(QRhi::OpenGLES2, &params);
@@ -354,6 +367,9 @@ void Renderer::createRhi()
 #if QT_CONFIG(vulkan)
     if (graphicsApi == Vulkan) {
         QRhiVulkanInitParams params;
+#ifdef USE_RSH
+        params.resourceSharingHost = rsh;
+#endif
         params.inst = instance;
         params.window = window;
         r = QRhi::create(QRhi::Vulkan, &params);
@@ -363,6 +379,9 @@ void Renderer::createRhi()
 #ifdef Q_OS_WIN
     if (graphicsApi == D3D11) {
         QRhiD3D11InitParams params;
+#ifdef USE_RSH
+        params.resourceSharingHost = rsh;
+#endif
         r = QRhi::create(QRhi::D3D11, &params);
     }
 #endif
@@ -370,6 +389,9 @@ void Renderer::createRhi()
 #ifdef Q_OS_DARWIN
     if (graphicsApi == Metal) {
         QRhiMetalInitParams params;
+#ifdef USE_RSH
+        params.resourceSharingHost = rsh;
+#endif
         r = QRhi::create(QRhi::Metal, &params);
     }
 #endif
@@ -761,7 +783,7 @@ int main(int argc, char **argv)
 
     QPlainTextEdit *info = new QPlainTextEdit(
                 QLatin1String("This application tests rendering on a separate thread per window, with dedicated QRhi instances. "
-                              "No resources are shared across windows here. (QRhiResourceSharingHost is not used) "
+                              "No resources are shared across windows here. "
                               "\n\nThis is the same concept as the Qt Quick Scenegraph's threaded render loop. This should allow rendering to the different windows "
                               "without unintentionally throttling each other's threads."
                               "\n\nUsing API: ") + graphicsApiName());
@@ -793,6 +815,10 @@ int main(int argc, char **argv)
         delete wr.renderer;
         delete wr.window;
     }
+
+#ifdef USE_RSH
+    delete rsh;
+#endif
 
 #if QT_CONFIG(vulkan)
     delete instance;

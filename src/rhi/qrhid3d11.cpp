@@ -173,7 +173,25 @@ bool QRhiD3D11::create(QRhi::Flags flags)
 {
     Q_UNUSED(flags);
 
-    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+    // We do not support CrossThreadResourceSharing because the single
+    // immediate device context and/or DXGI blow up eventually when used from
+    // multiple threads, even if command submission is synchronized. So no need
+    // to lock and ignore rsh if there's already an associated QRhi on a
+    // different thread.
+    if (rsh) {
+        bool noRsh = false;
+        for (QThread *t : qAsConst(rsh->rhiThreads)) {
+            if (t != QThread::currentThread()) {
+                noRsh = true;
+                break;
+            }
+        }
+        if (noRsh) {
+            qWarning("Attempted to set a QRhiResourceSharingHost with QRhi instances on different threads when "
+                     "QRhi::CrossThreadResourceSharing is not supported. Resource sharing will be disabled.");
+            rsh = nullptr;
+        }
+    }
 
     uint devFlags = 0;
     if (debugLayer)
@@ -245,8 +263,10 @@ bool QRhiD3D11::create(QRhi::Flags flags)
     nativeHandlesStruct.dev = dev;
     nativeHandlesStruct.context = context;
 
-    if (rsh)
+    if (rsh) {
         rsh->rhiCount += 1;
+        rsh->rhiThreads.append(QThread::currentThread());
+    }
 
     return true;
 }
@@ -277,6 +297,7 @@ void QRhiD3D11::destroy()
 
     if (rsh) {
         rsh->rhiCount -= 1;
+        rsh->rhiThreads.removeOne(QThread::currentThread());
         if (rsh->rhiCount == 0) {
             if (rsh->d_d3d11.context) {
                 reinterpret_cast<ID3D11DeviceContext1 *>(rsh->d_d3d11.context)->Release();
@@ -381,6 +402,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::PrimitiveRestart:
         return true;
+    case QRhi::CrossThreadResourceSharing:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;
@@ -750,8 +773,6 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     Q_ASSERT(inFrame);
     inFrame = false;
 
-    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
-
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
     Q_ASSERT(contextState.currentSwapChain = swapChainD);
     const int currentFrameSlot = swapChainD->currentFrameSlot;
@@ -762,12 +783,11 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
     const bool recordTimestamps = tsDisjoint && tsStart && tsEnd && !swapChainD->timestampActive[currentFrameSlot];
 
-    // send all commands to the context. we already do the rsh lock ourselves
-    // hence lockWithRsh == false.
+    // send all commands to the context
     if (recordTimestamps)
-        executeCommandBuffer(&swapChainD->cb, swapChainD, false);
+        executeCommandBuffer(&swapChainD->cb, swapChainD);
     else
-        executeCommandBuffer(&swapChainD->cb, nullptr, false);
+        executeCommandBuffer(&swapChainD->cb);
 
     if (swapChainD->sampleDesc.Count > 1) {
         context->ResolveSubresource(swapChainD->tex[currentFrameSlot], 0,
@@ -781,9 +801,6 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
         context->End(tsDisjoint);
         swapChainD->timestampActive[currentFrameSlot] = true;
     }
-
-    // avoid keeping the mutex when issuing the Present
-    lock.unlock();
 
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
     // this must be done before the Present
@@ -1511,10 +1528,8 @@ void QRhiD3D11::setRenderTarget(QRhiRenderTarget *rt)
     context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rtD->rtv : nullptr, rtD->dsv);
 }
 
-void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain, bool lockWithRsh)
+void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain)
 {
-    QMutexLocker lock((lockWithRsh && rsh) ? &rsh->mtx : nullptr);
-
     quint32 stencilRef = 0;
     float blendConstants[] = { 1, 1, 1, 1 };
 

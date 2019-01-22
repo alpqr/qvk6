@@ -453,6 +453,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::PrimitiveRestart:
         return true;
+    case QRhi::CrossThreadResourceSharing:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

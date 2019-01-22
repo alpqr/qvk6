@@ -288,6 +288,7 @@ bool QRhiGles2::create(QRhi::Flags flags)
 
     if (rsh) {
         rsh->rhiCount += 1;
+        rsh->rhiThreads.append(QThread::currentThread());
         if (rshWantsContext)
             rsh->d_gles2.context = ctx;
     }
@@ -315,6 +316,7 @@ void QRhiGles2::destroy()
 
     if (rsh) {
         rsh->rhiCount -= 1;
+        rsh->rhiThreads.removeOne(QThread::currentThread());
         if (rsh->rhiCount == 0) {
             delete rsh->d_gles2.context;
             rsh->d_gles2.context = nullptr;
@@ -460,6 +462,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::PrimitiveRestart:
         return false; // say no to madness
+    case QRhi::CrossThreadResourceSharing:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

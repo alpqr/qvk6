@@ -49,7 +49,6 @@ hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
 res.sh.: example to show using same texture
-res.sh.: d3d context sync
 revise create() and importing external device objects
 revise structs in api
 primitive restart

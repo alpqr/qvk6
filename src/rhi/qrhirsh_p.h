@@ -58,6 +58,7 @@
 #include "qrhimetal.h"
 #endif
 
+#include <QThread>
 #include <QMutex>
 
 QT_BEGIN_NAMESPACE
@@ -69,6 +70,7 @@ public:
 
     QMutex mtx;
     int rhiCount = 0;
+    QVector<QThread *> rhiThreads;
 
     QRhiNullNativeHandles d_null;
 #ifndef QT_NO_OPENGL

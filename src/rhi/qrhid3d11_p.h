@@ -530,6 +530,7 @@ public:
     void executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain = nullptr);
     DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;
     void finishActiveReadbacks();
+    void reportLiveObjects(ID3D11Device *device);
 
     QRhiResourceSharingHostPrivate *rsh = nullptr;
     bool debugLayer = false;

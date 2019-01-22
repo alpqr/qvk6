@@ -294,7 +294,11 @@ void QRhiD3D11::destroy()
                 rsh->d_d3d11.context = nullptr;
             }
             if (rsh->d_d3d11.dev) {
-                reinterpret_cast<ID3D11Device *>(rsh->d_d3d11.dev)->Release();
+                ID3D11Device *rshDev = reinterpret_cast<ID3D11Device *>(rsh->d_d3d11.dev);
+#if 0
+                reportLiveObjects(rshDev); // "Refcount" > 0 means that object was not released correctly
+#endif
+                rshDev->Release();
                 rsh->d_d3d11.dev = nullptr;
             }
         }
@@ -303,6 +307,16 @@ void QRhiD3D11::destroy()
     if (dxgiFactory) {
         dxgiFactory->Release();
         dxgiFactory = nullptr;
+    }
+}
+
+void QRhiD3D11::reportLiveObjects(ID3D11Device *device)
+{
+    // this works only when params.enableDebugLayer was true
+    ID3D11Debug *debug;
+    if (SUCCEEDED(device->QueryInterface(IID_ID3D11Debug, reinterpret_cast<void **>(&debug)))) {
+        debug->ReportLiveDeviceObjects(D3D11_RLDO_DETAIL);
+        debug->Release();
     }
 }
 

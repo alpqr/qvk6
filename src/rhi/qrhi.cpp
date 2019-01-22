@@ -227,8 +227,8 @@ QT_BEGIN_NAMESPACE
 
     A QRhi instance can be created and used on any thread but all usage must be
     limited to that one single thread. When it comes to native objects, such as
-    OpenGL contexts, passed in in QRhiInitParams, it is up to the application
-    to ensure they are not misused by other threads.
+    OpenGL contexts, passed in via a QRhiNativeHandles subclass, it is up to
+    the application to ensure they are not misused by other threads.
 
     \sa {Qt Shader Tools}
  */
@@ -2535,11 +2535,6 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     facilitating the reuse of the device objects. With Direct3D 11 for example,
     it also performs synchronizing submission to the device context (of which
     there is only one, regardless of the number of threads submitting to it).
-
-    \note There is no further synchronization performed for resources like
-    buffers or textures. If the QRhi instances operate on different threads, it
-    is up to those threads to ensure the QRhiResource usages on the threads
-    are done as appropriate for the underlying graphics APIs.
 
     \note The QRhiResourceSharingHost can be created on a thread that is
     different than the threads on which the associated QRhi instances will be

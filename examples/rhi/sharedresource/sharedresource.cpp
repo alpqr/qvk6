@@ -48,11 +48,8 @@
 **
 ****************************************************************************/
 
-// Adapted from hellominimalcrossgfxtriangle with the frame rendering stripped out.
-// Include this file and implement Window::customInit, release and render.
-// Debug/validation layer is enabled for D3D and Vulkan.
-
 #include <QGuiApplication>
+
 #include <QCommandLineParser>
 #include <QWindow>
 #include <QPlatformSurfaceEvent>
@@ -60,13 +57,10 @@
 
 #include <QBakedShader>
 #include <QFile>
-#include <QRhiProfiler>
 
-#include <QRhiNullInitParams>
-
+#include <QOffscreenSurface>
 #ifndef QT_NO_OPENGL
 #include <QRhiGles2InitParams>
-#include <QOffscreenSurface>
 #endif
 
 #if QT_CONFIG(vulkan)
@@ -82,31 +76,19 @@
 #include <QRhiMetalInitParams>
 #endif
 
-QBakedShader getShader(const QString &name)
-{
-    QFile f(name);
-    if (f.open(QIODevice::ReadOnly))
-        return QBakedShader::fromSerialized(f.readAll());
-
-    return QBakedShader();
-}
-
 enum GraphicsApi
 {
-    Null,
     OpenGL,
     Vulkan,
     D3D11,
     Metal
 };
 
-GraphicsApi graphicsApi;
+static GraphicsApi graphicsApi;
 
-QString graphicsApiName()
+static QString graphicsApiName()
 {
     switch (graphicsApi) {
-    case Null:
-        return QLatin1String("Null (no output)");
     case OpenGL:
         return QLatin1String("OpenGL 2.x");
     case Vulkan:
@@ -121,14 +103,64 @@ QString graphicsApiName()
     return QString();
 }
 
-QRhi::Flags rhiFlags = QRhi::EnableDebugMarkers;
-int sampleCount = 1;
-QRhiSwapChain::Flags scFlags = 0;
+#if QT_CONFIG(vulkan)
+QVulkanInstance *vkinst = nullptr;
+QRhiResourceSharingHost *rsh = nullptr;
+QRhiTexture *tex = nullptr;
+#endif
+
+void createRhi(QWindow *window, QRhi **rhi, QOffscreenSurface **fallbackSurface)
+{
+    // This is what makes the difference here - create a single
+    // QRhiResourceSharingHost and associate all QRhis with it.
+    if (!rsh)
+        rsh = new QRhiResourceSharingHost;
+
+#ifndef QT_NO_OPENGL
+    if (graphicsApi == OpenGL) {
+        *fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
+        QRhiGles2InitParams params;
+        params.resourceSharingHost = rsh;
+        params.fallbackSurface = *fallbackSurface;
+        params.window = window;
+        *rhi = QRhi::create(QRhi::OpenGLES2, &params);
+    }
+#endif
+
+#if QT_CONFIG(vulkan)
+    if (graphicsApi == Vulkan) {
+        QRhiVulkanInitParams params;
+        params.resourceSharingHost = rsh;
+        params.inst = vkinst;
+        params.window = window;
+        *rhi = QRhi::create(QRhi::Vulkan, &params);
+    }
+#endif
+
+#ifdef Q_OS_WIN
+    if (graphicsApi == D3D11) {
+        QRhiD3D11InitParams params;
+        params.resourceSharingHost = rsh;
+        *rhi = QRhi::create(QRhi::D3D11, &params);
+    }
+#endif
+
+#ifdef Q_OS_DARWIN
+    if (graphicsApi == Metal) {
+        QRhiMetalInitParams params;
+        params.resourceSharingHost = rsh;
+        *rhi = QRhi::create(QRhi::Metal, &params);
+    }
+#endif
+
+    if (!*rhi)
+        qFatal("Failed to create RHI backend");
+}
 
 class Window : public QWindow
 {
 public:
-    Window();
+    Window(const QString &title, const QColor &bgColor);
     ~Window();
 
 protected:
@@ -138,42 +170,45 @@ protected:
     void releaseSwapChain();
     void render();
 
-    void customInit();
-    void customRelease();
-    void customRender();
-
     void exposeEvent(QExposeEvent *) override;
     bool event(QEvent *) override;
+
+    QRhi *m_rhi = nullptr;
+    QOffscreenSurface *m_fallbackSurface = nullptr;
+    QColor m_bgColor;
 
     bool m_running = false;
     bool m_notExposed = false;
     bool m_newlyExposed = false;
 
-    QRhi *m_r = nullptr;
+    QMatrix4x4 m_proj;
+    QVector<QRhiResource *> m_releasePool;
+
     bool m_hasSwapChain = false;
     QRhiSwapChain *m_sc = nullptr;
     QRhiRenderBuffer *m_ds = nullptr;
     QRhiRenderPassDescriptor *m_rp = nullptr;
 
-    QMatrix4x4 m_proj;
-
-    QElapsedTimer m_timer;
-    int m_frameCount;
-
-#ifndef QT_NO_OPENGL
-    QOffscreenSurface *m_fallbackSurface = nullptr;
-#endif
+    QRhiResourceUpdateBatch *initialUpdates = nullptr;
+    QRhiBuffer *vbuf = nullptr;
+    QRhiBuffer *ibuf = nullptr;
+    QRhiBuffer *ubuf = nullptr;
+    QRhiSampler *sampler = nullptr;
+    QRhiShaderResourceBindings *srb = nullptr;
+    QRhiGraphicsPipeline *ps = nullptr;
+    bool ownsTex = false;
 };
 
-Window::Window()
+Window::Window(const QString &title, const QColor &bgColor)
+    : m_bgColor(bgColor)
 {
-    // Tell the platform plugin what we want.
     switch (graphicsApi) {
     case OpenGL:
         setSurfaceType(OpenGLSurface);
         break;
     case Vulkan:
         setSurfaceType(VulkanSurface);
+        setVulkanInstance(vkinst);
         break;
     case D3D11:
         setSurfaceType(OpenGLSurface); // not a typo
@@ -186,6 +221,9 @@ Window::Window()
     default:
         break;
     }
+
+    resize(800, 600);
+    setTitle(title);
 }
 
 Window::~Window()
@@ -236,92 +274,131 @@ bool Window::event(QEvent *e)
     return QWindow::event(e);
 }
 
+static float quadVert[] =
+{
+  -0.5f,   0.5f,   0.0f, 0.0f,
+  -0.5f,  -0.5f,   0.0f, 1.0f,
+  0.5f,   -0.5f,   1.0f, 1.0f,
+  0.5f,   0.5f,    1.0f, 0.0f
+};
+
+static quint16 quadIndex[] =
+{
+    0, 1, 2, 0, 2, 3
+};
+
+QBakedShader getShader(const QString &name)
+{
+    QFile f(name);
+    if (f.open(QIODevice::ReadOnly))
+        return QBakedShader::fromSerialized(f.readAll());
+
+    return QBakedShader();
+}
+
 void Window::init()
 {
-    if (graphicsApi == Null) {
-        QRhiNullInitParams params;
-        m_r = QRhi::create(QRhi::Null, &params, rhiFlags);
-    }
+    createRhi(this, &m_rhi, &m_fallbackSurface);
 
-#ifndef QT_NO_OPENGL
-    if (graphicsApi == OpenGL) {
-        m_fallbackSurface = QRhiGles2InitParams::newFallbackSurface();
-        QRhiGles2InitParams params;
-        params.fallbackSurface = m_fallbackSurface;
-        params.window = this;
-        m_r = QRhi::create(QRhi::OpenGLES2, &params, rhiFlags);
-    }
-#endif
-
-#if QT_CONFIG(vulkan)
-    if (graphicsApi == Vulkan) {
-        QRhiVulkanInitParams params;
-        params.inst = vulkanInstance();
-        params.window = this;
-        m_r = QRhi::create(QRhi::Vulkan, &params, rhiFlags);
-    }
-#endif
-
-#ifdef Q_OS_WIN
-    if (graphicsApi == D3D11) {
-        QRhiD3D11InitParams params;
-        params.enableDebugLayer = true;
-        m_r = QRhi::create(QRhi::D3D11, &params, rhiFlags);
-    }
-#endif
-
-#ifdef Q_OS_DARWIN
-    if (graphicsApi == Metal) {
-        QRhiMetalInitParams params;
-        m_r = QRhi::create(QRhi::Metal, &params, rhiFlags);
-    }
-#endif
-
-    if (!m_r)
-        qFatal("Failed to create RHI backend");
-
-    // now onto the backend-independent init
-
-    m_sc = m_r->newSwapChain();
-    // allow depth-stencil, although we do not actually enable depth test/write for the triangle
-    m_ds = m_r->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
-                                QSize(), // no need to set the size yet
-                                sampleCount,
-                                QRhiRenderBuffer::UsedWithSwapChainOnly);
+    m_sc = m_rhi->newSwapChain();
+    m_ds = m_rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
+                                  QSize(), // no need to set the size yet
+                                  1,
+                                  QRhiRenderBuffer::UsedWithSwapChainOnly);
+    m_releasePool << m_ds;
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
-    m_sc->setSampleCount(sampleCount);
-    m_sc->setFlags(scFlags);
     m_rp = m_sc->newCompatibleRenderPassDescriptor();
+    m_releasePool << m_rp;
     m_sc->setRenderPassDescriptor(m_rp);
 
-    customInit();
+    vbuf = m_rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(quadVert));
+    m_releasePool << vbuf;
+    vbuf->build();
+
+    ibuf = m_rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::IndexBuffer, sizeof(quadIndex));
+    m_releasePool << ibuf;
+    ibuf->build();
+
+    ubuf = m_rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 68);
+    ubuf->build();
+    m_releasePool << ubuf;
+
+    QImage image;
+    if (!tex) {
+        ownsTex = true;
+        image.load(QLatin1String(":/qt256.png"));
+        tex = m_rhi->newTexture(QRhiTexture::RGBA8, image.size());
+        tex->build();
+    } else {
+        ownsTex = false;
+    }
+
+    sampler = m_rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
+                                QRhiSampler::ClampToEdge, QRhiSampler::ClampToEdge);
+    m_releasePool << sampler;
+    sampler->build();
+
+    srb = m_rhi->newShaderResourceBindings();
+    m_releasePool << srb;
+    srb->setBindings({
+        QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage | QRhiShaderResourceBinding::FragmentStage, ubuf),
+        QRhiShaderResourceBinding::sampledTexture(1, QRhiShaderResourceBinding::FragmentStage, tex, sampler)
+    });
+    srb->build();
+
+    ps = m_rhi->newGraphicsPipeline();
+    m_releasePool << ps;
+    ps->setShaderStages({
+        { QRhiGraphicsShaderStage::Vertex, getShader(QLatin1String(":/texture.vert.qsb")) },
+        { QRhiGraphicsShaderStage::Fragment, getShader(QLatin1String(":/texture.frag.qsb")) }
+    });
+    QRhiVertexInputLayout inputLayout;
+    inputLayout.setBindings({
+        { 4 * sizeof(float) }
+    });
+    inputLayout.setAttributes({
+        { 0, 0, QRhiVertexInputAttribute::Float2, 0 },
+        { 0, 1, QRhiVertexInputAttribute::Float2, 2 * sizeof(float) }
+    });
+    ps->setVertexInputLayout(inputLayout);
+    ps->setShaderResourceBindings(srb);
+    ps->setRenderPassDescriptor(m_rp);
+    ps->build();
+
+    initialUpdates = m_rhi->nextResourceUpdateBatch();
+    initialUpdates->uploadStaticBuffer(vbuf, 0, sizeof(quadVert), quadVert);
+    initialUpdates->uploadStaticBuffer(ibuf, quadIndex);
+    quint32 flip = 0;
+    initialUpdates->updateDynamicBuffer(ubuf, 64, 4, &flip);
+
+    if (ownsTex)
+        initialUpdates->uploadTexture(tex, image);
 }
 
 void Window::releaseResources()
 {
-    customRelease();
+    for (QRhiResource *res : m_releasePool)
+        res->releaseAndDestroy();
 
-    if (m_rp) {
-        m_rp->releaseAndDestroy();
-        m_rp = nullptr;
+    m_releasePool.clear();
+
+    if (ownsTex) {
+        delete tex;
+        tex = nullptr;
+        ownsTex = false;
     }
 
-    if (m_ds) {
-        m_ds->releaseAndDestroy();
-        m_ds = nullptr;
+    if (m_sc) {
+        m_sc->releaseAndDestroy();
+        m_sc = nullptr;
     }
 
-    delete m_sc;
-    m_sc = nullptr;
+    delete m_rhi;
+    m_rhi = nullptr;
 
-    delete m_r;
-    m_r = nullptr;
-
-#ifndef QT_NO_OPENGL
     delete m_fallbackSurface;
     m_fallbackSurface = nullptr;
-#endif
 }
 
 void Window::resizeSwapChain()
@@ -329,14 +406,11 @@ void Window::resizeSwapChain()
     const QSize outputSize = m_sc->surfacePixelSize();
 
     m_ds->setPixelSize(outputSize);
-    m_ds->build(); // == m_ds->release(); m_ds->build();
+    m_ds->build();
 
     m_hasSwapChain = m_sc->buildOrResize();
 
-    m_frameCount = 0;
-    m_timer.restart();
-
-    m_proj = m_r->clipSpaceCorrMatrix();
+    m_proj = m_rhi->clipSpaceCorrMatrix();
     m_proj.perspective(45.0f, outputSize.width() / (float) outputSize.height(), 0.01f, 1000.0f);
     m_proj.translate(0, 0, -4);
 }
@@ -364,65 +438,48 @@ void Window::render()
         m_newlyExposed = false;
     }
 
-    // Start a new frame. This is where we block when too far ahead of
-    // GPU/present, and that's what throttles the thread to the refresh rate.
-    // (except for OpenGL where it happens either in endFrame or somewhere else
-    // depending on the GL implementation)
-    QRhi::FrameOpResult r = m_r->beginFrame(m_sc);
-    if (r == QRhi::FrameOpSwapChainOutOfDate) {
+    QRhi::FrameOpResult result = m_rhi->beginFrame(m_sc);
+    if (result == QRhi::FrameOpSwapChainOutOfDate) {
         resizeSwapChain();
         if (!m_hasSwapChain)
             return;
-        r = m_r->beginFrame(m_sc);
+        result = m_rhi->beginFrame(m_sc);
     }
-    if (r != QRhi::FrameOpSuccess) {
+    if (result != QRhi::FrameOpSuccess) {
         requestUpdate();
         return;
     }
 
-    m_frameCount += 1;
-    if (m_timer.elapsed() > 1000) {
-        if (rhiFlags.testFlag(QRhi::EnableProfiling)) {
-            const QRhiProfiler::CpuTime ff = m_r->profiler()->frameToFrameTimes(m_sc);
-            const QRhiProfiler::CpuTime be = m_r->profiler()->frameBuildTimes(m_sc);
-            const QRhiProfiler::GpuTime gp = m_r->profiler()->gpuFrameTimes(m_sc);
-            if (m_r->isFeatureSupported(QRhi::Timestamps)) {
-                qDebug("ca. %d fps. "
-                       "frame-to-frame: min %lld max %lld avg %f. "
-                       "frame build: min %lld max %lld avg %f. "
-                       "gpu frame time: min %f max %f avg %f",
-                       m_frameCount,
-                       ff.minTime, ff.maxTime, ff.avgTime,
-                       be.minTime, be.maxTime, be.avgTime,
-                       gp.minTime, gp.maxTime, gp.avgTime);
-            } else {
-                qDebug("ca. %d fps. "
-                       "frame-to-frame: min %lld max %lld avg %f. "
-                       "frame build: min %lld max %lld avg %f. ",
-                       m_frameCount,
-                       ff.minTime, ff.maxTime, ff.avgTime,
-                       be.minTime, be.maxTime, be.avgTime);
-            }
-        } else {
-            qDebug("ca. %d fps", m_frameCount);
-        }
+    QRhiCommandBuffer *cb = m_sc->currentFrameCommandBuffer();
+    const QSize outputSizeInPixels = m_sc->currentPixelSize();
 
-        m_timer.restart();
-        m_frameCount = 0;
+    QRhiResourceUpdateBatch *u = m_rhi->nextResourceUpdateBatch();
+    if (initialUpdates) {
+        u->merge(initialUpdates);
+        initialUpdates->release();
+        initialUpdates = nullptr;
     }
 
-    customRender();
+    QMatrix4x4 mvp = m_proj;
+    mvp.scale(2.5f);
+    u->updateDynamicBuffer(ubuf, 0, 64, mvp.constData());
 
-    m_r->endFrame(m_sc);
 
-#ifdef Q_OS_DARWIN
-    if (!scFlags.testFlag(QRhiSwapChain::NoVSync))
-        requestUpdate(); // CVDisplayLink
-    else
-        QCoreApplication::postEvent(this, new QEvent(QEvent::UpdateRequest));
-#else
-    QCoreApplication::postEvent(this, new QEvent(QEvent::UpdateRequest));
-#endif
+    cb->beginPass(m_sc->currentFrameRenderTarget(),
+                  { float(m_bgColor.redF()), float(m_bgColor.greenF()), float(m_bgColor.blueF()), 1.0f },
+                  { 1.0f, 0 },
+                  u);
+
+    cb->setGraphicsPipeline(ps);
+    cb->setViewport({ 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
+    cb->setVertexInput(0, { { vbuf, 0 } }, ibuf, 0, QRhiCommandBuffer::IndexUInt16);
+    cb->drawIndexed(6);
+
+    cb->endPass();
+
+    m_rhi->endFrame(m_sc);
+
+    requestUpdate();
 }
 
 int main(int argc, char **argv)
@@ -430,7 +487,6 @@ int main(int argc, char **argv)
     QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QGuiApplication app(argc, argv);
 
-    // Defaults.
 #if defined(Q_OS_WIN)
     graphicsApi = D3D11;
 #elif defined(Q_OS_DARWIN)
@@ -441,11 +497,8 @@ int main(int argc, char **argv)
     graphicsApi = OpenGL;
 #endif
 
-    // Allow overriding via the command line.
     QCommandLineParser cmdLineParser;
     cmdLineParser.addHelpOption();
-    QCommandLineOption nullOption({ "n", "null" }, QLatin1String("Null"));
-    cmdLineParser.addOption(nullOption);
     QCommandLineOption glOption({ "g", "opengl" }, QLatin1String("OpenGL (2.x)"));
     cmdLineParser.addOption(glOption);
     QCommandLineOption vkOption({ "v", "vulkan" }, QLatin1String("Vulkan"));
@@ -455,8 +508,6 @@ int main(int argc, char **argv)
     QCommandLineOption mtlOption({ "m", "metal" }, QLatin1String("Metal"));
     cmdLineParser.addOption(mtlOption);
     cmdLineParser.process(app);
-    if (cmdLineParser.isSet(nullOption))
-        graphicsApi = Null;
     if (cmdLineParser.isSet(glOption))
         graphicsApi = OpenGL;
     if (cmdLineParser.isSet(vkOption))
@@ -469,55 +520,48 @@ int main(int argc, char **argv)
     qDebug("Selected graphics API is %s", qPrintable(graphicsApiName()));
     qDebug("This is a multi-api example, use command line arguments to override:\n%s", qPrintable(cmdLineParser.helpText()));
 
-#ifdef EXAMPLEFW_PREINIT
-    void preInit();
-    preInit();
-#endif
-
-    // OpenGL specifics.
-    QSurfaceFormat fmt;
-    fmt.setDepthBufferSize(24);
-    fmt.setStencilBufferSize(8);
-    if (sampleCount > 1)
-        fmt.setSamples(sampleCount);
-    if (scFlags.testFlag(QRhiSwapChain::NoVSync))
-        fmt.setSwapInterval(0);
-    QSurfaceFormat::setDefaultFormat(fmt);
-
-    // Vulkan setup.
 #if QT_CONFIG(vulkan)
-    QVulkanInstance inst;
+    vkinst = new QVulkanInstance;
     if (graphicsApi == Vulkan) {
 #ifndef Q_OS_ANDROID
-        inst.setLayers(QByteArrayList() << "VK_LAYER_LUNARG_standard_validation");
+        vkinst->setLayers({ "VK_LAYER_LUNARG_standard_validation" });
 #else
-        inst.setLayers(QByteArrayList()
-                       << "VK_LAYER_GOOGLE_threading"
-                       << "VK_LAYER_LUNARG_parameter_validation"
-                       << "VK_LAYER_LUNARG_object_tracker"
-                       << "VK_LAYER_LUNARG_core_validation"
-                       << "VK_LAYER_LUNARG_image"
-                       << "VK_LAYER_LUNARG_swapchain"
-                       << "VK_LAYER_GOOGLE_unique_objects");
+        vkinst->setLayers(QByteArrayList()
+                          << "VK_LAYER_GOOGLE_threading"
+                          << "VK_LAYER_LUNARG_parameter_validation"
+                          << "VK_LAYER_LUNARG_object_tracker"
+                          << "VK_LAYER_LUNARG_core_validation"
+                          << "VK_LAYER_LUNARG_image"
+                          << "VK_LAYER_LUNARG_swapchain"
+                          << "VK_LAYER_GOOGLE_unique_objects");
 #endif
-        inst.setExtensions(QByteArrayList()
-                           << "VK_KHR_get_physical_device_properties2");
-        if (!inst.create()) {
+        if (!vkinst->create()) {
             qWarning("Failed to create Vulkan instance, switching to OpenGL");
             graphicsApi = OpenGL;
         }
     }
 #endif
 
-    // Create and show the window.
-    Window w;
-#if QT_CONFIG(vulkan)
-    if (graphicsApi == Vulkan)
-        w.setVulkanInstance(&inst);
-#endif
-    w.resize(1280, 720);
-    w.setTitle(QCoreApplication::applicationName() + QLatin1String(" - ") + graphicsApiName());
-    w.show();
+    int result;
+    // lifetime: make sure the QWindows are gone when we move on to destroying
+    // the Vulkan instance and such.
+    {
+        Window windowA(QLatin1String("QRhi #1"), Qt::green);
+        Window windowB(QLatin1String("QRhi #2"), Qt::blue);
 
-    return app.exec();
+        windowA.show();
+        windowB.show();
+
+        windowA.setPosition(windowA.position() - QPoint(200, 200));
+        windowB.setPosition(windowB.position() + QPoint(200, 200));
+
+        result = app.exec();
+    }
+
+    delete rsh;
+#if QT_CONFIG(vulkan)
+    delete vkinst;
+#endif
+
+    return result;
 }

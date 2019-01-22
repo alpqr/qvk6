@@ -760,8 +760,8 @@ int main(int argc, char **argv)
     QVBoxLayout *layout = new QVBoxLayout(&w);
 
     QPlainTextEdit *info = new QPlainTextEdit(
-                QLatin1String("This application tests rendering on a separate thread per window, with dedicated QRhi instances. " // ### still sharing the same graphics device where applicable
-                              "No resources are shared across windows here. "
+                QLatin1String("This application tests rendering on a separate thread per window, with dedicated QRhi instances. "
+                              "No resources are shared across windows here. (QRhiResourceSharingHost is not used) "
                               "\n\nThis is the same concept as the Qt Quick Scenegraph's threaded render loop. This should allow rendering to the different windows "
                               "without unintentionally throttling each other's threads."
                               "\n\nUsing API: ") + graphicsApiName());

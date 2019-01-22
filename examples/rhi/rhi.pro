@@ -12,6 +12,7 @@ SUBDIRS += \
     multiwindow_threaded \
     imguidemo \
     triquadcube \
+    sharedresource \
     offscreen
 
 qtConfig(vulkan) {

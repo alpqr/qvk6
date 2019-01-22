@@ -1,4 +1,8 @@
-multiple qrhis on threads with shared resources - how
+res.sh.: reuse device / create sharing context
+res.sh.: example to show using same texture
+res.sh.: example to show read/write same texture
+res.sh.: d3d context sync
+res.sh.: exercise it in multiwindow_threaded too
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb

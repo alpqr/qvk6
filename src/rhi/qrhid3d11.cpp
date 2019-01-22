@@ -92,17 +92,6 @@ QT_BEGIN_NAMESPACE
     \note Regardless of using an imported or a QRhi-created device context, the
     \c ID3D11DeviceContext1 interface (Direct3D 11.1) must be supported.
     Initialization will fail otherwise.
-
-    \note Advanced usages involving multiple threads should be aware of the
-    differences in OpenGL and Direct3D when it comes to how threading works
-    with contexts and device contexts. There can be multiple QOpenGLContext
-    instances and one of those can be current on each thread at a time,
-    assuming that one context is not current on any other threads. Direct 3D
-    however has just one (immediate) device context per device and it is not
-    thread local. Rather, the same device context allows command submission
-    from multiple threads, but those threads then need to synchronize their
-    operations between themselves in order to not to interfere with each others
-    commands on the context.
  */
 
 /*!

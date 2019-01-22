@@ -362,11 +362,6 @@ private:
     int curBinding = -1;
 };
 
-class Q_RHI_PRIVATE_EXPORT QRhiResourceSharingHostPrivate
-{
-public:
-};
-
 QT_END_NAMESPACE
 
 #endif

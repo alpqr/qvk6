@@ -9,6 +9,7 @@ HEADERS += \
     qtrhiglobal_p.h \
     qrhi.h \
     qrhi_p.h \
+    qrhirsh_p.h \
     qrhiprofiler.h \
     qrhiprofiler_p.h \
     qrhinull.h \

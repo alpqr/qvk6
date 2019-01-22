@@ -105,6 +105,7 @@ static QString graphicsApiName()
 
 #if QT_CONFIG(vulkan)
 QVulkanInstance *vkinst = nullptr;
+int activeRhiCount = 0;
 QRhiResourceSharingHost *rsh = nullptr;
 QRhiTexture *tex = nullptr;
 #endif
@@ -196,7 +197,6 @@ protected:
     QRhiSampler *sampler = nullptr;
     QRhiShaderResourceBindings *srb = nullptr;
     QRhiGraphicsPipeline *ps = nullptr;
-    bool ownsTex = false;
 };
 
 Window::Window(const QString &title, const QColor &bgColor)
@@ -299,6 +299,7 @@ QBakedShader getShader(const QString &name)
 void Window::init()
 {
     createRhi(this, &m_rhi, &m_fallbackSurface);
+    ++activeRhiCount;
 
     m_sc = m_rhi->newSwapChain();
     m_ds = m_rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil,
@@ -325,13 +326,12 @@ void Window::init()
     m_releasePool << ubuf;
 
     QImage image;
+    bool newTex = false;
     if (!tex) {
-        ownsTex = true;
+        newTex = true;
         image.load(QLatin1String(":/qt256.png"));
         tex = m_rhi->newTexture(QRhiTexture::RGBA8, image.size());
         tex->build();
-    } else {
-        ownsTex = false;
     }
 
     sampler = m_rhi->newSampler(QRhiSampler::Linear, QRhiSampler::Linear, QRhiSampler::None,
@@ -372,7 +372,7 @@ void Window::init()
     quint32 flip = 0;
     initialUpdates->updateDynamicBuffer(ubuf, 64, 4, &flip);
 
-    if (ownsTex)
+    if (newTex)
         initialUpdates->uploadTexture(tex, image);
 }
 
@@ -383,19 +383,18 @@ void Window::releaseResources()
 
     m_releasePool.clear();
 
-    if (ownsTex) {
-        delete tex;
-        tex = nullptr;
-        ownsTex = false;
-    }
-
     if (m_sc) {
         m_sc->releaseAndDestroy();
         m_sc = nullptr;
     }
 
+    if (activeRhiCount == 1) {
+        delete tex;
+        tex = nullptr;
+    }
     delete m_rhi;
     m_rhi = nullptr;
+    --activeRhiCount;
 
     delete m_fallbackSurface;
     m_fallbackSurface = nullptr;

@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhi_p.h"
+#include "qrhirsh_p.h"
 #include <qmath.h>
 
 #include "qrhinull_p.h"
@@ -2523,9 +2524,8 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     Sharing the same device means that when two or more QRhi instances have the
     same QhiResourceSharingHost set, there will only be one native graphics
     device object, such as, \c VkDevice, \c MTLDevice, or \c ID3D11Device,
-    created, and that device will be available as long as the
-    QRhiResourceSharingHost is alive, thus avoiding lifetime and ownership
-    issues.
+    created, and that device will be available as long as any of the associated
+    QRhi instances are alive, thus avoiding lifetime and ownership issues.
 
     This makes the underlying graphics resources of QRhiResource subclasses
     such as QRhiTexture available to all the QRhi instances that use the same
@@ -2539,10 +2539,9 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     \note The QRhiResourceSharingHost can be created on a thread that is
     different than the threads on which the associated QRhi instances will be
     created. It is however up to the application to organize those threads in a
-    way that the construction and destruction of the QRhiResourceSharingHost is
-    performed (and completed) before and after all associated QRhi instances
-    and created and destroyed, respectively.
-  */
+    way that the QRhiResourceSharingHost is only destroyed after all associated
+    QRhi instances have been fully destroyed.
+ */
 
 /*!
     Constructs a new QRhiResourceSharingHost.

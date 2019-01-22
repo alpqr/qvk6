@@ -1120,6 +1120,7 @@ public:
 private:
     Q_DISABLE_COPY(QRhiResourceSharingHost)
     QRhiResourceSharingHostPrivate *d;
+    friend class QRhiResourceSharingHostPrivate;
 };
 
 struct Q_RHI_EXPORT QRhiInitParams

@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhigles2_p.h"
+#include "qrhirsh_p.h"
 #include <QWindow>
 #include <QOffscreenSurface>
 #include <QOpenGLContext>
@@ -190,6 +191,9 @@ QOffscreenSurface *QRhiGles2InitParams::newFallbackSurface()
 QRhiGles2::QRhiGles2(QRhiGles2InitParams *params, QRhiGles2NativeHandles *importDevice)
     : ofr(this)
 {
+    if (params->resourceSharingHost)
+        rsh = QRhiResourceSharingHostPrivate::get(params->resourceSharingHost);
+
     fallbackSurface = params->fallbackSurface;
     maybeWindow = params->window; // may be null
 
@@ -232,9 +236,24 @@ bool QRhiGles2::create(QRhi::Flags flags)
     Q_UNUSED(flags);
     Q_ASSERT(fallbackSurface);
 
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
+    QOpenGLContext *shareContext = nullptr;
+    bool rshWantsContext = false;
+    // Now we either need to share with the rsh's context, or, if there is
+    // context in the rsh yet, store the new context there as well.
+    if (rsh) {
+        if (rsh->d_gles2.context)
+            shareContext = rsh->d_gles2.context;
+        else
+            rshWantsContext = true;
+    }
+
     if (!importedContext) {
         ctx = new QOpenGLContext;
         ctx->setFormat(qrhigles2_effectiveFormat());
+        if (shareContext)
+            ctx->setShareContext(shareContext);
         if (!ctx->create()) {
             qWarning("QRhiGles2: Failed to create context");
             delete ctx;
@@ -267,6 +286,12 @@ bool QRhiGles2::create(QRhi::Flags flags)
 
     nativeHandlesStruct.context = ctx;
 
+    if (rsh) {
+        rsh->rhiCount += 1;
+        if (rshWantsContext)
+            rsh->d_gles2.context = ctx;
+    }
+
     return true;
 }
 
@@ -280,10 +305,17 @@ void QRhiGles2::destroy()
 
     f = nullptr;
 
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     if (!importedContext) {
-        delete ctx;
-        ctx = nullptr;
+        if (!rsh || rsh->rhiCount == 1) {
+            delete ctx;
+            ctx = nullptr;
+        }
     }
+
+    if (rsh)
+        rsh->rhiCount -= 1;
 }
 
 // Strictly speaking this is not necessary since we could do the deletes in

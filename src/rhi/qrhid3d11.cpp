@@ -264,6 +264,7 @@ bool QRhiD3D11::create(QRhi::Flags flags)
     nativeHandlesStruct.context = context;
 
     if (rsh) {
+        qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances", rsh, rsh->rhiCount);
         rsh->rhiCount += 1;
         rsh->rhiThreads.append(QThread::currentThread());
     }

@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhivulkan_p.h"
+#include "qrhirsh_p.h"
 
 #define VMA_IMPLEMENTATION
 #define VMA_STATIC_VULKAN_FUNCTIONS 0
@@ -254,6 +255,9 @@ static inline VmaAllocator toVmaAllocator(QVkAllocator a)
 QRhiVulkan::QRhiVulkan(QRhiVulkanInitParams *params, QRhiVulkanNativeHandles *importDevice)
     : ofr(this)
 {
+    if (params->resourceSharingHost)
+        rsh = QRhiResourceSharingHostPrivate::get(params->resourceSharingHost);
+
     inst = params->inst;
     maybeWindow = params->window; // may be null
 
@@ -284,11 +288,27 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     Q_UNUSED(flags);
     Q_ASSERT(inst);
 
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     globalVulkanInstance = inst; // assume this will not change during the lifetime of the entire application
 
     f = inst->functions();
 
-    if (!importedDevice) {
+    bool rshWantsDevice = false;
+    if (rsh) {
+        if (rsh->d_vulkan.dev) {
+            physDev = rsh->d_vulkan.physDev;
+            dev = rsh->d_vulkan.dev;
+            gfxQueueFamilyIdx = rsh->d_vulkan.gfxQueueFamilyIdx;
+            gfxQueue = rsh->d_vulkan.gfxQueue;
+            cmdPool = rsh->d_vulkan.cmdPool;
+            allocator = rsh->d_vulkan.vmemAllocator;
+        } else {
+            rshWantsDevice = true;
+        }
+    }
+
+    if (!importedDevice && (!rsh || rshWantsDevice)) {
         uint32_t devCount = 0;
         f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, nullptr);
         qDebug("%d physical devices", devCount);
@@ -399,7 +419,7 @@ bool QRhiVulkan::create(QRhi::Flags flags)
 
     df = inst->deviceFunctions(dev);
 
-    if (!importedCmdPool) {
+    if (!importedCmdPool && (!rsh || rshWantsDevice)) {
         VkCommandPoolCreateInfo poolInfo;
         memset(&poolInfo, 0, sizeof(poolInfo));
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -423,7 +443,7 @@ bool QRhiVulkan::create(QRhi::Flags flags)
            VK_VERSION_MINOR(physDevProperties.driverVersion),
            VK_VERSION_PATCH(physDevProperties.driverVersion));
 
-    if (!importedAllocator) {
+    if (!importedAllocator && (!rsh || rshWantsDevice)) {
         VmaVulkanFunctions afuncs;
         afuncs.vkGetPhysicalDeviceProperties = wrap_vkGetPhysicalDeviceProperties;
         afuncs.vkGetPhysicalDeviceMemoryProperties = wrap_vkGetPhysicalDeviceMemoryProperties;
@@ -490,6 +510,14 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     nativeHandlesStruct.cmdPool = cmdPool;
     nativeHandlesStruct.vmemAllocator = allocator;
 
+    if (rsh) {
+        qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances", rsh, rsh->rhiCount);
+        rsh->rhiCount += 1;
+        rsh->rhiThreads.append(QThread::currentThread());
+        if (rshWantsDevice)
+            rsh->d_vulkan = nativeHandlesStruct;
+    }
+
     return true;
 }
 
@@ -529,23 +557,41 @@ void QRhiVulkan::destroy()
     }
 
     if (!importedAllocator && allocator) {
-        vmaDestroyAllocator(toVmaAllocator(allocator));
+        if (!rsh || allocator != rsh->d_vulkan.vmemAllocator)
+            vmaDestroyAllocator(toVmaAllocator(allocator));
         allocator = nullptr;
     }
 
     if (!importedCmdPool && cmdPool) {
-        df->vkDestroyCommandPool(dev, cmdPool, nullptr);
+        if (!rsh || cmdPool != rsh->d_vulkan.cmdPool)
+            df->vkDestroyCommandPool(dev, cmdPool, nullptr);
         cmdPool = VK_NULL_HANDLE;
     }
 
     if (!importedDevice && dev) {
-        df->vkDestroyDevice(dev, nullptr);
-        inst->resetDeviceFunctions(dev);
+        if (!rsh || dev != rsh->d_vulkan.dev) {
+            df->vkDestroyDevice(dev, nullptr);
+            inst->resetDeviceFunctions(dev);
+        }
         dev = VK_NULL_HANDLE;
     }
 
     f = nullptr;
     df = nullptr;
+
+    if (rsh) {
+        rsh->rhiCount -= 1;
+        rsh->rhiThreads.removeOne(QThread::currentThread());
+        if (rsh->rhiCount == 0) {
+            vmaDestroyAllocator(toVmaAllocator(rsh->d_vulkan.vmemAllocator));
+            df = inst->deviceFunctions(rsh->d_vulkan.dev);
+            df->vkDestroyCommandPool(rsh->d_vulkan.dev, rsh->d_vulkan.cmdPool, nullptr);
+            df->vkDestroyDevice(rsh->d_vulkan.dev, nullptr);
+            inst->resetDeviceFunctions(dev);
+            df = nullptr;
+            rsh->d_vulkan = QRhiVulkanNativeHandles();
+        }
+    }
 }
 
 VkResult QRhiVulkan::createDescriptorPool(VkDescriptorPool *pool)

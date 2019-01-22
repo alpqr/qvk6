@@ -142,6 +142,7 @@ void createRhi()
 #ifdef Q_OS_WIN
     if (graphicsApi == D3D11) {
         QRhiD3D11InitParams params;
+        params.enableDebugLayer = true;
         r.r = QRhi::create(QRhi::D3D11, &params);
     }
 #endif

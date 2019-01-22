@@ -49,6 +49,7 @@ QT_BEGIN_NAMESPACE
 class QVulkanFunctions;
 class QVulkanDeviceFunctions;
 class QVulkanWindow;
+class QRhiResourceSharingHostPrivate;
 
 static const int QVK_FRAMES_IN_FLIGHT = 2;
 
@@ -483,6 +484,7 @@ public:
     // in case they changed in the meantime.
     void updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx = -1);
 
+    QRhiResourceSharingHostPrivate *rsh = nullptr;
     QVulkanInstance *inst = nullptr;
     QWindow *maybeWindow = nullptr;
     bool importedDevice = false;

@@ -318,13 +318,15 @@ QT_BEGIN_NAMESPACE
     different threads with QRhiResourceSharingHost set is allowed. Backends
     where the underlying graphics API cannot safely support using the same
     device or context from multiple threads will report this feature as
-    unsupported. In that case creating a QRhi with a QRhiResourceSharingHost
-    set will behave as if the QRhiResourceSharingHost was not provided at all.
-    Application and framework design may need to take support for this feature
-    into account: making resources like textures visible to multiple QRhi
-    instances is not neccessarily possible, so the design should be flexible
-    enough to allow functioning in that case as well (by using per-QRhi
-    resources instead of a single shared one, and possibly duplicating work).
+    unsupported. When not supported, creating a QRhi with a
+    QRhiResourceSharingHost when there are already other QRhi instances on
+    other threads associated with the same QRhiResourceSharingHost will behave
+    as if the QRhiResourceSharingHost was not set at all. Application and
+    framework design may need to take support for this feature into account:
+    making resources like textures visible to multiple QRhi instances is not
+    neccessarily possible, so the design should be flexible enough to allow
+    functioning in that case as well (by using per-QRhi resources instead of a
+    single shared one, and possibly duplicating work).
  */
 
 /*!

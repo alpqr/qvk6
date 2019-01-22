@@ -382,6 +382,7 @@ void Renderer::createRhi()
 #ifdef USE_RSH
         params.resourceSharingHost = rsh;
 #endif
+        params.enableDebugLayer = true;
         r = QRhi::create(QRhi::D3D11, &params);
     }
 #endif

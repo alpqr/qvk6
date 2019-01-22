@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhid3d11_p.h"
+#include "qrhirsh_p.h"
 #include <QWindow>
 #include <QBakedShader>
 #include <qmath.h>
@@ -127,6 +128,9 @@ QT_BEGIN_NAMESPACE
 QRhiD3D11::QRhiD3D11(QRhiD3D11InitParams *params, QRhiD3D11NativeHandles *importDevice)
     : ofr(this)
 {
+    if (params->resourceSharingHost)
+        rsh = QRhiResourceSharingHostPrivate::get(params->resourceSharingHost);
+
     debugLayer = params->enableDebugLayer;
     importedDevice = importDevice != nullptr;
     if (importedDevice) {
@@ -169,6 +173,8 @@ bool QRhiD3D11::create(QRhi::Flags flags)
 {
     Q_UNUSED(flags);
 
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     uint devFlags = 0;
     if (debugLayer)
         devFlags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -180,42 +186,53 @@ bool QRhiD3D11::create(QRhi::Flags flags)
     }
 
     if (!importedDevice) {
-        IDXGIAdapter1 *adapterToUse = nullptr;
-        IDXGIAdapter1 *adapter;
-        int requestedAdapterIndex = -1;
-        if (qEnvironmentVariableIsSet("QT_D3D_ADAPTER_INDEX"))
-            requestedAdapterIndex = qEnvironmentVariableIntValue("QT_D3D_ADAPTER_INDEX");
-        for (int adapterIndex = 0; dxgiFactory->EnumAdapters1(adapterIndex, &adapter) != DXGI_ERROR_NOT_FOUND; ++adapterIndex) {
-            DXGI_ADAPTER_DESC1 desc;
-            adapter->GetDesc1(&desc);
-            const QString name = QString::fromUtf16((char16_t *) desc.Description);
-            qDebug("Adapter %d: '%s' (flags 0x%x)", adapterIndex, qPrintable(name), desc.Flags);
-            if (!adapterToUse && (requestedAdapterIndex < 0 || requestedAdapterIndex == adapterIndex)) {
-                adapterToUse = adapter;
-                qDebug("  using this adapter");
-            } else {
-                adapter->Release();
+        if (!rsh || !rsh->d_d3d11.dev) {
+            IDXGIAdapter1 *adapterToUse = nullptr;
+            IDXGIAdapter1 *adapter;
+            int requestedAdapterIndex = -1;
+            if (qEnvironmentVariableIsSet("QT_D3D_ADAPTER_INDEX"))
+                requestedAdapterIndex = qEnvironmentVariableIntValue("QT_D3D_ADAPTER_INDEX");
+            for (int adapterIndex = 0; dxgiFactory->EnumAdapters1(adapterIndex, &adapter) != DXGI_ERROR_NOT_FOUND; ++adapterIndex) {
+                DXGI_ADAPTER_DESC1 desc;
+                adapter->GetDesc1(&desc);
+                const QString name = QString::fromUtf16((char16_t *) desc.Description);
+                qDebug("Adapter %d: '%s' (flags 0x%x)", adapterIndex, qPrintable(name), desc.Flags);
+                if (!adapterToUse && (requestedAdapterIndex < 0 || requestedAdapterIndex == adapterIndex)) {
+                    adapterToUse = adapter;
+                    qDebug("  using this adapter");
+                } else {
+                    adapter->Release();
+                }
             }
-        }
-        if (!adapterToUse) {
-            qWarning("No adapter");
-            return false;
-        }
+            if (!adapterToUse) {
+                qWarning("No adapter");
+                return false;
+            }
 
-        ID3D11DeviceContext *ctx = nullptr;
-        HRESULT hr = D3D11CreateDevice(adapterToUse, D3D_DRIVER_TYPE_UNKNOWN, nullptr, devFlags,
-                                       nullptr, 0, D3D11_SDK_VERSION,
-                                       &dev, &featureLevel, &ctx);
-        adapterToUse->Release();
-        if (FAILED(hr)) {
-            qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
-            return false;
-        }
-        if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
-            ctx->Release();
+            ID3D11DeviceContext *ctx = nullptr;
+            HRESULT hr = D3D11CreateDevice(adapterToUse, D3D_DRIVER_TYPE_UNKNOWN, nullptr, devFlags,
+                                           nullptr, 0, D3D11_SDK_VERSION,
+                                           &dev, &featureLevel, &ctx);
+            adapterToUse->Release();
+            if (FAILED(hr)) {
+                qWarning("Failed to create D3D11 device and context: %s", qPrintable(comErrorMessage(hr)));
+                return false;
+            }
+            if (SUCCEEDED(ctx->QueryInterface(IID_ID3D11DeviceContext1, reinterpret_cast<void **>(&context)))) {
+                ctx->Release();
+            } else {
+                qWarning("ID3D11DeviceContext1 not supported");
+                return false;
+            }
+
+            if (rsh) {
+                rsh->d_d3d11.dev = dev;
+                rsh->d_d3d11.context = context;
+            }
         } else {
-            qWarning("ID3D11DeviceContext1 not supported");
-            return false;
+            dev = reinterpret_cast<ID3D11Device *>(rsh->d_d3d11.dev);
+            context = reinterpret_cast<ID3D11DeviceContext1 *>(rsh->d_d3d11.context);
+            featureLevel = dev->GetFeatureLevel();
         }
     } else {
         Q_ASSERT(dev && context);
@@ -228,12 +245,17 @@ bool QRhiD3D11::create(QRhi::Flags flags)
     nativeHandlesStruct.dev = dev;
     nativeHandlesStruct.context = context;
 
+    if (rsh)
+        rsh->rhiCount += 1;
+
     return true;
 }
 
 void QRhiD3D11::destroy()
 {
     finishActiveReadbacks();
+
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     if (annotations) {
         annotations->Release();
@@ -242,12 +264,28 @@ void QRhiD3D11::destroy()
 
     if (!importedDevice) {
         if (context) {
-            context->Release();
+            if (!rsh || rsh->d_d3d11.context != context)
+                context->Release();
             context = nullptr;
         }
         if (dev) {
-            dev->Release();
+            if (!rsh || rsh->d_d3d11.dev != dev)
+                dev->Release();
             dev = nullptr;
+        }
+    }
+
+    if (rsh) {
+        rsh->rhiCount -= 1;
+        if (rsh->rhiCount == 0) {
+            if (rsh->d_d3d11.context) {
+                reinterpret_cast<ID3D11DeviceContext1 *>(rsh->d_d3d11.context)->Release();
+                rsh->d_d3d11.context = nullptr;
+            }
+            if (rsh->d_d3d11.dev) {
+                reinterpret_cast<ID3D11Device *>(rsh->d_d3d11.dev)->Release();
+                rsh->d_d3d11.dev = nullptr;
+            }
         }
     }
 
@@ -712,6 +750,8 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     Q_ASSERT(inFrame);
     inFrame = false;
 
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     QD3D11SwapChain *swapChainD = QRHI_RES(QD3D11SwapChain, swapChain);
     Q_ASSERT(contextState.currentSwapChain = swapChainD);
     const int currentFrameSlot = swapChainD->currentFrameSlot;
@@ -722,10 +762,12 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     ID3D11Query *tsEnd = swapChainD->timestampQuery[tsIdx + 1];
     const bool recordTimestamps = tsDisjoint && tsStart && tsEnd && !swapChainD->timestampActive[currentFrameSlot];
 
+    // send all commands to the context. we already do the rsh lock ourselves
+    // hence lockWithRsh == false.
     if (recordTimestamps)
-        executeCommandBuffer(&swapChainD->cb, swapChainD);
+        executeCommandBuffer(&swapChainD->cb, swapChainD, false);
     else
-        executeCommandBuffer(&swapChainD->cb);
+        executeCommandBuffer(&swapChainD->cb, nullptr, false);
 
     if (swapChainD->sampleDesc.Count > 1) {
         context->ResolveSubresource(swapChainD->tex[currentFrameSlot], 0,
@@ -739,6 +781,9 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
         context->End(tsDisjoint);
         swapChainD->timestampActive[currentFrameSlot] = true;
     }
+
+    // avoid keeping the mutex when issuing the Present
+    lock.unlock();
 
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
     // this must be done before the Present
@@ -1466,8 +1511,10 @@ void QRhiD3D11::setRenderTarget(QRhiRenderTarget *rt)
     context->OMSetRenderTargets(rtD->colorAttCount, rtD->colorAttCount ? rtD->rtv : nullptr, rtD->dsv);
 }
 
-void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain)
+void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain, bool lockWithRsh)
 {
+    QMutexLocker lock((lockWithRsh && rsh) ? &rsh->mtx : nullptr);
+
     quint32 stencilRef = 0;
     float blendConstants[] = { 1, 1, 1, 1 };
 

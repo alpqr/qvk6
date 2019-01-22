@@ -1,7 +1,5 @@
 res.sh.: reuse device / create sharing context
-res.sh.: example to show using same texture
 res.sh.: example to show read/write same texture
-res.sh.: d3d context sync
 res.sh.: exercise it in multiwindow_threaded too
 advanced blend modes
 gl: tex formats (texture, readback)
@@ -50,6 +48,8 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+res.sh.: example to show using same texture
+res.sh.: d3d context sync
 revise create() and importing external device objects
 revise structs in api
 primitive restart

@@ -308,14 +308,18 @@ void QRhiGles2::destroy()
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     if (!importedContext) {
-        if (!rsh || rsh->rhiCount == 1) {
+        if (!rsh || rsh->d_gles2.context != ctx)
             delete ctx;
-            ctx = nullptr;
-        }
+        ctx = nullptr;
     }
 
-    if (rsh)
+    if (rsh) {
         rsh->rhiCount -= 1;
+        if (rsh->rhiCount == 0) {
+            delete rsh->d_gles2.context;
+            rsh->d_gles2.context = nullptr;
+        }
+    }
 }
 
 // Strictly speaking this is not necessary since we could do the deletes in

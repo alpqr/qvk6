@@ -48,6 +48,8 @@
 **
 ****************************************************************************/
 
+// Demonstrates using the same QRhiTexture with two QRhi instances.
+
 #include <QGuiApplication>
 
 #include <QCommandLineParser>
@@ -161,7 +163,7 @@ void createRhi(QWindow *window, QRhi **rhi, QOffscreenSurface **fallbackSurface)
 class Window : public QWindow
 {
 public:
-    Window(const QString &title, const QColor &bgColor);
+    Window(const QString &title, const QColor &bgColor, int windowNumber);
     ~Window();
 
 protected:
@@ -177,12 +179,14 @@ protected:
     QRhi *m_rhi = nullptr;
     QOffscreenSurface *m_fallbackSurface = nullptr;
     QColor m_bgColor;
+    int m_windowNumber;
 
     bool m_running = false;
     bool m_notExposed = false;
     bool m_newlyExposed = false;
 
     QMatrix4x4 m_proj;
+    float m_rotation = 0;
     QVector<QRhiResource *> m_releasePool;
 
     bool m_hasSwapChain = false;
@@ -199,8 +203,9 @@ protected:
     QRhiGraphicsPipeline *ps = nullptr;
 };
 
-Window::Window(const QString &title, const QColor &bgColor)
-    : m_bgColor(bgColor)
+Window::Window(const QString &title, const QColor &bgColor, int windowNumber)
+    : m_bgColor(bgColor),
+      m_windowNumber(windowNumber)
 {
     switch (graphicsApi) {
     case OpenGL:
@@ -461,6 +466,8 @@ void Window::render()
 
     QMatrix4x4 mvp = m_proj;
     mvp.scale(2.5f);
+    mvp.rotate(m_rotation, m_windowNumber == 2, m_windowNumber == 1, m_windowNumber == 0);
+    m_rotation += 0.5f;
     u->updateDynamicBuffer(ubuf, 0, 64, mvp.constData());
 
 
@@ -545,8 +552,8 @@ int main(int argc, char **argv)
     // lifetime: make sure the QWindows are gone when we move on to destroying
     // the Vulkan instance and such.
     {
-        Window windowA(QLatin1String("QRhi #1"), Qt::green);
-        Window windowB(QLatin1String("QRhi #2"), Qt::blue);
+        Window windowA(QLatin1String("QRhi #1"), Qt::green, 0);
+        Window windowB(QLatin1String("QRhi #2"), Qt::blue, 1);
 
         windowA.show();
         windowB.show();

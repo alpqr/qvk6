@@ -51,6 +51,8 @@
 
 QT_BEGIN_NAMESPACE
 
+class QRhiResourceSharingHostPrivate;
+
 struct QD3D11Buffer : public QRhiBuffer
 {
     QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
@@ -525,10 +527,13 @@ public:
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);
     void setShaderResources(QD3D11ShaderResourceBindings *srbD);
     void setRenderTarget(QRhiRenderTarget *rt);
-    void executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain = nullptr);
+    void executeCommandBuffer(QD3D11CommandBuffer *cbD,
+                              QD3D11SwapChain *timestampSwapChain = nullptr,
+                              bool lockWithRsh = true);
     DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;
     void finishActiveReadbacks();
 
+    QRhiResourceSharingHostPrivate *rsh = nullptr;
     bool debugLayer = false;
     bool importedDevice = false;
     ID3D11Device *dev = nullptr;

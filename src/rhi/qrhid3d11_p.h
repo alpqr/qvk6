@@ -532,7 +532,6 @@ public:
     void finishActiveReadbacks();
     void reportLiveObjects(ID3D11Device *device);
 
-    QRhiResourceSharingHostPrivate *rsh = nullptr;
     bool debugLayer = false;
     bool importedDevice = false;
     ID3D11Device *dev = nullptr;

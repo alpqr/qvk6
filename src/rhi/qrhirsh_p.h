@@ -77,7 +77,11 @@ public:
     QRhiGles2NativeHandles d_gles2;
 #endif
 #if QT_CONFIG(vulkan)
-    QRhiVulkanNativeHandles d_vulkan;
+    struct {
+        QRhiVulkanNativeHandles h;
+        QVulkanDeviceFunctions *df = nullptr;
+        void *releaseQueue = nullptr;
+    } d_vulkan;
 #endif
 #ifdef Q_OS_WIN
     QRhiD3D11NativeHandles d_d3d11;

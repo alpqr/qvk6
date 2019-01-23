@@ -491,11 +491,16 @@ public:
     QByteArray name() const;
     void setName(const QByteArray &name);
 
+    virtual bool isSharable() const;
+
 protected:
     QRhiResource(QRhiImplementation *rhi_);
     Q_DISABLE_COPY(QRhiResource)
+    friend class QRhiImplementation;
     QRhiImplementation *rhi = nullptr;
     QByteArray objectName;
+    QRhiResourceSharingHostPrivate *orphanedWithRsh = nullptr;
+    Q_DECL_UNUSED_MEMBER quint64 m_reserved;
 };
 
 class Q_RHI_EXPORT QRhiBuffer : public QRhiResource

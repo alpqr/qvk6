@@ -1879,13 +1879,14 @@ void QGles2Texture::release()
     specified = false;
     nativeHandlesStruct.texture = 0;
 
-    if (owns) {
-        QRHI_RES_RHI(QRhiGles2);
+    QRHI_RES_RHI(QRhiGles2);
+    if (owns)
         rhiD->releaseQueue.append(e);
-    }
 
     QRHI_PROF;
     QRHI_PROF_F(releaseTexture(this));
+
+    rhiD->unregisterResource(this);
 }
 
 static inline bool isPowerOfTwo(int x)
@@ -1979,11 +1980,14 @@ bool QGles2Texture::build()
     nativeHandlesStruct.texture = texture;
 
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
 bool QGles2Texture::buildFrom(const QRhiNativeHandles *src)
 {
+    QRHI_RES_RHI(QRhiGles2);
+
     const QRhiGles2TextureNativeHandles *h = static_cast<const QRhiGles2TextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
@@ -2001,6 +2005,7 @@ bool QGles2Texture::buildFrom(const QRhiNativeHandles *src)
     nativeHandlesStruct.texture = texture;
 
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 

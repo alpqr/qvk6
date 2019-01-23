@@ -296,13 +296,13 @@ bool QRhiVulkan::create(QRhi::Flags flags)
 
     bool rshWantsDevice = false;
     if (rsh) {
-        if (rsh->d_vulkan.dev) {
-            physDev = rsh->d_vulkan.physDev;
-            dev = rsh->d_vulkan.dev;
-            gfxQueueFamilyIdx = rsh->d_vulkan.gfxQueueFamilyIdx;
-            gfxQueue = rsh->d_vulkan.gfxQueue;
-            cmdPool = rsh->d_vulkan.cmdPool;
-            allocator = rsh->d_vulkan.vmemAllocator;
+        if (rsh->d_vulkan.h.dev) {
+            physDev = rsh->d_vulkan.h.physDev;
+            dev = rsh->d_vulkan.h.dev;
+            gfxQueueFamilyIdx = rsh->d_vulkan.h.gfxQueueFamilyIdx;
+            gfxQueue = rsh->d_vulkan.h.gfxQueue;
+            cmdPool = rsh->d_vulkan.h.cmdPool;
+            allocator = rsh->d_vulkan.h.vmemAllocator;
         } else {
             rshWantsDevice = true;
         }
@@ -514,8 +514,10 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances", rsh, rsh->rhiCount);
         rsh->rhiCount += 1;
         rsh->rhiThreads.append(QThread::currentThread());
-        if (rshWantsDevice)
-            rsh->d_vulkan = nativeHandlesStruct;
+        if (rshWantsDevice) {
+            rsh->d_vulkan.h = nativeHandlesStruct;
+            rsh->d_vulkan.df = df;
+        }
     }
 
     return true;
@@ -557,19 +559,19 @@ void QRhiVulkan::destroy()
     }
 
     if (!importedAllocator && allocator) {
-        if (!rsh || allocator != rsh->d_vulkan.vmemAllocator)
+        if (!rsh || allocator != rsh->d_vulkan.h.vmemAllocator)
             vmaDestroyAllocator(toVmaAllocator(allocator));
         allocator = nullptr;
     }
 
     if (!importedCmdPool && cmdPool) {
-        if (!rsh || cmdPool != rsh->d_vulkan.cmdPool)
+        if (!rsh || cmdPool != rsh->d_vulkan.h.cmdPool)
             df->vkDestroyCommandPool(dev, cmdPool, nullptr);
         cmdPool = VK_NULL_HANDLE;
     }
 
     if (!importedDevice && dev) {
-        if (!rsh || dev != rsh->d_vulkan.dev) {
+        if (!rsh || dev != rsh->d_vulkan.h.dev) {
             df->vkDestroyDevice(dev, nullptr);
             inst->resetDeviceFunctions(dev);
         }
@@ -583,13 +585,20 @@ void QRhiVulkan::destroy()
         rsh->rhiCount -= 1;
         rsh->rhiThreads.removeOne(QThread::currentThread());
         if (rsh->rhiCount == 0) {
-            vmaDestroyAllocator(toVmaAllocator(rsh->d_vulkan.vmemAllocator));
-            df = inst->deviceFunctions(rsh->d_vulkan.dev);
-            df->vkDestroyCommandPool(rsh->d_vulkan.dev, rsh->d_vulkan.cmdPool, nullptr);
-            df->vkDestroyDevice(rsh->d_vulkan.dev, nullptr);
-            inst->resetDeviceFunctions(dev);
-            df = nullptr;
-            rsh->d_vulkan = QRhiVulkanNativeHandles();
+            // all associated QRhi instances are gone for the rsh, time to clean up
+            rsh->d_vulkan.df->vkDeviceWaitIdle(rsh->d_vulkan.h.dev);
+            if (rsh->d_vulkan.releaseQueue) {
+                auto rshRelQueue = static_cast<QVector<DeferredReleaseEntry> *>(rsh->d_vulkan.releaseQueue);
+                QRhiVulkan::executeDeferredReleasesOnRshNow(rsh, rshRelQueue);
+                delete rshRelQueue;
+            }
+            vmaDestroyAllocator(toVmaAllocator(rsh->d_vulkan.h.vmemAllocator));
+            rsh->d_vulkan.df->vkDestroyCommandPool(rsh->d_vulkan.h.dev, rsh->d_vulkan.h.cmdPool, nullptr);
+            rsh->d_vulkan.df->vkDestroyDevice(rsh->d_vulkan.h.dev, nullptr);
+            inst->resetDeviceFunctions(rsh->d_vulkan.h.dev);
+            rsh->d_vulkan.h = QRhiVulkanNativeHandles();
+            rsh->d_vulkan.df = nullptr;
+            rsh->d_vulkan.releaseQueue = nullptr;
         }
     }
 }
@@ -2700,6 +2709,43 @@ void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
     updates.clear();
 }
 
+static void qrhivk_releaseBuffer(const QRhiVulkan::DeferredReleaseEntry &e, void *allocator)
+{
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
+        vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.buffers[i], toVmaAllocation(e.buffer.allocations[i]));
+        vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.stagingBuffers[i], toVmaAllocation(e.buffer.stagingAllocations[i]));
+    }
+}
+
+static void qrhivk_releaseTexture(const QRhiVulkan::DeferredReleaseEntry &e, VkDevice dev, QVulkanDeviceFunctions *df, void *allocator)
+{
+    df->vkDestroyImageView(dev, e.texture.imageView, nullptr);
+    vmaDestroyImage(toVmaAllocator(allocator), e.texture.image, toVmaAllocation(e.texture.allocation));
+    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
+        vmaDestroyBuffer(toVmaAllocator(allocator), e.texture.stagingBuffers[i], toVmaAllocation(e.texture.stagingAllocations[i]));
+}
+
+void QRhiVulkan::executeDeferredReleasesOnRshNow(QRhiResourceSharingHostPrivate *rsh,
+                                                 QVector<QRhiVulkan::DeferredReleaseEntry> *rshRelQueue)
+{
+    for (int i = rshRelQueue->count() - 1; i >= 0; --i) {
+        const QRhiVulkan::DeferredReleaseEntry &e((*rshRelQueue)[i]);
+        // only need to handle resources that report isSharable() == true
+        switch (e.type) {
+        case QRhiVulkan::DeferredReleaseEntry::Buffer:
+            qrhivk_releaseBuffer(e, rsh->d_vulkan.h.vmemAllocator);
+            break;
+        case QRhiVulkan::DeferredReleaseEntry::Texture:
+            qrhivk_releaseTexture(e, rsh->d_vulkan.h.dev, rsh->d_vulkan.df, rsh->d_vulkan.h.vmemAllocator);
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+        rshRelQueue->removeAt(i);
+    }
+}
+
 void QRhiVulkan::executeDeferredReleases(bool forced)
 {
     for (int i = releaseQueue.count() - 1; i >= 0; --i) {
@@ -2718,10 +2764,7 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 }
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Buffer:
-                for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-                    vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.buffers[i], toVmaAllocation(e.buffer.allocations[i]));
-                    vmaDestroyBuffer(toVmaAllocator(allocator), e.buffer.stagingBuffers[i], toVmaAllocation(e.buffer.stagingAllocations[i]));
-                }
+                qrhivk_releaseBuffer(e, allocator);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::RenderBuffer:
                 df->vkDestroyImageView(dev, e.renderBuffer.imageView, nullptr);
@@ -2729,10 +2772,7 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 df->vkFreeMemory(dev, e.renderBuffer.memory, nullptr);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Texture:
-                df->vkDestroyImageView(dev, e.texture.imageView, nullptr);
-                vmaDestroyImage(toVmaAllocator(allocator), e.texture.image, toVmaAllocation(e.texture.allocation));
-                for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
-                    vmaDestroyBuffer(toVmaAllocator(allocator), e.texture.stagingBuffers[i], toVmaAllocation(e.texture.stagingAllocations[i]));
+                qrhivk_releaseTexture(e, dev, df, allocator);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Sampler:
                 df->vkDestroySampler(dev, e.sampler.sampler, nullptr);
@@ -2751,6 +2791,7 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 vmaDestroyBuffer(toVmaAllocator(allocator), e.stagingBuffer.stagingBuffer, toVmaAllocation(e.stagingBuffer.stagingAllocation));
                 break;
             default:
+                Q_UNREACHABLE();
                 break;
             }
             releaseQueue.removeAt(i);
@@ -3596,6 +3637,17 @@ static inline VkShaderStageFlags toVkShaderStageFlags(QRhiShaderResourceBinding:
     return VkShaderStageFlags(s);
 }
 
+static void addToRshReleaseQueue(QRhiResourceSharingHostPrivate *rsh, const QRhiVulkan::DeferredReleaseEntry &e)
+{
+    QVector<QRhiVulkan::DeferredReleaseEntry> *rshRelQueue =
+            static_cast<QVector<QRhiVulkan::DeferredReleaseEntry> *>(rsh->d_vulkan.releaseQueue);
+    if (!rshRelQueue) {
+        rshRelQueue = new QVector<QRhiVulkan::DeferredReleaseEntry>;
+        rsh->d_vulkan.releaseQueue = rshRelQueue;
+    }
+    rshRelQueue->append(e);
+}
+
 QVkBuffer::QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
     : QRhiBuffer(rhi, type, usage, size)
 {
@@ -3605,14 +3657,15 @@ QVkBuffer::QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int s
     }
 }
 
+bool QVkBuffer::isSharable() const
+{
+    // returning true implies orphaned release must be supported via the rsh
+    return true;
+}
+
 void QVkBuffer::release()
 {
-    int nullBufferCount = 0;
-    for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
-        if (!buffers[i])
-            ++nullBufferCount;
-    }
-    if (nullBufferCount == QVK_FRAMES_IN_FLIGHT)
+    if (!buffers[0])
         return;
 
     QRhiVulkan::DeferredReleaseEntry e;
@@ -3632,15 +3685,26 @@ void QVkBuffer::release()
         pendingDynamicUpdates[i].clear();
     }
 
-    QRHI_RES_RHI(QRhiVulkan);
-    rhiD->releaseQueue.append(e);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiVulkan);
+        rhiD->releaseQueue.append(e);
 
-    QRHI_PROF;
-    QRHI_PROF_F(releaseBuffer(this));
+        QRHI_PROF;
+        QRHI_PROF_F(releaseBuffer(this));
+
+        rhiD->unregisterResource(this);
+    } else {
+        // associated rhi is already gone, queue the deferred release to the rsh instead
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QVkBuffer::build()
 {
+    QRHI_RES_RHI(QRhiVulkan);
+    if (!rhiD->orphanCheck(this))
+        return false;
+
     if (buffers[0])
         release();
 
@@ -3662,7 +3726,6 @@ bool QVkBuffer::build()
         bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     }
 
-    QRHI_RES_RHI(QRhiVulkan);
     VkResult err = VK_SUCCESS;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         buffers[i] = VK_NULL_HANDLE;
@@ -3692,6 +3755,7 @@ bool QVkBuffer::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -3733,6 +3797,8 @@ void QVkRenderBuffer::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseRenderBuffer(this));
+
+    rhiD->unregisterResource(this);
 }
 
 bool QVkRenderBuffer::build()
@@ -3789,6 +3855,7 @@ bool QVkRenderBuffer::build()
     }
 
     lastActiveFrameSlot = -1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -3805,6 +3872,12 @@ QVkTexture::QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixe
         stagingBuffers[i] = VK_NULL_HANDLE;
         stagingAllocations[i] = nullptr;
     }
+}
+
+bool QVkTexture::isSharable() const
+{
+    // returning true implies orphaned release must be supported via the rsh
+    return true;
 }
 
 void QVkTexture::release()
@@ -3833,19 +3906,29 @@ void QVkTexture::release()
     imageAlloc = nullptr;
     nativeHandlesStruct.image = VK_NULL_HANDLE;
 
-    QRHI_RES_RHI(QRhiVulkan);
-    rhiD->releaseQueue.append(e);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiVulkan);
+        rhiD->releaseQueue.append(e);
 
-    QRHI_PROF;
-    QRHI_PROF_F(releaseTexture(this));
+        QRHI_PROF;
+        QRHI_PROF_F(releaseTexture(this));
+
+        rhiD->unregisterResource(this);
+    } else {
+        // associated rhi is already gone, queue the deferred release to the rsh instead
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QVkTexture::prepareBuild(QSize *adjustedSize)
 {
+    QRHI_RES_RHI(QRhiVulkan);
+    if (!rhiD->orphanCheck(this))
+        return false;
+
     if (image)
         release();
 
-    QRHI_RES_RHI(QRhiVulkan);
     vkformat = toVkTextureFormat(m_format, m_flags);
     VkFormatProperties props;
     rhiD->f->vkGetPhysicalDeviceFormatProperties(rhiD->physDev, vkformat, &props);
@@ -3974,11 +4057,14 @@ bool QVkTexture::build()
 
     owns = true;
     layout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    rhiD->registerResource(this);
     return true;
 }
 
 bool QVkTexture::buildFrom(const QRhiNativeHandles *src)
 {
+    QRHI_RES_RHI(QRhiVulkan);
+
     const QRhiVulkanTextureNativeHandles *h = static_cast<const QRhiVulkanTextureNativeHandles *>(src);
     if (!h || !h->image)
         return false;
@@ -3996,6 +4082,7 @@ bool QVkTexture::buildFrom(const QRhiNativeHandles *src)
 
     owns = false;
     layout = h->layout;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -4025,6 +4112,8 @@ void QVkSampler::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 bool QVkSampler::build()
@@ -4053,6 +4142,7 @@ bool QVkSampler::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -4081,6 +4171,8 @@ void QVkRenderPassDescriptor::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 QVkReferenceRenderTarget::QVkReferenceRenderTarget(QRhiImplementation *rhi)
@@ -4140,6 +4232,8 @@ void QVkTextureRenderTarget::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescriptor()
@@ -4160,6 +4254,7 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
     }
 
     rp->ownsRp = true;
+    rhiD->registerResource(rp);
     return rp;
 }
 
@@ -4281,6 +4376,7 @@ bool QVkTextureRenderTarget::build()
     }
 
     lastActiveFrameSlot = -1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -4323,6 +4419,8 @@ void QVkShaderResourceBindings::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 bool QVkShaderResourceBindings::build()
@@ -4373,6 +4471,7 @@ bool QVkShaderResourceBindings::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -4398,6 +4497,8 @@ void QVkGraphicsPipeline::release()
 
     QRHI_RES_RHI(QRhiVulkan);
     rhiD->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 bool QVkGraphicsPipeline::build()
@@ -4599,14 +4700,15 @@ bool QVkGraphicsPipeline::build()
     for (VkShaderModule shader : shaders)
         rhiD->df->vkDestroyShaderModule(rhiD->dev, shader, nullptr);
 
-    if (err == VK_SUCCESS) {
-        lastActiveFrameSlot = -1;
-        generation += 1;
-        return true;
-    } else {
+    if (err != VK_SUCCESS) {
         qWarning("Failed to create graphics pipeline: %d", err);
         return false;
     }
+
+    lastActiveFrameSlot = -1;
+    generation += 1;
+    rhiD->registerResource(this);
+    return true;
 }
 
 QVkCommandBuffer::QVkCommandBuffer(QRhiImplementation *rhi)
@@ -4638,6 +4740,8 @@ void QVkSwapChain::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseSwapChain(this));
+
+    rhiD->unregisterResource(this);
 }
 
 QRhiCommandBuffer *QVkSwapChain::currentFrameCommandBuffer()
@@ -4704,6 +4808,7 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
     }
 
     rp->ownsRp = true;
+    rhiD->registerResource(rp);
     return rp;
 }
 
@@ -4805,8 +4910,7 @@ bool QVkSwapChain::buildOrResize()
     }
 
     QRHI_RES_RHI(QRhiVulkan);
-    if (!window)
-        rhiD->swapchains.insert(this);
+    const bool brandNew = !window || window != m_window;
 
     // Can be called multiple times due to window resizes - that is not the
     // same as a simple release+build (as with other resources). Thus no
@@ -4822,6 +4926,9 @@ bool QVkSwapChain::buildOrResize()
 
     if (!rhiD->recreateSwapChain(this))
         return false;
+
+    if (brandNew)
+        rhiD->swapchains.insert(this);
 
     if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {
         qWarning("Depth-stencil buffer's sampleCount (%d) does not match color buffers' sample count (%d). Expect problems.",
@@ -4884,6 +4991,9 @@ bool QVkSwapChain::buildOrResize()
 
     QRHI_PROF;
     QRHI_PROF_F(resizeSwapChain(this, QVK_FRAMES_IN_FLIGHT, samples > VK_SAMPLE_COUNT_1_BIT ? QVK_FRAMES_IN_FLIGHT : 0, samples));
+
+    if (brandNew)
+        rhiD->registerResource(this);
 
     return true;
 }

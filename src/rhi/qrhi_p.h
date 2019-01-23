@@ -155,13 +155,41 @@ public:
         return p->rhiDWhenEnabled ? p : nullptr;
     }
 
+    void registerResource(QRhiResource *res)
+    {
+        res->orphanedWithRsh = nullptr;
+        resources.insert(res);
+    }
+
+    void unregisterResource(QRhiResource *res)
+    {
+        resources.remove(res);
+    }
+
+    QSet<QRhiResource *> activeResources() const
+    {
+        return resources;
+    }
+
+    bool orphanCheck(QRhiResource *res)
+    {
+        if (res->orphanedWithRsh) {
+            qWarning("Attempted to perform something on an orphaned QRhiResource %p (%s). This is invalid.",
+                     res, res->objectName.constData());
+            return false;
+        }
+        return true;
+    }
+
     QRhi *q;
 
 protected:
+    QRhiResourceSharingHostPrivate *rsh = nullptr;
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
     QRhiProfiler profiler;
     bool debugMarkers = false;
+    QSet<QRhiResource *> resources;
 
     friend class QRhi;
     friend class QRhiResourceUpdateBatchPrivate;

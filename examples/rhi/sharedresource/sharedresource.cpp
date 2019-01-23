@@ -337,6 +337,7 @@ void Window::init()
         newTex = true;
         image.load(QLatin1String(":/qt256.png"));
         tex = m_rhi->newTexture(QRhiTexture::RGBA8, image.size());
+        Q_ASSERT(tex->isSharable());
         tex->build();
     }
 
@@ -394,7 +395,7 @@ void Window::releaseResources()
         m_sc = nullptr;
     }
 
-    // ### this is wrong
+    // tex may outlive its creating QRhi, that's fine since it's isSharable()==true
     if (activeRhiCount == 1) {
         tex->releaseAndDestroy();
         tex = nullptr;

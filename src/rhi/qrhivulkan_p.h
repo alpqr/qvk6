@@ -66,6 +66,7 @@ typedef void * QVkAllocator;
 struct QVkBuffer : public QRhiBuffer
 {
     QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    bool isSharable() const override;
     void release() override;
     bool build() override;
 
@@ -104,6 +105,7 @@ struct QVkTexture : public QRhiTexture
 {
     QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
                int sampleCount, Flags flags);
+    bool isSharable() const override;
     void release() override;
     bool build() override;
     bool buildFrom(const QRhiNativeHandles *src) override;
@@ -484,7 +486,6 @@ public:
     // in case they changed in the meantime.
     void updateShaderResourceBindings(QRhiShaderResourceBindings *srb, int descSetIdx = -1);
 
-    QRhiResourceSharingHostPrivate *rsh = nullptr;
     QVulkanInstance *inst = nullptr;
     QWindow *maybeWindow = nullptr;
     bool importedDevice = false;
@@ -622,6 +623,9 @@ public:
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
+
+    static void executeDeferredReleasesOnRshNow(QRhiResourceSharingHostPrivate *rsh,
+                                                QVector<DeferredReleaseEntry> *rshRelQueue);
 };
 
 Q_DECLARE_TYPEINFO(QRhiVulkan::DescriptorPoolData, Q_MOVABLE_TYPE);

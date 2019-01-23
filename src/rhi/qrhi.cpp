@@ -359,6 +359,8 @@ QT_BEGIN_NAMESPACE
     underlying graphics resources of QRhiResource subclasses such as
     QRhiTexture visible to all the QRhi instances that use the same
     QRhiResourceSharingHost.
+
+    \sa QRhiResource::isSharable()
  */
 
 /*!
@@ -1157,6 +1159,25 @@ void QRhiResource::setName(const QByteArray &name)
 {
     objectName = name;
     objectName.replace(',', '_'); // cannot contain comma for QRhiProfiler
+}
+
+/*!
+    \return true if this resource is sharable between QRhi instances via a
+    QRhiResourceSharingHost. It also means that such an QRhiResource can
+    outlive the QRhi on which it was created.
+
+    \note Once a sharable QRhiResource is \c orphaned, meaning that the QRhi
+    from which it was created gets destroyed, build() is not a valid operation
+    anymore. It can only be used in graphics operations (as the underlying
+    graphics objects are still there and valid) or can be released. This is
+    true as long as the QRhiResourceSharingHost, with which the creator QRhi
+    was associated with, has at least one associated QRhi alive.
+
+    \sa QRhiResourceSharingHost, QRhi::CrossThreadResourceSharing
+ */
+bool QRhiResource::isSharable() const
+{
+    return false;
 }
 
 /*!
@@ -2334,6 +2355,32 @@ QRhiCommandBuffer::QRhiCommandBuffer(QRhiImplementation *rhi)
 QRhiImplementation::~QRhiImplementation()
 {
     qDeleteAll(resUpdPool);
+
+    if (rsh) {
+        for (QRhiResource *res : qAsConst(resources)) {
+            if (res->isSharable()) {
+                res->orphanedWithRsh = rsh;
+            } else {
+                qWarning("QRhi %p going down orphaning an unreleased, non-sharable resource %p (%s). This is bad.",
+                         q, res, res->objectName.constData());
+            }
+            res->rhi = nullptr;
+        }
+    } else {
+        // Be nice and show something about leaked stuff. Though we may not get
+        // this far with some backends where the allocator or the api may check
+        // and freak out for unfreed graphics objects in the derived dtor already.
+#ifndef QT_NO_DEBUG
+        if (!resources.isEmpty()) {
+            qWarning("QRhi %p going down with %d unreleased resources and no QRhiResourceSharingHost. This is bad.",
+                     q, resources.count());
+            for (QRhiResource *res : qAsConst(resources)) {
+                qWarning("  Resource %p (%s)", res, res->objectName.constData());
+                res->rhi = nullptr;
+            }
+        }
+#endif
+    }
 }
 
 void QRhiImplementation::sendVMemStatsToProfiler()
@@ -2543,7 +2590,25 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
 
     This makes the underlying graphics resources of QRhiResource subclasses
     such as QRhiTexture available to all the QRhi instances that use the same
-    QRhiResourceSharingHost.
+    QRhiResourceSharingHost. This applies only to QRhiResource instances that
+    report \c true from \l{QRhiResource::isSharable()}{isSharable()}.
+
+    In order to avoid lifetime management issues with shared resources, a
+    sharable QRhiResource is allowed to be orphaned, meaning the QRhi the
+    resource was created from can be destroyed while keeping the QRhiResource
+    usable (although operations like \c build() are not allowed anymore then).
+    Applications can thus postpone calling
+    \l{QRhiResource::release()}{release()} on the resource as long as there is
+    at least one QRhi associated with the QRhiResourceSharingHost that was
+    associated with the resource's creator QRhi.
+
+    \note The QRhiResourceSharingHost does not perform graphics resource
+    operations on its own. Therefore it is important that all relevant
+    QRhiResource instances are released before the last associated QRhi is
+    destroyed. Attempting to release a QRhiResource after that will lead to
+    graphics resource leaks (assuming the resource sharing host gets destroyed
+    then; if there are new QRhi instances created for the same resource sharing
+    host later on then there is no issue, as long as, again, those are alive).
 
     \note When creating QRhi instances on different threads, using
     QRhiResourceSharingHost may not be supported, depending on the backend and
@@ -2558,6 +2623,76 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     created. It is however up to the application to organize those threads in a
     way that the QRhiResourceSharingHost is only destroyed after all associated
     QRhi instances have been fully destroyed.
+
+    To illustrate resource sharing, take the following code snippets.
+
+    In many cases an application will use a single QRhi. Resources created from it
+    must be always released before destroying the rhi:
+
+    \badcode
+        QRhi *rhi = QRhi::create(initParams);
+        QRhiTexture *tex = rhi->newTexture(...);
+        ... use tex with rhi
+        tex->releaseAndDestroy();
+        delete rhi;
+    \endcode
+
+    Let's introduce a second QRhi:
+
+    \badcode
+        QRhi *rhi = QRhi::create(initParams);
+        QRhi *rhi2 = QRhi::create(initParams);
+        QRhiTexture *tex = rhi->newTexture(...);
+        ... use tex with rhi
+        tex->releaseAndDestroy();
+        delete rhi;
+        delete rhi2;
+    \endcode
+
+    Here using \c tex with \c rhi2 is forbidden. (although it may work with some backends)
+    Let's make it work:
+
+    \badcode
+        QRhiResourceSharingHost *rsh = new QRhiResourceSharingHost;
+        initParams.resourceSharingHost = rsh;
+        QRhi *rhi = QRhi::create(initParams);
+        QRhi *rhi2 = QRhi::create(initParams);
+        QRhiTexture *tex = rhi->newTexture(...);
+        if (!tex->isSharable()) { error("not supported"); }
+        ... use tex with rhi or rhi2
+        tex->releaseAndDestroy();
+        delete rhi;
+        delete rhi2;
+        delete rsh;
+    \endcode
+
+    Now \c tex is usable with \c rhi2 as well.
+
+    What if \c rhi is destroyed before \c rhi2?
+
+    \badcode
+        QRhiResourceSharingHost *rsh = new QRhiResourceSharingHost;
+        initParams.resourceSharingHost = rsh;
+        QRhi *rhi = QRhi::create(initParams);
+        QRhi *rhi2 = QRhi::create(initParams);
+        QRhiTexture *tex = rhi->newTexture(...);
+        if (!tex->isSharable()) { error("not supported"); }
+        ... use tex with rhi or rhi2
+        delete rhi;
+        ... use tex with rhi2
+        tex->releaseAndDestroy();
+        delete rhi2;
+        delete rsh;
+    \endcode
+
+    This is valid as well. After the \c{delete rhi} \c tex is in an orphaned
+    state so calling \c build() on it for instance would fail.
+
+    \note Moving the \c{tex->releaseAndDestroy()} call between the \c{delete
+    rhi2} and \c{delete rsh} statements would be incorrect.
+
+    \sa QRhiResource::isSharable(), QRhi::CrossThreadResourceSharing,
+    QRhiInitParams, QRhi::create()
  */
 
 /*!

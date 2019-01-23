@@ -523,7 +523,6 @@ public:
     void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb);
     void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly);
 
-    QRhiResourceSharingHostPrivate *rsh = nullptr;
     QOpenGLContext *ctx = nullptr;
     bool importedContext = false;
     QWindow *maybeWindow = nullptr;

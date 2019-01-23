@@ -1560,6 +1560,8 @@ void QMetalBuffer::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseBuffer(this));
+
+    rhiD->unregisterResource(this);
 }
 
 bool QMetalBuffer::build()
@@ -1602,6 +1604,7 @@ bool QMetalBuffer::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -1634,6 +1637,8 @@ void QMetalRenderBuffer::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseRenderBuffer(this));
+
+    rhiD->unregisterResource(this);
 }
 
 bool QMetalRenderBuffer::build()
@@ -1690,6 +1695,7 @@ bool QMetalRenderBuffer::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -1735,6 +1741,8 @@ void QMetalTexture::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseTexture(this));
+
+    rhiD->unregisterResource(this);
 }
 
 static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
@@ -1926,11 +1934,14 @@ bool QMetalTexture::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
 bool QMetalTexture::buildFrom(const QRhiNativeHandles *src)
 {
+    QRHI_RES_RHI(QRhiMetal);
+
     const QRhiMetalTextureNativeHandles *h = static_cast<const QRhiMetalTextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
@@ -1948,6 +1959,7 @@ bool QMetalTexture::buildFrom(const QRhiNativeHandles *src)
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -1982,6 +1994,8 @@ void QMetalSampler::release()
 
     QRHI_RES_RHI(QRhiMetal);
     rhiD->d->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 static inline MTLSamplerMinMagFilter toMetalFilter(QRhiSampler::Filter f)
@@ -2050,6 +2064,7 @@ bool QMetalSampler::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -2267,6 +2282,8 @@ QMetalGraphicsPipeline::~QMetalGraphicsPipeline()
 
 void QMetalGraphicsPipeline::release()
 {
+    QRHI_RES_RHI(QRhiMetal);
+
     if (!d->ps)
         return;
 
@@ -2297,6 +2314,8 @@ void QMetalGraphicsPipeline::release()
         [d->fsLib release];
         d->fsLib = nil;
     }
+
+    rhiD->unregisterResource(this);
 }
 
 static inline MTLVertexFormat toMetalAttributeFormat(QRhiVertexInputAttribute::Format format)
@@ -2693,6 +2712,7 @@ bool QMetalGraphicsPipeline::build()
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -2779,6 +2799,8 @@ void QMetalSwapChain::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseSwapChain(this));
+
+    rhiD->unregisterResource(this);
 }
 
 QRhiCommandBuffer *QMetalSwapChain::currentFrameCommandBuffer()
@@ -2837,12 +2859,14 @@ bool QMetalSwapChain::buildOrResize()
 {
     Q_ASSERT(m_window);
 
+    const bool needsRegistration = !window || window != m_window;
+
     if (window && window != m_window)
         release();
     // else no release(), this is intentional
 
     QRHI_RES_RHI(QRhiMetal);
-    if (!window)
+    if (needsRegistration)
         rhiD->swapchains.insert(this);
 
     window = m_window;
@@ -2920,6 +2944,9 @@ bool QMetalSwapChain::buildOrResize()
 
     QRHI_PROF;
     QRHI_PROF_F(resizeSwapChain(this, QMTL_FRAMES_IN_FLIGHT, samples > 1 ? QMTL_FRAMES_IN_FLIGHT : 0, samples));
+
+    if (needsRegistration)
+        rhiD->registerResource(this);
 
     return true;
 }

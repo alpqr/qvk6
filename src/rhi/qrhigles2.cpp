@@ -1741,6 +1741,8 @@ void QGles2Buffer::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseBuffer(this));
+
+    rhiD->unregisterResource(this);
 }
 
 bool QGles2Buffer::build()
@@ -1771,6 +1773,7 @@ bool QGles2Buffer::build()
     rhiD->f->glBufferData(target, m_size, nullptr, m_type == Dynamic ? GL_DYNAMIC_DRAW : GL_STATIC_DRAW);
 
     QRHI_PROF_F(newBuffer(this, m_size, 1, 0));
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -1797,6 +1800,8 @@ void QGles2RenderBuffer::release()
 
     QRHI_PROF;
     QRHI_PROF_F(releaseRenderBuffer(this));
+
+    rhiD->unregisterResource(this);
 }
 
 bool QGles2RenderBuffer::build()
@@ -1851,6 +1856,7 @@ bool QGles2RenderBuffer::build()
         break;
     }
 
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -2096,6 +2102,8 @@ void QGles2TextureRenderTarget::release()
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 QRhiRenderPassDescriptor *QGles2TextureRenderTarget::newCompatibleRenderPassDescriptor()
@@ -2159,6 +2167,7 @@ bool QGles2TextureRenderTarget::build()
         return false;
     }
 
+    rhiD->registerResource(this);
     return true;
 }
 
@@ -2234,6 +2243,8 @@ void QGles2GraphicsPipeline::release()
 
     QRHI_RES_RHI(QRhiGles2);
     rhiD->releaseQueue.append(e);
+
+    rhiD->unregisterResource(this);
 }
 
 bool QGles2GraphicsPipeline::build()
@@ -2357,6 +2368,7 @@ bool QGles2GraphicsPipeline::build()
         lookupSamplers(v);
 
     generation += 1;
+    rhiD->registerResource(this);
     return true;
 }
 

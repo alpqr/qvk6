@@ -4910,7 +4910,7 @@ bool QVkSwapChain::buildOrResize()
     }
 
     QRHI_RES_RHI(QRhiVulkan);
-    const bool brandNew = !window || window != m_window;
+    const bool needsRegistration = !window || window != m_window;
 
     // Can be called multiple times due to window resizes - that is not the
     // same as a simple release+build (as with other resources). Thus no
@@ -4927,7 +4927,7 @@ bool QVkSwapChain::buildOrResize()
     if (!rhiD->recreateSwapChain(this))
         return false;
 
-    if (brandNew)
+    if (needsRegistration)
         rhiD->swapchains.insert(this);
 
     if (m_depthStencil && m_depthStencil->sampleCount() != m_sampleCount) {
@@ -4992,7 +4992,7 @@ bool QVkSwapChain::buildOrResize()
     QRHI_PROF;
     QRHI_PROF_F(resizeSwapChain(this, QVK_FRAMES_IN_FLIGHT, samples > VK_SAMPLE_COUNT_1_BIT ? QVK_FRAMES_IN_FLIGHT : 0, samples));
 
-    if (brandNew)
+    if (needsRegistration)
         rhiD->registerResource(this);
 
     return true;

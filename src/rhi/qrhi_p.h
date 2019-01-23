@@ -155,6 +155,7 @@ public:
         return p->rhiDWhenEnabled ? p : nullptr;
     }
 
+    // only really care about resources that own native graphics resources underneath
     void registerResource(QRhiResource *res)
     {
         res->orphanedWithRsh = nullptr;

@@ -66,7 +66,7 @@ typedef void * QVkAllocator;
 struct QVkBuffer : public QRhiBuffer
 {
     QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
-    bool isSharable() const override;
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 
@@ -87,6 +87,7 @@ struct QVkRenderBuffer : public QRhiRenderBuffer
     QVkRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
                     int sampleCount, Flags flags);
     ~QVkRenderBuffer();
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     QRhiTexture::Format backingFormat() const override;
@@ -105,7 +106,7 @@ struct QVkTexture : public QRhiTexture
 {
     QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
                int sampleCount, Flags flags);
-    bool isSharable() const override;
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     bool buildFrom(const QRhiNativeHandles *src) override;
@@ -134,6 +135,7 @@ struct QVkSampler : public QRhiSampler
 {
     QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
                AddressMode u, AddressMode v, AddressMode w);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 

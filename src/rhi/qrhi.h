@@ -491,7 +491,7 @@ public:
     QByteArray name() const;
     void setName(const QByteArray &name);
 
-    virtual bool isSharable() const;
+    virtual bool isShareable() const;
 
 protected:
     QRhiResource(QRhiImplementation *rhi_);

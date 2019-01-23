@@ -360,7 +360,7 @@ QT_BEGIN_NAMESPACE
     QRhiTexture visible to all the QRhi instances that use the same
     QRhiResourceSharingHost.
 
-    \sa QRhiResource::isSharable()
+    \sa QRhiResource::isShareable()
  */
 
 /*!
@@ -1162,20 +1162,25 @@ void QRhiResource::setName(const QByteArray &name)
 }
 
 /*!
-    \return true if this resource is sharable between QRhi instances via a
+    \return true if this resource is shareable between QRhi instances via a
     QRhiResourceSharingHost. It also means that such an QRhiResource can
     outlive the QRhi on which it was created.
 
-    \note Once a sharable QRhiResource is \c orphaned, meaning that the QRhi
-    from which it was created gets destroyed, build() is not a valid operation
-    anymore. It can only be used in graphics operations (as the underlying
-    graphics objects are still there and valid) or can be released. This is
-    true as long as the QRhiResourceSharingHost, with which the creator QRhi
-    was associated with, has at least one associated QRhi alive.
+    \note Once a shareable QRhiResource is \c orphaned, meaning that the QRhi
+    from which it was created gets destroyed, \c{build()} is not a valid
+    operation anymore. The QRhiResource can then only be used in graphics
+    operations (as the underlying graphics objects are still there and valid)
+    or can be released, as long as the QRhiResourceSharingHost,
+    with which the creator QRhi was associated with, has at least one
+    associated QRhi alive.
+
+    \note Shareable resources typically include buffers, textures, samplers,
+    and renderbuffers. Most backends will not support other type of shareable
+    resources.
 
     \sa QRhiResourceSharingHost, QRhi::CrossThreadResourceSharing
  */
-bool QRhiResource::isSharable() const
+bool QRhiResource::isShareable() const
 {
     return false;
 }
@@ -2358,10 +2363,10 @@ QRhiImplementation::~QRhiImplementation()
 
     if (rsh) {
         for (QRhiResource *res : qAsConst(resources)) {
-            if (res->isSharable()) {
+            if (res->isShareable()) {
                 res->orphanedWithRsh = rsh;
             } else {
-                qWarning("QRhi %p going down orphaning an unreleased, non-sharable resource %p (%s). This is bad.",
+                qWarning("QRhi %p going down orphaning an unreleased, non-shareable resource %p (%s). This is bad.",
                          q, res, res->objectName.constData());
             }
             res->rhi = nullptr;
@@ -2591,10 +2596,10 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     This makes the underlying graphics resources of QRhiResource subclasses
     such as QRhiTexture available to all the QRhi instances that use the same
     QRhiResourceSharingHost. This applies only to QRhiResource instances that
-    report \c true from \l{QRhiResource::isSharable()}{isSharable()}.
+    report \c true from \l{QRhiResource::isShareable()}{isShareable()}.
 
     In order to avoid lifetime management issues with shared resources, a
-    sharable QRhiResource is allowed to be orphaned, meaning the QRhi the
+    sharaeble QRhiResource is allowed to be orphaned, meaning the QRhi the
     resource was created from can be destroyed while keeping the QRhiResource
     usable (although operations like \c build() are not allowed anymore then).
     Applications can thus postpone calling
@@ -2658,7 +2663,7 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
         QRhi *rhi = QRhi::create(initParams);
         QRhi *rhi2 = QRhi::create(initParams);
         QRhiTexture *tex = rhi->newTexture(...);
-        if (!tex->isSharable()) { error("not supported"); }
+        if (!tex->isShareable()) { error("not supported"); }
         ... use tex with rhi or rhi2
         tex->releaseAndDestroy();
         delete rhi;
@@ -2676,7 +2681,7 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
         QRhi *rhi = QRhi::create(initParams);
         QRhi *rhi2 = QRhi::create(initParams);
         QRhiTexture *tex = rhi->newTexture(...);
-        if (!tex->isSharable()) { error("not supported"); }
+        if (!tex->isShareable()) { error("not supported"); }
         ... use tex with rhi or rhi2
         delete rhi;
         ... use tex with rhi2
@@ -2691,7 +2696,7 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     \note Moving the \c{tex->releaseAndDestroy()} call between the \c{delete
     rhi2} and \c{delete rsh} statements would be incorrect.
 
-    \sa QRhiResource::isSharable(), QRhi::CrossThreadResourceSharing,
+    \sa QRhiResource::isShareable(), QRhi::CrossThreadResourceSharing,
     QRhiInitParams, QRhi::create()
  */
 

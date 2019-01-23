@@ -2717,6 +2717,13 @@ static void qrhivk_releaseBuffer(const QRhiVulkan::DeferredReleaseEntry &e, void
     }
 }
 
+static void qrhivk_releaseRenderBuffer(const QRhiVulkan::DeferredReleaseEntry &e, VkDevice dev, QVulkanDeviceFunctions *df)
+{
+    df->vkDestroyImageView(dev, e.renderBuffer.imageView, nullptr);
+    df->vkDestroyImage(dev, e.renderBuffer.image, nullptr);
+    df->vkFreeMemory(dev, e.renderBuffer.memory, nullptr);
+}
+
 static void qrhivk_releaseTexture(const QRhiVulkan::DeferredReleaseEntry &e, VkDevice dev, QVulkanDeviceFunctions *df, void *allocator)
 {
     df->vkDestroyImageView(dev, e.texture.imageView, nullptr);
@@ -2725,18 +2732,29 @@ static void qrhivk_releaseTexture(const QRhiVulkan::DeferredReleaseEntry &e, VkD
         vmaDestroyBuffer(toVmaAllocator(allocator), e.texture.stagingBuffers[i], toVmaAllocation(e.texture.stagingAllocations[i]));
 }
 
+static void qrhivk_releaseSampler(const QRhiVulkan::DeferredReleaseEntry &e, VkDevice dev, QVulkanDeviceFunctions *df)
+{
+    df->vkDestroySampler(dev, e.sampler.sampler, nullptr);
+}
+
 void QRhiVulkan::executeDeferredReleasesOnRshNow(QRhiResourceSharingHostPrivate *rsh,
                                                  QVector<QRhiVulkan::DeferredReleaseEntry> *rshRelQueue)
 {
     for (int i = rshRelQueue->count() - 1; i >= 0; --i) {
         const QRhiVulkan::DeferredReleaseEntry &e((*rshRelQueue)[i]);
-        // only need to handle resources that report isSharable() == true
+        // only need to handle resources that report isShareable() == true
         switch (e.type) {
         case QRhiVulkan::DeferredReleaseEntry::Buffer:
             qrhivk_releaseBuffer(e, rsh->d_vulkan.h.vmemAllocator);
             break;
+        case QRhiVulkan::DeferredReleaseEntry::RenderBuffer:
+            qrhivk_releaseRenderBuffer(e, rsh->d_vulkan.h.dev, rsh->d_vulkan.df);
+            break;
         case QRhiVulkan::DeferredReleaseEntry::Texture:
             qrhivk_releaseTexture(e, rsh->d_vulkan.h.dev, rsh->d_vulkan.df, rsh->d_vulkan.h.vmemAllocator);
+            break;
+        case QRhiVulkan::DeferredReleaseEntry::Sampler:
+            qrhivk_releaseSampler(e, rsh->d_vulkan.h.dev, rsh->d_vulkan.df);
             break;
         default:
             Q_UNREACHABLE();
@@ -2767,15 +2785,13 @@ void QRhiVulkan::executeDeferredReleases(bool forced)
                 qrhivk_releaseBuffer(e, allocator);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::RenderBuffer:
-                df->vkDestroyImageView(dev, e.renderBuffer.imageView, nullptr);
-                df->vkDestroyImage(dev, e.renderBuffer.image, nullptr);
-                df->vkFreeMemory(dev, e.renderBuffer.memory, nullptr);
+                qrhivk_releaseRenderBuffer(e, dev, df);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Texture:
                 qrhivk_releaseTexture(e, dev, df, allocator);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::Sampler:
-                df->vkDestroySampler(dev, e.sampler.sampler, nullptr);
+                qrhivk_releaseSampler(e, dev, df);
                 break;
             case QRhiVulkan::DeferredReleaseEntry::TextureRenderTarget:
                 df->vkDestroyFramebuffer(dev, e.textureRenderTarget.fb, nullptr);
@@ -3657,7 +3673,7 @@ QVkBuffer::QVkBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int s
     }
 }
 
-bool QVkBuffer::isSharable() const
+bool QVkBuffer::isShareable() const
 {
     // returning true implies orphaned release must be supported via the rsh
     return true;
@@ -3686,6 +3702,7 @@ void QVkBuffer::release()
     }
 
     if (!orphanedWithRsh) {
+        // the rhi is still around, good
         QRHI_RES_RHI(QRhiVulkan);
         rhiD->releaseQueue.append(e);
 
@@ -3770,6 +3787,11 @@ QVkRenderBuffer::~QVkRenderBuffer()
     delete backingTexture;
 }
 
+bool QVkRenderBuffer::isShareable() const
+{
+    return true;
+}
+
 void QVkRenderBuffer::release()
 {
     if (!memory && !backingTexture)
@@ -3787,29 +3809,36 @@ void QVkRenderBuffer::release()
     image = VK_NULL_HANDLE;
     imageView = VK_NULL_HANDLE;
 
-    QRHI_RES_RHI(QRhiVulkan);
-    rhiD->releaseQueue.append(e);
-
     if (backingTexture) {
         Q_ASSERT(backingTexture->lastActiveFrameSlot == -1);
         backingTexture->release();
     }
 
-    QRHI_PROF;
-    QRHI_PROF_F(releaseRenderBuffer(this));
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiVulkan);
+        rhiD->releaseQueue.append(e);
 
-    rhiD->unregisterResource(this);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseRenderBuffer(this));
+
+        rhiD->unregisterResource(this);
+    } else {
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QVkRenderBuffer::build()
 {
+    QRHI_RES_RHI(QRhiVulkan);
+    if (!rhiD->orphanCheck(this))
+        return false;
+
     if (memory || backingTexture)
         release();
 
     if (m_pixelSize.isEmpty())
         return false;
 
-    QRHI_RES_RHI(QRhiVulkan);
     QRHI_PROF;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
 
@@ -3874,7 +3903,7 @@ QVkTexture::QVkTexture(QRhiImplementation *rhi, Format format, const QSize &pixe
     }
 }
 
-bool QVkTexture::isSharable() const
+bool QVkTexture::isShareable() const
 {
     // returning true implies orphaned release must be supported via the rsh
     return true;
@@ -3907,6 +3936,7 @@ void QVkTexture::release()
     nativeHandlesStruct.image = VK_NULL_HANDLE;
 
     if (!orphanedWithRsh) {
+        // the rhi is still around, good
         QRHI_RES_RHI(QRhiVulkan);
         rhiD->releaseQueue.append(e);
 
@@ -4098,6 +4128,11 @@ QVkSampler::QVkSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilt
 {
 }
 
+bool QVkSampler::isShareable() const
+{
+    return true;
+}
+
 void QVkSampler::release()
 {
     if (!sampler)
@@ -4110,14 +4145,21 @@ void QVkSampler::release()
     e.sampler.sampler = sampler;
     sampler = VK_NULL_HANDLE;
 
-    QRHI_RES_RHI(QRhiVulkan);
-    rhiD->releaseQueue.append(e);
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiVulkan);
+        rhiD->releaseQueue.append(e);
+        rhiD->unregisterResource(this);
+    } else {
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QVkSampler::build()
 {
+    QRHI_RES_RHI(QRhiVulkan);
+    if (!rhiD->orphanCheck(this))
+        return false;
+
     if (sampler)
         release();
 
@@ -4133,7 +4175,6 @@ bool QVkSampler::build()
     samplerInfo.maxAnisotropy = 1.0f;
     samplerInfo.maxLod = m_mipmapMode == None ? 0.25f : 1000.0f;
 
-    QRHI_RES_RHI(QRhiVulkan);
     VkResult err = rhiD->df->vkCreateSampler(rhiD->dev, &samplerInfo, nullptr, &sampler);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create sampler: %d", err);

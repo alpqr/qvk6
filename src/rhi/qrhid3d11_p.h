@@ -56,6 +56,7 @@ class QRhiResourceSharingHostPrivate;
 struct QD3D11Buffer : public QRhiBuffer
 {
     QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 
@@ -70,6 +71,7 @@ struct QD3D11RenderBuffer : public QRhiRenderBuffer
 {
     QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
                        int sampleCount, QRhiRenderBuffer::Flags flags);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     QRhiTexture::Format backingFormat() const override;
@@ -86,6 +88,7 @@ struct QD3D11Texture : public QRhiTexture
 {
     QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
                   int sampleCount, Flags flags);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     bool buildFrom(const QRhiNativeHandles *src) override;
@@ -109,6 +112,7 @@ struct QD3D11Sampler : public QRhiSampler
 {
     QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
                   AddressMode u, AddressMode v, AddressMode w);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 

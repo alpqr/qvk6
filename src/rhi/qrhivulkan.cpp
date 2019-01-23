@@ -3718,8 +3718,7 @@ void QVkBuffer::release()
 
 bool QVkBuffer::build()
 {
-    QRHI_RES_RHI(QRhiVulkan);
-    if (!rhiD->orphanCheck(this))
+    if (!QRhiImplementation::orphanCheck(this))
         return false;
 
     if (buffers[0])
@@ -3743,6 +3742,7 @@ bool QVkBuffer::build()
         bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     }
 
+    QRHI_RES_RHI(QRhiVulkan);
     VkResult err = VK_SUCCESS;
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i) {
         buffers[i] = VK_NULL_HANDLE;
@@ -3829,8 +3829,7 @@ void QVkRenderBuffer::release()
 
 bool QVkRenderBuffer::build()
 {
-    QRHI_RES_RHI(QRhiVulkan);
-    if (!rhiD->orphanCheck(this))
+    if (!QRhiImplementation::orphanCheck(this))
         return false;
 
     if (memory || backingTexture)
@@ -3839,6 +3838,7 @@ bool QVkRenderBuffer::build()
     if (m_pixelSize.isEmpty())
         return false;
 
+    QRHI_RES_RHI(QRhiVulkan);
     QRHI_PROF;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
 
@@ -3952,13 +3952,13 @@ void QVkTexture::release()
 
 bool QVkTexture::prepareBuild(QSize *adjustedSize)
 {
-    QRHI_RES_RHI(QRhiVulkan);
-    if (!rhiD->orphanCheck(this))
+    if (!QRhiImplementation::orphanCheck(this))
         return false;
 
     if (image)
         release();
 
+    QRHI_RES_RHI(QRhiVulkan);
     vkformat = toVkTextureFormat(m_format, m_flags);
     VkFormatProperties props;
     rhiD->f->vkGetPhysicalDeviceFormatProperties(rhiD->physDev, vkformat, &props);
@@ -4028,8 +4028,6 @@ bool QVkTexture::finishBuild()
 
 bool QVkTexture::build()
 {
-    QRHI_RES_RHI(QRhiVulkan);
-
     QSize size;
     if (!prepareBuild(&size))
         return false;
@@ -4069,6 +4067,7 @@ bool QVkTexture::build()
     memset(&allocInfo, 0, sizeof(allocInfo));
     allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
 
+    QRHI_RES_RHI(QRhiVulkan);
     VmaAllocation allocation;
     VkResult err = vmaCreateImage(toVmaAllocator(rhiD->allocator), &imageInfo, &allocInfo, &image, &allocation, nullptr);
     if (err != VK_SUCCESS) {
@@ -4093,8 +4092,6 @@ bool QVkTexture::build()
 
 bool QVkTexture::buildFrom(const QRhiNativeHandles *src)
 {
-    QRHI_RES_RHI(QRhiVulkan);
-
     const QRhiVulkanTextureNativeHandles *h = static_cast<const QRhiVulkanTextureNativeHandles *>(src);
     if (!h || !h->image)
         return false;
@@ -4112,6 +4109,7 @@ bool QVkTexture::buildFrom(const QRhiNativeHandles *src)
 
     owns = false;
     layout = h->layout;
+    QRHI_RES_RHI(QRhiVulkan);
     rhiD->registerResource(this);
     return true;
 }
@@ -4156,8 +4154,7 @@ void QVkSampler::release()
 
 bool QVkSampler::build()
 {
-    QRHI_RES_RHI(QRhiVulkan);
-    if (!rhiD->orphanCheck(this))
+    if (!QRhiImplementation::orphanCheck(this))
         return false;
 
     if (sampler)
@@ -4175,6 +4172,7 @@ bool QVkSampler::build()
     samplerInfo.maxAnisotropy = 1.0f;
     samplerInfo.maxLod = m_mipmapMode == None ? 0.25f : 1000.0f;
 
+    QRHI_RES_RHI(QRhiVulkan);
     VkResult err = rhiD->df->vkCreateSampler(rhiD->dev, &samplerInfo, nullptr, &sampler);
     if (err != VK_SUCCESS) {
         qWarning("Failed to create sampler: %d", err);

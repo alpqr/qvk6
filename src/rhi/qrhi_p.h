@@ -172,7 +172,7 @@ public:
         return resources;
     }
 
-    bool orphanCheck(QRhiResource *res)
+    static bool orphanCheck(QRhiResource *res)
     {
         if (res->orphanedWithRsh) {
             qWarning("Attempted to perform something on an orphaned QRhiResource %p (%s). This is invalid.",

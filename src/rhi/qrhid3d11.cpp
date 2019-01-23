@@ -1686,10 +1686,13 @@ QD3D11Buffer::QD3D11Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage,
 {
 }
 
+bool QD3D11Buffer::isShareable() const
+{
+    return true;
+}
+
 void QD3D11Buffer::release()
 {
-    QRHI_RES_RHI(QRhiD3D11);
-
     if (!buffer)
         return;
 
@@ -1698,10 +1701,12 @@ void QD3D11Buffer::release()
     buffer->Release();
     buffer = nullptr;
 
-    QRHI_PROF;
-    QRHI_PROF_F(releaseBuffer(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiD3D11);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseBuffer(this));
+        rhiD->unregisterResource(this);
+    }
 }
 
 static inline uint toD3DBufferUsage(QRhiBuffer::UsageFlags usage)
@@ -1718,6 +1723,9 @@ static inline uint toD3DBufferUsage(QRhiBuffer::UsageFlags usage)
 
 bool QD3D11Buffer::build()
 {
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
+
     if (buffer)
         release();
 
@@ -1760,10 +1768,13 @@ QD3D11RenderBuffer::QD3D11RenderBuffer(QRhiImplementation *rhi, Type type, const
 {
 }
 
+bool QD3D11RenderBuffer::isShareable() const
+{
+    return true;
+}
+
 void QD3D11RenderBuffer::release()
 {
-    QRHI_RES_RHI(QRhiD3D11);
-
     if (!tex)
         return;
 
@@ -1780,14 +1791,19 @@ void QD3D11RenderBuffer::release()
     tex->Release();
     tex = nullptr;
 
-    QRHI_PROF;
-    QRHI_PROF_F(releaseRenderBuffer(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiD3D11);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseRenderBuffer(this));
+        rhiD->unregisterResource(this);
+    }
 }
 
 bool QD3D11RenderBuffer::build()
 {
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
+
     if (tex)
         release();
 
@@ -1868,10 +1884,13 @@ QD3D11Texture::QD3D11Texture(QRhiImplementation *rhi, Format format, const QSize
 {
 }
 
+bool QD3D11Texture::isShareable() const
+{
+    return true;
+}
+
 void QD3D11Texture::release()
 {
-    QRHI_RES_RHI(QRhiD3D11);
-
     if (!tex)
         return;
 
@@ -1885,10 +1904,12 @@ void QD3D11Texture::release()
 
     tex = nullptr;
 
-    QRHI_PROF;
-    QRHI_PROF_F(releaseTexture(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiD3D11);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseTexture(this));
+        rhiD->unregisterResource(this);
+    }
 }
 
 static inline DXGI_FORMAT toD3DDepthTextureSRVFormat(QRhiTexture::Format format)
@@ -1919,7 +1940,8 @@ static inline DXGI_FORMAT toD3DDepthTextureDSVFormat(QRhiTexture::Format format)
 
 bool QD3D11Texture::prepareBuild(QSize *adjustedSize)
 {
-    QRHI_RES_RHI(QRhiD3D11);
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
 
     if (tex)
         release();
@@ -1929,6 +1951,7 @@ bool QD3D11Texture::prepareBuild(QSize *adjustedSize)
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
+    QRHI_RES_RHI(QRhiD3D11);
     dxgiFormat = toD3DTextureFormat(m_format, m_flags);
     mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
@@ -1988,8 +2011,6 @@ bool QD3D11Texture::finishBuild()
 
 bool QD3D11Texture::build()
 {
-    QRHI_RES_RHI(QRhiD3D11);
-
     QSize size;
     if (!prepareBuild(&size))
         return false;
@@ -2026,6 +2047,7 @@ bool QD3D11Texture::build()
     desc.BindFlags = bindFlags;
     desc.MiscFlags = miscFlags;
 
+    QRHI_RES_RHI(QRhiD3D11);
     HRESULT hr = rhiD->dev->CreateTexture2D(&desc, nullptr, &tex);
     if (FAILED(hr)) {
         qWarning("Failed to create texture: %s", qPrintable(comErrorMessage(hr)));
@@ -2048,8 +2070,6 @@ bool QD3D11Texture::build()
 
 bool QD3D11Texture::buildFrom(const QRhiNativeHandles *src)
 {
-    QRHI_RES_RHI(QRhiD3D11);
-
     const QRhiD3D11TextureNativeHandles *h = static_cast<const QRhiD3D11TextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
@@ -2066,6 +2086,7 @@ bool QD3D11Texture::buildFrom(const QRhiNativeHandles *src)
     QRHI_PROF_F(newTexture(this, false, mipLevelCount, m_flags.testFlag(CubeMap) ? 6 : 1, sampleDesc.Count));
 
     owns = false;
+    QRHI_RES_RHI(QRhiD3D11);
     rhiD->registerResource(this);
     return true;
 }
@@ -2081,17 +2102,23 @@ QD3D11Sampler::QD3D11Sampler(QRhiImplementation *rhi, Filter magFilter, Filter m
 {
 }
 
+bool QD3D11Sampler::isShareable() const
+{
+    return true;
+}
+
 void QD3D11Sampler::release()
 {
-    QRHI_RES_RHI(QRhiD3D11);
-
     if (!samplerState)
         return;
 
     samplerState->Release();
     samplerState = nullptr;
 
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiD3D11);
+        rhiD->unregisterResource(this);
+    }
 }
 
 static inline D3D11_FILTER toD3DFilter(QRhiSampler::Filter minFilter, QRhiSampler::Filter magFilter, QRhiSampler::Filter mipFilter)
@@ -2147,6 +2174,9 @@ static inline D3D11_TEXTURE_ADDRESS_MODE toD3DAddressMode(QRhiSampler::AddressMo
 
 bool QD3D11Sampler::build()
 {
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
+
     if (samplerState)
         release();
 

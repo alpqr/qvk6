@@ -294,15 +294,19 @@ bool QRhiVulkan::create(QRhi::Flags flags)
 
     f = inst->functions();
 
+    if (rsh && importedDevice && gfxQueueFamilyIdx < 0) {
+        qWarning("QRhiResourceSharingHost is not compatible with QRhi instances with externally created "
+                 "native devices with no graphics queue family index specified");
+        return false;
+    }
+
     bool rshWantsDevice = false;
     if (rsh) {
-        if (rsh->d_vulkan.h.dev) {
-            physDev = rsh->d_vulkan.h.physDev;
-            dev = rsh->d_vulkan.h.dev;
-            gfxQueueFamilyIdx = rsh->d_vulkan.h.gfxQueueFamilyIdx;
-            gfxQueue = rsh->d_vulkan.h.gfxQueue;
-            cmdPool = rsh->d_vulkan.h.cmdPool;
-            allocator = rsh->d_vulkan.h.vmemAllocator;
+        if (rsh->d_vulkan.dev) {
+            physDev = rsh->d_vulkan.physDev;
+            dev = rsh->d_vulkan.dev;
+            allocator = rsh->d_vulkan.allocator;
+            gfxQueueFamilyIdx = rsh->d_vulkan.gfxQueueFamilyIdx;
         } else {
             rshWantsDevice = true;
         }
@@ -419,7 +423,7 @@ bool QRhiVulkan::create(QRhi::Flags flags)
 
     df = inst->deviceFunctions(dev);
 
-    if (!importedCmdPool && (!rsh || rshWantsDevice)) {
+    if (!importedCmdPool) {
         VkCommandPoolCreateInfo poolInfo;
         memset(&poolInfo, 0, sizeof(poolInfo));
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -511,11 +515,15 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     nativeHandlesStruct.vmemAllocator = allocator;
 
     if (rsh) {
-        qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances", rsh, rsh->rhiCount);
+        qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances on VkDevice %p",
+               rsh, rsh->rhiCount, dev);
         rsh->rhiCount += 1;
         rsh->rhiThreads.append(QThread::currentThread());
         if (rshWantsDevice) {
-            rsh->d_vulkan.h = nativeHandlesStruct;
+            rsh->d_vulkan.physDev = physDev;
+            rsh->d_vulkan.dev = dev;
+            rsh->d_vulkan.allocator = allocator;
+            rsh->d_vulkan.gfxQueueFamilyIdx = gfxQueueFamilyIdx;
             rsh->d_vulkan.df = df;
         }
     }
@@ -559,19 +567,18 @@ void QRhiVulkan::destroy()
     }
 
     if (!importedAllocator && allocator) {
-        if (!rsh || allocator != rsh->d_vulkan.h.vmemAllocator)
+        if (!rsh || allocator != rsh->d_vulkan.allocator)
             vmaDestroyAllocator(toVmaAllocator(allocator));
         allocator = nullptr;
     }
 
     if (!importedCmdPool && cmdPool) {
-        if (!rsh || cmdPool != rsh->d_vulkan.h.cmdPool)
-            df->vkDestroyCommandPool(dev, cmdPool, nullptr);
+        df->vkDestroyCommandPool(dev, cmdPool, nullptr);
         cmdPool = VK_NULL_HANDLE;
     }
 
     if (!importedDevice && dev) {
-        if (!rsh || dev != rsh->d_vulkan.h.dev) {
+        if (!rsh || dev != rsh->d_vulkan.dev) {
             df->vkDestroyDevice(dev, nullptr);
             inst->resetDeviceFunctions(dev);
         }
@@ -586,17 +593,19 @@ void QRhiVulkan::destroy()
         rsh->rhiThreads.removeOne(QThread::currentThread());
         if (rsh->rhiCount == 0) {
             // all associated QRhi instances are gone for the rsh, time to clean up
-            rsh->d_vulkan.df->vkDeviceWaitIdle(rsh->d_vulkan.h.dev);
+            rsh->d_vulkan.df->vkDeviceWaitIdle(rsh->d_vulkan.dev);
             if (rsh->d_vulkan.releaseQueue) {
                 auto rshRelQueue = static_cast<QVector<DeferredReleaseEntry> *>(rsh->d_vulkan.releaseQueue);
                 QRhiVulkan::executeDeferredReleasesOnRshNow(rsh, rshRelQueue);
                 delete rshRelQueue;
             }
-            vmaDestroyAllocator(toVmaAllocator(rsh->d_vulkan.h.vmemAllocator));
-            rsh->d_vulkan.df->vkDestroyCommandPool(rsh->d_vulkan.h.dev, rsh->d_vulkan.h.cmdPool, nullptr);
-            rsh->d_vulkan.df->vkDestroyDevice(rsh->d_vulkan.h.dev, nullptr);
-            inst->resetDeviceFunctions(rsh->d_vulkan.h.dev);
-            rsh->d_vulkan.h = QRhiVulkanNativeHandles();
+            vmaDestroyAllocator(toVmaAllocator(rsh->d_vulkan.allocator));
+            rsh->d_vulkan.df->vkDestroyDevice(rsh->d_vulkan.dev, nullptr);
+            inst->resetDeviceFunctions(rsh->d_vulkan.dev);
+            rsh->d_vulkan.physDev = VK_NULL_HANDLE;
+            rsh->d_vulkan.dev = VK_NULL_HANDLE;
+            rsh->d_vulkan.allocator = nullptr;
+            rsh->d_vulkan.gfxQueueFamilyIdx = -1;
             rsh->d_vulkan.df = nullptr;
             rsh->d_vulkan.releaseQueue = nullptr;
         }
@@ -1545,6 +1554,8 @@ void QRhiVulkan::waitCommandCompletion(int frameSlot)
 
 QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr); // externally synchronized fun for VkQueue & co.
+
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
     QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrameSlot]);
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
@@ -1650,6 +1661,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 
     QRHI_PROF_F(beginSwapChainFrame(swapChain));
 
+    lock.unlock();
     prepareNewFrame(&swapChainD->cbWrapper);
 
     return QRhi::FrameOpSuccess;
@@ -1657,6 +1669,8 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr); // externally synchronized fun for VkQueue & co.
+
     Q_ASSERT(inFrame);
     inFrame = false;
 
@@ -1802,6 +1816,7 @@ QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
 QRhi::FrameOpResult QRhiVulkan::finish()
 {
     Q_ASSERT(!inPass);
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     QVkSwapChain *swapChainD = nullptr;
     if (inFrame) {
@@ -1836,8 +1851,8 @@ QRhi::FrameOpResult QRhiVulkan::finish()
             startCommandBuffer(&swapChainD->imageRes[swapChainD->currentImageIndex].cmdBuf);
     }
 
+    lock.unlock();
     executeDeferredReleases(true);
-
     finishActiveReadbacks(true);
 
     return QRhi::FrameOpSuccess;
@@ -2745,16 +2760,16 @@ void QRhiVulkan::executeDeferredReleasesOnRshNow(QRhiResourceSharingHostPrivate 
         // only need to handle resources that report isShareable() == true
         switch (e.type) {
         case QRhiVulkan::DeferredReleaseEntry::Buffer:
-            qrhivk_releaseBuffer(e, rsh->d_vulkan.h.vmemAllocator);
+            qrhivk_releaseBuffer(e, rsh->d_vulkan.allocator);
             break;
         case QRhiVulkan::DeferredReleaseEntry::RenderBuffer:
-            qrhivk_releaseRenderBuffer(e, rsh->d_vulkan.h.dev, rsh->d_vulkan.df);
+            qrhivk_releaseRenderBuffer(e, rsh->d_vulkan.dev, rsh->d_vulkan.df);
             break;
         case QRhiVulkan::DeferredReleaseEntry::Texture:
-            qrhivk_releaseTexture(e, rsh->d_vulkan.h.dev, rsh->d_vulkan.df, rsh->d_vulkan.h.vmemAllocator);
+            qrhivk_releaseTexture(e, rsh->d_vulkan.dev, rsh->d_vulkan.df, rsh->d_vulkan.allocator);
             break;
         case QRhiVulkan::DeferredReleaseEntry::Sampler:
-            qrhivk_releaseSampler(e, rsh->d_vulkan.h.dev, rsh->d_vulkan.df);
+            qrhivk_releaseSampler(e, rsh->d_vulkan.dev, rsh->d_vulkan.df);
             break;
         default:
             Q_UNREACHABLE();

@@ -44,7 +44,6 @@
 #include "qtrhiglobal_p.h"
 #include "qrhi_p.h"
 
-#include "qrhinull.h"
 #ifndef QT_NO_OPENGL
 #include "qrhigles2.h"
 #endif
@@ -72,7 +71,6 @@ public:
     int rhiCount = 0;
     QVector<QThread *> rhiThreads;
 
-    QRhiNullNativeHandles d_null;
 #ifndef QT_NO_OPENGL
     struct {
         QOpenGLContext *dummyShareContext = nullptr;
@@ -80,7 +78,10 @@ public:
 #endif
 #if QT_CONFIG(vulkan)
     struct {
-        QRhiVulkanNativeHandles h;
+        VkPhysicalDevice physDev = VK_NULL_HANDLE;
+        VkDevice dev = VK_NULL_HANDLE;
+        void *allocator = nullptr;
+        int gfxQueueFamilyIdx = -1;
         QVulkanDeviceFunctions *df = nullptr;
         void *releaseQueue = nullptr;
     } d_vulkan;

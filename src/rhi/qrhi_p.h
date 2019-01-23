@@ -150,9 +150,12 @@ public:
 
     QRhiProfilerPrivate *profilerPrivateOrNull()
     {
+        // return null when QRhi::EnableProfiling was not set
         QRhiProfilerPrivate *p = QRhiProfilerPrivate::get(&profiler);
-        return p->rhi ? p : nullptr;
+        return p->rhiDWhenEnabled ? p : nullptr;
     }
+
+    QRhi *q;
 
 protected:
     QVector<QRhiResourceUpdateBatch *> resUpdPool;

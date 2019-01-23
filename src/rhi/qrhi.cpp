@@ -2658,10 +2658,10 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags, QRh
     }
 
     if (r->d) {
+        r->d->q = r.data();
         if (flags.testFlag(EnableProfiling)) {
             QRhiProfilerPrivate *profD = QRhiProfilerPrivate::get(&r->d->profiler);
-            profD->rhi = r.data();
-            profD->rhiD = r->d;
+            profD->rhiDWhenEnabled = r->d;
         }
         r->d->debugMarkers = flags.testFlag(EnableDebugMarkers);
         if (r->d->create(flags))

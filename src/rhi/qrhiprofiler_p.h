@@ -83,8 +83,7 @@ public:
     void writeFloat(const char *key, float f);
     void endEntry();
 
-    QRhi *rhi = nullptr;
-    QRhiImplementation *rhiD = nullptr;
+    QRhiImplementation *rhiDWhenEnabled = nullptr;
     QIODevice *outputDevice = nullptr;
     QElapsedTimer ts;
     QByteArray buf;

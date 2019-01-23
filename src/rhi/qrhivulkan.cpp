@@ -2403,9 +2403,9 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                     imageSizeBytes = compressedData.size();
                     if (imageSizeBytes > 0) {
                         src = compressedData.constData();
-                        const int subresw = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
-                        const int subresh = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
-                        QSize size(subresw, subresh);
+                        QSize size = q->sizeForMipLevel(level, utexD->m_pixelSize);
+                        const int subresw = size.width();
+                        const int subresh = size.height();
                         if (!mipDesc.sourceSize().isEmpty())
                             size = mipDesc.sourceSize();
                         const int w = size.width();
@@ -2508,11 +2508,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 qWarning("Multisample texture cannot be read back");
                 continue;
             }
-            aRb.pixelSize = texD->m_pixelSize;
-            if (u.rb.level() > 0) {
-                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level()))));
-                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level()))));
-            }
+            aRb.pixelSize = u.rb.level() > 0 ? q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize)
+                                             : texD->m_pixelSize;
             aRb.format = texD->m_format;
         } else {
             Q_ASSERT(currentSwapChain);
@@ -3862,7 +3859,7 @@ bool QVkTexture::prepareBuild(QSize *adjustedSize)
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
-    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
     if (samples > VK_SAMPLE_COUNT_1_BIT) {
         if (isCube) {

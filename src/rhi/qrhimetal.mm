@@ -1194,8 +1194,9 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
                     curOfs += aligned(fullImageSizeBytes, texbufAlign);
                 } else if (!compressedData.isEmpty() && isCompressedFormat(utexD->m_format)) {
-                    const int subresw = qFloor(float(qMax(1, utexD->m_pixelSize.width() >> level)));
-                    const int subresh = qFloor(float(qMax(1, utexD->m_pixelSize.height() >> level)));
+                    const QSize subresSize = q->sizeForMipLevel(level, utexD->m_pixelSize);
+                    const int subresw = subresSize.width();
+                    const int subresh = subresSize.height();
                     int w, h;
                     if (mipDesc.sourceSize().isEmpty()) {
                         w = subresw;
@@ -1282,11 +1283,8 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 qWarning("Multisample texture cannot be read back");
                 continue;
             }
-            aRb.pixelSize = texD->m_pixelSize;
-            if (u.rb.level() > 0) {
-                aRb.pixelSize.setWidth(qFloor(float(qMax(1, aRb.pixelSize.width() >> u.rb.level()))));
-                aRb.pixelSize.setHeight(qFloor(float(qMax(1, aRb.pixelSize.height() >> u.rb.level()))));
-            }
+            aRb.pixelSize = u.rb.level() > 0 ? q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize)
+                                             : texD->m_pixelSize;
             aRb.format = texD->m_format;
             src = texD->d->tex;
             srcSize = texD->m_pixelSize;
@@ -1868,7 +1866,7 @@ bool QMetalTexture::prepareBuild(QSize *adjustedSize)
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     d->format = toMetalTextureFormat(m_format, m_flags);
-    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
     if (samples > 1) {
         if (isCube) {

@@ -1063,13 +1063,8 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                     cmd.args.updateSubRes.dstBox = box;
                     cmd.args.updateSubRes.srcRowPitch = bpl;
                 } else if (!mipDesc.compressedData().isEmpty() && isCompressedFormat(texD->m_format)) {
-                    QSize size;
-                    if (mipDesc.sourceSize().isEmpty()) {
-                        size.setWidth(qFloor(float(qMax(1, texD->m_pixelSize.width() >> level))));
-                        size.setHeight(qFloor(float(qMax(1, texD->m_pixelSize.height() >> level))));
-                    } else {
-                        size = mipDesc.sourceSize();
-                    }
+                    const QSize size = mipDesc.sourceSize().isEmpty() ? q->sizeForMipLevel(level, texD->m_pixelSize)
+                                                                      : mipDesc.sourceSize();
                     quint32 bpl = 0;
                     QSize blockDim;
                     compressedFormatInfo(texD->m_format, size, &bpl, nullptr, &blockDim);
@@ -1140,11 +1135,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             }
             src = texD->tex;
             dxgiFormat = texD->dxgiFormat;
-            pixelSize = texD->m_pixelSize;
-            if (u.rb.level() > 0) {
-                pixelSize.setWidth(qFloor(float(qMax(1, pixelSize.width() >> u.rb.level()))));
-                pixelSize.setHeight(qFloor(float(qMax(1, pixelSize.height() >> u.rb.level()))));
-            }
+            pixelSize = u.rb.level() > 0 ? q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize) : texD->m_pixelSize;
             format = texD->m_format;
             subres = D3D11CalcSubresource(u.rb.level(), u.rb.layer(), texD->mipLevelCount);
         } else {
@@ -1925,7 +1916,7 @@ bool QD3D11Texture::prepareBuild(QSize *adjustedSize)
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
     dxgiFormat = toD3DTextureFormat(m_format, m_flags);
-    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     sampleDesc = rhiD->effectiveSampleCount(m_sampleCount);
     if (sampleDesc.Count > 1) {
         if (isCube) {

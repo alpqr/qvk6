@@ -857,13 +857,8 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                 const QPoint dp = mipDesc.destinationTopLeft();
                 const QByteArray compressedData = mipDesc.compressedData();
                 if (isCompressed && !compressedData.isEmpty()) {
-                    QSize size;
-                    if (mipDesc.sourceSize().isEmpty()) {
-                        size.setWidth(qFloor(float(qMax(1, texD->m_pixelSize.width() >> level))));
-                        size.setHeight(qFloor(float(qMax(1, texD->m_pixelSize.height() >> level))));
-                    } else {
-                        size = mipDesc.sourceSize();
-                    }
+                    const QSize size = mipDesc.sourceSize().isEmpty() ? q->sizeForMipLevel(level, texD->m_pixelSize)
+                                                                      : mipDesc.sourceSize();
                     if (texD->specified) {
                         QGles2CommandBuffer::Command cmd;
                         cmd.cmd = QGles2CommandBuffer::Command::CompressedSubImage;
@@ -1925,7 +1920,7 @@ bool QGles2Texture::prepareBuild(QSize *adjustedSize)
     glintformat = GL_RGBA;
     glformat = GL_RGBA;
     gltype = GL_UNSIGNED_BYTE;
-    mipLevelCount = hasMipMaps ? qCeil(log2(qMax(size.width(), size.height()))) + 1 : 1;
+    mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
 
     if (isCompressed) {
         glintformat = toGlCompressedTextureFormat(m_format, m_flags);
@@ -1960,10 +1955,9 @@ bool QGles2Texture::build()
             const GLenum faceTargetBase = isCube ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : target;
             for (int layer = 0, layerCount = isCube ? 6 : 1; layer != layerCount; ++layer) {
                 for (int level = 0; level != mipLevelCount; ++level) {
-                    const int w = qFloor(float(qMax(1, size.width() >> level)));
-                    const int h = qFloor(float(qMax(1, size.height() >> level)));
+                    const QSize mipSize = rhiD->q->sizeForMipLevel(level, size);
                     rhiD->f->glTexImage2D(faceTargetBase + layer, level, glintformat,
-                                          w, h, 0,
+                                          mipSize.width(), mipSize.height(), 0,
                                           glformat, gltype, nullptr);
                 }
             }

@@ -2719,6 +2719,23 @@ QRhiResourceSharingHost::~QRhiResourceSharingHost()
     delete d;
 }
 
+bool QRhiResourceSharingHostPrivate::crossThreadDisallowCheck() const
+{
+    bool otherThreads = false;
+    for (QThread *t : qAsConst(rhiThreads)) {
+        if (t != QThread::currentThread()) {
+            otherThreads = true;
+            break;
+        }
+    }
+    if (otherThreads) {
+        qWarning("Attempted to set a QRhiResourceSharingHost with QRhi instances on different threads when "
+                 "QRhi::CrossThreadResourceSharing is not supported. Resource sharing will be disabled.");
+        return false;
+    }
+    return true;
+}
+
 /*!
     \internal
  */

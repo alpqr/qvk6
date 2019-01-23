@@ -1,6 +1,5 @@
 res.sh.: gl
 res.sh.: mtl
-can we really not support CrossThreadRsh on d3d?
 res.sh.: example to show read/write same texture
 advanced blend modes
 gl: tex formats (texture, readback)

@@ -66,6 +66,7 @@ class Q_RHI_PRIVATE_EXPORT QRhiResourceSharingHostPrivate
 {
 public:
     static QRhiResourceSharingHostPrivate *get(QRhiResourceSharingHost *h) { return h->d; }
+    bool crossThreadDisallowCheck() const;
 
     QMutex mtx;
     int rhiCount = 0;

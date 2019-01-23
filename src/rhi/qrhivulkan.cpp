@@ -541,6 +541,8 @@ void QRhiVulkan::destroy()
     executeDeferredReleases(true);
     finishActiveReadbacks(true);
 
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     if (ofr.cmdFence) {
         df->vkDestroyFence(dev, ofr.cmdFence, nullptr);
         ofr.cmdFence = VK_NULL_HANDLE;
@@ -1756,6 +1758,8 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     QRhi::FrameOpResult cbres = startCommandBuffer(&ofr.cbWrapper.cb);
     if (cbres != QRhi::FrameOpSuccess)
         return cbres;
@@ -1773,6 +1777,7 @@ QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
     if (swapchains.count() > 1)
         waitCommandCompletion(currentFrameSlot);
 
+    lock.unlock();
     prepareNewFrame(&ofr.cbWrapper);
     ofr.active = true;
 
@@ -1782,6 +1787,8 @@ QRhi::FrameOpResult QRhiVulkan::beginOffscreenFrame(QRhiCommandBuffer **cb)
 
 QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     Q_ASSERT(inFrame);
     inFrame = false;
     Q_ASSERT(ofr.active);
@@ -1806,6 +1813,7 @@ QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
     df->vkWaitForFences(dev, 1, &ofr.cmdFence, VK_TRUE, UINT64_MAX);
     df->vkResetFences(dev, 1, &ofr.cmdFence);
 
+    lock.unlock();
     // Here we know that executing the host-side reads for this (or any
     // previous) frame is safe since we waited for completion above.
     finishActiveReadbacks(true);
@@ -1815,8 +1823,8 @@ QRhi::FrameOpResult QRhiVulkan::endOffscreenFrame()
 
 QRhi::FrameOpResult QRhiVulkan::finish()
 {
-    Q_ASSERT(!inPass);
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+    Q_ASSERT(!inPass);
 
     QVkSwapChain *swapChainD = nullptr;
     if (inFrame) {

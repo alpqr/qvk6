@@ -162,25 +162,10 @@ bool QRhiD3D11::create(QRhi::Flags flags)
 {
     Q_UNUSED(flags);
 
-    // We do not support CrossThreadResourceSharing because the single
-    // immediate device context and/or DXGI blow up eventually when used from
-    // multiple threads, even if command submission is synchronized. So no need
-    // to lock and ignore rsh if there's already an associated QRhi on a
-    // different thread.
-    if (rsh) {
-        bool noRsh = false;
-        for (QThread *t : qAsConst(rsh->rhiThreads)) {
-            if (t != QThread::currentThread()) {
-                noRsh = true;
-                break;
-            }
-        }
-        if (noRsh) {
-            qWarning("Attempted to set a QRhiResourceSharingHost with QRhi instances on different threads when "
-                     "QRhi::CrossThreadResourceSharing is not supported. Resource sharing will be disabled.");
-            rsh = nullptr;
-        }
-    }
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
+//    if (!rsh->crossThreadDisallowCheck())
+//        rsh = nullptr;
 
     uint devFlags = 0;
     if (debugLayer)
@@ -408,7 +393,7 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::PrimitiveRestart:
         return true;
     case QRhi::CrossThreadResourceSharing:
-        return false;
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -727,6 +712,8 @@ void QRhiD3D11::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
 
 QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     Q_ASSERT(!inFrame);
     inFrame = true;
 
@@ -768,6 +755,7 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
 
     QRHI_PROF_F(beginSwapChainFrame(swapChain));
 
+    lock.unlock();
     finishActiveReadbacks();
 
     return QRhi::FrameOpSuccess;
@@ -775,6 +763,8 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     Q_ASSERT(inFrame);
     inFrame = false;
 
@@ -838,11 +828,15 @@ QRhi::FrameOpResult QRhiD3D11::beginOffscreenFrame(QRhiCommandBuffer **cb)
 
 QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     Q_ASSERT(inFrame && ofr.active);
     inFrame = false;
     ofr.active = false;
 
     executeCommandBuffer(&ofr.cbWrapper);
+
+    lock.unlock();
     finishActiveReadbacks();
 
     return QRhi::FrameOpSuccess;;
@@ -966,7 +960,9 @@ static inline bool isDepthTextureFormat(QRhiTexture::Format format)
 
 QRhi::FrameOpResult QRhiD3D11::finish()
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
     Q_ASSERT(!inPass);
+
     if (inFrame) {
         if (ofr.active) {
             Q_ASSERT(!contextState.currentSwapChain);
@@ -978,7 +974,10 @@ QRhi::FrameOpResult QRhiD3D11::finish()
             contextState.currentSwapChain->cb.resetCommands();
         }
     }
+
+    lock.unlock();
     finishActiveReadbacks();
+
     return QRhi::FrameOpSuccess;
 }
 
@@ -1216,6 +1215,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
 
 void QRhiD3D11::finishActiveReadbacks()
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
     QVarLengthArray<std::function<void()>, 4> completedCallbacks;
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
 
@@ -1244,6 +1244,7 @@ void QRhiD3D11::finishActiveReadbacks()
         activeReadbacks.removeAt(i);
     }
 
+    lock.unlock();
     for (auto f : completedCallbacks)
         f();
 }
@@ -1462,6 +1463,7 @@ void QRhiD3D11::executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD)
     if (!bufD->hasPendingDynamicUpdates)
         return;
 
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
     Q_ASSERT(bufD->m_type == QRhiBuffer::Dynamic);
     bufD->hasPendingDynamicUpdates = false;
     D3D11_MAPPED_SUBRESOURCE mp;

@@ -53,6 +53,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QVBoxLayout>
 
 #include <QThread>
@@ -87,8 +88,6 @@
 #include "window.h"
 
 #include "../shared/cube.h"
-
-//#define USE_RSH
 
 static QBakedShader getShader(const QString &name)
 {
@@ -337,6 +336,7 @@ Renderer::~Renderer()
 #endif
 }
 
+bool useRsh = false;
 QRhiResourceSharingHost *rsh = nullptr;
 
 void Renderer::createRhi()
@@ -346,18 +346,17 @@ void Renderer::createRhi()
 
     qDebug() << "renderer" << this << "creating rhi";
 
-#ifdef USE_RSH
-    qDebug("Using QRhiResourceSharingHost");
-    if (!rsh)
-        rsh = new QRhiResourceSharingHost;
-#endif
+    if (useRsh) {
+        qDebug("Using QRhiResourceSharingHost");
+        if (!rsh)
+            rsh = new QRhiResourceSharingHost;
+    }
 
 #ifndef QT_NO_OPENGL
     if (graphicsApi == OpenGL) {
         QRhiGles2InitParams params;
-#ifdef USE_RSH
-        params.resourceSharingHost = rsh;
-#endif
+        if (useRsh)
+            params.resourceSharingHost = rsh;
         params.fallbackSurface = fallbackSurface;
         params.window = window;
         r = QRhi::create(QRhi::OpenGLES2, &params);
@@ -367,9 +366,8 @@ void Renderer::createRhi()
 #if QT_CONFIG(vulkan)
     if (graphicsApi == Vulkan) {
         QRhiVulkanInitParams params;
-#ifdef USE_RSH
-        params.resourceSharingHost = rsh;
-#endif
+        if (useRsh)
+            params.resourceSharingHost = rsh;
         params.inst = instance;
         params.window = window;
         r = QRhi::create(QRhi::Vulkan, &params);
@@ -379,9 +377,8 @@ void Renderer::createRhi()
 #ifdef Q_OS_WIN
     if (graphicsApi == D3D11) {
         QRhiD3D11InitParams params;
-#ifdef USE_RSH
-        params.resourceSharingHost = rsh;
-#endif
+        if (useRsh)
+            params.resourceSharingHost = rsh;
         params.enableDebugLayer = true;
         r = QRhi::create(QRhi::D3D11, &params);
     }
@@ -390,9 +387,8 @@ void Renderer::createRhi()
 #ifdef Q_OS_DARWIN
     if (graphicsApi == Metal) {
         QRhiMetalInitParams params;
-#ifdef USE_RSH
-        params.resourceSharingHost = rsh;
-#endif
+        if (useRsh)
+            params.resourceSharingHost = rsh;
         r = QRhi::create(QRhi::Metal, &params);
     }
 #endif
@@ -783,17 +779,23 @@ int main(int argc, char **argv)
     QVBoxLayout *layout = new QVBoxLayout(&w);
 
     QPlainTextEdit *info = new QPlainTextEdit(
-                QLatin1String("This application tests rendering on a separate thread per window, with dedicated QRhi instances. "
-                              "No resources are shared across windows here. "
+                QLatin1String("This application tests rendering on a separate thread per window, with dedicated QRhi instances and resources. "
                               "\n\nThis is the same concept as the Qt Quick Scenegraph's threaded render loop. This should allow rendering to the different windows "
                               "without unintentionally throttling each other's threads."
+                              "\n\nCan also be used to exercise creating sets of windows that can \"see\" each others' resources by using the same graphics device. "
+                              "(although no application-side QRhiResource is reused here)"
                               "\n\nUsing API: ") + graphicsApiName());
     info->setReadOnly(true);
     layout->addWidget(info);
+    QCheckBox *rshCb = new QCheckBox(QLatin1String("Use QRhiResourceSharingHost for new window (use same device "
+                                                   "(e.g. VkDevice+VkQueue on Vulkan) or sharing contexts (OpenGL))"));
+    rshCb->setChecked(false);
+    layout->addWidget(rshCb);
     QLabel *label = new QLabel(QLatin1String("Window and thread count: 0"));
     layout->addWidget(label);
     QPushButton *btn = new QPushButton(QLatin1String("New window"));
-    QObject::connect(btn, &QPushButton::clicked, btn, [label, &winCount] {
+    QObject::connect(btn, &QPushButton::clicked, btn, [label, &winCount, rshCb] {
+        useRsh = rshCb->isChecked();
         winCount += 1;
         label->setText(QString::asprintf("Window count: %d", winCount));
         createWindow();
@@ -817,9 +819,7 @@ int main(int argc, char **argv)
         delete wr.window;
     }
 
-#ifdef USE_RSH
     delete rsh;
-#endif
 
 #if QT_CONFIG(vulkan)
     delete instance;

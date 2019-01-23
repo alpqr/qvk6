@@ -1,7 +1,7 @@
-res.sh.: rhi resource tracking, isSharable, orphaning, ...
+res.sh.: gl
 res.sh.: mtl
+can we really not support CrossThreadRsh on d3d?
 res.sh.: example to show read/write same texture
-res.sh.: exercise it in multiwindow_threaded too
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb
@@ -49,7 +49,9 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
-res.sh.: gl/d3d/vk
+res.sh.: exercise it in multiwindow_threaded too
+res.sh.: vk, d3d
+res.sh.: rhi resource tracking, isSharable, orphaning, ...
 res.sh.: example to show using same texture
 revise create() and importing external device objects
 revise structs in api

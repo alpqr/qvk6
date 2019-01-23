@@ -238,20 +238,26 @@ bool QRhiGles2::create(QRhi::Flags flags)
 
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
+    const QSurfaceFormat effectiveFormat = qrhigles2_effectiveFormat();
     QOpenGLContext *shareContext = nullptr;
-    bool rshWantsContext = false;
-    // Now we either need to share with the rsh's context, or, if there is
-    // context in the rsh yet, store the new context there as well.
     if (rsh) {
-        if (rsh->d_gles2.context)
-            shareContext = rsh->d_gles2.context;
-        else
-            rshWantsContext = true;
+        // The straightforward solution would be to store the first context a
+        // QRhi creates and make all other QRhis' contexts share with that.
+        // That is wrong since on some platforms setting up sharing
+        // (wglShareLists) is not allowed when the context is current on a
+        // thread. Work this around by using a dedicated context that is used
+        // only to set up the sharing and nothing else.
+        if (!rsh->d_gles2.dummyShareContext) {
+            rsh->d_gles2.dummyShareContext = new QOpenGLContext;
+            rsh->d_gles2.dummyShareContext->setFormat(effectiveFormat);
+            rsh->d_gles2.dummyShareContext->create();
+            shareContext = rsh->d_gles2.dummyShareContext;
+        }
     }
 
     if (!importedContext) {
         ctx = new QOpenGLContext;
-        ctx->setFormat(qrhigles2_effectiveFormat());
+        ctx->setFormat(effectiveFormat);
         if (shareContext)
             ctx->setShareContext(shareContext);
         if (!ctx->create()) {
@@ -290,8 +296,6 @@ bool QRhiGles2::create(QRhi::Flags flags)
         qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances", rsh, rsh->rhiCount);
         rsh->rhiCount += 1;
         rsh->rhiThreads.append(QThread::currentThread());
-        if (rshWantsContext)
-            rsh->d_gles2.context = ctx;
     }
 
     return true;
@@ -310,8 +314,7 @@ void QRhiGles2::destroy()
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     if (!importedContext) {
-        if (!rsh || rsh->d_gles2.context != ctx)
-            delete ctx;
+        delete ctx;
         ctx = nullptr;
     }
 
@@ -319,8 +322,8 @@ void QRhiGles2::destroy()
         rsh->rhiCount -= 1;
         rsh->rhiThreads.removeOne(QThread::currentThread());
         if (rsh->rhiCount == 0) {
-            delete rsh->d_gles2.context;
-            rsh->d_gles2.context = nullptr;
+            delete rsh->d_gles2.dummyShareContext;
+            rsh->d_gles2.dummyShareContext = nullptr;
         }
     }
 }

@@ -74,7 +74,9 @@ public:
 
     QRhiNullNativeHandles d_null;
 #ifndef QT_NO_OPENGL
-    QRhiGles2NativeHandles d_gles2;
+    struct {
+        QOpenGLContext *dummyShareContext = nullptr;
+    } d_gles2;
 #endif
 #if QT_CONFIG(vulkan)
     struct {

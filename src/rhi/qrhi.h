@@ -1164,8 +1164,7 @@ public:
         Timestamps,
         Instancing,
         CustomInstanceStepRate,
-        PrimitiveRestart,
-        CrossThreadResourceSharing
+        PrimitiveRestart
     };
 
     enum ResourceSizeLimit {

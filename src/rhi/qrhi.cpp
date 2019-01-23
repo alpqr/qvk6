@@ -313,20 +313,6 @@ QT_BEGIN_NAMESPACE
     identically across backends, as long as this feature is reported as
     supported, are \l{QRhiGraphicsPipeline::LineStrip}{LineStrip} and
     \l{QRhiGraphicsPipeline::TriangleStrip}{TriangleStrip}.
-
-    \value CrossThreadResourceSharing Indicates that creating QRhi instances on
-    different threads with QRhiResourceSharingHost set is allowed. Backends
-    where the underlying graphics API cannot safely support using the same
-    device or context from multiple threads will report this feature as
-    unsupported. When not supported, creating a QRhi with a
-    QRhiResourceSharingHost when there are already other QRhi instances on
-    other threads associated with the same QRhiResourceSharingHost will behave
-    as if the QRhiResourceSharingHost was not set at all. Application and
-    framework design may need to take support for this feature into account:
-    making resources like textures visible to multiple QRhi instances is not
-    neccessarily possible, so the design should be flexible enough to allow
-    functioning in that case as well (by using per-QRhi resources instead of a
-    single shared one, and possibly duplicating work).
  */
 
 /*!
@@ -1178,7 +1164,7 @@ void QRhiResource::setName(const QByteArray &name)
     and renderbuffers. Most backends will not support other type of shareable
     resources.
 
-    \sa QRhiResourceSharingHost, QRhi::CrossThreadResourceSharing
+    \sa QRhiResourceSharingHost
  */
 bool QRhiResource::isShareable() const
 {
@@ -2615,14 +2601,6 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     then; if there are new QRhi instances created for the same resource sharing
     host later on then there is no issue, as long as, again, those are alive).
 
-    \note When creating QRhi instances on different threads, using
-    QRhiResourceSharingHost may not be supported, depending on the backend and
-    the underlying graphics API. Support for this is indicated by the
-    QRhi::CrossThreadResourceSharing flag. When not supported, attempting to
-    create a QRhi in such a threaded scenario with a QRhiResourceSharingHost
-    will lead to a warning and ignoring resource sharing altogether (as if
-    QRhiInitParams::resourceSharingHost was not set).
-
     \note The QRhiResourceSharingHost can be created on a thread that is
     different than the threads on which the associated QRhi instances will be
     created. It is however up to the application to organize those threads in a
@@ -2696,8 +2674,7 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     \note Moving the \c{tex->releaseAndDestroy()} call between the \c{delete
     rhi2} and \c{delete rsh} statements would be incorrect.
 
-    \sa QRhiResource::isShareable(), QRhi::CrossThreadResourceSharing,
-    QRhiInitParams, QRhi::create()
+    \sa QRhiResource::isShareable(), QRhiInitParams, QRhi::create()
  */
 
 /*!
@@ -2717,23 +2694,6 @@ QRhiResourceSharingHost::QRhiResourceSharingHost()
 QRhiResourceSharingHost::~QRhiResourceSharingHost()
 {
     delete d;
-}
-
-bool QRhiResourceSharingHostPrivate::crossThreadDisallowCheck() const
-{
-    bool otherThreads = false;
-    for (QThread *t : qAsConst(rhiThreads)) {
-        if (t != QThread::currentThread()) {
-            otherThreads = true;
-            break;
-        }
-    }
-    if (otherThreads) {
-        qWarning("Attempted to set a QRhiResourceSharingHost with QRhi instances on different threads when "
-                 "QRhi::CrossThreadResourceSharing is not supported. Resource sharing will be disabled.");
-        return false;
-    }
-    return true;
 }
 
 /*!

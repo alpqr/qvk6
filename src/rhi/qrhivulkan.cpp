@@ -518,7 +518,6 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances on VkDevice %p",
                rsh, rsh->rhiCount, dev);
         rsh->rhiCount += 1;
-        rsh->rhiThreads.append(QThread::currentThread());
         if (rshWantsDevice) {
             rsh->d_vulkan.physDev = physDev;
             rsh->d_vulkan.dev = dev;
@@ -591,9 +590,7 @@ void QRhiVulkan::destroy()
     df = nullptr;
 
     if (rsh) {
-        rsh->rhiCount -= 1;
-        rsh->rhiThreads.removeOne(QThread::currentThread());
-        if (rsh->rhiCount == 0) {
+        if (--rsh->rhiCount == 0) {
             // all associated QRhi instances are gone for the rsh, time to clean up
             rsh->d_vulkan.df->vkDeviceWaitIdle(rsh->d_vulkan.dev);
             if (rsh->d_vulkan.releaseQueue) {
@@ -3006,8 +3003,6 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::CustomInstanceStepRate:
         return vertexAttribDivisorAvailable;
     case QRhi::PrimitiveRestart:
-        return true;
-    case QRhi::CrossThreadResourceSharing:
         return true;
     default:
         Q_UNREACHABLE();

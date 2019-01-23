@@ -57,7 +57,6 @@
 #include "qrhimetal.h"
 #endif
 
-#include <QThread>
 #include <QMutex>
 
 QT_BEGIN_NAMESPACE
@@ -66,11 +65,9 @@ class Q_RHI_PRIVATE_EXPORT QRhiResourceSharingHostPrivate
 {
 public:
     static QRhiResourceSharingHostPrivate *get(QRhiResourceSharingHost *h) { return h->d; }
-    bool crossThreadDisallowCheck() const;
 
     QMutex mtx;
     int rhiCount = 0;
-    QVector<QThread *> rhiThreads;
 
 #ifndef QT_NO_OPENGL
     struct {

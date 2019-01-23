@@ -164,9 +164,6 @@ bool QRhiD3D11::create(QRhi::Flags flags)
 
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
-//    if (!rsh->crossThreadDisallowCheck())
-//        rsh = nullptr;
-
     uint devFlags = 0;
     if (debugLayer)
         devFlags |= D3D11_CREATE_DEVICE_DEBUG;
@@ -241,7 +238,6 @@ bool QRhiD3D11::create(QRhi::Flags flags)
         qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances on ID3D11Device %p",
                rsh, rsh->rhiCount, dev);
         rsh->rhiCount += 1;
-        rsh->rhiThreads.append(QThread::currentThread());
     }
 
     return true;
@@ -272,9 +268,7 @@ void QRhiD3D11::destroy()
     }
 
     if (rsh) {
-        rsh->rhiCount -= 1;
-        rsh->rhiThreads.removeOne(QThread::currentThread());
-        if (rsh->rhiCount == 0) {
+        if (--rsh->rhiCount == 0) {
             if (rsh->d_d3d11.context) {
                 reinterpret_cast<ID3D11DeviceContext1 *>(rsh->d_d3d11.context)->Release();
                 rsh->d_d3d11.context = nullptr;
@@ -391,8 +385,6 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::CustomInstanceStepRate:
         return true;
     case QRhi::PrimitiveRestart:
-        return true;
-    case QRhi::CrossThreadResourceSharing:
         return true;
     default:
         Q_UNREACHABLE();

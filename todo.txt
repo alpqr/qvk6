@@ -1,6 +1,7 @@
 res.sh.: gl
 res.sh.: mtl
 res.sh.: example to show read/write same texture
+threading with rsh with resource - more external sync needed
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb

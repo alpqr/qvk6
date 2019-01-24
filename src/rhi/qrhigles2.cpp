@@ -251,8 +251,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
             rsh->d_gles2.dummyShareContext = new QOpenGLContext;
             rsh->d_gles2.dummyShareContext->setFormat(effectiveFormat);
             rsh->d_gles2.dummyShareContext->create();
-            shareContext = rsh->d_gles2.dummyShareContext;
         }
+        shareContext = rsh->d_gles2.dummyShareContext;
     }
 
     if (!importedContext) {
@@ -293,7 +293,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
     nativeHandlesStruct.context = ctx;
 
     if (rsh) {
-        qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances", rsh, rsh->rhiCount);
+        qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances sharing via %p",
+               rsh, rsh->rhiCount, rsh->d_gles2.dummyShareContext);
         rsh->rhiCount += 1;
     }
 
@@ -308,21 +309,28 @@ void QRhiGles2::destroy()
     ensureContext();
     executeDeferredReleases();
 
-    f = nullptr;
-
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
+    if (rsh) {
+        if (--rsh->rhiCount == 0) {
+            if (rsh->d_gles2.releaseQueue) {
+                auto rshRelQueue = static_cast<QVector<DeferredReleaseEntry> *>(rsh->d_gles2.releaseQueue);
+                // with ctx still current
+                QRhiGles2::executeDeferredReleasesOnRshNow(rshRelQueue);
+                delete rshRelQueue;
+            }
+            delete rsh->d_gles2.dummyShareContext;
+            rsh->d_gles2.dummyShareContext = nullptr;
+            rsh->d_gles2.releaseQueue = nullptr;
+        }
+    }
 
     if (!importedContext) {
         delete ctx;
         ctx = nullptr;
     }
 
-    if (rsh) {
-        if (--rsh->rhiCount == 0) {
-            delete rsh->d_gles2.dummyShareContext;
-            rsh->d_gles2.dummyShareContext = nullptr;
-        }
-    }
+    f = nullptr;
 }
 
 // Strictly speaking this is not necessary since we could do the deletes in
@@ -350,9 +358,34 @@ void QRhiGles2::executeDeferredReleases()
             f->glDeleteFramebuffers(1, &e.textureRenderTarget.framebuffer);
             break;
         default:
+            Q_UNREACHABLE();
             break;
         }
         releaseQueue.removeAt(i);
+    }
+}
+
+void QRhiGles2::executeDeferredReleasesOnRshNow(QVector<QRhiGles2::DeferredReleaseEntry> *rshRelQueue)
+{
+    for (int i = rshRelQueue->count() - 1; i >= 0; --i) {
+        const QRhiGles2::DeferredReleaseEntry &e((*rshRelQueue)[i]);
+        // only need to handle resources that report isShareable() == true
+        switch (e.type) {
+        case QRhiGles2::DeferredReleaseEntry::Buffer:
+            f->glDeleteBuffers(1, &e.buffer.buffer);
+            break;
+        case QRhiGles2::DeferredReleaseEntry::Texture:
+            f->glDeleteTextures(1, &e.texture.texture);
+            break;
+        case QRhiGles2::DeferredReleaseEntry::RenderBuffer:
+            f->glDeleteRenderbuffers(1, &e.renderbuffer.renderbuffer);
+            break;
+        // samplers have no backing GL object
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+        rshRelQueue->removeAt(i);
     }
 }
 
@@ -1717,9 +1750,25 @@ void QRhiGles2::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resource
         enqueueResourceUpdates(cb, resourceUpdates);
 }
 
+static void addToRshReleaseQueue(QRhiResourceSharingHostPrivate *rsh, const QRhiGles2::DeferredReleaseEntry &e)
+{
+    QVector<QRhiGles2::DeferredReleaseEntry> *rshRelQueue =
+            static_cast<QVector<QRhiGles2::DeferredReleaseEntry> *>(rsh->d_gles2.releaseQueue);
+    if (!rshRelQueue) {
+        rshRelQueue = new QVector<QRhiGles2::DeferredReleaseEntry>;
+        rsh->d_gles2.releaseQueue = rshRelQueue;
+    }
+    rshRelQueue->append(e);
+}
+
 QGles2Buffer::QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
     : QRhiBuffer(rhi, type, usage, size)
 {
+}
+
+bool QGles2Buffer::isShareable() const
+{
+    return true;
 }
 
 void QGles2Buffer::release()
@@ -1734,22 +1783,28 @@ void QGles2Buffer::release()
 
     buffer = 0;
 
-    QRHI_RES_RHI(QRhiGles2);
-    rhiD->releaseQueue.append(e);
-
-    QRHI_PROF;
-    QRHI_PROF_F(releaseBuffer(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiGles2);
+        rhiD->releaseQueue.append(e);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseBuffer(this));
+        rhiD->unregisterResource(this);
+    } else {
+        // associated rhi is already gone, queue the deferred release to the rsh instead
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QGles2Buffer::build()
 {
-    QRHI_RES_RHI(QRhiGles2);
-    QRHI_PROF;
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
 
     if (buffer)
         release();
+
+    QRHI_RES_RHI(QRhiGles2);
+    QRHI_PROF;
 
     if (m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
         // special since we do not support uniform blocks in this backend
@@ -1781,6 +1836,11 @@ QGles2RenderBuffer::QGles2RenderBuffer(QRhiImplementation *rhi, Type type, const
 {
 }
 
+bool QGles2RenderBuffer::isShareable() const
+{
+    return true;
+}
+
 void QGles2RenderBuffer::release()
 {
     if (!renderbuffer)
@@ -1793,22 +1853,27 @@ void QGles2RenderBuffer::release()
 
     renderbuffer = 0;
 
-    QRHI_RES_RHI(QRhiGles2);
-    rhiD->releaseQueue.append(e);
-
-    QRHI_PROF;
-    QRHI_PROF_F(releaseRenderBuffer(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiGles2);
+        rhiD->releaseQueue.append(e);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseRenderBuffer(this));
+        rhiD->unregisterResource(this);
+    } else {
+        // associated rhi is already gone, queue the deferred release to the rsh instead
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QGles2RenderBuffer::build()
 {
-    QRHI_RES_RHI(QRhiGles2);
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
 
     if (renderbuffer)
         release();
 
+    QRHI_RES_RHI(QRhiGles2);
     QRHI_PROF;
     samples = qMax(1, m_sampleCount);
 
@@ -1869,6 +1934,11 @@ QGles2Texture::QGles2Texture(QRhiImplementation *rhi, Format format, const QSize
 {
 }
 
+bool QGles2Texture::isShareable() const
+{
+    return true;
+}
+
 void QGles2Texture::release()
 {
     if (!texture)
@@ -1883,14 +1953,17 @@ void QGles2Texture::release()
     specified = false;
     nativeHandlesStruct.texture = 0;
 
-    QRHI_RES_RHI(QRhiGles2);
-    if (owns)
-        rhiD->releaseQueue.append(e);
-
-    QRHI_PROF;
-    QRHI_PROF_F(releaseTexture(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiGles2);
+        if (owns)
+            rhiD->releaseQueue.append(e);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseTexture(this));
+        rhiD->unregisterResource(this);
+    } else {
+        // associated rhi is already gone, queue the deferred release to the rsh instead
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 static inline bool isPowerOfTwo(int x)
@@ -1901,11 +1974,13 @@ static inline bool isPowerOfTwo(int x)
 
 bool QGles2Texture::prepareBuild(QSize *adjustedSize)
 {
-    QRHI_RES_RHI(QRhiGles2);
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
 
     if (texture)
         release();
 
+    QRHI_RES_RHI(QRhiGles2);
     if (!rhiD->ensureContext())
         return false;
 
@@ -1943,12 +2018,11 @@ bool QGles2Texture::prepareBuild(QSize *adjustedSize)
 
 bool QGles2Texture::build()
 {
-    QRHI_RES_RHI(QRhiGles2);
-
     QSize size;
     if (!prepareBuild(&size))
         return false;
 
+    QRHI_RES_RHI(QRhiGles2);
     rhiD->f->glGenTextures(1, &texture);
 
     const bool isCube = m_flags.testFlag(CubeMap);
@@ -1990,8 +2064,6 @@ bool QGles2Texture::build()
 
 bool QGles2Texture::buildFrom(const QRhiNativeHandles *src)
 {
-    QRHI_RES_RHI(QRhiGles2);
-
     const QRhiGles2TextureNativeHandles *h = static_cast<const QRhiGles2TextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
@@ -2002,6 +2074,7 @@ bool QGles2Texture::buildFrom(const QRhiNativeHandles *src)
     texture = h->texture;
     specified = true;
 
+    QRHI_RES_RHI(QRhiGles2);
     QRHI_PROF;
     QRHI_PROF_F(newTexture(this, false, mipLevelCount, m_flags.testFlag(CubeMap) ? 6 : 1, 1));
 
@@ -2024,6 +2097,11 @@ QGles2Sampler::QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter m
 {
 }
 
+bool QGles2Sampler::isShareable() const
+{
+    return true;
+}
+
 void QGles2Sampler::release()
 {
     // nothing to do here
@@ -2031,6 +2109,8 @@ void QGles2Sampler::release()
 
 bool QGles2Sampler::build()
 {
+    // no backing GL object -> no orphanCheck() since it is never registered
+
     glminfilter = toGlMinFilter(m_minFilter, m_mipmapMode);
     glmagfilter = toGlMagFilter(m_magFilter);
     glwraps = toGlWrapMode(m_addressU);

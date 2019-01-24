@@ -55,6 +55,7 @@ class QRhiResourceSharingHostPrivate;
 struct QGles2Buffer : public QRhiBuffer
 {
     QGles2Buffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 
@@ -77,6 +78,7 @@ struct QGles2RenderBuffer : public QRhiRenderBuffer
 {
     QGles2RenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
                        int sampleCount, QRhiRenderBuffer::Flags flags);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     QRhiTexture::Format backingFormat() const override;
@@ -90,6 +92,7 @@ struct QGles2Texture : public QRhiTexture
 {
     QGles2Texture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
                   int sampleCount, Flags flags);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     bool buildFrom(const QRhiNativeHandles *src) override;
@@ -115,6 +118,7 @@ struct QGles2Sampler : public QRhiSampler
 {
     QGles2Sampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
                   AddressMode u, AddressMode v, AddressMode w);
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 
@@ -569,6 +573,8 @@ public:
         };
     };
     QVector<DeferredReleaseEntry> releaseQueue;
+
+    void executeDeferredReleasesOnRshNow(QVector<QRhiGles2::DeferredReleaseEntry> *rshRelQueue);
 
     struct OffscreenFrame {
         OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }

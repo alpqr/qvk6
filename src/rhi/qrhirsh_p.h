@@ -72,6 +72,7 @@ public:
 #ifndef QT_NO_OPENGL
     struct {
         QOpenGLContext *dummyShareContext = nullptr;
+        void *releaseQueue = nullptr;
     } d_gles2;
 #endif
 #if QT_CONFIG(vulkan)

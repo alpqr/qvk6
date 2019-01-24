@@ -227,11 +227,27 @@ QT_BEGIN_NAMESPACE
     \section3 Threading
 
     A QRhi instance can be created and used on any thread but all usage must be
-    limited to that one single thread. When it comes to native objects, such as
-    OpenGL contexts, passed in via a QRhiNativeHandles subclass, it is up to
-    the application to ensure they are not misused by other threads.
+    limited to that one single thread.
 
-    \sa {Qt Shader Tools}
+    When it comes to externally created native objects, such as OpenGL contexts
+    passed in via QRhiGles2NativeHandles, it is up to the application to ensure
+    they are not misused by other threads.
+
+    By default any QRhiResource created from one QRhi must only be used with
+    that one QRhi and must be released before the QRhi is destroyed. This rule
+    is relaxed when a QRhi is created with an associated
+    QRhiResourceSharingHost. From then on any QRhiResource that reports \c true
+    from \l{QRhiResource::isShareable()}{isShareable()} is usable with other
+    QRhi instances as well, as long as they are associated with the same
+    QRhiResourceSharingHost. Resources can also outlive their creating QRhi in
+    this case, as long as there is at least one QRhi left in the "sharing
+    group". When the QRhi instances live and operate on different threads,
+    additional synchronization may be required. When writing to resources,
+    additional synchronization may be required even when the QRhi instances
+    live on the same thread. See QRhiResourceSharingHost for further
+    discussion.
+
+    \sa {Qt Shader Tools}, QRhiResourceSharingHost
  */
 
 /*!
@@ -2607,6 +2623,13 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     way that the QRhiResourceSharingHost is only destroyed after all associated
     QRhi instances have been fully destroyed.
 
+    \note Having a QRhiResourceSharingHost associated with a QRhi triggers
+    mutex-based synchronization for native objects like the graphics queue or
+    device context, with backends where applicable. This allows having two or
+    more QRhi instances on two or more different threads with the same
+    QRhiResourceSharingHost and so sharing the same device, queue, or device
+    context.
+
     To illustrate resource sharing, take the following code snippets.
 
     In many cases an application will use a single QRhi. Resources created from it
@@ -2668,8 +2691,10 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
         delete rsh;
     \endcode
 
-    This is valid as well. After the \c{delete rhi} \c tex is in an orphaned
-    state so calling \c build() on it for instance would fail.
+    This is valid as well. After the \c{delete rhi} statement \c tex is in an
+    orphaned state so calling \c build() on it for example would fail. On the
+    other hand, it is still valid to use \c{tex} as it is for rendering, with
+    its existing underlying native texture.
 
     \note Moving the \c{tex->releaseAndDestroy()} call between the \c{delete
     rhi2} and \c{delete rsh} statements would be incorrect.

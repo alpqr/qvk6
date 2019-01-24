@@ -787,8 +787,8 @@ int main(int argc, char **argv)
                               "\n\nUsing API: ") + graphicsApiName());
     info->setReadOnly(true);
     layout->addWidget(info);
-    QCheckBox *rshCb = new QCheckBox(QLatin1String("Use QRhiResourceSharingHost for new window (use same device "
-                                                   "(e.g. VkDevice+VkQueue on Vulkan) or sharing contexts (OpenGL))"));
+    QCheckBox *rshCb = new QCheckBox(QLatin1String("Use QRhiResourceSharingHost for new window\n(use same device, "
+                                                   "e.g. VkDevice+VkQueue on Vulkan, ID3D11Device+Context on D3D; or sharing contexts on OpenGL)"));
     rshCb->setChecked(false);
     layout->addWidget(rshCb);
     QLabel *label = new QLabel(QLatin1String("Window and thread count: 0"));

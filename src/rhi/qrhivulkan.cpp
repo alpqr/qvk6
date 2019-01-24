@@ -312,6 +312,14 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         }
     }
 
+    QVector<VkQueueFamilyProperties> queueFamilyProps;
+    auto queryQueueFamilyProps = [this, &queueFamilyProps] {
+        uint32_t queueCount = 0;
+        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, nullptr);
+        queueFamilyProps.resize(queueCount);
+        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, queueFamilyProps.data());
+    };
+
     if (!importedDevice && (!rsh || rshWantsDevice)) {
         uint32_t devCount = 0;
         f->vkEnumeratePhysicalDevices(inst->vkInstance(), &devCount, nullptr);
@@ -329,10 +337,7 @@ bool QRhiVulkan::create(QRhi::Flags flags)
             return false;
         }
 
-        uint32_t queueCount = 0;
-        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, nullptr);
-        QVector<VkQueueFamilyProperties> queueFamilyProps(queueCount);
-        f->vkGetPhysicalDeviceQueueFamilyProperties(physDev, &queueCount, queueFamilyProps.data());
+        queryQueueFamilyProps();
 
         gfxQueue = VK_NULL_HANDLE;
         gfxQueueFamilyIdx = -1;
@@ -360,8 +365,6 @@ bool QRhiVulkan::create(QRhi::Flags flags)
             qWarning("No present queue family found");
             return false;
         }
-
-        timestampValidBits = queueFamilyProps[gfxQueueFamilyIdx].timestampValidBits;
 
         VkDeviceQueueCreateInfo queueInfo[2];
         const float prio[] = { 0 };
@@ -435,8 +438,15 @@ bool QRhiVulkan::create(QRhi::Flags flags)
         }
     }
 
-    if (gfxQueueFamilyIdx != -1 && !gfxQueue)
-        df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
+    if (gfxQueueFamilyIdx != -1) {
+        if (!gfxQueue)
+            df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
+
+        if (queueFamilyProps.isEmpty())
+            queryQueueFamilyProps();
+
+        timestampValidBits = queueFamilyProps[gfxQueueFamilyIdx].timestampValidBits;
+    }
 
     f->vkGetPhysicalDeviceProperties(physDev, &physDevProperties);
     ubufAlign = physDevProperties.limits.minUniformBufferOffsetAlignment;

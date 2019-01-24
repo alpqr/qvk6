@@ -66,6 +66,7 @@
 
 #include <QBakedShader>
 #include <QFile>
+#include <QRhiProfiler>
 
 #ifndef QT_NO_OPENGL
 #include <QRhiGles2InitParams>
@@ -283,6 +284,7 @@ struct Renderer
 
     QMatrix4x4 m_proj;
     float m_rotation = 0;
+    int m_frameCount = 0;
 };
 
 void Thread::run()
@@ -345,6 +347,7 @@ void Renderer::createRhi()
         return;
 
     qDebug() << "renderer" << this << "creating rhi";
+    QRhi::Flags rhiFlags = QRhi::EnableProfiling;
 
     if (useRsh) {
         qDebug("Using QRhiResourceSharingHost");
@@ -359,7 +362,7 @@ void Renderer::createRhi()
             params.resourceSharingHost = rsh;
         params.fallbackSurface = fallbackSurface;
         params.window = window;
-        r = QRhi::create(QRhi::OpenGLES2, &params);
+        r = QRhi::create(QRhi::OpenGLES2, &params, rhiFlags);
     }
 #endif
 
@@ -370,7 +373,7 @@ void Renderer::createRhi()
             params.resourceSharingHost = rsh;
         params.inst = instance;
         params.window = window;
-        r = QRhi::create(QRhi::Vulkan, &params);
+        r = QRhi::create(QRhi::Vulkan, &params, rhiFlags);
     }
 #endif
 
@@ -380,7 +383,7 @@ void Renderer::createRhi()
         if (useRsh)
             params.resourceSharingHost = rsh;
         params.enableDebugLayer = true;
-        r = QRhi::create(QRhi::D3D11, &params);
+        r = QRhi::create(QRhi::D3D11, &params, rhiFlags);
     }
 #endif
 
@@ -389,7 +392,7 @@ void Renderer::createRhi()
         QRhiMetalInitParams params;
         if (useRsh)
             params.resourceSharingHost = rsh;
-        r = QRhi::create(QRhi::Metal, &params);
+        r = QRhi::create(QRhi::Metal, &params, rhiFlags);
     }
 #endif
 
@@ -634,6 +637,28 @@ void Renderer::render(bool newlyExposed, bool wakeBeforePresent)
     wakeUpIfNeeded();
 
     r->endFrame(m_sc);
+
+    m_frameCount += 1;
+    if ((m_frameCount % 300) == 0) {
+        const QRhiProfiler::CpuTime ff = r->profiler()->frameToFrameTimes(m_sc);
+        const QRhiProfiler::CpuTime be = r->profiler()->frameBuildTimes(m_sc);
+        const QRhiProfiler::GpuTime gp = r->profiler()->gpuFrameTimes(m_sc);
+        if (r->isFeatureSupported(QRhi::Timestamps)) {
+            qDebug("[renderer %p] frame-to-frame: min %lld max %lld avg %f. "
+                   "frame build: min %lld max %lld avg %f. "
+                   "gpu frame time: min %f max %f avg %f",
+                   this,
+                   ff.minTime, ff.maxTime, ff.avgTime,
+                   be.minTime, be.maxTime, be.avgTime,
+                   gp.minTime, gp.maxTime, gp.avgTime);
+        } else {
+            qDebug("[renderer %p] frame-to-frame: min %lld max %lld avg %f. "
+                   "frame build: min %lld max %lld avg %f. ",
+                   this,
+                   ff.minTime, ff.maxTime, ff.avgTime,
+                   be.minTime, be.maxTime, be.avgTime);
+        }
+    }
 }
 
 void Renderer::sendInit()

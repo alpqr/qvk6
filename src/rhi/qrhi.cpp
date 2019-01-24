@@ -2630,6 +2630,15 @@ quint32 QRhiImplementation::approxByteSizeForTexture(QRhiTexture::Format format,
     QRhiResourceSharingHost and so sharing the same device, queue, or device
     context.
 
+    \note Resource sharing increases the chance of contention and inconsistent
+    frame rate due to sharing the same device and possibly command queue, and
+    due to the need for synchronization inside various QRhi calls. The results
+    can also vary based on the implementation of the underlying graphics API,
+    with potentially different results from different vendor's drivers or
+    different driver versions. Applications and libraries are advised to
+    consider offering resource sharing as an opt-in feature, combined with a
+    design that allows operating with fully independent QRhi instances as well.
+
     To illustrate resource sharing, take the following code snippets.
 
     In many cases an application will use a single QRhi. Resources created from it

@@ -35,6 +35,7 @@
 ****************************************************************************/
 
 #include "qrhimetal_p.h"
+#include "qrhirsh_p.h"
 #include <QGuiApplication>
 #include <QWindow>
 #include <qmath.h>
@@ -273,7 +274,8 @@ QRhiMetal::QRhiMetal(QRhiMetalInitParams *params, QRhiMetalNativeHandles *import
 {
     d = new QRhiMetalData(this);
 
-    Q_UNUSED(params);
+    if (params->resourceSharingHost)
+        rsh = QRhiResourceSharingHostPrivate::get(params->resourceSharingHost);
 
     importedDevice = importDevice != nullptr;
     if (importedDevice) {
@@ -303,17 +305,39 @@ bool QRhiMetal::create(QRhi::Flags flags)
 {
     Q_UNUSED(flags);
 
-    if (importedDevice)
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
+    if (importedDevice) {
         [d->dev retain];
-    else
-        d->dev = MTLCreateSystemDefaultDevice();
+    } else {
+        if (!rsh || !rsh->d_metal.dev) {
+            d->dev = MTLCreateSystemDefaultDevice();
+            if (rsh) {
+                rsh->d_metal.dev = d->dev;
+                [d->dev retain];
+            }
+        } else {
+            d->dev = (id<MTLDevice>) rsh->d_metal.dev;
+            [d->dev retain];
+        }
+    }
 
     qDebug("Metal device: %s", qPrintable(QString::fromNSString([d->dev name])));
 
-    if (importedCmdQueue)
+    if (importedCmdQueue) {
         [d->cmdQueue retain];
-    else
-        d->cmdQueue = [d->dev newCommandQueue];
+    } else {
+        if (!rsh || !rsh->d_metal.cmdQueue) {
+            d->cmdQueue = [d->dev newCommandQueue];
+            if (rsh) {
+                rsh->d_metal.cmdQueue = d->cmdQueue;
+                [d->cmdQueue retain];
+            }
+        } else {
+            d->cmdQueue = (id<MTLCommandQueue>) rsh->d_metal.cmdQueue;
+            [d->cmdQueue retain];
+        }
+    }
 
     if (@available(macOS 10.13, iOS 11.0, *)) {
         d->captureMgr = [MTLCaptureManager sharedCaptureManager];
@@ -347,6 +371,12 @@ bool QRhiMetal::create(QRhi::Flags flags)
     nativeHandlesStruct.dev = d->dev;
     nativeHandlesStruct.cmdQueue = d->cmdQueue;
 
+    if (rsh) {
+        qDebug("Attached to QRhiResourceSharingHost %p, currently %d other QRhi instances on MTLDevice %p",
+               rsh, rsh->rhiCount, (void *) d->dev);
+        rsh->rhiCount += 1;
+    }
+
     return true;
 }
 
@@ -354,6 +384,8 @@ void QRhiMetal::destroy()
 {
     executeDeferredReleases(true);
     finishActiveReadbacks(true);
+
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     if (@available(macOS 10.13, iOS 11.0, *)) {
         [d->captureScope release];
@@ -367,6 +399,15 @@ void QRhiMetal::destroy()
     [d->dev release];
     if (!importedDevice)
         d->dev = nil;
+
+    if (rsh) {
+        if (--rsh->rhiCount == 0) {
+            [(id<MTLCommandQueue>) rsh->d_metal.cmdQueue release];
+            rsh->d_metal.cmdQueue = nullptr;
+            [(id<MTLDevice>) rsh->d_metal.dev release];
+            rsh->d_metal.dev = nullptr;
+        }
+    }
 }
 
 QVector<int> QRhiMetal::supportedSampleCounts() const

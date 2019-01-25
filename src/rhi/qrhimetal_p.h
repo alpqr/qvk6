@@ -57,6 +57,7 @@ struct QMetalBuffer : public QRhiBuffer
 {
     QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size);
     ~QMetalBuffer();
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 
@@ -73,6 +74,7 @@ struct QMetalRenderBuffer : public QRhiRenderBuffer
     QMetalRenderBuffer(QRhiImplementation *rhi, Type type, const QSize &pixelSize,
                        int sampleCount, QRhiRenderBuffer::Flags flags);
     ~QMetalRenderBuffer();
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     QRhiTexture::Format backingFormat() const override;
@@ -91,6 +93,7 @@ struct QMetalTexture : public QRhiTexture
     QMetalTexture(QRhiImplementation *rhi, Format format, const QSize &pixelSize,
                   int sampleCount, Flags flags);
     ~QMetalTexture();
+    bool isShareable() const override;
     void release() override;
     bool build() override;
     bool buildFrom(const QRhiNativeHandles *src) override;
@@ -114,6 +117,7 @@ struct QMetalSampler : public QRhiSampler
     QMetalSampler(QRhiImplementation *rhi, Filter magFilter, Filter minFilter, Filter mipmapMode,
                   AddressMode u, AddressMode v, AddressMode w);
     ~QMetalSampler();
+    bool isShareable() const override;
     void release() override;
     bool build() override;
 

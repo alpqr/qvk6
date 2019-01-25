@@ -160,6 +160,8 @@ struct QRhiMetalData
     };
     QVector<DeferredReleaseEntry> releaseQueue;
 
+    static void executeDeferredReleasesOnRshNow(QVector<DeferredReleaseEntry> *rshRelQueue);
+
     struct OffscreenFrame {
         OffscreenFrame(QRhiImplementation *rhi) : cbWrapper(rhi) { }
         bool active = false;
@@ -340,7 +342,8 @@ bool QRhiMetal::create(QRhi::Flags flags)
         // an option when capturing, and becomes especially useful when having
         // multiple windows with multiple QRhis.
         d->captureScope = [d->captureMgr newCaptureScopeWithCommandQueue: d->cmdQueue];
-        d->captureScope.label = @"Qt capture scope";
+        const QString label = QString::asprintf("Qt capture scope for QRhi %p", this);
+        d->captureScope.label = label.toNSString();
     }
 
 #if defined(Q_OS_MACOS)
@@ -400,8 +403,14 @@ void QRhiMetal::destroy()
 
     if (rsh) {
         if (--rsh->rhiCount == 0) {
+            if (rsh->d_metal.releaseQueue) {
+                auto rshRelQueue = static_cast<QVector<QRhiMetalData::DeferredReleaseEntry> *>(rsh->d_metal.releaseQueue);
+                QRhiMetalData::executeDeferredReleasesOnRshNow(rshRelQueue);
+                delete rshRelQueue;
+            }
             [(id<MTLDevice>) rsh->d_metal.dev release];
             rsh->d_metal.dev = nullptr;
+            rsh->d_metal.releaseQueue = nullptr;
         }
     }
 }
@@ -1502,6 +1511,55 @@ void QRhiMetal::endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resource
         enqueueResourceUpdates(cb, resourceUpdates);
 }
 
+static void qrhimtl_releaseBuffer(const QRhiMetalData::DeferredReleaseEntry &e)
+{
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+        [e.buffer.buffers[i] release];
+}
+
+static void qrhimtl_releaseRenderBuffer(const QRhiMetalData::DeferredReleaseEntry &e)
+{
+    [e.renderbuffer.texture release];
+}
+
+static void qrhimtl_releaseTexture(const QRhiMetalData::DeferredReleaseEntry &e)
+{
+    [e.texture.texture release];
+    for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
+        [e.texture.stagingBuffers[i] release];
+}
+
+static void qrhimtl_releaseSampler(const QRhiMetalData::DeferredReleaseEntry &e)
+{
+    [e.sampler.samplerState release];
+}
+
+void QRhiMetalData::executeDeferredReleasesOnRshNow(QVector<QRhiMetalData::DeferredReleaseEntry> *rshRelQueue)
+{
+    for (int i = rshRelQueue->count() - 1; i >= 0; --i) {
+        const QRhiMetalData::DeferredReleaseEntry &e((*rshRelQueue)[i]);
+        // only need to handle resources that report isShareable() == true
+        switch (e.type) {
+        case QRhiMetalData::DeferredReleaseEntry::Buffer:
+            qrhimtl_releaseBuffer(e);
+            break;
+        case QRhiMetalData::DeferredReleaseEntry::RenderBuffer:
+            qrhimtl_releaseRenderBuffer(e);
+            break;
+        case QRhiMetalData::DeferredReleaseEntry::Texture:
+            qrhimtl_releaseTexture(e);
+            break;
+        case QRhiMetalData::DeferredReleaseEntry::Sampler:
+            qrhimtl_releaseSampler(e);
+            break;
+        default:
+            Q_UNREACHABLE();
+            break;
+        }
+        rshRelQueue->removeAt(i);
+    }
+}
+
 void QRhiMetal::executeDeferredReleases(bool forced)
 {
     for (int i = d->releaseQueue.count() - 1; i >= 0; --i) {
@@ -1509,19 +1567,16 @@ void QRhiMetal::executeDeferredReleases(bool forced)
         if (forced || currentFrameSlot == e.lastActiveFrameSlot || e.lastActiveFrameSlot < 0) {
             switch (e.type) {
             case QRhiMetalData::DeferredReleaseEntry::Buffer:
-                for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
-                    [e.buffer.buffers[i] release];
+                qrhimtl_releaseBuffer(e);
                 break;
             case QRhiMetalData::DeferredReleaseEntry::RenderBuffer:
-                [e.renderbuffer.texture release];
+                qrhimtl_releaseRenderBuffer(e);
                 break;
             case QRhiMetalData::DeferredReleaseEntry::Texture:
-                [e.texture.texture release];
-                for (int i = 0; i < QMTL_FRAMES_IN_FLIGHT; ++i)
-                    [e.texture.stagingBuffers[i] release];
+                qrhimtl_releaseTexture(e);
                 break;
             case QRhiMetalData::DeferredReleaseEntry::Sampler:
-                [e.sampler.samplerState release];
+                qrhimtl_releaseSampler(e);
                 break;
             case QRhiMetalData::DeferredReleaseEntry::StagingBuffer:
                 [e.stagingBuffer.buffer release];
@@ -1562,6 +1617,17 @@ void QRhiMetal::finishActiveReadbacks(bool forced)
         f();
 }
 
+static void addToRshReleaseQueue(QRhiResourceSharingHostPrivate *rsh, const QRhiMetalData::DeferredReleaseEntry &e)
+{
+    QVector<QRhiMetalData::DeferredReleaseEntry> *rshRelQueue =
+            static_cast<QVector<QRhiMetalData::DeferredReleaseEntry> *>(rsh->d_metal.releaseQueue);
+    if (!rshRelQueue) {
+        rshRelQueue = new QVector<QRhiMetalData::DeferredReleaseEntry>;
+        rsh->d_metal.releaseQueue = rshRelQueue;
+    }
+    rshRelQueue->append(e);
+}
+
 QMetalBuffer::QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage, int size)
     : QRhiBuffer(rhi, type, usage, size),
       d(new QMetalBufferData)
@@ -1573,6 +1639,11 @@ QMetalBuffer::QMetalBuffer(QRhiImplementation *rhi, Type type, UsageFlags usage,
 QMetalBuffer::~QMetalBuffer()
 {
     delete d;
+}
+
+bool QMetalBuffer::isShareable() const
+{
+    return true;
 }
 
 void QMetalBuffer::release()
@@ -1590,17 +1661,23 @@ void QMetalBuffer::release()
         d->pendingUpdates[i].clear();
     }
 
-    QRHI_RES_RHI(QRhiMetal);
-    rhiD->d->releaseQueue.append(e);
-
-    QRHI_PROF;
-    QRHI_PROF_F(releaseBuffer(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiMetal);
+        rhiD->d->releaseQueue.append(e);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseBuffer(this));
+        rhiD->unregisterResource(this);
+    } else {
+        // associated rhi is already gone, queue the deferred release to the rsh instead
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QMetalBuffer::build()
 {
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
+
     if (d->buf[0])
         release();
 
@@ -1655,6 +1732,11 @@ QMetalRenderBuffer::~QMetalRenderBuffer()
     delete d;
 }
 
+bool QMetalRenderBuffer::isShareable() const
+{
+    return true;
+}
+
 void QMetalRenderBuffer::release()
 {
     if (!d->tex)
@@ -1667,17 +1749,22 @@ void QMetalRenderBuffer::release()
     e.renderbuffer.texture = d->tex;
     d->tex = nil;
 
-    QRHI_RES_RHI(QRhiMetal);
-    rhiD->d->releaseQueue.append(e);
-
-    QRHI_PROF;
-    QRHI_PROF_F(releaseRenderBuffer(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiMetal);
+        rhiD->d->releaseQueue.append(e);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseRenderBuffer(this));
+        rhiD->unregisterResource(this);
+    } else {
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 bool QMetalRenderBuffer::build()
 {
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
+
     if (d->tex)
         release();
 
@@ -1753,6 +1840,11 @@ QMetalTexture::~QMetalTexture()
     delete d;
 }
 
+bool QMetalTexture::isShareable() const
+{
+    return true;
+}
+
 void QMetalTexture::release()
 {
     if (!d->tex)
@@ -1771,13 +1863,15 @@ void QMetalTexture::release()
         d->stagingBuf[i] = nil;
     }
 
-    QRHI_RES_RHI(QRhiMetal);
-    rhiD->d->releaseQueue.append(e);
-
-    QRHI_PROF;
-    QRHI_PROF_F(releaseTexture(this));
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiMetal);
+        rhiD->d->releaseQueue.append(e);
+        QRHI_PROF;
+        QRHI_PROF_F(releaseTexture(this));
+        rhiD->unregisterResource(this);
+    } else {
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
@@ -1899,7 +1993,8 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
 
 bool QMetalTexture::prepareBuild(QSize *adjustedSize)
 {
-    QRHI_RES_RHI(QRhiMetal);
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
 
     if (d->tex)
         release();
@@ -1908,6 +2003,7 @@ bool QMetalTexture::prepareBuild(QSize *adjustedSize)
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
 
+    QRHI_RES_RHI(QRhiMetal);
     d->format = toMetalTextureFormat(m_format, m_flags);
     mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
     samples = rhiD->effectiveSampleCount(m_sampleCount);
@@ -1930,8 +2026,6 @@ bool QMetalTexture::prepareBuild(QSize *adjustedSize)
 
 bool QMetalTexture::build()
 {
-    QRHI_RES_RHI(QRhiMetal);
-
     QSize size;
     if (!prepareBuild(&size))
         return false;
@@ -1955,6 +2049,7 @@ bool QMetalTexture::build()
     if (m_flags.testFlag(RenderTarget))
         desc.usage |= MTLTextureUsageRenderTarget;
 
+    QRHI_RES_RHI(QRhiMetal);
     d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
     [desc release];
 
@@ -1975,8 +2070,6 @@ bool QMetalTexture::build()
 
 bool QMetalTexture::buildFrom(const QRhiNativeHandles *src)
 {
-    QRHI_RES_RHI(QRhiMetal);
-
     const QRhiMetalTextureNativeHandles *h = static_cast<const QRhiMetalTextureNativeHandles *>(src);
     if (!h || !h->texture)
         return false;
@@ -1994,6 +2087,7 @@ bool QMetalTexture::buildFrom(const QRhiNativeHandles *src)
 
     lastActiveFrameSlot = -1;
     generation += 1;
+    QRHI_RES_RHI(QRhiMetal);
     rhiD->registerResource(this);
     return true;
 }
@@ -2015,6 +2109,11 @@ QMetalSampler::~QMetalSampler()
     delete d;
 }
 
+bool QMetalSampler::isShareable() const
+{
+    return true;
+}
+
 void QMetalSampler::release()
 {
     if (!d->samplerState)
@@ -2027,10 +2126,13 @@ void QMetalSampler::release()
     e.sampler.samplerState = d->samplerState;
     d->samplerState = nil;
 
-    QRHI_RES_RHI(QRhiMetal);
-    rhiD->d->releaseQueue.append(e);
-
-    rhiD->unregisterResource(this);
+    if (!orphanedWithRsh) {
+        QRHI_RES_RHI(QRhiMetal);
+        rhiD->d->releaseQueue.append(e);
+        rhiD->unregisterResource(this);
+    } else {
+        addToRshReleaseQueue(orphanedWithRsh, e);
+    }
 }
 
 static inline MTLSamplerMinMagFilter toMetalFilter(QRhiSampler::Filter f)
@@ -2082,6 +2184,9 @@ static inline MTLSamplerAddressMode toMetalAddressMode(QRhiSampler::AddressMode 
 
 bool QMetalSampler::build()
 {
+    if (!QRhiImplementation::orphanCheck(this))
+        return false;
+
     if (d->samplerState)
         release();
 

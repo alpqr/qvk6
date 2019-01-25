@@ -563,6 +563,8 @@ int main(int argc, char **argv)
 
         windowA.setPosition(windowA.position() - QPoint(200, 200));
         windowB.setPosition(windowB.position() + QPoint(200, 200));
+        windowA.raise();
+        windowB.raise();
 
         result = app.exec();
     }

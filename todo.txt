@@ -1,9 +1,9 @@
-res.sh.: mtl
+event
 res.sh.: example to show read/write same texture
-threading with rsh with resource - more external sync needed
+threading with rsh with resource - more external sync needed?
 advanced blend modes
 gl: tex formats (texture, readback)
-gl: srgb
+gl: srgb? (glEnable and co.)
 should istexformatsupported should check srgb combinations
 vk: image in wrong layout when beginFrame-endFrame without a pass in it
 cbuffer alignment rules - some things fail to translate (to hlsl e.g. with structs), which is fine but how to mitigate
@@ -48,6 +48,7 @@ dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 
 +++ done
+res.sh.: mtl
 res.sh.: gl
 res.sh.: exercise it in multiwindow_threaded too
 res.sh.: vk, d3d

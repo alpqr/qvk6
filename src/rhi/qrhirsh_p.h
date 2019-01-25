@@ -91,6 +91,7 @@ public:
 #ifdef Q_OS_DARWIN
     struct {
         void *dev = nullptr;
+        void *releaseQueue = nullptr;
     } d_metal;
 #endif
 };

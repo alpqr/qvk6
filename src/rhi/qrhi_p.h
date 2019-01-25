@@ -260,23 +260,12 @@ public:
         QRhiTexture *tex = nullptr;
     };
 
-    struct TexturePrepare {
-        TexturePrepare() { }
-        TexturePrepare(QRhiTexture *tex_, QRhiResourceUpdateBatch::TexturePrepareFlags flags_)
-            : tex(tex_), flags(flags_)
-        { }
-
-        QRhiTexture *tex = nullptr;
-        QRhiResourceUpdateBatch::TexturePrepareFlags flags;
-    };
-
     QVector<DynamicBufferUpdate> dynamicBufferUpdates;
     QVector<StaticBufferUpload> staticBufferUploads;
     QVector<TextureUpload> textureUploads;
     QVector<TextureCopy> textureCopies;
     QVector<TextureRead> textureReadbacks;
     QVector<TextureMipGen> textureMipGens;
-    QVector<TexturePrepare> texturePrepares;
 
     QRhiResourceUpdateBatch *q = nullptr;
     QRhiImplementation *rhi = nullptr;
@@ -294,7 +283,6 @@ Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureCopy, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureRead, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureMipGen, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TexturePrepare, Q_MOVABLE_TYPE);
 
 class Q_RHI_PRIVATE_EXPORT QRhiShaderResourceBindingPrivate
 {

@@ -1083,12 +1083,6 @@ struct Q_RHI_EXPORT QRhiReadbackResult
 class Q_RHI_EXPORT QRhiResourceUpdateBatch
 {
 public:
-    enum TexturePrepareFlag {
-        TextureRead = 1 << 0,
-        TextureWrite = 1 << 1
-    };
-    Q_DECLARE_FLAGS(TexturePrepareFlags, TexturePrepareFlag)
-
     ~QRhiResourceUpdateBatch();
 
     void release();
@@ -1104,8 +1098,6 @@ public:
     void readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result);
     void generateMips(QRhiTexture *tex);
 
-    void prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags);
-
 private:
     QRhiResourceUpdateBatch(QRhiImplementation *rhi);
     Q_DISABLE_COPY(QRhiResourceUpdateBatch)
@@ -1113,8 +1105,6 @@ private:
     friend class QRhiResourceUpdateBatchPrivate;
     friend class QRhi;
 };
-
-Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiResourceUpdateBatch::TexturePrepareFlags)
 
 class Q_RHI_EXPORT QRhiResourceSharingHost
 {

@@ -2697,14 +2697,6 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         finishTransferDest(cb, utexD);
     }
 
-    for (const QRhiResourceUpdateBatchPrivate::TexturePrepare &u : ud->texturePrepares) {
-        if (u.flags.testFlag(QRhiResourceUpdateBatch::TextureRead)) {
-            QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
-            if (utexD->layout != VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-                finishTransferDest(cb, utexD);
-        }
-    }
-
     ud->free();
 }
 

@@ -2843,11 +2843,6 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags, QRh
  */
 
 /*!
-    \enum QRhiResourceUpdateBatch::TexturePrepareFlag
-    \internal
- */
-
-/*!
     \internal
  */
 QRhiResourceUpdateBatch::QRhiResourceUpdateBatch(QRhiImplementation *rhi)
@@ -3057,14 +3052,6 @@ void QRhiResourceUpdateBatch::generateMips(QRhiTexture *tex)
 }
 
 /*!
-    \internal
- */
-void QRhiResourceUpdateBatch::prepareTextureForUse(QRhiTexture *tex, TexturePrepareFlags flags)
-{
-    d->texturePrepares.append({ tex, flags });
-}
-
-/*!
    \return an available, empty batch to which copy type of operations can be
    recorded.
 
@@ -3116,7 +3103,6 @@ void QRhiResourceUpdateBatchPrivate::free()
     textureCopies.clear();
     textureReadbacks.clear();
     textureMipGens.clear();
-    texturePrepares.clear();
 
     rhi->resUpdPoolMap.clearBit(poolIndex);
     poolIndex = -1;
@@ -3130,7 +3116,6 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
     textureCopies += other->textureCopies;
     textureReadbacks += other->textureReadbacks;
     textureMipGens += other->textureMipGens;
-    texturePrepares += other->texturePrepares;
 }
 
 /*!

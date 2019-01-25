@@ -86,7 +86,10 @@ public:
     } d_vulkan;
 #endif
 #ifdef Q_OS_WIN
-    QRhiD3D11NativeHandles d_d3d11;
+    struct {
+        void *dev = nullptr;
+        void *context = nullptr;
+    } d_d3d11;
 #endif
 #ifdef Q_OS_DARWIN
     struct {

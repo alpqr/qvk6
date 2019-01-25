@@ -327,20 +327,18 @@ bool QRhiMetal::create(QRhi::Flags flags)
     if (importedCmdQueue) {
         [d->cmdQueue retain];
     } else {
-        if (!rsh || !rsh->d_metal.cmdQueue) {
-            d->cmdQueue = [d->dev newCommandQueue];
-            if (rsh) {
-                rsh->d_metal.cmdQueue = d->cmdQueue;
-                [d->cmdQueue retain];
-            }
-        } else {
-            d->cmdQueue = (id<MTLCommandQueue>) rsh->d_metal.cmdQueue;
-            [d->cmdQueue retain];
-        }
+        // We could use the existing MTLCommandQueue when rsh is enabled. We
+        // choose not to share the queue however, in order avoid performance
+        // surprises with multiple windows and QRhis severly limiting each
+        // other's rendering rate.
+        d->cmdQueue = [d->dev newCommandQueue];
     }
 
     if (@available(macOS 10.13, iOS 11.0, *)) {
         d->captureMgr = [MTLCaptureManager sharedCaptureManager];
+        // Have a custom capture scope as well which then shows up in XCode as
+        // an option when capturing, and becomes especially useful when having
+        // multiple windows with multiple QRhis.
         d->captureScope = [d->captureMgr newCaptureScopeWithCommandQueue: d->cmdQueue];
         d->captureScope.label = @"Qt capture scope";
     }
@@ -402,8 +400,6 @@ void QRhiMetal::destroy()
 
     if (rsh) {
         if (--rsh->rhiCount == 0) {
-            [(id<MTLCommandQueue>) rsh->d_metal.cmdQueue release];
-            rsh->d_metal.cmdQueue = nullptr;
             [(id<MTLDevice>) rsh->d_metal.dev release];
             rsh->d_metal.dev = nullptr;
         }

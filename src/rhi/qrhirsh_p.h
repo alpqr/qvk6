@@ -89,7 +89,9 @@ public:
     QRhiD3D11NativeHandles d_d3d11;
 #endif
 #ifdef Q_OS_DARWIN
-    QRhiMetalNativeHandles d_metal;
+    struct {
+        void *dev = nullptr;
+    } d_metal;
 #endif
 };
 

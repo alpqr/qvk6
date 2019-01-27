@@ -224,7 +224,7 @@ QT_BEGIN_NAMESPACE
     QRhiTexture::nativeHandles(). Most importantly, passing pointers in structs
     and via setters does not transfer ownership.
 
-    \section3 Threading
+    \section3 Threading and resource sharing
 
     A QRhi instance can be created and used on any thread but all usage must be
     limited to that one single thread.
@@ -240,12 +240,7 @@ QT_BEGIN_NAMESPACE
     from \l{QRhiResource::isShareable()}{isShareable()} is usable with other
     QRhi instances as well, as long as they are associated with the same
     QRhiResourceSharingHost. Resources can also outlive their creating QRhi in
-    this case, as long as there is at least one QRhi left in the "sharing
-    group". When the QRhi instances live and operate on different threads,
-    additional synchronization may be required. When writing to resources,
-    additional synchronization may be required even when the QRhi instances
-    live on the same thread. See QRhiResourceSharingHost for further
-    discussion.
+    this case, as long as there is at least one QRhi left in the sharing group.
 
     \sa {Qt Shader Tools}, QRhiResourceSharingHost
  */

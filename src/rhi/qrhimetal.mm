@@ -52,7 +52,10 @@ QT_BEGIN_NAMESPACE
     are Managed on macOS and Shared on iOS/tvOS, and still duplicated.
     "Immutable" is like "static" but with only one native buffer underneath.
     Textures are Private (device local) and a host visible staging buffer is
-    used to upload data to them.
+    used to upload data to them. Does not rely on strong objects refs from
+    command buffers (hence uses commandBufferWithUnretainedReferences), but
+    does rely on automatic dependency tracking between encoders (hence no
+    MTLResourceHazardTrackingModeUntracked atm).
 */
 
 #if __has_feature(objc_arc)

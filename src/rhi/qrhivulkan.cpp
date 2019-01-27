@@ -439,6 +439,12 @@ bool QRhiVulkan::create(QRhi::Flags flags)
     }
 
     if (gfxQueueFamilyIdx != -1) {
+        // Will use one queue always, including when multiple QRhis use the
+        // same device. This has significant consequences, and cannot easily be
+        // changed (e.g. think pipeline barriers which create a dependency
+        // between commands submitted to a queue - with multiple queues
+        // additional synchronization would be needed)
+
         if (!gfxQueue)
             df->vkGetDeviceQueue(dev, gfxQueueFamilyIdx, 0, &gfxQueue);
 
@@ -1563,7 +1569,7 @@ void QRhiVulkan::waitCommandCompletion(int frameSlot)
 
 QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 {
-    QMutexLocker lock(rsh ? &rsh->mtx : nullptr); // externally synchronized fun for VkQueue & co.
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     QVkSwapChain *swapChainD = QRHI_RES(QVkSwapChain, swapChain);
     QVkSwapChain::FrameResources &frame(swapChainD->frameRes[swapChainD->currentFrameSlot]);
@@ -1678,7 +1684,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
 
 QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 {
-    QMutexLocker lock(rsh ? &rsh->mtx : nullptr); // externally synchronized fun for VkQueue & co.
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     Q_ASSERT(inFrame);
     inFrame = false;
@@ -1875,6 +1881,8 @@ QRhi::FrameOpResult QRhiVulkan::finish()
 
 void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     QVkTextureRenderTarget *rtD = QRHI_RES(QVkTextureRenderTarget, rt);
     rtD->lastActiveFrameSlot = currentFrameSlot;
     rtD->d.rp->lastActiveFrameSlot = currentFrameSlot;
@@ -1900,6 +1908,8 @@ void QRhiVulkan::activateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRen
 
 void QRhiVulkan::deactivateTextureRenderTarget(QRhiCommandBuffer *, QRhiTextureRenderTarget *rt)
 {
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
+
     QVkTextureRenderTarget *rtD = QRHI_RES(QVkTextureRenderTarget, rt);
     // already in the right layout when the renderpass ends
     const QVector<QRhiColorAttachment> colorAttachments = rtD->m_desc.colorAttachments();
@@ -2268,6 +2278,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
     QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
     QRhiResourceUpdateBatchPrivate *ud = QRhiResourceUpdateBatchPrivate::get(resourceUpdates);
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     for (const QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate &u : ud->dynamicBufferUpdates) {
         QVkBuffer *bufD = QRHI_RES(QVkBuffer, u.buf);
@@ -2705,6 +2717,8 @@ void QRhiVulkan::executeBufferHostWritesForCurrentFrame(QVkBuffer *bufD)
     QVector<QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate> &updates(bufD->pendingDynamicUpdates[currentFrameSlot]);
     if (updates.isEmpty())
         return;
+
+    QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     Q_ASSERT(bufD->m_type == QRhiBuffer::Dynamic);
     void *p = nullptr;

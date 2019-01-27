@@ -1,6 +1,5 @@
-event
 res.sh.: example to show read/write same texture
-threading with rsh with resource - more external sync needed?
+event/fence for res.sh.?
 advanced blend modes
 gl: tex formats (texture, readback)
 gl: srgb? (glEnable and co.)

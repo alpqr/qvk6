@@ -1,4 +1,4 @@
-res.sh.: example to show read/write same texture
+res.sh.: example to show read/write same texture?
 event/fence for res.sh.?
 advanced blend modes
 gl: tex formats (texture, readback)
@@ -21,8 +21,6 @@ gl: ubuf structs, arrays
 test cubemap face as target
 test cubemap face readback
 object names for other than buf/rb/tex
-
-optional:
 compute?
 mtl: drawable warning?
 gl: target QOpenGLWindow/Widget?
@@ -41,8 +39,6 @@ multi-buffer (region) readback?
 depth readback?
 copy image depth?
 gl: markers and object names via gl_khr_debug
-
-shadertools:
 dxc for d3d as an alternative to fxc?
 hlsl -> dxc -> spirv -> spirv-cross hmmm...
 

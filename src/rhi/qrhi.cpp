@@ -242,6 +242,13 @@ QT_BEGIN_NAMESPACE
     QRhiResourceSharingHost. Resources can also outlive their creating QRhi in
     this case, as long as there is at least one QRhi left in the sharing group.
 
+    \note Support for efficient concurrent access to shared resources from QRhi
+    instances operating on different threads, especially when writing (for
+    example, rendering to a texture) is involved, is limited for the time
+    being. Neither GPU-GPU nor GPU-host synchronization facilities (such as,
+    fences or events) are provided in the QRhi API at the moment. These may be
+    introduced in the future.
+
     \sa {Qt Shader Tools}, QRhiResourceSharingHost
  */
 

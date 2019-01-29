@@ -39,10 +39,10 @@
 
 #include "qshaderbatchablerewriter_p.h"
 
-// This is a slightly modified version of qsgshaderrewriter.cpp from qtdeclarative/src/quick/scenegraph/coreapi.
-//
-// It generates a push constant block (_qt) with a single member (zRange) and a vertex attribute (_qt_order) at location 7.
-//
+// This is a slightly modified version of qsgshaderrewriter.cpp from
+// qtdeclarative/src/quick/scenegraph/coreapi. Here we insert an extra uniform
+// block (_qt) with a single member (zRange) with binding 7, and a vertex
+// attribute (_qt_order) at location 7.
 
 QT_BEGIN_NAMESPACE
 
@@ -190,7 +190,7 @@ QByteArray addZAdjustment(const QByteArray &input)
     result += QByteArray::fromRawData(input.constData(), voidPos - input.constData());
 
     result += QByteArrayLiteral("layout(location = 7) in float _qt_order;\n");
-    result += QByteArrayLiteral("layout(push_constant) uniform _Qt { float zRange; } _qt;\n");
+    result += QByteArrayLiteral("layout(std140, binding = 7) uniform _Qt { float zRange; } _qt;\n");
 
     // Find first brace '{'
     while (t != Tokenizer::Token_EOF && t != Tokenizer::Token_OpenBrace) t = tok.next();

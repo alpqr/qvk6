@@ -340,11 +340,14 @@ QBakedShader QShaderBaker::bake()
 
     QSpirvShader spirvShader;
     spirvShader.setSpirvBinary(spirv);
-    bs.setDescription(spirvShader.shaderDescription());
 
     QSpirvShader batchableSpirvShader;
-    if (!batchableSpirv.isEmpty())
+    if (!batchableSpirv.isEmpty()) {
         batchableSpirvShader.setSpirvBinary(batchableSpirv);
+        bs.setDescription(batchableSpirvShader.shaderDescription());
+    } else {
+        bs.setDescription(spirvShader.shaderDescription());
+    }
 
     for (const GeneratedShader &req: d->reqVersions) {
         for (const QBakedShaderKey::ShaderVariant &v : d->variants) {

@@ -936,8 +936,9 @@ void QRhiMetal::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
     }
 }
 
-QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags)
 {
+    Q_UNUSED(flags);
     Q_ASSERT(!inFrame);
     inFrame = true;
 
@@ -989,7 +990,7 @@ QRhi::FrameOpResult QRhiMetal::beginFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags)
 {
     Q_ASSERT(inFrame);
     inFrame = false;
@@ -997,7 +998,9 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
     QMetalSwapChain *swapChainD = QRHI_RES(QMetalSwapChain, swapChain);
     Q_ASSERT(currentSwapChain == swapChainD);
 
-    [swapChainD->cbWrapper.d->cb presentDrawable: swapChainD->d->curDrawable];
+    const bool needsPresent = !flags.testFlag(QRhi::SkipPresent);
+    if (needsPresent)
+        [swapChainD->cbWrapper.d->cb presentDrawable: swapChainD->d->curDrawable];
 
     __block int thisFrameSlot = currentFrameSlot;
     [swapChainD->cbWrapper.d->cb addCompletedHandler: ^(id<MTLCommandBuffer>) {
@@ -1006,17 +1009,17 @@ QRhi::FrameOpResult QRhiMetal::endFrame(QRhiSwapChain *swapChain)
 
     [swapChainD->cbWrapper.d->cb commit];
 
+    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
+    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
+
     if (@available(macOS 10.13, iOS 11.0, *))
         [d->captureScope endScope];
 
-    swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
+    if (needsPresent)
+        swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QMTL_FRAMES_IN_FLIGHT;
+
     swapChainD->frameCount += 1;
-
-    QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
-    QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount));
-
     currentSwapChain = nullptr;
-
     return QRhi::FrameOpSuccess;
 }
 

@@ -124,6 +124,7 @@ QString graphicsApiName()
 QRhi::Flags rhiFlags = QRhi::EnableDebugMarkers;
 int sampleCount = 1;
 QRhiSwapChain::Flags scFlags = 0;
+QRhi::EndFrameFlags endFrameFlags = 0;
 
 class Window : public QWindow
 {
@@ -413,7 +414,7 @@ void Window::render()
 
     customRender();
 
-    m_r->endFrame(m_sc);
+    m_r->endFrame(m_sc, endFrameFlags);
 
 #ifdef Q_OS_DARWIN
     if (!scFlags.testFlag(QRhiSwapChain::NoVSync))

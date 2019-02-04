@@ -471,8 +471,8 @@ public:
                                                        QRhiTextureRenderTarget::Flags flags) override;
 
     QRhiSwapChain *createSwapChain() override;
-    QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
-    QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags) override;
+    QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
     QRhi::FrameOpResult endOffscreenFrame() override;
     QRhi::FrameOpResult finish() override;
@@ -531,7 +531,7 @@ public:
     bool importedContext = false;
     QWindow *maybeWindow = nullptr;
     QSurface *fallbackSurface = nullptr;
-    mutable bool buffersSwapped = false;
+    mutable bool needsMakeCurrent = false;
     QOpenGLExtensions *f = nullptr;
     struct {
         // Multisample fb and blit are supported (GLES 3.0 or OpenGL 3.x). Not

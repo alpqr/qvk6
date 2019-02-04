@@ -334,6 +334,23 @@ QT_BEGIN_NAMESPACE
  */
 
 /*!
+    \enum QRhi::BeginFrameFlag
+    Flag values for QRhi::beginFrame()
+ */
+
+/*!
+    \enum QRhi::EndFrameFlag
+    Flag values for QRhi::endFrame()
+
+    \value SkipPresent Specifies that no present command is to be queued or no
+    swapBuffers call is to be made. This way no image is presented. Generating
+    multiple frames with all having this flag set is not recommended (except,
+    for example, for benchmarking purposes - but keep in mind that backends may
+    behave differently when it comes to waiting for command completion without
+    presenting so the results are not comparable between them)
+ */
+
+/*!
     \enum QRhi::ResourceSizeLimit
     Describes the resource limit to query.
 
@@ -3659,11 +3676,13 @@ QRhiSwapChain *QRhi::newSwapChain()
 
     \endlist
 
+    \a flags is currently unused.
+
     \sa endFrame()
  */
-QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain, BeginFrameFlags flags)
 {
-    return d->beginFrame(swapChain);
+    return d->beginFrame(swapChain, flags);
 }
 
 /*!
@@ -3673,11 +3692,15 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain)
     Double (or triple) buffering is managed internally by the QRhiSwapChain and
     QRhi.
 
+    \a flags can optionally be used to change the behavior in certain ways.
+    Passing QRhi::SkipPresent skips queuing the Present command or calling
+    swapBuffers.
+
     \sa beginFrame()
  */
-QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain, EndFrameFlags flags)
 {
-    return d->endFrame(swapChain);
+    return d->endFrame(swapChain, flags);
 }
 
 /*!

@@ -218,8 +218,8 @@ bool QRhiGles2::ensureContext(QSurface *surface) const
     if (!surface)
         surface = fallbackSurface;
 
-    if (buffersSwapped)
-        buffersSwapped = false;
+    if (needsMakeCurrent)
+        needsMakeCurrent = false;
     else if (!nativeWindowGone && QOpenGLContext::currentContext() == ctx && (surface == fallbackSurface || ctx->surface() == surface))
         return true;
 
@@ -727,8 +727,9 @@ void QRhiGles2::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
     Q_UNUSED(msg);
 }
 
-QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags)
 {
+    Q_UNUSED(flags);
     Q_ASSERT(!inFrame);
 
     QGles2SwapChain *swapChainD = QRHI_RES(QGles2SwapChain, swapChain);
@@ -747,7 +748,7 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags)
 {
     Q_ASSERT(inFrame);
     inFrame = false;
@@ -764,15 +765,15 @@ QRhi::FrameOpResult QRhiGles2::endFrame(QRhiSwapChain *swapChain)
     // this must be done before the swap
     QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
 
-    if (swapChainD->surface) {
+    if (swapChainD->surface && !flags.testFlag(QRhi::SkipPresent)) {
         ctx->swapBuffers(swapChainD->surface);
-        buffersSwapped = true;
+        needsMakeCurrent = true;
+    } else {
+        f->glFlush();
     }
 
     swapChainD->frameCount += 1;
-
     currentSwapChain = nullptr;
-
     return QRhi::FrameOpSuccess;
 }
 

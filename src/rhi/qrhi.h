@@ -1157,6 +1157,15 @@ public:
         PrimitiveRestart
     };
 
+    enum BeginFrameFlag {
+    };
+    Q_DECLARE_FLAGS(BeginFrameFlags, BeginFrameFlag)
+
+    enum EndFrameFlag {
+        SkipPresent = 1 << 0
+    };
+    Q_DECLARE_FLAGS(EndFrameFlags, EndFrameFlag)
+
     enum ResourceSizeLimit {
         TextureSizeMin = 1,
         TextureSizeMax
@@ -1194,8 +1203,8 @@ public:
                                                     QRhiTextureRenderTarget::Flags flags = QRhiTextureRenderTarget::Flags());
 
     QRhiSwapChain *newSwapChain();
-    FrameOpResult beginFrame(QRhiSwapChain *swapChain);
-    FrameOpResult endFrame(QRhiSwapChain *swapChain);
+    FrameOpResult beginFrame(QRhiSwapChain *swapChain, BeginFrameFlags flags = BeginFrameFlags());
+    FrameOpResult endFrame(QRhiSwapChain *swapChain, EndFrameFlags flags = EndFrameFlags());
 
     FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb);
     FrameOpResult endOffscreenFrame();
@@ -1233,6 +1242,8 @@ private:
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::Flags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::BeginFrameFlags)
+Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::EndFrameFlags)
 
 QT_END_NAMESPACE
 

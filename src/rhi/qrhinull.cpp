@@ -261,15 +261,17 @@ void QRhiNull::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
     Q_UNUSED(msg);
 }
 
-QRhi::FrameOpResult QRhiNull::beginFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiNull::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags)
 {
+    Q_UNUSED(flags);
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
     QRHI_PROF_F(beginSwapChainFrame(swapChain));
     return QRhi::FrameOpSuccess;
 }
 
-QRhi::FrameOpResult QRhiNull::endFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiNull::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags)
 {
+    Q_UNUSED(flags);
     QNullSwapChain *swapChainD = QRHI_RES(QNullSwapChain, swapChain);
     QRhiProfilerPrivate *rhiP = profilerPrivateOrNull();
     QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));

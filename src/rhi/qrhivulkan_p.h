@@ -375,8 +375,8 @@ public:
                                                        QRhiTextureRenderTarget::Flags flags) override;
 
     QRhiSwapChain *createSwapChain() override;
-    QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) override;
-    QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) override;
+    QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags) override;
+    QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags) override;
     QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) override;
     QRhi::FrameOpResult endOffscreenFrame() override;
     QRhi::FrameOpResult finish() override;
@@ -457,7 +457,7 @@ public:
                                                   VkSemaphore *waitSem, VkSemaphore *signalSem);
     void waitCommandCompletion(int frameSlot);
     QRhi::FrameOpResult beginNonWrapperFrame(QRhiSwapChain *swapChain);
-    QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain);
+    QRhi::FrameOpResult endNonWrapperFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags);
     void prepareNewFrame(QRhiCommandBuffer *cb);
     void prepareForTransferDest(QRhiCommandBuffer *cb, QVkTexture *texD);
     void prepareForTransferSrc(QRhiCommandBuffer *cb, QVkTexture *texD);

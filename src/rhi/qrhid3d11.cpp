@@ -702,8 +702,9 @@ void QRhiD3D11::debugMarkMsg(QRhiCommandBuffer *cb, const QByteArray &msg)
     cbD->commands.append(cmd);
 }
 
-QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags)
 {
+    Q_UNUSED(flags);
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
     Q_ASSERT(!inFrame);
@@ -753,7 +754,7 @@ QRhi::FrameOpResult QRhiD3D11::beginFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags)
 {
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
@@ -793,16 +794,20 @@ QRhi::FrameOpResult QRhiD3D11::endFrame(QRhiSwapChain *swapChain)
     // this must be done before the Present
     QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
 
-    const UINT presentFlags = 0;
-    HRESULT hr = swapChainD->swapChain->Present(swapChainD->swapInterval, presentFlags);
-    if (FAILED(hr))
-        qWarning("Failed to present: %s", qPrintable(comErrorMessage(hr)));
+    if (!flags.testFlag(QRhi::SkipPresent)) {
+        const UINT presentFlags = 0;
+        HRESULT hr = swapChainD->swapChain->Present(swapChainD->swapInterval, presentFlags);
+        if (FAILED(hr))
+            qWarning("Failed to present: %s", qPrintable(comErrorMessage(hr)));
 
-    swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QD3D11SwapChain::BUFFER_COUNT;
+        // move on to the next buffer
+        swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QD3D11SwapChain::BUFFER_COUNT;
+    } else {
+        context->Flush();
+    }
+
     swapChainD->frameCount += 1;
-
     contextState.currentSwapChain = nullptr;
-
     return QRhi::FrameOpSuccess;
 }
 

@@ -65,6 +65,7 @@
 #include <QRhiProfiler>
 
 #define PROFILE_TO_FILE
+//#define SKIP_PRESENT
 //#define USE_MSAA
 //#define USE_SRGB_SWAPCHAIN
 //#define READBACK_SWAPCHAIN
@@ -90,6 +91,10 @@ void preInit()
     qDebug("Writing profiling output to %s", qPrintable(profFn));
     d.profOut.setFileName(profFn);
     d.profOut.open(QIODevice::WriteOnly);
+#endif
+
+#ifdef SKIP_PRESENT
+    endFrameFlags |= QRhi::SkipPresent;
 #endif
 
 #ifdef USE_MSAA

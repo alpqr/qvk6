@@ -1420,20 +1420,21 @@ static inline bool checkDeviceLost(VkResult err)
     return false;
 }
 
-QRhi::FrameOpResult QRhiVulkan::beginFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiVulkan::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags)
 {
+    Q_UNUSED(flags);
     if (QRHI_RES(QVkSwapChain, swapChain)->wrapWindow)
         return beginWrapperFrame(swapChain);
     else
         return beginNonWrapperFrame(swapChain);
 }
 
-QRhi::FrameOpResult QRhiVulkan::endFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiVulkan::endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags)
 {
     if (QRHI_RES(QVkSwapChain, swapChain)->wrapWindow)
         return endWrapperFrame(swapChain);
     else
-        return endNonWrapperFrame(swapChain);
+        return endNonWrapperFrame(swapChain, flags);
 }
 
 QRhi::FrameOpResult QRhiVulkan::beginWrapperFrame(QRhiSwapChain *swapChain)
@@ -1682,7 +1683,7 @@ QRhi::FrameOpResult QRhiVulkan::beginNonWrapperFrame(QRhiSwapChain *swapChain)
     return QRhi::FrameOpSuccess;
 }
 
-QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
+QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags)
 {
     QMutexLocker lock(rsh ? &rsh->mtx : nullptr);
 
@@ -1722,10 +1723,11 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
 
     // stop recording and submit to the queue
     Q_ASSERT(!image.cmdFenceWaitable);
+    const bool needsPresent = !flags.testFlag(QRhi::SkipPresent);
     QRhi::FrameOpResult submitres = endAndSubmitCommandBuffer(image.cmdBuf,
                                                               image.cmdFence,
                                                               frame.imageSemWaitable ? &frame.imageSem : nullptr,
-                                                              &frame.drawSem);
+                                                              needsPresent ? &frame.drawSem : nullptr);
     if (submitres != QRhi::FrameOpSuccess)
         return submitres;
 
@@ -1736,36 +1738,38 @@ QRhi::FrameOpResult QRhiVulkan::endNonWrapperFrame(QRhiSwapChain *swapChain)
     // this must be done before the Present
     QRHI_PROF_F(endSwapChainFrame(swapChain, swapChainD->frameCount + 1));
 
-    // add the Present to the queue
-    VkPresentInfoKHR presInfo;
-    memset(&presInfo, 0, sizeof(presInfo));
-    presInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presInfo.swapchainCount = 1;
-    presInfo.pSwapchains = &swapChainD->sc;
-    presInfo.pImageIndices = &swapChainD->currentImageIndex;
-    presInfo.waitSemaphoreCount = 1;
-    presInfo.pWaitSemaphores = &frame.drawSem; // gfxQueueFamilyIdx == presQueueFamilyIdx ? &frame.drawSem : &frame.presTransSem;
+    if (needsPresent) {
+        // add the Present to the queue
+        VkPresentInfoKHR presInfo;
+        memset(&presInfo, 0, sizeof(presInfo));
+        presInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+        presInfo.swapchainCount = 1;
+        presInfo.pSwapchains = &swapChainD->sc;
+        presInfo.pImageIndices = &swapChainD->currentImageIndex;
+        presInfo.waitSemaphoreCount = 1;
+        presInfo.pWaitSemaphores = &frame.drawSem; // gfxQueueFamilyIdx == presQueueFamilyIdx ? &frame.drawSem : &frame.presTransSem;
 
-    VkResult err = vkQueuePresentKHR(gfxQueue, &presInfo);
-    if (err != VK_SUCCESS) {
-        if (err == VK_ERROR_OUT_OF_DATE_KHR) {
-            return QRhi::FrameOpSwapChainOutOfDate;
-        } else if (err != VK_SUBOPTIMAL_KHR) {
-            if (checkDeviceLost(err))
-                return QRhi::FrameOpDeviceLost;
-            else
-                qWarning("Failed to present: %d", err);
-            return QRhi::FrameOpError;
+        VkResult err = vkQueuePresentKHR(gfxQueue, &presInfo);
+        if (err != VK_SUCCESS) {
+            if (err == VK_ERROR_OUT_OF_DATE_KHR) {
+                return QRhi::FrameOpSwapChainOutOfDate;
+            } else if (err != VK_SUBOPTIMAL_KHR) {
+                if (checkDeviceLost(err))
+                    return QRhi::FrameOpDeviceLost;
+                else
+                    qWarning("Failed to present: %d", err);
+                return QRhi::FrameOpError;
+            }
         }
+
+        // mark the current swapchain buffer as unused from our side
+        frame.imageAcquired = false;
+        // and move on to the next buffer
+        swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
     }
 
-    frame.imageAcquired = false;
-
-    swapChainD->currentFrameSlot = (swapChainD->currentFrameSlot + 1) % QVK_FRAMES_IN_FLIGHT;
     swapChainD->frameCount += 1;
-
     currentSwapChain = nullptr;
-
     return QRhi::FrameOpSuccess;
 }
 

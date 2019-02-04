@@ -89,8 +89,8 @@ public:
                                                                QRhiTextureRenderTarget::Flags flags) = 0;
 
     virtual QRhiSwapChain *createSwapChain() = 0;
-    virtual QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain) = 0;
-    virtual QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain) = 0;
+    virtual QRhi::FrameOpResult beginFrame(QRhiSwapChain *swapChain, QRhi::BeginFrameFlags flags) = 0;
+    virtual QRhi::FrameOpResult endFrame(QRhiSwapChain *swapChain, QRhi::EndFrameFlags flags) = 0;
     virtual QRhi::FrameOpResult beginOffscreenFrame(QRhiCommandBuffer **cb) = 0;
     virtual QRhi::FrameOpResult endOffscreenFrame() = 0;
     virtual QRhi::FrameOpResult finish() = 0;

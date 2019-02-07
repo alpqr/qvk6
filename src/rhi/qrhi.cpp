@@ -1923,6 +1923,59 @@ QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
 }
 
 /*!
+    Returns \c true if all the bindings in the two QRhiShaderResourceBinding
+    objects \a a and \a b are equal.
+
+    \relates QRhiShaderResourceBinding
+*/
+bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
+{
+    if (a.d == b.d)
+        return true;
+
+    if (a.d->binding != b.d->binding
+            || a.d->stage != b.d->stage
+            || a.d->type != b.d->type)
+    {
+        return false;
+    }
+
+    switch (a.d->type) {
+    case QRhiShaderResourceBinding::UniformBuffer:
+        if (a.d->u.ubuf.buf != b.d->u.ubuf.buf
+                || a.d->u.ubuf.offset != b.d->u.ubuf.offset
+                || a.d->u.ubuf.maybeSize != b.d->u.ubuf.maybeSize)
+        {
+            return false;
+        }
+        break;
+    case QRhiShaderResourceBinding::SampledTexture:
+        if (a.d->u.stex.tex != b.d->u.stex.tex
+                || a.d->u.stex.sampler != b.d->u.stex.sampler)
+        {
+            return false;
+        }
+        break;
+    default:
+        Q_UNREACHABLE();
+        return false;
+    }
+
+    return true;
+}
+
+/*!
+    Returns \c false if all the bindings in the two QRhiShaderResourceBinding
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiShaderResourceBinding
+*/
+bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
+{
+    return !(a == b);
+}
+
+/*!
     \class QRhiGraphicsPipeline
     \inmodule QtRhi
     \brief Graphics pipeline state resource.

@@ -277,9 +277,14 @@ public:
 private:
     QRhiShaderResourceBindingPrivate *d;
     friend class QRhiShaderResourceBindingPrivate;
+    friend Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &);
+    friend Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &);
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBinding::StageFlags)
+
+Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b);
+Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b);
 
 class Q_RHI_EXPORT QRhiColorAttachment
 {

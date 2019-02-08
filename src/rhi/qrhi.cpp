@@ -1975,6 +1975,13 @@ bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBind
     return !(a == b);
 }
 
+uint qHash(const QRhiShaderResourceBinding &b, uint seed)
+{
+    const char *u = reinterpret_cast<const char *>(&b.d->u);
+    return seed + b.d->binding + 10 * b.d->stage + 100 * b.d->type
+            + qHash(QByteArray::fromRawData(u, sizeof(b.d->u)), seed);
+}
+
 /*!
     \class QRhiGraphicsPipeline
     \inmodule QtRhi

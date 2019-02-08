@@ -1982,6 +1982,49 @@ uint qHash(const QRhiShaderResourceBinding &b, uint seed)
             + qHash(QByteArray::fromRawData(u, sizeof(b.d->u)), seed);
 }
 
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiShaderResourceBinding &b)
+{
+    const QRhiShaderResourceBindingPrivate *d = b.d;
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiShaderResourceBinding("
+                  << "binding=" << d->binding
+                  << " stage=" << d->stage
+                  << " type=" << d->type;
+    switch (d->type) {
+    case QRhiShaderResourceBinding::UniformBuffer:
+        dbg.nospace() << " UniformBuffer("
+                      << "buffer=" << d->u.ubuf.buf
+                      << " offset=" << d->u.ubuf.offset
+                      << " maybeSize=" << d->u.ubuf.maybeSize
+                      << ')';
+        break;
+    case QRhiShaderResourceBinding::SampledTexture:
+        dbg.nospace() << " SampledTexture("
+                      << "texture=" << d->u.stex.tex
+                      << " sampler=" << d->u.stex.sampler
+                      << ')';
+        break;
+    default:
+        Q_UNREACHABLE();
+        break;
+    }
+    dbg.nospace() << ')';
+    return dbg;
+}
+#endif
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiShaderResourceBindings &srb)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiShaderResourceBindings("
+                  << srb.m_bindings
+                  << ')';
+    return dbg;
+}
+#endif
+
 /*!
     \class QRhiGraphicsPipeline
     \inmodule QtRhi

@@ -280,6 +280,9 @@ private:
     friend Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &);
     friend Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &);
     friend Q_RHI_EXPORT uint qHash(const QRhiShaderResourceBinding &, uint);
+#ifndef QT_NO_DEBUG_STREAM
+    friend Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiShaderResourceBinding &);
+#endif
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBinding::StageFlags)
@@ -287,6 +290,9 @@ Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBinding::StageFlags)
 Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b);
 Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b);
 Q_RHI_EXPORT uint qHash(const QRhiShaderResourceBinding &b, uint seed = 0);
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiShaderResourceBinding &);
+#endif
 
 class Q_RHI_EXPORT QRhiColorAttachment
 {
@@ -786,7 +792,14 @@ protected:
     QRhiShaderResourceBindings(QRhiImplementation *rhi);
     QVector<QRhiShaderResourceBinding> m_bindings;
     Q_DECL_UNUSED_MEMBER quint64 m_reserved;
+#ifndef QT_NO_DEBUG_STREAM
+    friend Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiShaderResourceBindings &);
+#endif
 };
+
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiShaderResourceBindings &);
+#endif
 
 class Q_RHI_EXPORT QRhiGraphicsPipeline : public QRhiResource
 {

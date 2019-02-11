@@ -436,6 +436,13 @@ QBakedShader QBakedShader::fromSerialized(const QByteArray &data)
     return bs;
 }
 
+/*!
+    Returns \c true if the two QBakedShader objects \a a and \a b are equal,
+    meaning they are for the same stage with matching sets of shader source or
+    binary code.
+
+    \relates QBakedShader
+ */
 bool operator==(const QBakedShader &lhs, const QBakedShader &rhs) Q_DECL_NOTHROW
 {
     return lhs.d->stage == rhs.d->stage
@@ -443,6 +450,20 @@ bool operator==(const QBakedShader &lhs, const QBakedShader &rhs) Q_DECL_NOTHROW
     // do not bother with desc, if the shader code is the same, the description must match too
 }
 
+/*!
+    \fn bool operator!=(const QBakedShader &lhs, const QBakedShader &rhs)
+
+    Returns \c false if the values in the two QBakedShader objects \a a and \a b
+    are equal; otherwise returns \c true.
+
+    \relates QBakedShader
+ */
+
+/*!
+    Returns the hash value for \a s, using \a seed to seed the calculation.
+
+    \relates QBakedShader
+ */
 uint qHash(const QBakedShader &s, uint seed) Q_DECL_NOTHROW
 {
     uint h = s.stage();
@@ -451,26 +472,74 @@ uint qHash(const QBakedShader &s, uint seed) Q_DECL_NOTHROW
     return h;
 }
 
+/*!
+    Returns \c true if the two QBakedShaderVersion objects \a a and \a b are
+    equal.
+
+    \relates QBakedShaderVersion
+ */
 bool operator==(const QBakedShaderVersion &lhs, const QBakedShaderVersion &rhs) Q_DECL_NOTHROW
 {
     return lhs.version() == rhs.version() && lhs.flags() == rhs.flags();
 }
 
+/*!
+    \fn bool operator!=(const QBakedShaderVersion &lhs, const QBakedShaderVersion &rhs)
+
+    Returns \c false if the values in the two QBakedShaderVersion objects \a a
+    and \a b are equal; otherwise returns \c true.
+
+    \relates QBakedShaderVersion
+ */
+
+/*!
+    Returns \c true if the two QBakedShaderKey objects \a a and \a b are equal.
+
+    \relates QBakedShaderKey
+ */
 bool operator==(const QBakedShaderKey &lhs, const QBakedShaderKey &rhs) Q_DECL_NOTHROW
 {
     return lhs.source() == rhs.source() && lhs.sourceVersion() == rhs.sourceVersion()
             && lhs.sourceVariant() == rhs.sourceVariant();
 }
 
+/*!
+    \fn bool operator!=(const QBakedShaderKey &lhs, const QBakedShaderKey &rhs)
+
+    Returns \c false if the values in the two QBakedShaderKey objects \a a
+    and \a b are equal; otherwise returns \c true.
+
+    \relates QBakedShaderKey
+ */
+
+/*!
+    Returns the hash value for \a k, using \a seed to seed the calculation.
+
+    \relates QBakedShaderKey
+ */
+uint qHash(const QBakedShaderKey &k, uint seed) Q_DECL_NOTHROW
+{
+    return seed + 10 * k.source() + k.sourceVersion().version() + k.sourceVersion().flags() + k.sourceVariant();
+}
+
+/*!
+    Returns \c true if the two QBakedShaderCode objects \a a and \a b are equal.
+
+    \relates QBakedShaderCode
+ */
 bool operator==(const QBakedShaderCode &lhs, const QBakedShaderCode &rhs) Q_DECL_NOTHROW
 {
     return lhs.shader() == rhs.shader() && lhs.entryPoint() == rhs.entryPoint();
 }
 
-uint qHash(const QBakedShaderKey &k, uint seed) Q_DECL_NOTHROW
-{
-    return seed + 10 * k.source() + k.sourceVersion().version() + k.sourceVersion().flags() + k.sourceVariant();
-}
+/*!
+    \fn bool operator!=(const QBakedShaderCode &lhs, const QBakedShaderCode &rhs)
+
+    Returns \c false if the values in the two QBakedShaderCode objects \a a
+    and \a b are equal; otherwise returns \c true.
+
+    \relates QBakedShaderCode
+ */
 
 #ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QBakedShader &bs)

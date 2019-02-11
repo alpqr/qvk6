@@ -173,10 +173,20 @@ public:
 private:
     QBakedShaderPrivate *d;
     friend struct QBakedShaderPrivate;
+    friend Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShader &, const QBakedShader &) Q_DECL_NOTHROW;
+    friend Q_SHADERTOOLS_EXPORT uint qHash(const QBakedShader &, uint) Q_DECL_NOTHROW;
 #ifndef QT_NO_DEBUG_STREAM
     friend Q_SHADERTOOLS_EXPORT QDebug operator<<(QDebug, const QBakedShader &);
 #endif
 };
+
+Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShader &lhs, const QBakedShader &rhs) Q_DECL_NOTHROW;
+Q_SHADERTOOLS_EXPORT uint qHash(const QBakedShader &s, uint seed = 0) Q_DECL_NOTHROW;
+
+inline bool operator!=(const QBakedShader &lhs, const QBakedShader &rhs) Q_DECL_NOTHROW
+{
+    return !(lhs == rhs);
+}
 
 Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShaderVersion &lhs, const QBakedShaderVersion &rhs) Q_DECL_NOTHROW;
 Q_SHADERTOOLS_EXPORT bool operator==(const QBakedShaderKey &lhs, const QBakedShaderKey &rhs) Q_DECL_NOTHROW;
@@ -197,7 +207,7 @@ inline bool operator!=(const QBakedShaderCode &lhs, const QBakedShaderCode &rhs)
     return !(lhs == rhs);
 }
 
-Q_SHADERTOOLS_EXPORT uint qHash(const QBakedShaderKey &k, uint seed = 0);
+Q_SHADERTOOLS_EXPORT uint qHash(const QBakedShaderKey &k, uint seed = 0) Q_DECL_NOTHROW;
 
 #ifndef QT_NO_DEBUG_STREAM
 Q_SHADERTOOLS_EXPORT QDebug operator<<(QDebug, const QBakedShader &);

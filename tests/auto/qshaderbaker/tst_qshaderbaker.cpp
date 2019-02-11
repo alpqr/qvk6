@@ -436,6 +436,7 @@ void tst_QShaderBaker::bakedShaderImplicitSharing()
         QCOMPARE(s1.availableShaders().count(), 1);
         QVERIFY(s1.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
         QCOMPARE(s0.stage(), s1.stage());
+        QCOMPARE(s0, s1);
 
         s1.detach();
         QVERIFY(QBakedShaderPrivate::get(&s0) != QBakedShaderPrivate::get(&s1));
@@ -444,6 +445,7 @@ void tst_QShaderBaker::bakedShaderImplicitSharing()
         QCOMPARE(s1.availableShaders().count(), 1);
         QVERIFY(s1.availableShaders().contains(QBakedShaderKey(QBakedShaderKey::SpirvShader, QBakedShaderVersion(100))));
         QCOMPARE(s0.stage(), s1.stage());
+        QCOMPARE(s0, s1);
     }
 
     {
@@ -465,6 +467,7 @@ void tst_QShaderBaker::bakedShaderImplicitSharing()
         QCOMPARE(d1.inputVariables().count(), 2);
         QCOMPARE(d1.outputVariables().count(), 1);
         QCOMPARE(d1.uniformBlocks().count(), 1);
+        QVERIFY(s0 != s1);
     }
 }
 

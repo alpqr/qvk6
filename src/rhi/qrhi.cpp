@@ -417,6 +417,39 @@ QRhiColorClearValue::QRhiColorClearValue(float r, float g, float b, float a)
 }
 
 /*!
+    Returns \c true if the colors in the two QRhiColorClearValue objects \a a
+    and \a b are equal.
+
+    \relates QRhiColorClearValue
+ */
+bool operator==(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DECL_NOTHROW
+{
+    return a.rgba() == b.rgba();
+}
+
+/*!
+    Returns \c false if the colors in the two QRhiColorClearValue objects \a a
+    and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiColorClearValue
+*/
+bool operator!=(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiColorClearValue
+ */
+uint qHash(const QRhiColorClearValue &v, uint seed) Q_DECL_NOTHROW
+{
+    const QVector4D c = v.rgba();
+    return qFloor((c.x() + c.y() + c.z() + c.w()) * 1000) + seed;
+}
+
+/*!
     \class QRhiDepthStencilClearValue
     \inmodule QtRhi
     \brief Specifies clear values for a depth or stencil buffer.
@@ -440,6 +473,39 @@ QRhiDepthStencilClearValue::QRhiDepthStencilClearValue(float d, quint32 s)
     : m_d(d),
       m_s(s)
 {
+}
+
+/*!
+    Returns \c true if the values in the two QRhiDepthStencilClearValue objects
+    \a a and \a b are equal.
+
+    \relates QRhiDepthStencilClearValue
+ */
+bool operator==(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClearValue &b) Q_DECL_NOTHROW
+{
+    return a.depthClearValue() == b.depthClearValue()
+            && a.stencilClearValue() == b.stencilClearValue();
+}
+
+/*!
+    Returns \c false if the values in the two QRhiDepthStencilClearValue
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiDepthStencilClearValue
+*/
+bool operator!=(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClearValue &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiDepthStencilClearValue
+ */
+uint qHash(const QRhiDepthStencilClearValue &v, uint seed) Q_DECL_NOTHROW
+{
+    return seed * (qFloor(v.depthClearValue() * 100) + v.stencilClearValue());
 }
 
 /*!
@@ -495,6 +561,41 @@ QRhiViewport::QRhiViewport(float x, float y, float w, float h, float minDepth, f
 }
 
 /*!
+    Returns \c true if the values in the two QRhiViewport objects
+    \a a and \a b are equal.
+
+    \relates QRhiViewport
+ */
+bool operator==(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW
+{
+    return a.viewport() == b.viewport()
+            && a.minDepth() == b.minDepth()
+            && a.maxDepth() == b.maxDepth();
+}
+
+/*!
+    Returns \c false if the values in the two QRhiViewport
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiViewport
+*/
+bool operator!=(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiViewport
+ */
+uint qHash(const QRhiViewport &v, uint seed) Q_DECL_NOTHROW
+{
+    const QVector4D r = v.viewport();
+    return seed + r.x() + r.y() + r.z() + r.w() + qFloor(v.minDepth() * 100) + qFloor(v.maxDepth() * 100);
+}
+
+/*!
     \class QRhiScissor
     \inmodule QtRhi
     \brief Specifies a scissor rectangle.
@@ -525,6 +626,39 @@ QRhiScissor::QRhiScissor()
 QRhiScissor::QRhiScissor(int x, int y, int w, int h)
     : m_rect(x, y, w, h)
 {
+}
+
+/*!
+    Returns \c true if the values in the two QRhiScissor objects
+    \a a and \a b are equal.
+
+    \relates QRhiScissor
+ */
+bool operator==(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW
+{
+    return a.scissor() == b.scissor();
+}
+
+/*!
+    Returns \c false if the values in the two QRhiScissor
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiScissor
+*/
+bool operator!=(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiScissor
+ */
+uint qHash(const QRhiScissor &v, uint seed) Q_DECL_NOTHROW
+{
+    const QVector4D r = v.scissor();
+    return seed + r.x() + r.y() + r.z() + r.w();
 }
 
 /*!
@@ -606,6 +740,40 @@ QRhiVertexInputBinding::QRhiVertexInputBinding(quint32 stride, Classification cl
       m_classification(cls),
       m_instanceStepRate(stepRate)
 {
+}
+
+/*!
+    Returns \c true if the values in the two QRhiVertexInputBinding objects
+    \a a and \a b are equal.
+
+    \relates QRhiVertexInputBinding
+ */
+bool operator==(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b) Q_DECL_NOTHROW
+{
+    return a.stride() == b.stride()
+            && a.classification() == b.classification()
+            && a.instanceStepRate() == b.instanceStepRate();
+}
+
+/*!
+    Returns \c false if the values in the two QRhiVertexInputBinding
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiVertexInputBinding
+*/
+bool operator!=(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiVertexInputBinding
+ */
+uint qHash(const QRhiVertexInputBinding &v, uint seed) Q_DECL_NOTHROW
+{
+    return seed + v.stride() + v.classification();
 }
 
 /*!
@@ -710,6 +878,41 @@ QRhiVertexInputAttribute::QRhiVertexInputAttribute(int binding, int location, Fo
 }
 
 /*!
+    Returns \c true if the values in the two QRhiVertexInputAttribute objects
+    \a a and \a b are equal.
+
+    \relates QRhiVertexInputAttribute
+ */
+bool operator==(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribute &b) Q_DECL_NOTHROW
+{
+    return a.binding() == b.binding()
+            && a.location() == b.location()
+            && a.format() == b.format()
+            && a.offset() == b.offset();
+}
+
+/*!
+    Returns \c false if the values in the two QRhiVertexInputAttribute
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiVertexInputAttribute
+*/
+bool operator!=(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribute &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiVertexInputAttribute
+ */
+uint qHash(const QRhiVertexInputAttribute &v, uint seed) Q_DECL_NOTHROW
+{
+    return seed + v.binding() + v.location() + v.format() + v.offset();
+}
+
+/*!
     \class QRhiVertexInputLayout
     \inmodule QtRhi
     \brief Describes the layout of vertex inputs consumed by a vertex shader.
@@ -723,6 +926,39 @@ QRhiVertexInputAttribute::QRhiVertexInputAttribute(int binding, int location, Fo
  */
 QRhiVertexInputLayout::QRhiVertexInputLayout()
 {
+}
+
+/*!
+    Returns \c true if the values in the two QRhiVertexInputLayout objects
+    \a a and \a b are equal.
+
+    \relates QRhiVertexInputLayout
+ */
+bool operator==(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) Q_DECL_NOTHROW
+{
+    return a.bindings() == b.bindings()
+            && a.attributes() == b.attributes();
+}
+
+/*!
+    Returns \c false if the values in the two QRhiVertexInputLayout
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiVertexInputLayout
+*/
+bool operator!=(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiVertexInputLayout
+ */
+uint qHash(const QRhiVertexInputLayout &v, uint seed) Q_DECL_NOTHROW
+{
+    return qHash(v.bindings(), seed) + qHash(v.attributes(), seed);
 }
 
 /*!
@@ -759,6 +995,39 @@ QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &
     : m_type(type),
       m_shader(shader)
 {
+}
+
+/*!
+    Returns \c true if the values in the two QRhiGraphicsShaderStage objects
+    \a a and \a b are equal.
+
+    \relates QRhiGraphicsShaderStage
+ */
+bool operator==(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage &b) Q_DECL_NOTHROW
+{
+    return a.type() == b.type()
+            && a.shader() == b.shader();
+}
+
+/*!
+    Returns \c false if the values in the two QRhiGraphicsShaderStage
+    objects \a a and \a b are equal; otherwise returns \c true.
+
+    \relates QRhiGraphicsShaderStage
+*/
+bool operator!=(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage &b) Q_DECL_NOTHROW
+{
+    return !(a == b);
+}
+
+/*!
+    Returns the hash value for \a v, using \a seed to seed the calculation.
+
+    \relates QRhiGraphicsShaderStage
+ */
+uint qHash(const QRhiGraphicsShaderStage &v, uint seed) Q_DECL_NOTHROW
+{
+    return v.type() + qHash(v.shader(), seed);
 }
 
 /*!
@@ -1927,8 +2196,8 @@ QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
     objects \a a and \a b are equal.
 
     \relates QRhiShaderResourceBinding
-*/
-bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
+ */
+bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b) Q_DECL_NOTHROW
 {
     if (a.d == b.d)
         return true;
@@ -1969,13 +2238,18 @@ bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBind
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiShaderResourceBinding
-*/
-bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
+ */
+bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b) Q_DECL_NOTHROW
 {
     return !(a == b);
 }
 
-uint qHash(const QRhiShaderResourceBinding &b, uint seed)
+/*!
+    Returns the hash value for \a b, using \a seed to seed the calculation.
+
+    \relates QRhiShaderResourceBinding
+ */
+uint qHash(const QRhiShaderResourceBinding &b, uint seed) Q_DECL_NOTHROW
 {
     const char *u = reinterpret_cast<const char *>(&b.d->u);
     return seed + b.d->binding + 10 * b.d->stage + 100 * b.d->type

@@ -436,6 +436,21 @@ QBakedShader QBakedShader::fromSerialized(const QByteArray &data)
     return bs;
 }
 
+bool operator==(const QBakedShader &lhs, const QBakedShader &rhs) Q_DECL_NOTHROW
+{
+    return lhs.d->stage == rhs.d->stage
+            && lhs.d->shaders == rhs.d->shaders;
+    // do not bother with desc, if the shader code is the same, the description must match too
+}
+
+uint qHash(const QBakedShader &s, uint seed) Q_DECL_NOTHROW
+{
+    uint h = s.stage();
+    for (auto it = s.d->shaders.constBegin(), itEnd = s.d->shaders.constEnd(); it != itEnd; ++it)
+        h += qHash(it.key(), seed) + qHash(it.value().shader(), seed);
+    return h;
+}
+
 bool operator==(const QBakedShaderVersion &lhs, const QBakedShaderVersion &rhs) Q_DECL_NOTHROW
 {
     return lhs.version() == rhs.version() && lhs.flags() == rhs.flags();
@@ -452,8 +467,12 @@ bool operator==(const QBakedShaderCode &lhs, const QBakedShaderCode &rhs) Q_DECL
     return lhs.shader() == rhs.shader() && lhs.entryPoint() == rhs.entryPoint();
 }
 
-#ifndef QT_NO_DEBUG_STREAM
+uint qHash(const QBakedShaderKey &k, uint seed) Q_DECL_NOTHROW
+{
+    return seed + 10 * k.source() + k.sourceVersion().version() + k.sourceVersion().flags() + k.sourceVariant();
+}
 
+#ifndef QT_NO_DEBUG_STREAM
 QDebug operator<<(QDebug dbg, const QBakedShader &bs)
 {
     const QBakedShaderPrivate *d = bs.d;
@@ -466,11 +485,6 @@ QDebug operator<<(QDebug dbg, const QBakedShader &bs)
                   << ')';
 
     return dbg;
-}
-
-uint qHash(const QBakedShaderKey &k, uint seed)
-{
-    return seed + 10 * k.source() + k.sourceVersion().version() + k.sourceVersion().flags() + k.sourceVariant();
 }
 
 QDebug operator<<(QDebug dbg, const QBakedShaderKey &k)
@@ -488,7 +502,6 @@ QDebug operator<<(QDebug dbg, const QBakedShaderVersion &v)
     dbg.nospace() << "Version(" << v.version() << " " << v.flags() << ")";
     return dbg;
 }
-
 #endif // QT_NO_DEBUG_STREAM
 
 QT_END_NAMESPACE

@@ -78,6 +78,10 @@ private:
 
 Q_DECLARE_TYPEINFO(QRhiColorClearValue, Q_MOVABLE_TYPE);
 
+Q_RHI_EXPORT bool operator==(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiColorClearValue &v, uint seed = 0) Q_DECL_NOTHROW;
+
 class Q_RHI_EXPORT QRhiDepthStencilClearValue
 {
 public:
@@ -96,6 +100,10 @@ private:
 };
 
 Q_DECLARE_TYPEINFO(QRhiDepthStencilClearValue, Q_MOVABLE_TYPE);
+
+Q_RHI_EXPORT bool operator==(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClearValue &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClearValue &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiDepthStencilClearValue &v, uint seed = 0) Q_DECL_NOTHROW;
 
 class Q_RHI_EXPORT QRhiViewport
 {
@@ -120,6 +128,10 @@ private:
 
 Q_DECLARE_TYPEINFO(QRhiViewport, Q_MOVABLE_TYPE);
 
+Q_RHI_EXPORT bool operator==(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiViewport &v, uint seed = 0) Q_DECL_NOTHROW;
+
 class Q_RHI_EXPORT QRhiScissor
 {
 public:
@@ -134,6 +146,10 @@ private:
 };
 
 Q_DECLARE_TYPEINFO(QRhiScissor, Q_MOVABLE_TYPE);
+
+Q_RHI_EXPORT bool operator==(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiScissor &v, uint seed = 0) Q_DECL_NOTHROW;
 
 class Q_RHI_EXPORT QRhiVertexInputBinding
 {
@@ -163,6 +179,10 @@ private:
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputBinding, Q_MOVABLE_TYPE);
+
+Q_RHI_EXPORT bool operator==(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiVertexInputBinding &v, uint seed = 0) Q_DECL_NOTHROW;
 
 class Q_RHI_EXPORT QRhiVertexInputAttribute
 {
@@ -202,6 +222,10 @@ private:
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputAttribute, Q_MOVABLE_TYPE);
 
+Q_RHI_EXPORT bool operator==(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribute &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribute &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiVertexInputAttribute &v, uint seed = 0) Q_DECL_NOTHROW;
+
 class Q_RHI_EXPORT QRhiVertexInputLayout
 {
 public:
@@ -220,6 +244,10 @@ private:
 };
 
 Q_DECLARE_TYPEINFO(QRhiVertexInputLayout, Q_MOVABLE_TYPE);
+
+Q_RHI_EXPORT bool operator==(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiVertexInputLayout &v, uint seed = 0) Q_DECL_NOTHROW;
 
 class Q_RHI_EXPORT QRhiGraphicsShaderStage
 {
@@ -247,6 +275,10 @@ private:
 };
 
 Q_DECLARE_TYPEINFO(QRhiGraphicsShaderStage, Q_MOVABLE_TYPE);
+
+Q_RHI_EXPORT bool operator==(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiGraphicsShaderStage &s, uint seed = 0) Q_DECL_NOTHROW;
 
 class Q_RHI_EXPORT QRhiShaderResourceBinding
 {
@@ -277,9 +309,9 @@ public:
 private:
     QRhiShaderResourceBindingPrivate *d;
     friend class QRhiShaderResourceBindingPrivate;
-    friend Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &);
-    friend Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &);
-    friend Q_RHI_EXPORT uint qHash(const QRhiShaderResourceBinding &, uint);
+    friend Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &) Q_DECL_NOTHROW;
+    friend Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &, const QRhiShaderResourceBinding &) Q_DECL_NOTHROW;
+    friend Q_RHI_EXPORT uint qHash(const QRhiShaderResourceBinding &, uint) Q_DECL_NOTHROW;
 #ifndef QT_NO_DEBUG_STREAM
     friend Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiShaderResourceBinding &);
 #endif
@@ -287,9 +319,9 @@ private:
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhiShaderResourceBinding::StageFlags)
 
-Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b);
-Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b);
-Q_RHI_EXPORT uint qHash(const QRhiShaderResourceBinding &b, uint seed = 0);
+Q_RHI_EXPORT bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b) Q_DECL_NOTHROW;
+Q_RHI_EXPORT uint qHash(const QRhiShaderResourceBinding &b, uint seed = 0) Q_DECL_NOTHROW;
 #ifndef QT_NO_DEBUG_STREAM
 Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiShaderResourceBinding &);
 #endif

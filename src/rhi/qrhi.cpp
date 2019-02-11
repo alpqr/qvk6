@@ -417,7 +417,7 @@ QRhiColorClearValue::QRhiColorClearValue(float r, float g, float b, float a)
 }
 
 /*!
-    Returns \c true if the colors in the two QRhiColorClearValue objects \a a
+    \return \c true if the colors in the two QRhiColorClearValue objects \a a
     and \a b are equal.
 
     \relates QRhiColorClearValue
@@ -428,7 +428,7 @@ bool operator==(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DE
 }
 
 /*!
-    Returns \c false if the colors in the two QRhiColorClearValue objects \a a
+    \return \c false if the colors in the two QRhiColorClearValue objects \a a
     and \a b are equal; otherwise returns \c true.
 
     \relates QRhiColorClearValue
@@ -439,7 +439,7 @@ bool operator!=(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DE
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiColorClearValue
  */
@@ -476,7 +476,7 @@ QRhiDepthStencilClearValue::QRhiDepthStencilClearValue(float d, quint32 s)
 }
 
 /*!
-    Returns \c true if the values in the two QRhiDepthStencilClearValue objects
+    \return \c true if the values in the two QRhiDepthStencilClearValue objects
     \a a and \a b are equal.
 
     \relates QRhiDepthStencilClearValue
@@ -488,7 +488,7 @@ bool operator==(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClear
 }
 
 /*!
-    Returns \c false if the values in the two QRhiDepthStencilClearValue
+    \return \c false if the values in the two QRhiDepthStencilClearValue
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiDepthStencilClearValue
@@ -499,7 +499,7 @@ bool operator!=(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClear
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiDepthStencilClearValue
  */
@@ -561,7 +561,7 @@ QRhiViewport::QRhiViewport(float x, float y, float w, float h, float minDepth, f
 }
 
 /*!
-    Returns \c true if the values in the two QRhiViewport objects
+    \return \c true if the values in the two QRhiViewport objects
     \a a and \a b are equal.
 
     \relates QRhiViewport
@@ -574,7 +574,7 @@ bool operator==(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW
 }
 
 /*!
-    Returns \c false if the values in the two QRhiViewport
+    \return \c false if the values in the two QRhiViewport
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiViewport
@@ -585,7 +585,7 @@ bool operator!=(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiViewport
  */
@@ -629,7 +629,7 @@ QRhiScissor::QRhiScissor(int x, int y, int w, int h)
 }
 
 /*!
-    Returns \c true if the values in the two QRhiScissor objects
+    \return \c true if the values in the two QRhiScissor objects
     \a a and \a b are equal.
 
     \relates QRhiScissor
@@ -640,7 +640,7 @@ bool operator==(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW
 }
 
 /*!
-    Returns \c false if the values in the two QRhiScissor
+    \return \c false if the values in the two QRhiScissor
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiScissor
@@ -651,7 +651,7 @@ bool operator!=(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiScissor
  */
@@ -743,7 +743,7 @@ QRhiVertexInputBinding::QRhiVertexInputBinding(quint32 stride, Classification cl
 }
 
 /*!
-    Returns \c true if the values in the two QRhiVertexInputBinding objects
+    \return \c true if the values in the two QRhiVertexInputBinding objects
     \a a and \a b are equal.
 
     \relates QRhiVertexInputBinding
@@ -756,7 +756,7 @@ bool operator==(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b
 }
 
 /*!
-    Returns \c false if the values in the two QRhiVertexInputBinding
+    \return \c false if the values in the two QRhiVertexInputBinding
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiVertexInputBinding
@@ -767,7 +767,7 @@ bool operator!=(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiVertexInputBinding
  */
@@ -878,7 +878,7 @@ QRhiVertexInputAttribute::QRhiVertexInputAttribute(int binding, int location, Fo
 }
 
 /*!
-    Returns \c true if the values in the two QRhiVertexInputAttribute objects
+    \return \c true if the values in the two QRhiVertexInputAttribute objects
     \a a and \a b are equal.
 
     \relates QRhiVertexInputAttribute
@@ -892,7 +892,7 @@ bool operator==(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribut
 }
 
 /*!
-    Returns \c false if the values in the two QRhiVertexInputAttribute
+    \return \c false if the values in the two QRhiVertexInputAttribute
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiVertexInputAttribute
@@ -903,7 +903,7 @@ bool operator!=(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribut
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiVertexInputAttribute
  */
@@ -929,7 +929,7 @@ QRhiVertexInputLayout::QRhiVertexInputLayout()
 }
 
 /*!
-    Returns \c true if the values in the two QRhiVertexInputLayout objects
+    \return \c true if the values in the two QRhiVertexInputLayout objects
     \a a and \a b are equal.
 
     \relates QRhiVertexInputLayout
@@ -941,7 +941,7 @@ bool operator==(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) 
 }
 
 /*!
-    Returns \c false if the values in the two QRhiVertexInputLayout
+    \return \c false if the values in the two QRhiVertexInputLayout
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiVertexInputLayout
@@ -952,7 +952,7 @@ bool operator!=(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) 
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiVertexInputLayout
  */
@@ -998,7 +998,7 @@ QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &
 }
 
 /*!
-    Returns \c true if the values in the two QRhiGraphicsShaderStage objects
+    \return \c true if the values in the two QRhiGraphicsShaderStage objects
     \a a and \a b are equal.
 
     \relates QRhiGraphicsShaderStage
@@ -1010,7 +1010,7 @@ bool operator==(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage 
 }
 
 /*!
-    Returns \c false if the values in the two QRhiGraphicsShaderStage
+    \return \c false if the values in the two QRhiGraphicsShaderStage
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiGraphicsShaderStage
@@ -1021,7 +1021,7 @@ bool operator!=(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage 
 }
 
 /*!
-    Returns the hash value for \a v, using \a seed to seed the calculation.
+    \return the hash value for \a v, using \a seed to seed the calculation.
 
     \relates QRhiGraphicsShaderStage
  */
@@ -1977,7 +1977,7 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
     \brief Encapsulates resources for making buffer, texture, sampler resources visible to shaders.
 
     A QRhiShaderResourceBindings is a collection of QRhiShaderResourceBinding
-    instances, each of which describe a single binding.
+    objects, each of which describe a single binding.
 
     Take a fragment shader with the following interface:
 
@@ -2050,9 +2050,35 @@ QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
 }
 
 /*!
+    \return \c true if the layout is compatible with \a other. The layout does
+    not include the actual resource (such as, buffer or texture) and related
+    parameters (such as, offset or size). It does include the binding point,
+    pipeline stage, and resource type, however. The number and order of the
+    bindings must also match in order to be compatible.
+
+    When there is a QRhiGraphicsPipeline created with this
+    QRhiShaderResourceBindings, and the function returns \c true, \a other can
+    then safely be passed to QRhiCommandBuffer::setGraphicsPipeline(), and so
+    be used with the pipeline in place of this QRhiShaderResourceBindings.
+ */
+bool QRhiShaderResourceBindings::isLayoutCompatible(const QRhiShaderResourceBindings *other) const
+{
+    const int count = m_bindings.count();
+    if (count != other->m_bindings.count())
+        return false;
+
+    for (int i = 0; i < count; ++i) {
+        if (!m_bindings[i].isLayoutCompatible(other->m_bindings.at(i)))
+            return false;
+    }
+
+    return true;
+}
+
+/*!
     \class QRhiShaderResourceBinding
     \inmodule QtRhi
-    \brief Specifies the shader resources that are made visible to one or more shader stages.
+    \brief Describes the shader resource for a single binding point.
 
     A QRhiShaderResourceBinding cannot be constructed directly. Instead, use
     the static functions uniformBuffer(), sampledTexture() to get an instance.
@@ -2130,6 +2156,24 @@ QRhiShaderResourceBinding::~QRhiShaderResourceBinding()
 }
 
 /*!
+    \return \c true if the layout is compatible with \a other. The layout does not
+    include the actual resource (such as, buffer or texture) and related
+    parameters (such as, offset or size).
+
+    For example, \c a and \c b below are not equal, but are compatible layout-wise:
+
+    \badcode
+        auto a = QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, buffer);
+        auto b = QRhiShaderResourceBinding::uniformBuffer(0, QRhiShaderResourceBinding::VertexStage, someOtherBuffer, 256);
+    \endcode
+ */
+bool QRhiShaderResourceBinding::isLayoutCompatible(const QRhiShaderResourceBinding &other) const
+{
+    return (d == other.d)
+            || (d->binding == other.d->binding && d->stage == other.d->stage && d->type == other.d->type);
+}
+
+/*!
     \return a shader resource binding for the given binding number, pipeline
     stage, and buffer specified by \a binding, \a stage, and \a buf.
  */
@@ -2192,8 +2236,12 @@ QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
 }
 
 /*!
-    Returns \c true if all the bindings in the two QRhiShaderResourceBinding
-    objects \a a and \a b are equal.
+    \return \c true if the contents of the two QRhiShaderResourceBinding
+    objects \a a and \a b are equal. This includes the resources (buffer,
+    texture) and related parameters (offset, size) as well. To only compare
+    layouts (binding point, pipeline stage, resource type), use
+    \l{QRhiShaderResourceBinding::isLayoutCompatible()}{isLayoutCompatible()}
+    instead.
 
     \relates QRhiShaderResourceBinding
  */
@@ -2234,7 +2282,7 @@ bool operator==(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBind
 }
 
 /*!
-    Returns \c false if all the bindings in the two QRhiShaderResourceBinding
+    \return \c false if all the bindings in the two QRhiShaderResourceBinding
     objects \a a and \a b are equal; otherwise returns \c true.
 
     \relates QRhiShaderResourceBinding
@@ -2245,7 +2293,7 @@ bool operator!=(const QRhiShaderResourceBinding &a, const QRhiShaderResourceBind
 }
 
 /*!
-    Returns the hash value for \a b, using \a seed to seed the calculation.
+    \return the hash value for \a b, using \a seed to seed the calculation.
 
     \relates QRhiShaderResourceBinding
  */
@@ -3254,7 +3302,7 @@ QRhiResourceUpdateBatch::~QRhiResourceUpdateBatch()
 }
 
 /*!
-    Returns the batch to the pool. This should only be used when the batch is
+    \return the batch to the pool. This should only be used when the batch is
     not passed to one of QRhiCommandBuffer::beginPass(),
     QRhiCommandBuffer::endPass(), or QRhiCommandBuffer::resourceUpdate()
     because these implicitly call release().
@@ -3601,6 +3649,8 @@ void QRhiCommandBuffer::endPass(QRhiResourceUpdateBatch *resourceUpdates)
 
     \note This function can only be called inside a pass, meaning between a
     beginPass() end endPass() call.
+
+    \sa QRhiShaderResourceBindings::isLayoutCompatible()
  */
 void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps,
                                             QRhiShaderResourceBindings *srb)

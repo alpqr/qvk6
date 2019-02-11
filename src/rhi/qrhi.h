@@ -302,6 +302,8 @@ public:
     ~QRhiShaderResourceBinding();
     void detach();
 
+    bool isLayoutCompatible(const QRhiShaderResourceBinding &other) const;
+
     static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf);
     static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size);
     static QRhiShaderResourceBinding sampledTexture(int binding, StageFlags stage, QRhiTexture *tex, QRhiSampler *sampler);
@@ -817,6 +819,8 @@ class Q_RHI_EXPORT QRhiShaderResourceBindings : public QRhiResource
 public:
     QVector<QRhiShaderResourceBinding> bindings() const { return m_bindings; }
     void setBindings(const QVector<QRhiShaderResourceBinding> &b) { m_bindings = b; }
+
+    bool isLayoutCompatible(const QRhiShaderResourceBindings *other) const;
 
     virtual bool build() = 0;
 

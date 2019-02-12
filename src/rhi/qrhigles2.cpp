@@ -2353,7 +2353,7 @@ bool QGles2GraphicsPipeline::build()
         else
             ver = { 120 };
         const QBakedShader bakedShader = shaderStage.shader();
-        const QByteArray source = bakedShader.shader({ QBakedShaderKey::GlslShader, ver }).shader();
+        const QByteArray source = bakedShader.shader({ QBakedShaderKey::GlslShader, ver, shaderStage.shaderVariant() }).shader();
         if (source.isEmpty()) {
             qWarning() << "No GLSL" << ver.version() << "shader code found in baked shader" << bakedShader;
             return false;

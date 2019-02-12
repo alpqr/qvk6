@@ -4608,7 +4608,7 @@ bool QVkGraphicsPipeline::build()
     QVarLengthArray<VkPipelineShaderStageCreateInfo, 4> shaderStageCreateInfos;
     for (const QRhiGraphicsShaderStage &shaderStage : m_shaderStages) {
         const QBakedShader bakedShader = shaderStage.shader();
-        const QBakedShaderCode spirv = bakedShader.shader({ QBakedShaderKey::SpirvShader, 100 });
+        const QBakedShaderCode spirv = bakedShader.shader({ QBakedShaderKey::SpirvShader, 100, shaderStage.shaderVariant() });
         if (spirv.shader().isEmpty()) {
             qWarning() << "No SPIR-V 1.0 shader code found in baked shader" << bakedShader;
             return false;

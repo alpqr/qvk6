@@ -260,7 +260,8 @@ public:
     };
 
     QRhiGraphicsShaderStage();
-    QRhiGraphicsShaderStage(Type type, const QBakedShader &shader);
+    QRhiGraphicsShaderStage(Type type, const QBakedShader &shader,
+                            QBakedShaderKey::ShaderVariant v = QBakedShaderKey::StandardShader);
 
     Type type() const { return m_type; }
     void setType(Type t) { m_type = t; }
@@ -268,9 +269,13 @@ public:
     QBakedShader shader() const { return m_shader; }
     void setShader(const QBakedShader &s) { m_shader = s; }
 
+    QBakedShaderKey::ShaderVariant shaderVariant() const { return m_shaderVariant; }
+    void setShaderVariant(QBakedShaderKey::ShaderVariant v) { m_shaderVariant = v; }
+
 private:
     Type m_type;
     QBakedShader m_shader;
+    QBakedShaderKey::ShaderVariant m_shaderVariant = QBakedShaderKey::StandardShader;
     Q_DECL_UNUSED_MEMBER quint64 m_reserved;
 };
 

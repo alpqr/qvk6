@@ -129,7 +129,8 @@ struct QRhiMetalData
     MTLRenderPassDescriptor *createDefaultRenderPass(bool hasDepthStencil,
                                                      const QRhiColorClearValue &colorClearValue,
                                                      const QRhiDepthStencilClearValue &depthStencilClearValue);
-    id<MTLLibrary> createMetalLib(const QBakedShader &shader, QString *error, QByteArray *entryPoint);
+    id<MTLLibrary> createMetalLib(const QBakedShader &shader, QBakedShaderKey::ShaderVariant shaderVariant,
+                                  QString *error, QByteArray *entryPoint);
     id<MTLFunction> createMSLShaderFunction(id<MTLLibrary> lib, const QByteArray &entryPoint);
 
     struct DeferredReleaseEntry {
@@ -2654,9 +2655,10 @@ static inline MTLCullMode toMetalCullMode(QRhiGraphicsPipeline::CullMode c)
     }
 }
 
-id<MTLLibrary> QRhiMetalData::createMetalLib(const QBakedShader &shader, QString *error, QByteArray *entryPoint)
+id<MTLLibrary> QRhiMetalData::createMetalLib(const QBakedShader &shader, QBakedShaderKey::ShaderVariant shaderVariant,
+                                             QString *error, QByteArray *entryPoint)
 {
-    QBakedShaderCode mtllib = shader.shader({ QBakedShaderKey::MetalLibShader, 12 });
+    QBakedShaderCode mtllib = shader.shader({ QBakedShaderKey::MetalLibShader, 12, shaderVariant });
     if (!mtllib.shader().isEmpty()) {
         dispatch_data_t data = dispatch_data_create(mtllib.shader().constData(),
                                                     mtllib.shader().size(),
@@ -2674,7 +2676,7 @@ id<MTLLibrary> QRhiMetalData::createMetalLib(const QBakedShader &shader, QString
         }
     }
 
-    QBakedShaderCode mslSource = shader.shader({ QBakedShaderKey::MslShader, 12 });
+    QBakedShaderCode mslSource = shader.shader({ QBakedShaderKey::MslShader, 12, shaderVariant });
     if (mslSource.shader().isEmpty()) {
         qWarning() << "No MSL 1.2 code found in baked shader" << shader;
         return nil;
@@ -2756,7 +2758,7 @@ bool QMetalGraphicsPipeline::build()
     for (const QRhiGraphicsShaderStage &shaderStage : qAsConst(m_shaderStages)) {
         QString error;
         QByteArray entryPoint;
-        id<MTLLibrary> lib = rhiD->d->createMetalLib(shaderStage.shader(), &error, &entryPoint);
+        id<MTLLibrary> lib = rhiD->d->createMetalLib(shaderStage.shader(), shaderStage.shaderVariant(), &error, &entryPoint);
         if (!lib) {
             qWarning("MSL shader compilation failed: %s", qPrintable(error));
             return false;

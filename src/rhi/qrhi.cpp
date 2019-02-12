@@ -990,10 +990,16 @@ QRhiGraphicsShaderStage::QRhiGraphicsShaderStage()
 /*!
     Constructs a shader stage description with the \a type of the stage and the
     \a shader.
+
+    The shader variant \a v defaults to QBakedShaderKey::StandardShader. A
+    QBakedShader pack contains multiple source and binary versions of a shader.
+    In addition, it can also contain variants of the shader with slightly
+    modified code. \a v can then be used to select the desired variant.
  */
-QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &shader)
+QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &shader, QBakedShaderKey::ShaderVariant v)
     : m_type(type),
-      m_shader(shader)
+      m_shader(shader),
+      m_shaderVariant(v)
 {
 }
 
@@ -1006,7 +1012,8 @@ QRhiGraphicsShaderStage::QRhiGraphicsShaderStage(Type type, const QBakedShader &
 bool operator==(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage &b) Q_DECL_NOTHROW
 {
     return a.type() == b.type()
-            && a.shader() == b.shader();
+            && a.shader() == b.shader()
+            && a.shaderVariant() == b.shaderVariant();
 }
 
 /*!
@@ -1027,7 +1034,7 @@ bool operator!=(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage 
  */
 uint qHash(const QRhiGraphicsShaderStage &v, uint seed) Q_DECL_NOTHROW
 {
-    return v.type() + qHash(v.shader(), seed);
+    return v.type() + qHash(v.shader(), seed) + v.shaderVariant();
 }
 
 /*!

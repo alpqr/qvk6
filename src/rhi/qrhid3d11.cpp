@@ -508,7 +508,7 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         cmd.cmd = QD3D11CommandBuffer::Command::BindGraphicsPipeline;
         cmd.args.bindGraphicsPipeline.ps = psD;
         cmd.args.bindGraphicsPipeline.srb = srbD;
-        cmd.args.bindGraphicsPipeline.srbOnlyChange = !pipelineChanged && !srbChanged && srbUpdate;
+        cmd.args.bindGraphicsPipeline.srbOnlyChange = !pipelineChanged;
         cbD->commands.append(cmd);
     }
 }

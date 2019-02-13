@@ -131,6 +131,7 @@ public:
     virtual QVector<int> supportedSampleCounts() const = 0;
     virtual int ubufAlignment() const = 0;
     virtual bool isYUpInFramebuffer() const = 0;
+    virtual bool isYUpInNDC() const = 0;
     virtual QMatrix4x4 clipSpaceCorrMatrix() const = 0;
     virtual bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const = 0;
     virtual bool isFeatureSupported(QRhi::Feature feature) const = 0;

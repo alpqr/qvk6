@@ -455,6 +455,11 @@ bool QRhiMetal::isYUpInFramebuffer() const
     return false;
 }
 
+bool QRhiMetal::isYUpInNDC() const
+{
+    return true;
+}
+
 QMatrix4x4 QRhiMetal::clipSpaceCorrMatrix() const
 {
     // depth range 0..1

@@ -414,6 +414,11 @@ bool QRhiGles2::isYUpInFramebuffer() const
     return true;
 }
 
+bool QRhiGles2::isYUpInNDC() const
+{
+    return true;
+}
+
 QMatrix4x4 QRhiGles2::clipSpaceCorrMatrix() const
 {
     return QMatrix4x4(); // identity

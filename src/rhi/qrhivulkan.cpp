@@ -2963,9 +2963,14 @@ bool QRhiVulkan::isYUpInFramebuffer() const
     return false;
 }
 
+bool QRhiVulkan::isYUpInNDC() const
+{
+    return false;
+}
+
 QMatrix4x4 QRhiVulkan::clipSpaceCorrMatrix() const
 {
-    // See e.g. https://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
+    // See https://matthewwellings.com/blog/the-new-vulkan-coordinate-system/
 
     static QMatrix4x4 m;
     if (m.isIdentity()) {

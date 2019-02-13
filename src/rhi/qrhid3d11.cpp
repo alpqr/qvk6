@@ -344,6 +344,11 @@ bool QRhiD3D11::isYUpInFramebuffer() const
     return false;
 }
 
+bool QRhiD3D11::isYUpInNDC() const
+{
+    return true;
+}
+
 QMatrix4x4 QRhiD3D11::clipSpaceCorrMatrix() const
 {
     // Like with Vulkan, but Y is already good.

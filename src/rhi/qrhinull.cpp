@@ -110,6 +110,11 @@ bool QRhiNull::isYUpInFramebuffer() const
     return true;
 }
 
+bool QRhiNull::isYUpInNDC() const
+{
+    return true;
+}
+
 QMatrix4x4 QRhiNull::clipSpaceCorrMatrix() const
 {
     return QMatrix4x4(); // identity

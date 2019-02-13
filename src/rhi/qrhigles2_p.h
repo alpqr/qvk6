@@ -514,6 +514,7 @@ public:
     QVector<int> supportedSampleCounts() const override;
     int ubufAlignment() const override;
     bool isYUpInFramebuffer() const override;
+    bool isYUpInNDC() const override;
     QMatrix4x4 clipSpaceCorrMatrix() const override;
     bool isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture::Flags flags) const override;
     bool isFeatureSupported(QRhi::Feature feature) const override;

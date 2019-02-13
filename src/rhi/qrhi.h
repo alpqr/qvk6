@@ -1283,6 +1283,7 @@ public:
     QSize sizeForMipLevel(int mipLevel, const QSize &baseLevelSize) const;
 
     bool isYUpInFramebuffer() const;
+    bool isYUpInNDC() const;
 
     QMatrix4x4 clipSpaceCorrMatrix() const;
 

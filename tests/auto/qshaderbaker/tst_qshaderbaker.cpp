@@ -367,7 +367,7 @@ void tst_QShaderBaker::genVariants()
             if (key.source() == QBakedShaderKey::GlslShader) {
                 ++batchableGlslVariantCount;
                 const QByteArray src = s.shader(key).shader();
-                QVERIFY(src.contains(QByteArrayLiteral("gl_Position.z * _qt.zRange")));
+                QVERIFY(src.contains(QByteArrayLiteral("_qt_order * ")));
             }
         }
     }

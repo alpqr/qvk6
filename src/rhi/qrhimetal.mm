@@ -508,6 +508,10 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::PrimitiveRestart:
         return true;
+    case QRhi::GeometryShaders:
+        return false;
+    case QRhi::TessellationShaders:
+        return false; // for now
     default:
         Q_UNREACHABLE();
         return false;

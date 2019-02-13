@@ -331,6 +331,11 @@ QT_BEGIN_NAMESPACE
     identically across backends, as long as this feature is reported as
     supported, are \l{QRhiGraphicsPipeline::LineStrip}{LineStrip} and
     \l{QRhiGraphicsPipeline::TriangleStrip}{TriangleStrip}.
+
+    \value GeometryShaders Indicates that geometry shaders are supported.
+
+    \value TessellationShaders Indicates that tessellation control and
+    evaluation shaders are supported.
  */
 
 /*!
@@ -966,8 +971,10 @@ uint qHash(const QRhiVertexInputLayout &v, uint seed) Q_DECL_NOTHROW
     \inmodule QtRhi
     \brief Specifies the type and the shader code for a shader stage in the graphics pipeline.
 
-    \note There is no geometry stage because some graphics APIs (Metal) have no support
-    for it.
+    \note Some backends only support a subset of the stages. Use
+    QRhi::isFeatureSupported() to query for support at runtime. For example,
+    Metal has no geometry shader support, while the OpenGL 2.x backend only
+    supports the vertex and fragment stages.
  */
 
 /*!
@@ -976,6 +983,7 @@ uint qHash(const QRhiVertexInputLayout &v, uint seed) Q_DECL_NOTHROW
 
     \value Vertex Vertex stage
     \value Fragment Fragment (pixel) stage
+    \value Geometry Geometry stage
     \value TessellationControl Tessellation control (hull) stage
     \value TessellationEvaluation Tessellation evaluation (domain) stage
  */
@@ -2105,6 +2113,7 @@ bool QRhiShaderResourceBindings::isLayoutCompatible(const QRhiShaderResourceBind
 
     \value VertexStage Vertex stage
     \value FragmentStage Fragment (pixel) stage
+    \value GeometryStage Geometry stage
     \value TessellationControlStage Tessellation control (hull) stage
     \value TessellationEvaluationStage Tessellation evaluation (domain) stage
  */

@@ -501,6 +501,10 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::PrimitiveRestart:
         return false; // say no to madness
+    case QRhi::GeometryShaders:
+        return false;
+    case QRhi::TessellationShaders:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;

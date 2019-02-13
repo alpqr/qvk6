@@ -255,6 +255,7 @@ public:
     enum Type {
         Vertex,
         Fragment,
+        Geometry,
         TessellationControl,
         TessellationEvaluation
     };
@@ -296,8 +297,9 @@ public:
     enum StageFlag {
         VertexStage = 1 << 0,
         FragmentStage = 1 << 1,
-        TessellationControlStage = 1 << 2,
-        TessellationEvaluationStage = 1 << 3
+        GeometryStage = 1 << 2,
+        TessellationControlStage = 1 << 3,
+        TessellationEvaluationStage = 1 << 4
     };
     Q_DECLARE_FLAGS(StageFlags, StageFlag)
 
@@ -1215,7 +1217,9 @@ public:
         Timestamps,
         Instancing,
         CustomInstanceStepRate,
-        PrimitiveRestart
+        PrimitiveRestart,
+        GeometryShaders,
+        TessellationShaders
     };
 
     enum BeginFrameFlag {

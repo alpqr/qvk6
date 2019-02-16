@@ -454,6 +454,20 @@ uint qHash(const QRhiColorClearValue &v, uint seed) Q_DECL_NOTHROW
     return qFloor((c.x() + c.y() + c.z() + c.w()) * 1000) + seed;
 }
 
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiColorClearValue &v)
+{
+    QDebugStateSaver saver(dbg);
+    const QVector4D c = v.rgba();
+    dbg.nospace() << "QRhiColorClearValue(r=" << c.x()
+                  << " g=" << c.y()
+                  << " b=" << c.z()
+                  << " a=" << c.w()
+                  << ')';
+    return dbg;
+}
+#endif
+
 /*!
     \class QRhiDepthStencilClearValue
     \inmodule QtRhi
@@ -512,6 +526,17 @@ uint qHash(const QRhiDepthStencilClearValue &v, uint seed) Q_DECL_NOTHROW
 {
     return seed * (qFloor(v.depthClearValue() * 100) + v.stencilClearValue());
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiDepthStencilClearValue &v)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiDepthStencilClearValue(depth-clear=" << v.depthClearValue()
+                  << " stencil-clear=" << v.stencilClearValue()
+                  << ')';
+    return dbg;
+}
+#endif
 
 /*!
     \class QRhiViewport
@@ -600,6 +625,22 @@ uint qHash(const QRhiViewport &v, uint seed) Q_DECL_NOTHROW
     return seed + r.x() + r.y() + r.z() + r.w() + qFloor(v.minDepth() * 100) + qFloor(v.maxDepth() * 100);
 }
 
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiViewport &v)
+{
+    QDebugStateSaver saver(dbg);
+    const QVector4D r = v.viewport();
+    dbg.nospace() << "QRhiViewport(bottom-left-x=" << r.x()
+                  << " bottom-left-y=" << r.y()
+                  << " width=" << r.z()
+                  << " height=" << r.w()
+                  << " minDepth=" << v.minDepth()
+                  << " maxDepth=" << v.maxDepth()
+                  << ')';
+    return dbg;
+}
+#endif
+
 /*!
     \class QRhiScissor
     \inmodule QtRhi
@@ -665,6 +706,20 @@ uint qHash(const QRhiScissor &v, uint seed) Q_DECL_NOTHROW
     const QVector4D r = v.scissor();
     return seed + r.x() + r.y() + r.z() + r.w();
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiScissor &s)
+{
+    QDebugStateSaver saver(dbg);
+    const QVector4D r = s.scissor();
+    dbg.nospace() << "QRhiScissor(bottom-left-x=" << r.x()
+                  << " bottom-left-y=" << r.y()
+                  << " width=" << r.z()
+                  << " height=" << r.w()
+                  << ')';
+    return dbg;
+}
+#endif
 
 /*!
     \class QRhiVertexInputBinding
@@ -780,6 +835,18 @@ uint qHash(const QRhiVertexInputBinding &v, uint seed) Q_DECL_NOTHROW
 {
     return seed + v.stride() + v.classification();
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiVertexInputBinding &b)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiVertexInputBinding(stride=" << b.stride()
+                  << " cls=" << b.classification()
+                  << " step-rate=" << b.instanceStepRate()
+                  << ')';
+    return dbg;
+}
+#endif
 
 /*!
     \class QRhiVertexInputAttribute
@@ -917,6 +984,19 @@ uint qHash(const QRhiVertexInputAttribute &v, uint seed) Q_DECL_NOTHROW
     return seed + v.binding() + v.location() + v.format() + v.offset();
 }
 
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiVertexInputAttribute &a)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiVertexInputAttribute(binding=" << a.binding()
+                  << " location=" << a.location()
+                  << " format=" << a.format()
+                  << " offset=" << a.offset()
+                  << ')';
+    return dbg;
+}
+#endif
+
 /*!
     \class QRhiVertexInputLayout
     \inmodule QtRhi
@@ -965,6 +1045,17 @@ uint qHash(const QRhiVertexInputLayout &v, uint seed) Q_DECL_NOTHROW
 {
     return qHash(v.bindings(), seed) + qHash(v.attributes(), seed);
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiVertexInputLayout &v)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiVertexInputLayout(bindings=" << v.bindings()
+                  << " attributes=" << v.attributes()
+                  << ')';
+    return dbg;
+}
+#endif
 
 /*!
     \class QRhiGraphicsShaderStage
@@ -1044,6 +1135,18 @@ uint qHash(const QRhiGraphicsShaderStage &v, uint seed) Q_DECL_NOTHROW
 {
     return v.type() + qHash(v.shader(), seed) + v.shaderVariant();
 }
+
+#ifndef QT_NO_DEBUG_STREAM
+QDebug operator<<(QDebug dbg, const QRhiGraphicsShaderStage &s)
+{
+    QDebugStateSaver saver(dbg);
+    dbg.nospace() << "QRhiGraphicsShaderStage(type=" << s.type()
+                  << " shader=" << s.shader()
+                  << " variant=" << s.shaderVariant()
+                  << ')';
+    return dbg;
+}
+#endif
 
 /*!
     \class QRhiColorAttachment
@@ -3736,6 +3839,11 @@ void QRhiCommandBuffer::setVertexInput(int startBinding, const QVector<VertexInp
 /*!
     Records setting the active viewport rectangle specified in \a viewport.
 
+    With backends where the underlying graphics API has scissoring always
+    enabled, this function also sets the scissor to match the viewport whenever
+    the active QRhiGraphicsPipeline does not have
+    \l{QRhiGraphicsPipeline::UsesScissor}{UsesScissor} set.
+
     \note QRhi assumes OpenGL-style viewport coordinates, meaning x and y are
     bottom-left.
 
@@ -3751,7 +3859,9 @@ void QRhiCommandBuffer::setViewport(const QRhiViewport &viewport)
     Records setting the active scissor rectangle specified in \a scissor.
 
     This can only be called when the bound pipeline has
-    QRhiGraphicsPipeline::UsesScissor set.
+    \l{QRhiGraphicsPipeline::UsesScissor}{UsesScissor} set. When the flag is
+    set on the active pipeline, this function must be called because scissor
+    testing will get enabled and so a scissor rectangle must be provided.
 
     \note QRhi assumes OpenGL-style viewport coordinates, meaning x and y are
     bottom-left.

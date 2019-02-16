@@ -81,6 +81,9 @@ Q_DECLARE_TYPEINFO(QRhiColorClearValue, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiColorClearValue &a, const QRhiColorClearValue &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiColorClearValue &v, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiColorClearValue &);
+#endif
 
 class Q_RHI_EXPORT QRhiDepthStencilClearValue
 {
@@ -104,6 +107,9 @@ Q_DECLARE_TYPEINFO(QRhiDepthStencilClearValue, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClearValue &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiDepthStencilClearValue &a, const QRhiDepthStencilClearValue &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiDepthStencilClearValue &v, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiDepthStencilClearValue &);
+#endif
 
 class Q_RHI_EXPORT QRhiViewport
 {
@@ -131,6 +137,9 @@ Q_DECLARE_TYPEINFO(QRhiViewport, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiViewport &a, const QRhiViewport &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiViewport &v, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiViewport &);
+#endif
 
 class Q_RHI_EXPORT QRhiScissor
 {
@@ -150,6 +159,9 @@ Q_DECLARE_TYPEINFO(QRhiScissor, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiScissor &a, const QRhiScissor &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiScissor &v, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiScissor &);
+#endif
 
 class Q_RHI_EXPORT QRhiVertexInputBinding
 {
@@ -183,6 +195,9 @@ Q_DECLARE_TYPEINFO(QRhiVertexInputBinding, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiVertexInputBinding &a, const QRhiVertexInputBinding &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiVertexInputBinding &v, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiVertexInputBinding &);
+#endif
 
 class Q_RHI_EXPORT QRhiVertexInputAttribute
 {
@@ -225,6 +240,9 @@ Q_DECLARE_TYPEINFO(QRhiVertexInputAttribute, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribute &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiVertexInputAttribute &a, const QRhiVertexInputAttribute &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiVertexInputAttribute &v, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiVertexInputAttribute &);
+#endif
 
 class Q_RHI_EXPORT QRhiVertexInputLayout
 {
@@ -248,6 +266,9 @@ Q_DECLARE_TYPEINFO(QRhiVertexInputLayout, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiVertexInputLayout &a, const QRhiVertexInputLayout &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiVertexInputLayout &v, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiVertexInputLayout &);
+#endif
 
 class Q_RHI_EXPORT QRhiGraphicsShaderStage
 {
@@ -285,6 +306,9 @@ Q_DECLARE_TYPEINFO(QRhiGraphicsShaderStage, Q_MOVABLE_TYPE);
 Q_RHI_EXPORT bool operator==(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT bool operator!=(const QRhiGraphicsShaderStage &a, const QRhiGraphicsShaderStage &b) Q_DECL_NOTHROW;
 Q_RHI_EXPORT uint qHash(const QRhiGraphicsShaderStage &s, uint seed = 0) Q_DECL_NOTHROW;
+#ifndef QT_NO_DEBUG_STREAM
+Q_RHI_EXPORT QDebug operator<<(QDebug, const QRhiGraphicsShaderStage &);
+#endif
 
 class Q_RHI_EXPORT QRhiShaderResourceBinding
 {

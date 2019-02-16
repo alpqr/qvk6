@@ -826,16 +826,6 @@ static inline MTLViewport toMetalViewport(const QRhiViewport &viewport, const QS
     return vp;
 }
 
-void QRhiMetal::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
-{
-    Q_ASSERT(inPass);
-    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
-    Q_ASSERT(cbD->currentPipeline && cbD->currentTarget);
-    const QSize outputSize = cbD->currentTarget->sizeInPixels();
-    const MTLViewport vp = toMetalViewport(viewport, outputSize);
-    [cbD->d->currentPassEncoder setViewport: vp];
-}
-
 static inline MTLScissorRect toMetalScissor(const QRhiScissor &scissor, const QSize &outputSize)
 {
     // x,y is top-left in MTLScissorRect but bottom-left in QRhiScissor
@@ -848,11 +838,28 @@ static inline MTLScissorRect toMetalScissor(const QRhiScissor &scissor, const QS
     return s;
 }
 
+void QRhiMetal::setViewport(QRhiCommandBuffer *cb, const QRhiViewport &viewport)
+{
+    Q_ASSERT(inPass);
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+    Q_ASSERT(cbD->currentPipeline && cbD->currentTarget);
+    const QSize outputSize = cbD->currentTarget->sizeInPixels();
+    const MTLViewport vp = toMetalViewport(viewport, outputSize);
+    [cbD->d->currentPassEncoder setViewport: vp];
+
+    if (!QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->m_flags.testFlag(QRhiGraphicsPipeline::UsesScissor)) {
+        const QVector4D v = viewport.viewport();
+        const MTLScissorRect s = toMetalScissor(QRhiScissor(v.x(), v.y(), v.z(), v.w()), outputSize);
+        [cbD->d->currentPassEncoder setScissorRect: s];
+    }
+}
+
 void QRhiMetal::setScissor(QRhiCommandBuffer *cb, const QRhiScissor &scissor)
 {
     Q_ASSERT(inPass);
     QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     Q_ASSERT(cbD->currentPipeline && cbD->currentTarget);
+    Q_ASSERT(QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->m_flags.testFlag(QRhiGraphicsPipeline::UsesScissor));
     const QSize outputSize = cbD->currentTarget->sizeInPixels();
     const MTLScissorRect s = toMetalScissor(scissor, outputSize);
     [cbD->d->currentPassEncoder setScissorRect: s];

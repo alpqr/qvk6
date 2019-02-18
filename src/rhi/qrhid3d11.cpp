@@ -395,6 +395,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         return false; // for now
     case QRhi::TessellationShaders:
         return false; // for now
+    case QRhi::NonDynamicUniformBuffers:
+        return false; // because UpdateSubresource cannot deal with this
     default:
         Q_UNREACHABLE();
         return false;

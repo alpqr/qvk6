@@ -336,6 +336,13 @@ QT_BEGIN_NAMESPACE
 
     \value TessellationShaders Indicates that tessellation control and
     evaluation shaders are supported.
+
+    \value NonDynamicUniformBuffers Indicates that creating buffers with the
+    usage \l{QRhiBuffer::UniformBuffer}{UniformBuffer} and the types
+    \l{QRhiBuffer::Immutable}{Immutable} or \l{QRhiBuffer::Static}{Static} is
+    supported. When reported as unsupported, uniform (constant) buffers must be
+    created as \l{QRhiBuffer::Dynamic}{Dynamic}. (which is recommended
+    regardless)
  */
 
 /*!
@@ -1601,28 +1608,30 @@ bool QRhiResource::isShareable() const
 
 /*!
     \enum QRhiBuffer::Type
-    Specifies type of buffer resource.
+    Specifies storage type of buffer resource.
 
     \value Immutable Indicates that the data is not expected to change ever
     after the initial upload. Under the hood such buffer resources are
     typically placed in device local (GPU) memory (on systems where
-    applicable). Uploading new data is possible, but frequent changes can be
-    expensive. Upload typically happens by copying to a separate, host visible
-    staging buffer from which a GPU buffer-to-buffer copy is issued into the
-    actual GPU-only buffer.
+    applicable). Uploading new data is possible, but may be expensive. The
+    upload typically happens by copying to a separate, host visible staging
+    buffer from which a GPU buffer-to-buffer copy is issued into the actual
+    GPU-only buffer.
 
     \value Static Indicates that the data is expected to change only
     infrequently. Typically placed in device local (GPU) memory, where
     applicable. On backends where host visible staging buffers are used for
     uploading, the staging buffers are kept around for this type, unlike with
     Immutable, so subsequent uploads do not suffer in performance. Frequent
-    updates should be avoided.
+    updates, especially updates in consecutive frames, should be avoided.
 
     \value Dynamic Indicates that the data is expected to change frequently.
     Not recommended for large buffers. Typically backed by host visible memory
     in 2 copies in order to allow for changing without stalling the graphics
     pipeline. The double buffering is managed transparently to the applications
-    and is not exposed in the API here in any form.
+    and is not exposed in the API here in any form. This is the recommended,
+    and, with some backends, the only possible, type for buffers with
+    UniformBuffer usage.
  */
 
 /*!
@@ -4140,6 +4149,9 @@ QRhiShaderResourceBindings *QRhi::newShaderResourceBindings()
 
 /*!
     \return a new buffer with the specified \a type, \a usage, and \a size.
+
+    \note Some \a usage and \a type combinations may not be supported by all
+    backends. See \l{QRhi::NonDynamicUniformBuffers}{the feature flags}.
 
     \sa QRhiResource::release(), QRhiResource::releaseAndDestroy()
  */

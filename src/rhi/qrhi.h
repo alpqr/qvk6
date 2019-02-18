@@ -1243,7 +1243,8 @@ public:
         CustomInstanceStepRate,
         PrimitiveRestart,
         GeometryShaders,
-        TessellationShaders
+        TessellationShaders,
+        NonDynamicUniformBuffers
     };
 
     enum BeginFrameFlag {

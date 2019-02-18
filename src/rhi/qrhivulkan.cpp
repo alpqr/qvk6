@@ -3033,6 +3033,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::TessellationShaders:
         return true;
+    case QRhi::NonDynamicUniformBuffers:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

@@ -512,6 +512,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::TessellationShaders:
         return false; // for now
+    case QRhi::NonDynamicUniformBuffers:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

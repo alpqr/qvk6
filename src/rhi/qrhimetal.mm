@@ -221,7 +221,6 @@ struct QMetalCommandBufferData
     id<MTLCommandBuffer> cb;
     id<MTLRenderCommandEncoder> currentPassEncoder;
     MTLRenderPassDescriptor *currentPassRpDesc;
-    bool shaderResourceBindingsValid;
     int currentFirstVertexBinding;
     QRhiBatchedBindings<id<MTLBuffer> > currentVertexInputsBuffers;
     QRhiBatchedBindings<NSUInteger> currentVertexInputOffsets;
@@ -749,16 +748,12 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         [cbD->d->currentPassEncoder setFrontFacingWinding: psD->d->winding];
     }
 
-    if (!cbD->d->shaderResourceBindingsValid)
-        resNeedsRebind = true;
-
     if (resNeedsRebind || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
         cbD->currentResSlot = resSlot;
 
         enqueueShaderResourceBindings(srbD, cbD);
-        cbD->d->shaderResourceBindingsValid = true;
     }
 
     psD->lastActiveFrameSlot = currentFrameSlot;
@@ -2919,7 +2914,6 @@ void QMetalCommandBuffer::resetPerPassState()
     currentResSlot = -1;
     currentIndexBuffer = nullptr;
 
-    d->shaderResourceBindingsValid = false;
     d->currentFirstVertexBinding = -1;
     d->currentVertexInputsBuffers.clear();
     d->currentVertexInputOffsets.clear();

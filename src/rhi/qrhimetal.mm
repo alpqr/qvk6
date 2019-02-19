@@ -514,6 +514,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return false; // for now
     case QRhi::NonDynamicUniformBuffers:
         return true;
+    case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;

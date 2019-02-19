@@ -3035,6 +3035,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::NonDynamicUniformBuffers:
         return true;
+    case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

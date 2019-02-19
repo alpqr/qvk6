@@ -343,6 +343,12 @@ QT_BEGIN_NAMESPACE
     supported. When reported as unsupported, uniform (constant) buffers must be
     created as \l{QRhiBuffer::Dynamic}{Dynamic}. (which is recommended
     regardless)
+
+    \value NonFourAlignedEffectiveIndexBufferOffset Indicates that effective
+    index buffer offsets (\c{indexOffset + firstIndex * indexComponentSize})
+    that are not 4 byte aligned are supported. When not supported, attempting
+    to issue a \l{QRhiCommandBuffer::drawIndexed()}{drawIndexed()} with a
+    non-aligned effective offset may lead to unspecified behavior.
  */
 
 /*!
@@ -3932,12 +3938,14 @@ void QRhiCommandBuffer::draw(quint32 vertexCount,
     Records an indexed draw.
 
     The number of vertices is specified in \a indexCount. \a firstIndex is the
-    base index. The actual offset in the index buffer is given by
+    base index. The effective offset in the index buffer is given by
     \c{indexOffset + firstIndex * n} where \c n is 2 or 4 depending on the
     index element type. \c indexOffset is specified in setVertexInput().
 
-    \note The actual offset in the index buffer must be 4-byte aligned with
-    some backends.
+    \note The effective offset in the index buffer must be 4 byte aligned with
+    some backends (for example, Metal). With these backends the
+    \l{QRhi::NonFourAlignedEffectiveIndexBufferOffset}{NonFourAlignedEffectiveIndexBufferOffset}
+    feature will be reported as not-supported.
 
     For instanced drawing set \a instanceCount to a value other than 1. \a
     firstInstance is the instance ID of the first instance to draw.

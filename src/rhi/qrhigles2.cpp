@@ -507,6 +507,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::NonDynamicUniformBuffers:
         return true;
+    case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

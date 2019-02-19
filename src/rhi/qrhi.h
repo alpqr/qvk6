@@ -1244,7 +1244,8 @@ public:
         PrimitiveRestart,
         GeometryShaders,
         TessellationShaders,
-        NonDynamicUniformBuffers
+        NonDynamicUniformBuffers,
+        NonFourAlignedEffectiveIndexBufferOffset
     };
 
     enum BeginFrameFlag {

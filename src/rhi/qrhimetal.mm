@@ -2903,14 +2903,6 @@ void QMetalCommandBuffer::release()
 
 void QMetalCommandBuffer::resetState()
 {
-    currentTarget = nullptr;
-    currentPipeline = nullptr;
-    currentPipelineGeneration = 0;
-    currentSrb = nullptr;
-    currentSrbGeneration = 0;
-    currentResSlot = -1;
-    currentIndexBuffer = nullptr;
-
     d->currentPassEncoder = nil;
     d->currentPassRpDesc = nil;
 
@@ -2919,6 +2911,14 @@ void QMetalCommandBuffer::resetState()
 
 void QMetalCommandBuffer::resetPerPassState()
 {
+    currentTarget = nullptr;
+    currentPipeline = nullptr;
+    currentPipelineGeneration = 0;
+    currentSrb = nullptr;
+    currentSrbGeneration = 0;
+    currentResSlot = -1;
+    currentIndexBuffer = nullptr;
+
     d->shaderResourceBindingsValid = false;
     d->currentFirstVertexBinding = -1;
     d->currentVertexInputsBuffers.clear();

@@ -1377,10 +1377,8 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 f->glDepthMask(GL_TRUE);
                 f->glClearDepthf(cmd.args.clear.d);
             }
-            if (cmd.args.clear.mask & GL_STENCIL_BUFFER_BIT) {
-                f->glStencilMask(GL_TRUE);
+            if (cmd.args.clear.mask & GL_STENCIL_BUFFER_BIT)
                 f->glClearStencil(cmd.args.clear.s);
-            }
             f->glClear(cmd.args.clear.mask);
             break;
         case QGles2CommandBuffer::Command::BufferSubData:

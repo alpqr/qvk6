@@ -304,6 +304,7 @@ void TriangleOnCubeRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outpu
 {
     cb->setGraphicsPipeline(m_ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    cb->setShaderResources();
     cb->setVertexInput(0, { { m_vbuf, 0 }, { m_vbuf, 36 * 3 * sizeof(float) } });
     cb->draw(36);
 }

@@ -299,6 +299,7 @@ void Window::customRender()
     cb->beginPass(d.rt, { 0.5f, 0.2f, 0, 1 }, { 1, 0 });
     cb->setGraphicsPipeline(d.triPs);
     cb->setViewport({ 0, 0, float(d.msaaTex->pixelSize().width()), float(d.msaaTex->pixelSize().height()) });
+    cb->setShaderResources();
     cb->setVertexInput(0, { { d.vbuf, sizeof(vertexData) } });
     cb->draw(3);
     cb->endPass();
@@ -307,6 +308,7 @@ void Window::customRender()
     cb->beginPass(d.msaaRt, { 0.5f, 0.2f, 0, 1 }, { 1, 0 });
     cb->setGraphicsPipeline(d.msaaTriPs);
     cb->setViewport({ 0, 0, float(d.msaaTex->pixelSize().width()), float(d.msaaTex->pixelSize().height()) });
+    cb->setShaderResources();
     cb->setVertexInput(0, { { d.vbuf, sizeof(vertexData) } });
     cb->draw(3);
     cb->endPass();
@@ -316,9 +318,11 @@ void Window::customRender()
     cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 });
     cb->setGraphicsPipeline(d.psLeft); // showing the non-msaa version
     cb->setViewport({ 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
+    cb->setShaderResources();
     cb->setVertexInput(0, { { d.vbuf, 0 } }, d.ibuf, 0, QRhiCommandBuffer::IndexUInt16);
     cb->drawIndexed(6);
     cb->setGraphicsPipeline(d.psRight); // showing the msaa version, resolved in the shader
+    cb->setShaderResources();
     cb->drawIndexed(6);
     cb->endPass();
 }

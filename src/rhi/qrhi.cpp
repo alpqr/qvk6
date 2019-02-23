@@ -87,6 +87,13 @@ QT_BEGIN_NAMESPACE
     functions of the QRhi, such as, newBuffer(), newTexture(),
     newTextureRenderTarget(), newSwapChain().
 
+    \badcode
+        vbuf = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
+        if (!vbuf->build()) { error }
+        ...
+        vbuf->releaseAndDestroy();
+    \endcode
+
     \list
 
     \li The returned value from both create() and functions like newBuffer() is
@@ -116,24 +123,67 @@ QT_BEGIN_NAMESPACE
     QRhiResource::release(). Backends often queue release requests and defer
     executing them to an unspecified time, this is hidden from the
     applications. This way applications do not have to worry about releasing a
-    native resource that may still be in use by an in flight frame.
+    native resource that may still be in use by an in-flight frame.
+
+    \li Note that this does not mean that resources can freely be released
+    within a frame (that is, in a
+    \l{QRhiCommandBuffer::beginFrame()}{beginFrame()} -
+    \l{QRhiCommandBuffer::endFrame()}{endFrame()} section). As a general rule,
+    all referenced QRhiResource objects must stay unchanged until the frame is
+    submitted by calling \l{QRhiCommandBuffer::endFrame()}{endFrame()}.
 
     \endlist
 
-    \badcode
-        vbuf = rhi->newBuffer(QRhiBuffer::Immutable, QRhiBuffer::VertexBuffer, sizeof(vertexData));
-        if (!vbuf->build()) { error }
-        ...
-        vbuf->releaseAndDestroy();
-    \endcode
+    \section3 Command buffers and defered command execution
+
+    Regardless of the design and capabilities of the underlying graphics API,
+    all QRhi backends implement some level of command buffers. No
+    QRhiCommandBuffer function issues any native bind or draw command (such as,
+    \c glDrawElements) directly. Commands are always recorded in a queue,
+    either native or provided by the QRhi backend. The command buffer is
+    submitted, and so execution starts only upon QRhi::endFrame() or
+    QRhi::finish().
+
+    The defered nature has consequences for some types of objects. For example,
+    writing to a dynamic buffer multiple times within a frame, in case such
+    buffers are backed by host-visible memory, will result in making the
+    results of all writes are visible to all draw calls in the command buffer
+    of the frame, regardless of when the dynamic buffer update was recorded
+    relative to a draw call.
+
+    Furthermore, instances of QRhiResource subclasses must be treated immutable
+    within a frame in which they are referenced in any way. Create or rebuild
+    all resources upfront, before starting to record commands for the next
+    frame. Reusing a QRhiResource instance within a frame (by rebuilding it and
+    then referencing it again in the same \c{beginFrame - endFrame} section)
+    should be avoided as it may lead to unexpected results, depending on the
+    backend. As a general rule, all referenced QRhiResource objects must stay
+    unchanged until the frame is submitted by calling
+    \l{QRhiCommandBuffer::endFrame()}{endFrame()}.
+
+    Unlike APIs like OpenGL, upload and copy type of commands cannot be mixed
+    with draw commands. The typical renderer will involve a sequence similar to
+    the following: \c{(re)build resources} - \c{begin frame} - \c{record
+    uploads and copies} - \c{start renderpass} - \c{record draw calls} - \c{end
+    renderpass} - \c{end frame}. Recording copy type of operations happens via
+    QRhiResourceUpdateBatch. Such operations are committed typically on
+    \l{QRhiCommandBuffer::beginPass()}{beginPass()}.
+
+    When working with legacy rendering engines designed for OpenGL, the
+    migration to QRhi often involves redesigning from having a single \c render
+    step (that performs copies and uploads, clears buffers, and issues draw
+    calls, all mixed together) to a clearly separated, two phase \c prepare -
+    \c render setup where the \c render step only starts a renderpass and
+    records draw calls, while all resource creation and queuing of updates,
+    uploads and copies happens beforehand, in the \c prepare step.
 
     \section3 Resource reuse
 
-    From the user's point of view the QRhiResource is reusable immediately
-    after calling QRhiResource::release(). With the exception of swapchains,
-    calling \c build on an already built object does an implicit release. This
+    From the user's point of view a QRhiResource is reusable immediately after
+    calling QRhiResource::release(). With the exception of swapchains, calling
+    \c build() on an already built object does an implicit \c release(). This
     provides a handy shortcut to reuse a QRhiResource instance with different
-    parameters, with a new native graphics resource underneath.
+    parameters, with a new native graphics object underneath.
 
     The importance of reusing the same object lies in the fact that some
     objects reference other objects: for example, a QRhiShaderResourceBindings
@@ -159,7 +209,7 @@ QT_BEGIN_NAMESPACE
 
         ...
 
-        // now suddenly we need buffer with a different size
+        // now in a later frame we need to grow the buffer to a larger size
         ubuf->setSize(512);
         ubuf->build(); // same as ubuf->release(); ubuf->build();
 
@@ -168,14 +218,15 @@ QT_BEGIN_NAMESPACE
 
     \section3 Pooled objects
 
-    There are pooled objects too, like QRhiResourceUpdateBatch. An instance is
-    retrieved via a \c next function, such as, nextResourceUpdateBatch(). The
-    caller does not own the returned instance in this case. The only valid way
-    of operating here is calling functions on the QRhiResourceUpdateBatch and
-    then passing it to QRhiCommandBuffer::beginPass() or
-    QRhiCommandBuffer::endPass(). These functions take care of returning the
-    batch to the pool. Alternatively, a batch can be "canceled" and returned to
-    the pool without processing by calling QRhiResourceUpdateBatch::release().
+    In addition to resources, there are pooled objects as well, such as,
+    QRhiResourceUpdateBatch. An instance is retrieved via a \c next function,
+    such as, nextResourceUpdateBatch(). The caller does not own the returned
+    instance in this case. The only valid way of operating here is calling
+    functions on the QRhiResourceUpdateBatch and then passing it to
+    QRhiCommandBuffer::beginPass() or QRhiCommandBuffer::endPass(). These
+    functions take care of returning the batch to the pool. Alternatively, a
+    batch can be "canceled" and returned to the pool without processing by
+    calling QRhiResourceUpdateBatch::release().
 
     A typical pattern is thus:
 
@@ -2141,6 +2192,7 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
         ps->build();
         ...
         cb->setGraphicsPipeline(ps);
+        cb->setShaderResources(); // binds srb
     \endcode
 
     This assumes that \c ubuf is a QRhiBuffer, \c texture is a QRhiTexture,
@@ -2153,11 +2205,11 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
     Building on the above example, let's assume that a pass now needs to use
     the exact same pipeline and shaders with a different texture. Creating a
     whole separate QRhiGraphicsPipeline just for this would be an overkill.
-    This is why QRhiCommandBuffer::setGraphicsPipeline() allows specifying an
-    optional \a srb argument. As long as the layouts (so the number of bindings
-    and the binding points) match between two QRhiShaderResourceBindings, they
-    can both be used with the same pipeline, assuming the pipeline was built
-    with one of them in the first place.
+    This is why QRhiCommandBuffer::setShaderResources() allows specifying a \a
+    srb argument. As long as the layouts (so the number of bindings and the
+    binding points) match between two QRhiShaderResourceBindings, they can both
+    be used with the same pipeline, assuming the pipeline was built with one of
+    them in the first place.
 
     Creating and then using a new \c srb2 that is very similar to \c srb with
     the exception of referencing another texture could be implemented like the
@@ -2170,7 +2222,8 @@ QRhiTextureRenderTarget::QRhiTextureRenderTarget(QRhiImplementation *rhi,
         srb2->setBindings(bindings);
         srb2->build();
         ...
-        cb->setGraphicsPipeline(ps, srb2);
+        cb->setGraphicsPipeline(ps);
+        cb->setShaderResources(srb2); // binds srb2
     \endcode
  */
 
@@ -2191,8 +2244,11 @@ QRhiShaderResourceBindings::QRhiShaderResourceBindings(QRhiImplementation *rhi)
 
     When there is a QRhiGraphicsPipeline created with this
     QRhiShaderResourceBindings, and the function returns \c true, \a other can
-    then safely be passed to QRhiCommandBuffer::setGraphicsPipeline(), and so
+    then safely be passed to QRhiCommandBuffer::setShaderResources(), and so
     be used with the pipeline in place of this QRhiShaderResourceBindings.
+
+    This function can be called before build() as well. The bindings must
+    already be set via setBindings() however.
  */
 bool QRhiShaderResourceBindings::isLayoutCompatible(const QRhiShaderResourceBindings *other) const
 {
@@ -2309,7 +2365,7 @@ bool QRhiShaderResourceBinding::isLayoutCompatible(const QRhiShaderResourceBindi
 
 /*!
     \return a shader resource binding for the given binding number, pipeline
-    stage, and buffer specified by \a binding, \a stage, and \a buf.
+    stages, and buffer specified by \a binding, \a stage, and \a buf.
  */
 QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
         int binding, StageFlags stage, QRhiBuffer *buf)
@@ -2323,12 +2379,13 @@ QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
     d->u.ubuf.buf = buf;
     d->u.ubuf.offset = 0;
     d->u.ubuf.maybeSize = 0; // entire buffer
+    d->u.ubuf.hasDynamicOffset = false;
     return b;
 }
 
 /*!
     \return a shader resource binding for the given binding number, pipeline
-    stage, and buffer specified by \a binding, \a stage, and \a buf. This
+    stages, and buffer specified by \a binding, \a stage, and \a buf. This
     overload binds a region only, as specified by \a offset and \a size.
 
     \note It is up to the user to ensure the offset is aligned to
@@ -2347,12 +2404,38 @@ QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBuffer(
     d->u.ubuf.buf = buf;
     d->u.ubuf.offset = offset;
     d->u.ubuf.maybeSize = size;
+    d->u.ubuf.hasDynamicOffset = false;
     return b;
 }
 
 /*!
     \return a shader resource binding for the given binding number, pipeline
-    stage, texture, and sampler specified by \a binding, \a stage, \a tex,
+    stages, and buffer specified by \a binding, \a stage, and \a buf. The
+    uniform buffer is assumed to have dynamic offset. The dynamic offset can be
+    specified in QRhiCommandBuffer::setShaderResources(), thus allowing using
+    varying offset values without creating new bindings for the buffer. The
+    size of the bound region is specified by \a size. Like with non-dynamic
+    offsets, \c{offset + size} cannot exceed the size of \a buf.
+ */
+QRhiShaderResourceBinding QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(
+        int binding, StageFlags stage, QRhiBuffer *buf, int size)
+{
+    QRhiShaderResourceBinding b;
+    QRhiShaderResourceBindingPrivate *d = QRhiShaderResourceBindingPrivate::get(&b);
+    Q_ASSERT(d->ref.load() == 1);
+    d->binding = binding;
+    d->stage = stage;
+    d->type = UniformBuffer;
+    d->u.ubuf.buf = buf;
+    d->u.ubuf.offset = 0;
+    d->u.ubuf.maybeSize = size;
+    d->u.ubuf.hasDynamicOffset = true;
+    return b;
+}
+
+/*!
+    \return a shader resource binding for the given binding number, pipeline
+    stages, texture, and sampler specified by \a binding, \a stage, \a tex,
     \a sampler.
  */
 QRhiShaderResourceBinding QRhiShaderResourceBinding::sampledTexture(
@@ -3758,38 +3841,68 @@ void QRhiCommandBuffer::endPass(QRhiResourceUpdateBatch *resourceUpdates)
 }
 
 /*!
-    Records setting a new graphics pipeline and shader resource binding
-    collection.
+    Records setting a new graphics pipeline \a ps.
 
-    The pipeline is specified by \a ps. \a srb can be null in which case the
-    pipeline's associated QRhiGraphicsPipeline::shaderResourceBindings() is
-    used. When \a srb is specified, the layout (number of bindings, the type
-    and binding number of each binding) must fully match the
-    QRhiShaderResourceBindings that was associated with the pipeline upon
-    calling QRhiGraphicsPipeline::build().
+    \note This function must be called before recording other \c set or \c draw
+    commands on the command buffer.
 
-    There are cases when a seemingly unnecessary setGraphicsPipeline() call is
+    \note QRhi will optimize out unneccessary invocations within a pass, so
+    therefore overoptimizing to avoid calls to this function is not necessary
+    on the applications' side.
+
+    \note This function can only be called inside a pass, meaning between a
+    beginPass() end endPass() call.
+ */
+void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps)
+{
+    rhi->setGraphicsPipeline(this, ps);
+}
+
+/*!
+    Records binding a set of shader resources, such as, uniform buffers or
+    textures, that are made visible to one or more shader stages.
+
+    \a srb can be null in which case the current graphics pipeline's associated
+    QRhiGraphicsPipeline::shaderResourceBindings() is used. When \a srb is
+    non-null, it must be
+    \l{QRhiShaderResourceBindings::isLayoutCompatible()}{layout-compatible},
+    meaning the layout (number of bindings, the type and binding number of each
+    binding) must fully match the QRhiShaderResourceBindings that was
+    associated with the pipeline at the time of calling
+    QRhiGraphicsPipeline::build().
+
+    There are cases when a seemingly unnecessary setShaderResources() call is
     mandatory: when rebuilding a resource referenced from \a srb, for example
     changing the size of a QRhiBuffer followed by a QRhiBuffer::build(), this
     is the place where associated native objects (such as descriptor sets in
     case of Vulkan) are updated to refer to the current native resources that
     back the QRhiBuffer, QRhiTexture, QRhiSampler objects referenced from \a
-    srb. In this case setGraphicsPipeline() must be called even if \a ps and \a
-    srb are the same as in the last call.
+    srb. In this case setShaderResources() must be called even if \a srb is
+    the same as in the last call.
 
-    QRhi will optimize out unneccessary invocations within a pass (taking the
-    conditions described above into account), so therefore overoptimizing to
-    avoid calls to this function is not necessary on the applications' side.
+    \a dynamicOffsets allows specifying buffer offsets for uniform buffers that
+    were associated with \a srb via
+    QRhiShaderResourceBinding::uniformBufferWithDynamicOffset(). This is
+    different from providing the offset in the \a srb itself: dynamic offsets
+    do not require building a new QRhiShaderResourceBindings for every
+    different offset, can avoid writing the underlying descriptors (with
+    backends where applicable), and so they may be more efficient. Each element
+    of \a dynamicOffsets is a \c binding - \c offset pair.
+
+    \note All offsets in \a dynamicOffsets must be byte aligned to the value
+    returned from QRhi::ubufAlignment().
+
+    \note QRhi will optimize out unneccessary invocations within a pass (taking
+    the conditions described above into account), so therefore overoptimizing
+    to avoid calls to this function is not necessary on the applications' side.
 
     \note This function can only be called inside a pass, meaning between a
     beginPass() end endPass() call.
-
-    \sa QRhiShaderResourceBindings::isLayoutCompatible()
  */
-void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps,
-                                            QRhiShaderResourceBindings *srb)
+void QRhiCommandBuffer::setShaderResources(QRhiShaderResourceBindings *srb,
+                                           const QVector<DynamicOffset> &dynamicOffsets)
 {
-    rhi->setGraphicsPipeline(this, ps, srb);
+    rhi->setShaderResources(this, srb, dynamicOffsets);
 }
 
 /*!

@@ -186,11 +186,18 @@ QRhiShaderResourceBindings *QRhiNull::createShaderResourceBindings()
     return new QNullShaderResourceBindings(this);
 }
 
-void QRhiNull::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
+void QRhiNull::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps)
 {
     Q_UNUSED(cb);
     Q_UNUSED(ps);
+}
+
+void QRhiNull::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBindings *srb,
+                                  const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets)
+{
+    Q_UNUSED(cb);
     Q_UNUSED(srb);
+    Q_UNUSED(dynamicOffsets);
 }
 
 void QRhiNull::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,

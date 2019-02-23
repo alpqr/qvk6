@@ -481,6 +481,7 @@ void Window::render()
 
     cb->setGraphicsPipeline(ps);
     cb->setViewport({ 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
+    cb->setShaderResources();
     cb->setVertexInput(0, { { vbuf, 0 } }, ibuf, 0, QRhiCommandBuffer::IndexUInt16);
     cb->drawIndexed(6);
 

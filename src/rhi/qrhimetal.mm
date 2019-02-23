@@ -574,7 +574,9 @@ QRhiShaderResourceBindings *QRhiMetal::createShaderResourceBindings()
     return new QMetalShaderResourceBindings(this);
 }
 
-void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD, QMetalCommandBuffer *cbD)
+void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD, QMetalCommandBuffer *cbD,
+                                              const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets,
+                                              bool offsetOnlyChange)
 {
     static const int KNOWN_STAGES = 2;
     struct {
@@ -591,13 +593,22 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
         {
             QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b->u.ubuf.buf);
             id<MTLBuffer> mtlbuf = bufD->d->buf[bufD->m_type == QRhiBuffer::Immutable ? 0 : currentFrameSlot];
+            uint offset = b->u.ubuf.offset;
+            if (!dynamicOffsets.isEmpty()) {
+                for (const QRhiCommandBuffer::DynamicOffset &dynOfs : dynamicOffsets) {
+                    if (dynOfs.first == b->binding) {
+                        offset = dynOfs.second;
+                        break;
+                    }
+                }
+            }
             if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
                 res[0].buffers.feed(b->binding, mtlbuf);
-                res[0].bufferOffsets.feed(b->binding, b->u.ubuf.offset);
+                res[0].bufferOffsets.feed(b->binding, offset);
             }
             if (b->stage.testFlag(QRhiShaderResourceBinding::FragmentStage)) {
                 res[1].buffers.feed(b->binding, mtlbuf);
-                res[1].bufferOffsets.feed(b->binding, b->u.ubuf.offset);
+                res[1].bufferOffsets.feed(b->binding, offset);
             }
         }
             break;
@@ -624,8 +635,7 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
     for (int idx = 0; idx < KNOWN_STAGES; ++idx) {
         res[idx].buffers.finish();
         res[idx].bufferOffsets.finish();
-        res[idx].textures.finish();
-        res[idx].samplers.finish();
+
         for (int i = 0, ie = res[idx].buffers.batches.count(); i != ie; ++i) {
             const auto &bufferBatch(res[idx].buffers.batches[i]);
             const auto &offsetBatch(res[idx].bufferOffsets.batches[i]);
@@ -645,6 +655,13 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
                 break;
             }
         }
+
+        if (offsetOnlyChange)
+            continue;
+
+        res[idx].textures.finish();
+        res[idx].samplers.finish();
+
         for (int i = 0, ie = res[idx].textures.batches.count(); i != ie; ++i) {
             const auto &batch(res[idx].textures.batches[i]);
             switch (idx) {
@@ -680,16 +697,39 @@ void QRhiMetal::enqueueShaderResourceBindings(QMetalShaderResourceBindings *srbD
     }
 }
 
-void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
+void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps)
 {
     Q_ASSERT(inPass);
 
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     QMetalGraphicsPipeline *psD = QRHI_RES(QMetalGraphicsPipeline, ps);
+
+    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
+        cbD->currentPipeline = ps;
+        cbD->currentPipelineGeneration = psD->generation;
+
+        [cbD->d->currentPassEncoder setRenderPipelineState: psD->d->ps];
+        [cbD->d->currentPassEncoder setDepthStencilState: psD->d->ds];
+        [cbD->d->currentPassEncoder setCullMode: psD->d->cullMode];
+        [cbD->d->currentPassEncoder setFrontFacingWinding: psD->d->winding];
+    }
+
+    psD->lastActiveFrameSlot = currentFrameSlot;
+}
+
+void QRhiMetal::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBindings *srb,
+                                   const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets)
+{
+    Q_ASSERT(inPass);
+
+    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
+    Q_ASSERT(cbD->currentPipeline);
     if (!srb)
-        srb = psD->m_shaderResourceBindings;
+        srb = QRHI_RES(QMetalGraphicsPipeline, cbD->currentPipeline)->m_shaderResourceBindings;
 
     QMetalShaderResourceBindings *srbD = QRHI_RES(QMetalShaderResourceBindings, srb);
     bool hasSlottedResourceInSrb = false;
+    bool hasDynamicOffsetInSrb = false;
     bool resNeedsRebind = false;
 
     // do buffer writes, figure out if we need to rebind, and mark as in-use
@@ -704,6 +744,8 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
             executeBufferHostWritesForCurrentFrame(bufD);
             if (bufD->m_type != QRhiBuffer::Immutable)
                 hasSlottedResourceInSrb = true;
+            if (b->u.ubuf.hasDynamicOffset)
+                hasDynamicOffsetInSrb = true;
             if (bufD->generation != bd.ubuf.generation) {
                 resNeedsRebind = true;
                 bd.ubuf.generation = bufD->generation;
@@ -732,31 +774,22 @@ void QRhiMetal::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
         }
     }
 
-    QMetalCommandBuffer *cbD = QRHI_RES(QMetalCommandBuffer, cb);
     // make sure the resources for the correct slot get bound
     const int resSlot = hasSlottedResourceInSrb ? currentFrameSlot : 0;
     if (hasSlottedResourceInSrb && cbD->currentResSlot != resSlot)
         resNeedsRebind = true;
 
-    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
-        cbD->currentPipeline = ps;
-        cbD->currentPipelineGeneration = psD->generation;
+    const bool srbChange = cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation;
 
-        [cbD->d->currentPassEncoder setRenderPipelineState: psD->d->ps];
-        [cbD->d->currentPassEncoder setDepthStencilState: psD->d->ds];
-        [cbD->d->currentPassEncoder setCullMode: psD->d->cullMode];
-        [cbD->d->currentPassEncoder setFrontFacingWinding: psD->d->winding];
-    }
-
-    if (resNeedsRebind || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
+    // dynamic uniform buffer offsets always trigger a rebind
+    if (hasDynamicOffsetInSrb || resNeedsRebind || srbChange) {
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
         cbD->currentResSlot = resSlot;
 
-        enqueueShaderResourceBindings(srbD, cbD);
+        const bool offsetOnlyChange = hasDynamicOffsetInSrb && !resNeedsRebind && !srbChange;
+        enqueueShaderResourceBindings(srbD, cbD, dynamicOffsets, offsetOnlyChange);
     }
-
-    psD->lastActiveFrameSlot = currentFrameSlot;
 }
 
 void QRhiMetal::setVertexInput(QRhiCommandBuffer *cb, int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,

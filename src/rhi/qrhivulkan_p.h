@@ -203,6 +203,7 @@ struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
     void release() override;
     bool build() override;
 
+    QVector<QRhiShaderResourceBinding> sortedBindings;
     int poolIndex = -1;
     VkDescriptorSetLayout layout = VK_NULL_HANDLE;
     VkDescriptorSet descSets[QVK_FRAMES_IN_FLIGHT]; // multiple sets to support dynamic buffers
@@ -391,8 +392,11 @@ public:
     void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
-                             QRhiGraphicsPipeline *ps,
-                             QRhiShaderResourceBindings *srb) override;
+                             QRhiGraphicsPipeline *ps) override;
+
+    void setShaderResources(QRhiCommandBuffer *cb,
+                            QRhiShaderResourceBindings *srb,
+                            const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
                         int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,

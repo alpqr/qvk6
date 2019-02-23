@@ -297,6 +297,7 @@ int main(int argc, char **argv)
         cb->beginPass(rt, { 0, 1, 0, 1 }, { 1, 0 }, u);
         cb->setGraphicsPipeline(ps);
         cb->setViewport({ 0, 0, 1280, 720 });
+        cb->setShaderResources();
         cb->setVertexInput(0, { { vbuf, 0 } });
         cb->draw(3);
 

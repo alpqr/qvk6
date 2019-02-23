@@ -171,6 +171,7 @@ void TriangleRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeI
 {
     cb->setGraphicsPipeline(m_ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    cb->setShaderResources();
     cb->setVertexInput(0, { { m_vbuf, 0 } });
     cb->draw(3);
 }

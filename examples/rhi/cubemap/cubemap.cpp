@@ -172,6 +172,7 @@ void Window::customRender()
     cb->beginPass(m_sc->currentFrameRenderTarget(), { 0.4f, 0.7f, 0.0f, 1.0f }, { 1.0f, 0 }, u);
     cb->setGraphicsPipeline(d.ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    cb->setShaderResources();
     cb->setVertexInput(0, { { d.vbuf, 0 } });
     cb->draw(36);
     cb->endPass();

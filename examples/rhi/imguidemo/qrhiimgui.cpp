@@ -271,7 +271,8 @@ void QRhiImgui::queueFrame(QRhiCommandBuffer *cb)
                 const QPointF scissorPixelBottomLeft = QPointF(cmd->ClipRect.x, d->lastOutputSize.height() - cmd->ClipRect.w);
                 const QSizeF scissorPixelSize = QSizeF(cmd->ClipRect.z - cmd->ClipRect.x, cmd->ClipRect.w - cmd->ClipRect.y);
                 const int textureIndex = int(reinterpret_cast<qintptr>(cmd->TextureId));
-                cb->setGraphicsPipeline(d->ps, d->textures[textureIndex].srb);
+                cb->setGraphicsPipeline(d->ps);
+                cb->setShaderResources(d->textures[textureIndex].srb);
                 cb->setScissor({ int(scissorPixelBottomLeft.x()), int(scissorPixelBottomLeft.y()),
                                  int(scissorPixelSize.width()), int(scissorPixelSize.height()) });
                 cb->setVertexInput(0, vertexInput, d->ibuf, indexOffset, QRhiCommandBuffer::IndexUInt32);

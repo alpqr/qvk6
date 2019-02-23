@@ -631,6 +631,7 @@ VkResult QRhiVulkan::createDescriptorPool(VkDescriptorPool *pool)
 {
     VkDescriptorPoolSize descPoolSizes[] = {
         { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, QVK_UNIFORM_BUFFERS_PER_POOL },
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, QVK_UNIFORM_BUFFERS_PER_POOL },
         { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, QVK_COMBINED_IMAGE_SAMPLERS_PER_POOL }
     };
     VkDescriptorPoolCreateInfo descPoolInfo;
@@ -2086,9 +2087,9 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
     const bool updateAll = descSetIdx < 0;
     int frameSlot = updateAll ? 0 : descSetIdx;
     while (frameSlot < (updateAll ? QVK_FRAMES_IN_FLIGHT : descSetIdx + 1)) {
-        srbD->boundResourceData[frameSlot].resize(srbD->m_bindings.count());
-        for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
-            const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->m_bindings[i]);
+        srbD->boundResourceData[frameSlot].resize(srbD->sortedBindings.count());
+        for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
+            const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->sortedBindings[i]);
             QVkShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[frameSlot][i]);
 
             VkWriteDescriptorSet writeInfo;
@@ -2101,7 +2102,8 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
             switch (b->type) {
             case QRhiShaderResourceBinding::UniformBuffer:
             {
-                writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                writeInfo.descriptorType = b->u.ubuf.hasDynamicOffset ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+                                                                      : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 QRhiBuffer *buf = b->u.ubuf.buf;
                 QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
                 bd.ubuf.generation = bufD->generation;
@@ -3108,24 +3110,46 @@ QRhiShaderResourceBindings *QRhiVulkan::createShaderResourceBindings()
     return new QVkShaderResourceBindings(this);
 }
 
-void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
+void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps)
 {
     Q_ASSERT(inPass);
     QVkGraphicsPipeline *psD = QRHI_RES(QVkGraphicsPipeline, ps);
     Q_ASSERT(psD->pipeline);
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
+
+    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
+        df->vkCmdBindPipeline(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
+        cbD->currentPipeline = ps;
+        cbD->currentPipelineGeneration = psD->generation;
+    }
+
+    psD->lastActiveFrameSlot = currentFrameSlot;
+}
+
+void QRhiVulkan::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBindings *srb,
+                                    const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets)
+{
+    Q_ASSERT(inPass);
+
+    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
+    Q_ASSERT(cbD->currentPipeline);
+    QVkGraphicsPipeline *psD = QRHI_RES(QVkGraphicsPipeline, cbD->currentPipeline);
 
     if (!srb)
         srb = psD->m_shaderResourceBindings;
 
     QVkShaderResourceBindings *srbD = QRHI_RES(QVkShaderResourceBindings, srb);
     bool hasSlottedResourceInSrb = false;
+    bool hasDynamicOffsetInSrb = false;
 
-    for (const QRhiShaderResourceBinding &binding : qAsConst(srbD->m_bindings)) {
+    for (const QRhiShaderResourceBinding &binding : qAsConst(srbD->sortedBindings)) {
         const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&binding);
         switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
             if (QRHI_RES(QVkBuffer, b->u.ubuf.buf)->m_type == QRhiBuffer::Dynamic)
                 hasSlottedResourceInSrb = true;
+            if (b->u.ubuf.hasDynamicOffset)
+                hasDynamicOffsetInSrb = true;
             break;
         default:
             break;
@@ -3137,8 +3161,8 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
 
     // Do host writes and mark referenced shader resources as in-use.
     // Also prepare to ensure the descriptor set we are going to bind refers to up-to-date Vk objects.
-    for (int i = 0, ie = srbD->m_bindings.count(); i != ie; ++i) {
-        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->m_bindings[i]);
+    for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
+        const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->sortedBindings[i]);
         QVkShaderResourceBindings::BoundResourceData &bd(srbD->boundResourceData[descSetIdx][i]);
         switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
@@ -3182,24 +3206,41 @@ void QRhiVulkan::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline
     if (rewriteDescSet)
         updateShaderResourceBindings(srb, descSetIdx);
 
-    QVkCommandBuffer *cbD = QRHI_RES(QVkCommandBuffer, cb);
-    if (cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation) {
-        df->vkCmdBindPipeline(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->pipeline);
-        cbD->currentPipeline = ps;
-        cbD->currentPipelineGeneration = psD->generation;
-    }
-    psD->lastActiveFrameSlot = currentFrameSlot;
-
-    // make sure the descriptors for the correct slot will get bound
-    const bool forceRebind = hasSlottedResourceInSrb && cbD->currentDescSetSlot != descSetIdx;
+    // make sure the descriptors for the correct slot will get bound.
+    // also, dynamic offsets always need a bind.
+    const bool forceRebind = (hasSlottedResourceInSrb && cbD->currentDescSetSlot != descSetIdx) || hasDynamicOffsetInSrb;
 
     if (forceRebind || rewriteDescSet || cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation) {
+        QVarLengthArray<uint32_t, 4> dynOfs;
+        if (hasDynamicOffsetInSrb) {
+            // Filling out dynOfs based on the sorted bindings is important
+            // because dynOfs has to be ordered based on the binding numbers,
+            // and neither srb nor dynamicOffsets has any such ordering
+            // requirement.
+            for (const QRhiShaderResourceBinding &binding : qAsConst(srbD->sortedBindings)) {
+                const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&binding);
+                if (b->type == QRhiShaderResourceBinding::UniformBuffer && b->u.ubuf.hasDynamicOffset) {
+                    uint32_t offset = 0;
+                    for (const QRhiCommandBuffer::DynamicOffset &ofs : dynamicOffsets) {
+                        if (ofs.first == b->binding) {
+                            offset = ofs.second;
+                            break;
+                        }
+                    }
+                    dynOfs.append(offset); // use 0 if dynamicOffsets did not contain this binding
+                }
+            }
+        }
+
         df->vkCmdBindDescriptorSets(cbD->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, psD->layout, 0, 1,
-                                    &srbD->descSets[descSetIdx], 0, nullptr);
+                                    &srbD->descSets[descSetIdx],
+                                    dynOfs.count(), dynOfs.isEmpty() ? nullptr : dynOfs.constData());
+
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
         cbD->currentDescSetSlot = descSetIdx;
     }
+
     srbD->lastActiveFrameSlot = currentFrameSlot;
 }
 
@@ -3679,11 +3720,12 @@ static inline void fillVkStencilOpState(VkStencilOpState *dst, const QRhiGraphic
     dst->compareOp = toVkCompareOp(src.compareOp);
 }
 
-static inline VkDescriptorType toVkDescriptorType(QRhiShaderResourceBinding::Type type)
+static inline VkDescriptorType toVkDescriptorType(const QRhiShaderResourceBindingPrivate *b)
 {
-    switch (type) {
+    switch (b->type) {
     case QRhiShaderResourceBinding::UniformBuffer:
-        return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        return b->u.ubuf.hasDynamicOffset ? VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC
+                                          : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     case QRhiShaderResourceBinding::SampledTexture:
         return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     default:
@@ -4499,6 +4541,8 @@ void QVkShaderResourceBindings::release()
     if (!layout)
         return;
 
+    sortedBindings.clear();
+
     QRhiVulkan::DeferredReleaseEntry e;
     e.type = QRhiVulkan::DeferredReleaseEntry::ShaderResourceBindings;
     e.lastActiveFrameSlot = lastActiveFrameSlot;
@@ -4525,13 +4569,20 @@ bool QVkShaderResourceBindings::build()
     for (int i = 0; i < QVK_FRAMES_IN_FLIGHT; ++i)
         descSets[i] = VK_NULL_HANDLE;
 
+    sortedBindings = m_bindings;
+    std::sort(sortedBindings.begin(), sortedBindings.end(),
+              [](const QRhiShaderResourceBinding &a, const QRhiShaderResourceBinding &b)
+    {
+        return QRhiShaderResourceBindingPrivate::get(&a)->binding < QRhiShaderResourceBindingPrivate::get(&b)->binding;
+    });
+
     QVarLengthArray<VkDescriptorSetLayoutBinding, 4> vkbindings;
-    for (const QRhiShaderResourceBinding &binding : qAsConst(m_bindings)) {
+    for (const QRhiShaderResourceBinding &binding : qAsConst(sortedBindings)) {
         const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&binding);
         VkDescriptorSetLayoutBinding vkbinding;
         memset(&vkbinding, 0, sizeof(vkbinding));
         vkbinding.binding = b->binding;
-        vkbinding.descriptorType = toVkDescriptorType(b->type);
+        vkbinding.descriptorType = toVkDescriptorType(b);
         vkbinding.descriptorCount = 1; // no array support yet
         vkbinding.stageFlags = toVkShaderStageFlags(b->stage);
         vkbindings.append(vkbinding);

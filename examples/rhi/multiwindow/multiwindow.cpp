@@ -493,6 +493,7 @@ void Window::render()
 
     cb->setGraphicsPipeline(d.ps);
     cb->setViewport({ 0, 0, float(outputSizeInPixels.width()), float(outputSizeInPixels.height()) });
+    cb->setShaderResources();
     cb->setVertexInput(0, { { d.vbuf, 0 } });
     cb->draw(3);
 

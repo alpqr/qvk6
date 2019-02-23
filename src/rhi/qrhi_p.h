@@ -105,8 +105,11 @@ public:
     virtual void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) = 0;
 
     virtual void setGraphicsPipeline(QRhiCommandBuffer *cb,
-                                     QRhiGraphicsPipeline *ps,
-                                     QRhiShaderResourceBindings *srb = nullptr) = 0;
+                                     QRhiGraphicsPipeline *ps) = 0;
+
+    virtual void setShaderResources(QRhiCommandBuffer *cb,
+                                    QRhiShaderResourceBindings *srb,
+                                    const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets) = 0;
 
     virtual void setVertexInput(QRhiCommandBuffer *cb,
                                 int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
@@ -313,6 +316,7 @@ public:
         QRhiBuffer *buf;
         int offset;
         int maybeSize;
+        bool hasDynamicOffset;
     };
     struct SampledTextureData {
         QRhiTexture *tex;

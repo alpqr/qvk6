@@ -246,9 +246,6 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
     QD3D11CommandBuffer(QRhiImplementation *rhi);
     void release() override;
 
-    // Technically it's not like we really need to queue up the commands, but
-    // have it this way since it helps keeping things concise and may become
-    // essential if "command buffers" become application creatable some day.
     struct Command {
         enum Cmd {
             SetRenderTarget,
@@ -258,6 +255,7 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             BindVertexBuffers,
             BindIndexBuffer,
             BindGraphicsPipeline,
+            BindShaderResources,
             StencilRef,
             BlendConstants,
             Draw,
@@ -272,6 +270,11 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
         };
         enum ClearFlag { Color = 1, Depth = 2, Stencil = 4 };
         Cmd cmd;
+
+        static const int MAX_UBUF_BINDINGS = 32; // should be D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT but 128 is a waste of space for our purposes
+
+        // QRhi*/QD3D11* references should be kept at minimum (so no
+        // QRhiTexture/Buffer/etc. pointers).
         union {
             struct {
                 QRhiRenderTarget *rt;
@@ -304,9 +307,13 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
             } bindIndexBuffer;
             struct {
                 QD3D11GraphicsPipeline *ps;
-                QD3D11ShaderResourceBindings *srb;
-                bool srbOnlyChange;
             } bindGraphicsPipeline;
+            struct {
+                QD3D11ShaderResourceBindings *srb;
+                bool offsetOnlyChange;
+                int dynamicOffsetCount;
+                uint dynamicOffsetPairs[MAX_UBUF_BINDINGS * 2]; // binding, offsetInConstants
+            } bindShaderResources;
             struct {
                 QD3D11GraphicsPipeline *ps;
                 quint32 ref;
@@ -356,7 +363,7 @@ struct QD3D11CommandBuffer : public QRhiCommandBuffer
                 DXGI_FORMAT format;
             } resolveSubRes;
             struct {
-                QD3D11Texture *tex;
+                ID3D11ShaderResourceView *srv;
             } genMip;
             struct {
                 char s[64];
@@ -421,7 +428,7 @@ struct QD3D11SwapChain : public QRhiSwapChain
     QSize surfacePixelSize() override;
 
     QRhiRenderPassDescriptor *newCompatibleRenderPassDescriptor() override;
-    bool buildOrResize();
+    bool buildOrResize() override;
 
     void releaseBuffers();
     bool newColorBuffer(const QSize &size, DXGI_FORMAT format, DXGI_SAMPLE_DESC sampleDesc,
@@ -493,8 +500,11 @@ public:
     void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
-                             QRhiGraphicsPipeline *ps,
-                             QRhiShaderResourceBindings *srb) override;
+                             QRhiGraphicsPipeline *ps) override;
+
+    void setShaderResources(QRhiCommandBuffer *cb,
+                            QRhiShaderResourceBindings *srb,
+                            const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
                         int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
@@ -530,7 +540,9 @@ public:
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD);
     void executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD);
-    void setShaderResources(QD3D11ShaderResourceBindings *srbD);
+    void bindShaderResources(QD3D11ShaderResourceBindings *srbD,
+                             const uint *dynOfsPairs, int dynOfsPairCount,
+                             bool offsetOnlyChange);
     void setRenderTarget(QRhiRenderTarget *rt);
     void executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *timestampSwapChain = nullptr);
     DXGI_SAMPLE_DESC effectiveSampleCount(int sampleCount) const;

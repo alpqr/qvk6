@@ -206,8 +206,11 @@ public:
     void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
-                             QRhiGraphicsPipeline *ps,
-                             QRhiShaderResourceBindings *srb) override;
+                             QRhiGraphicsPipeline *ps) override;
+
+    void setShaderResources(QRhiCommandBuffer *cb,
+                            QRhiShaderResourceBindings *srb,
+                            const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
                         int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,

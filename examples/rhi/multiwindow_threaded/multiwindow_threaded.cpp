@@ -629,6 +629,7 @@ void Renderer::render(bool newlyExposed, bool wakeBeforePresent)
 
     cb->setGraphicsPipeline(m_ps);
     cb->setViewport(QRhiViewport(0, 0, outputSize.width(), outputSize.height()));
+    cb->setShaderResources();
     cb->setVertexInput(0, { { m_vbuf, 0 }, { m_vbuf, 36 * 3 * sizeof(float) } });
     cb->draw(36);
 

@@ -337,6 +337,7 @@ public:
 
     static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf);
     static QRhiShaderResourceBinding uniformBuffer(int binding, StageFlags stage, QRhiBuffer *buf, int offset, int size);
+    static QRhiShaderResourceBinding uniformBufferWithDynamicOffset(int binding, StageFlags stage, QRhiBuffer *buf, int size);
     static QRhiShaderResourceBinding sampledTexture(int binding, StageFlags stage, QRhiTexture *tex, QRhiSampler *sampler);
 
 private:
@@ -1126,9 +1127,10 @@ public:
                    QRhiResourceUpdateBatch *resourceUpdates = nullptr);
     void endPass(QRhiResourceUpdateBatch *resourceUpdates = nullptr);
 
-    void setGraphicsPipeline(QRhiGraphicsPipeline *ps,
-                             QRhiShaderResourceBindings *srb = nullptr);
-
+    void setGraphicsPipeline(QRhiGraphicsPipeline *ps);
+    using DynamicOffset = QPair<int, quint32>; // binding, offset
+    void setShaderResources(QRhiShaderResourceBindings *srb = nullptr,
+                            const QVector<DynamicOffset> &dynamicOffsets = QVector<DynamicOffset>());
     using VertexInput = QPair<QRhiBuffer *, quint32>; // buffer, offset
     void setVertexInput(int startBinding, const QVector<VertexInput> &bindings,
                         QRhiBuffer *indexBuf = nullptr, quint32 indexOffset = 0,

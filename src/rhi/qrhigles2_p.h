@@ -248,6 +248,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             Draw,
             DrawIndexed,
             BindGraphicsPipeline,
+            BindShaderResources,
             BindFramebuffer,
             Clear,
             BufferData,
@@ -261,6 +262,11 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             GenMip
         };
         Cmd cmd;
+
+        static const int MAX_UBUF_BINDINGS = 32; // should be more than enough
+
+        // QRhi*/QGles2* references should be kept at minimum (so no
+        // QRhiTexture/Buffer/etc. pointers).
         union {
             struct {
                 float x, y, w, h;
@@ -299,9 +305,13 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             } drawIndexed;
             struct {
                 QRhiGraphicsPipeline *ps;
-                QRhiShaderResourceBindings *srb;
-                bool resOnlyChange;
             } bindGraphicsPipeline;
+            struct {
+                QRhiGraphicsPipeline *ps;
+                QRhiShaderResourceBindings *srb;
+                int dynamicOffsetCount;
+                uint dynamicOffsetPairs[MAX_UBUF_BINDINGS * 2]; // binding, offsetInConstants
+            } bindShaderResources;
             struct {
                 GLbitfield mask;
                 float c[4];
@@ -309,7 +319,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 quint32 s;
             } clear;
             struct {
-                QRhiTextureRenderTarget *rt;
+                GLuint fbo;
             } bindFramebuffer;
             struct {
                 GLenum target;
@@ -324,7 +334,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 int srcLevel;
                 int srcX;
                 int srcY;
-                QGles2Texture *dst;
+                GLenum dstTarget;
+                GLuint dstTexture;
                 GLenum dstFaceTarget;
                 int dstLevel;
                 int dstX;
@@ -334,12 +345,16 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             } copyTex;
             struct {
                 QRhiReadbackResult *result;
-                QGles2Texture *texture;
-                int layer;
+                GLuint texture;
+                int w;
+                int h;
+                QRhiTexture::Format format;
+                GLenum readTarget;
                 int level;
             } readPixels;
             struct {
-                QGles2Texture *dst;
+                GLenum target;
+                GLuint texture;
                 GLenum faceTarget;
                 int level;
                 int dx;
@@ -351,7 +366,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 const void *data; // must come from retainImage()
             } subImage;
             struct {
-                QGles2Texture *dst;
+                GLenum target;
+                GLuint texture;
                 GLenum faceTarget;
                 int level;
                 GLenum glintformat;
@@ -361,7 +377,8 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 const void *data; // must come from retainData()
             } compressedImage;
             struct {
-                QGles2Texture *dst;
+                GLenum target;
+                GLuint texture;
                 GLenum faceTarget;
                 int level;
                 int dx;
@@ -376,12 +393,13 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
                 GLuint renderbuffer;
                 int w;
                 int h;
-                QGles2Texture *dst;
-                int dstLayer;
+                GLenum target;
+                GLuint texture;
                 int dstLevel;
             } blitFromRb;
             struct {
-                QGles2Texture *tex;
+                GLenum target;
+                GLuint texture;
             } genMip;
         } args;
     };
@@ -487,8 +505,11 @@ public:
     void endPass(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates) override;
 
     void setGraphicsPipeline(QRhiCommandBuffer *cb,
-                             QRhiGraphicsPipeline *ps,
-                             QRhiShaderResourceBindings *srb) override;
+                             QRhiGraphicsPipeline *ps) override;
+
+    void setShaderResources(QRhiCommandBuffer *cb,
+                            QRhiShaderResourceBindings *srb,
+                            const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets) override;
 
     void setVertexInput(QRhiCommandBuffer *cb,
                         int startBinding, const QVector<QRhiCommandBuffer::VertexInput> &bindings,
@@ -525,8 +546,10 @@ public:
     void executeDeferredReleases();
     void enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdateBatch *resourceUpdates);
     void executeCommandBuffer(QRhiCommandBuffer *cb);
-    void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb);
-    void setChangedUniforms(QGles2GraphicsPipeline *psD, QRhiShaderResourceBindings *srb, bool changedOnly);
+    void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps);
+    void setChangedUniforms(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb,
+                            const uint *dynOfsPairs, int dynOfsCount,
+                            bool changedOnly);
 
     QOpenGLContext *ctx = nullptr;
     bool importedContext = false;

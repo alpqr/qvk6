@@ -157,6 +157,7 @@ void Window::customRender()
 
     cb->setGraphicsPipeline(d.ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    cb->setShaderResources();
     cb->setVertexInput(0, { { d.vbuf, 0 } });
     cb->draw(3);
 

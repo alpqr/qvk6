@@ -147,8 +147,9 @@ void QuadRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpdates
 
 void QuadRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &/*outputSizeInPixels*/)
 {
-    cb->setGraphicsPipeline(m_ps, m_srb);
+    cb->setGraphicsPipeline(m_ps);
     //cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    cb->setShaderResources(m_srb);
     cb->setVertexInput(0, { { m_vbuf, 0 } }, m_ibuf, 0, QRhiCommandBuffer::IndexUInt16);
     cb->drawIndexed(6);
 }

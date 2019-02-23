@@ -458,17 +458,39 @@ QRhiShaderResourceBindings *QRhiD3D11::createShaderResourceBindings()
     return new QD3D11ShaderResourceBindings(this);
 }
 
-void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb)
+void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline *ps)
 {
     Q_ASSERT(inPass);
 
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
     QD3D11GraphicsPipeline *psD = QRHI_RES(QD3D11GraphicsPipeline, ps);
+    const bool pipelineChanged = cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation;
+
+    if (pipelineChanged) {
+        cbD->currentPipeline = ps;
+        cbD->currentPipelineGeneration = psD->generation;
+
+        QD3D11CommandBuffer::Command cmd;
+        cmd.cmd = QD3D11CommandBuffer::Command::BindGraphicsPipeline;
+        cmd.args.bindGraphicsPipeline.ps = psD;
+        cbD->commands.append(cmd);
+    }
+}
+
+void QRhiD3D11::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBindings *srb,
+                                   const QVector<QRhiCommandBuffer::DynamicOffset> &dynamicOffsets)
+{
+    Q_ASSERT(inPass);
+
+    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
+    Q_ASSERT(cbD->currentPipeline);
+
     if (!srb)
-        srb = psD->m_shaderResourceBindings;
+        srb = QRHI_RES(QD3D11GraphicsPipeline, cbD->currentPipeline)->m_shaderResourceBindings;
 
     QD3D11ShaderResourceBindings *srbD = QRHI_RES(QD3D11ShaderResourceBindings, srb);
-    QD3D11CommandBuffer *cbD = QRHI_RES(QD3D11CommandBuffer, cb);
 
+    bool hasDynamicOffsetInSrb = false;
     bool srbUpdate = false;
     for (int i = 0, ie = srbD->sortedBindings.count(); i != ie; ++i) {
         const QRhiShaderResourceBindingPrivate *b = QRhiShaderResourceBindingPrivate::get(&srbD->sortedBindings[i]);
@@ -484,6 +506,9 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
                 srbUpdate = true;
                 bd.ubuf.generation = bufD->generation;
             }
+
+            if (b->u.ubuf.hasDynamicOffset)
+                hasDynamicOffsetInSrb = true;
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
@@ -508,20 +533,38 @@ void QRhiD3D11::setGraphicsPipeline(QRhiCommandBuffer *cb, QRhiGraphicsPipeline 
     if (srbUpdate)
         updateShaderResourceBindings(srbD);
 
-    const bool pipelineChanged = cbD->currentPipeline != ps || cbD->currentPipelineGeneration != psD->generation;
     const bool srbChanged = cbD->currentSrb != srb || cbD->currentSrbGeneration != srbD->generation;
 
-    if (pipelineChanged || srbChanged || srbUpdate) {
-        cbD->currentPipeline = ps;
-        cbD->currentPipelineGeneration = psD->generation;
+    if (srbChanged || srbUpdate || hasDynamicOffsetInSrb) {
         cbD->currentSrb = srb;
         cbD->currentSrbGeneration = srbD->generation;
 
         QD3D11CommandBuffer::Command cmd;
-        cmd.cmd = QD3D11CommandBuffer::Command::BindGraphicsPipeline;
-        cmd.args.bindGraphicsPipeline.ps = psD;
-        cmd.args.bindGraphicsPipeline.srb = srbD;
-        cmd.args.bindGraphicsPipeline.srbOnlyChange = !pipelineChanged;
+        cmd.cmd = QD3D11CommandBuffer::Command::BindShaderResources;
+        cmd.args.bindShaderResources.srb = srbD;
+        // dynamic offsets have to be applied at the time of executing the bind
+        // operations, not here
+        cmd.args.bindShaderResources.offsetOnlyChange = !srbChanged && !srbUpdate && hasDynamicOffsetInSrb;
+        cmd.args.bindShaderResources.dynamicOffsetCount = 0;
+        if (hasDynamicOffsetInSrb) {
+            const int dynCount = dynamicOffsets.count();
+            if (dynCount < QD3D11CommandBuffer::Command::MAX_UBUF_BINDINGS) {
+                cmd.args.bindShaderResources.dynamicOffsetCount = dynCount;
+                uint *p = cmd.args.bindShaderResources.dynamicOffsetPairs;
+                for (int i = 0; i < dynCount; ++i) {
+                    const QRhiCommandBuffer::DynamicOffset &dynOfs(dynamicOffsets[i]);
+                    const uint binding = dynOfs.first;
+                    Q_ASSERT(aligned(dynOfs.second, 256) == dynOfs.second);
+                    const uint offsetInConstants = dynOfs.second / 16;
+                    *p++ = binding;
+                    *p++ = offsetInConstants;
+                }
+            } else {
+                qWarning("Too many dynamic offsets (%d, max is %d)",
+                         dynCount, QD3D11CommandBuffer::Command::MAX_UBUF_BINDINGS);
+            }
+        }
+
         cbD->commands.append(cmd);
     }
 }
@@ -1216,7 +1259,7 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(u.tex->flags().testFlag(QRhiTexture::UsedWithGenerateMips));
         QD3D11CommandBuffer::Command cmd;
         cmd.cmd = QD3D11CommandBuffer::Command::GenMip;
-        cmd.args.genMip.tex = QRHI_RES(QD3D11Texture, u.tex);
+        cmd.args.genMip.srv = QRHI_RES(QD3D11Texture, u.tex)->srv;
         cbD->commands.append(cmd);
     }
 
@@ -1412,6 +1455,9 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b->u.ubuf.buf);
             Q_ASSERT(aligned(b->u.ubuf.offset, 256) == b->u.ubuf.offset);
             bd.ubuf.generation = bufD->generation;
+            // dynamic ubuf offsets are not considered here, those are baked in
+            // at a later stage, which is good as vsubufoffsets and friends are
+            // per-srb, not per-setShaderResources call
             const uint offsetInConstants = b->u.ubuf.offset / 16;
             // size must be 16 mult. (in constants, i.e. multiple of 256 bytes).
             // We can round up if needed since the buffers's actual size
@@ -1486,38 +1532,84 @@ void QRhiD3D11::executeBufferHostWritesForCurrentFrame(QD3D11Buffer *bufD)
     }
 }
 
-void QRhiD3D11::setShaderResources(QD3D11ShaderResourceBindings *srbD)
+void QRhiD3D11::bindShaderResources(QD3D11ShaderResourceBindings *srbD,
+                                    const uint *dynOfsPairs, int dynOfsPairCount,
+                                    bool offsetOnlyChange)
 {
-    for (const auto &batch : srbD->vssamplers.batches)
-        context->VSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
+    if (!offsetOnlyChange) {
+        for (const auto &batch : srbD->vssamplers.batches)
+            context->VSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
 
-    for (const auto &batch : srbD->vsshaderresources.batches) {
-        context->VSSetShaderResources(batch.startBinding, batch.resources.count(), batch.resources.constData());
-        contextState.vsLastActiveSrvBinding = batch.startBinding + batch.resources.count() - 1;
-    }
+        for (const auto &batch : srbD->vsshaderresources.batches) {
+            context->VSSetShaderResources(batch.startBinding, batch.resources.count(), batch.resources.constData());
+            contextState.vsLastActiveSrvBinding = batch.startBinding + batch.resources.count() - 1;
+        }
 
-    for (const auto &batch : srbD->fssamplers.batches)
-        context->PSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
+        for (const auto &batch : srbD->fssamplers.batches)
+            context->PSSetSamplers(batch.startBinding, batch.resources.count(), batch.resources.constData());
 
-    for (const auto &batch : srbD->fsshaderresources.batches) {
-        context->PSSetShaderResources(batch.startBinding, batch.resources.count(), batch.resources.constData());
-        contextState.fsLastActiveSrvBinding = batch.startBinding + batch.resources.count() - 1;
+        for (const auto &batch : srbD->fsshaderresources.batches) {
+            context->PSSetShaderResources(batch.startBinding, batch.resources.count(), batch.resources.constData());
+            contextState.fsLastActiveSrvBinding = batch.startBinding + batch.resources.count() - 1;
+        }
     }
 
     for (int i = 0, ie = srbD->vsubufs.batches.count(); i != ie; ++i) {
-        context->VSSetConstantBuffers1(srbD->vsubufs.batches[i].startBinding,
-                                       srbD->vsubufs.batches[i].resources.count(),
-                                       srbD->vsubufs.batches[i].resources.constData(),
-                                       srbD->vsubufoffsets.batches[i].resources.constData(),
-                                       srbD->vsubufsizes.batches[i].resources.constData());
+        if (!dynOfsPairCount) {
+            context->VSSetConstantBuffers1(srbD->vsubufs.batches[i].startBinding,
+                                           srbD->vsubufs.batches[i].resources.count(),
+                                           srbD->vsubufs.batches[i].resources.constData(),
+                                           srbD->vsubufoffsets.batches[i].resources.constData(),
+                                           srbD->vsubufsizes.batches[i].resources.constData());
+        } else {
+            const UINT count = srbD->vsubufs.batches[i].resources.count();
+            const UINT startBinding = srbD->vsubufs.batches[i].startBinding;
+            QVarLengthArray<UINT, 4> offsets = srbD->vsubufoffsets.batches[i].resources;
+            for (UINT b = 0; b < count; ++b) {
+                for (int di = 0; di < dynOfsPairCount; ++di) {
+                    const uint binding = dynOfsPairs[2 * di];
+                    if (binding == startBinding + b) {
+                        const uint offsetInConstants = dynOfsPairs[2 * di + 1];
+                        offsets[b] = offsetInConstants;
+                        break;
+                    }
+                }
+            }
+            context->VSSetConstantBuffers1(startBinding,
+                                           count,
+                                           srbD->vsubufs.batches[i].resources.constData(),
+                                           offsets.constData(),
+                                           srbD->vsubufsizes.batches[i].resources.constData());
+        }
     }
 
     for (int i = 0, ie = srbD->fsubufs.batches.count(); i != ie; ++i) {
-        context->PSSetConstantBuffers1(srbD->fsubufs.batches[i].startBinding,
-                                       srbD->fsubufs.batches[i].resources.count(),
-                                       srbD->fsubufs.batches[i].resources.constData(),
-                                       srbD->fsubufoffsets.batches[i].resources.constData(),
-                                       srbD->fsubufsizes.batches[i].resources.constData());
+        if (!dynOfsPairCount) {
+            context->PSSetConstantBuffers1(srbD->fsubufs.batches[i].startBinding,
+                                           srbD->fsubufs.batches[i].resources.count(),
+                                           srbD->fsubufs.batches[i].resources.constData(),
+                                           srbD->fsubufoffsets.batches[i].resources.constData(),
+                                           srbD->fsubufsizes.batches[i].resources.constData());
+        } else {
+            const UINT count = srbD->fsubufs.batches[i].resources.count();
+            const UINT startBinding = srbD->fsubufs.batches[i].startBinding;
+            QVarLengthArray<UINT, 4> offsets = srbD->fsubufoffsets.batches[i].resources;
+            for (UINT b = 0; b < count; ++b) {
+                for (int di = 0; di < dynOfsPairCount; ++di) {
+                    const uint binding = dynOfsPairs[2 * di];
+                    if (binding == startBinding + b) {
+                        const uint offsetInConstants = dynOfsPairs[2 * di + 1];
+                        offsets[b] = offsetInConstants;
+                        break;
+                    }
+                }
+            }
+            context->PSSetConstantBuffers1(startBinding,
+                                           count,
+                                           srbD->fsubufs.batches[i].resources.constData(),
+                                           offsets.constData(),
+                                           srbD->fsubufsizes.batches[i].resources.constData());
+        }
     }
 }
 
@@ -1615,18 +1707,20 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *
         case QD3D11CommandBuffer::Command::BindGraphicsPipeline:
         {
             QD3D11GraphicsPipeline *psD = cmd.args.bindGraphicsPipeline.ps;
-            QD3D11ShaderResourceBindings *srbD = cmd.args.bindGraphicsPipeline.srb;
-            if (!cmd.args.bindGraphicsPipeline.srbOnlyChange) {
-                context->VSSetShader(psD->vs, nullptr, 0);
-                context->PSSetShader(psD->fs, nullptr, 0);
-                context->IASetPrimitiveTopology(psD->d3dTopology);
-                context->IASetInputLayout(psD->inputLayout);
-                context->OMSetDepthStencilState(psD->dsState, stencilRef);
-                context->OMSetBlendState(psD->blendState, blendConstants, 0xffffffff);
-                context->RSSetState(psD->rastState);
-            }
-            setShaderResources(srbD);
+            context->VSSetShader(psD->vs, nullptr, 0);
+            context->PSSetShader(psD->fs, nullptr, 0);
+            context->IASetPrimitiveTopology(psD->d3dTopology);
+            context->IASetInputLayout(psD->inputLayout);
+            context->OMSetDepthStencilState(psD->dsState, stencilRef);
+            context->OMSetBlendState(psD->blendState, blendConstants, 0xffffffff);
+            context->RSSetState(psD->rastState);
         }
+            break;
+        case QD3D11CommandBuffer::Command::BindShaderResources:
+            bindShaderResources(cmd.args.bindShaderResources.srb,
+                                cmd.args.bindShaderResources.dynamicOffsetPairs,
+                                cmd.args.bindShaderResources.dynamicOffsetCount,
+                                cmd.args.bindShaderResources.offsetOnlyChange);
             break;
         case QD3D11CommandBuffer::Command::StencilRef:
             stencilRef = cmd.args.stencilRef.ref;
@@ -1677,7 +1771,7 @@ void QRhiD3D11::executeCommandBuffer(QD3D11CommandBuffer *cbD, QD3D11SwapChain *
                                         cmd.args.resolveSubRes.format);
             break;
         case QD3D11CommandBuffer::Command::GenMip:
-            context->GenerateMips(cmd.args.genMip.tex->srv);
+            context->GenerateMips(cmd.args.genMip.srv);
             break;
         case QD3D11CommandBuffer::Command::DebugMarkBegin:
             annotations->BeginEvent(reinterpret_cast<LPCWSTR>(QString::fromLatin1(cmd.args.debugMark.s).utf16()));

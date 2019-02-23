@@ -167,7 +167,7 @@ void TriangleRenderer::queueResourceUpdates(QRhiResourceUpdateBatch *resourceUpd
 #if 0
     static int messWithBufferTrigger = 0;
     // recreate the underlying VkBuffer every second frame
-    // to exercise setGraphicsPipeline's built-in smartness
+    // to exercise setShaderResources' built-in smartness
     if (!(messWithBufferTrigger & 1)) {
         m_ubuf->release();
         m_ubuf->build();
@@ -203,6 +203,7 @@ void TriangleRenderer::queueDraw(QRhiCommandBuffer *cb, const QSize &outputSizeI
 {
     cb->setGraphicsPipeline(m_ps);
     cb->setViewport(QRhiViewport(0, 0, outputSizeInPixels.width(), outputSizeInPixels.height()));
+    cb->setShaderResources();
     cb->setVertexInput(0, { { m_vbuf, 0 } });
     cb->draw(3);
 }

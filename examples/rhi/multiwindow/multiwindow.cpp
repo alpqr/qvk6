@@ -53,6 +53,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QCheckBox>
 #include <QVBoxLayout>
 
 #include <QCommandLineParser>
@@ -277,7 +278,7 @@ void destroySharedResources()
 class Window : public QWindow
 {
 public:
-    Window(const QString &title, const QColor &bgColor, int axis);
+    Window(const QString &title, const QColor &bgColor, int axis, bool noVSync);
     ~Window();
 
 protected:
@@ -291,7 +292,8 @@ protected:
     bool event(QEvent *) override;
 
     QColor m_bgColor;
-    int m_rotationAxis = 0;
+    int m_rotationAxis;
+    bool m_noVSync;
 
     bool m_running = false;
     bool m_notExposed = false;
@@ -310,9 +312,10 @@ protected:
     int m_opacityDir = -1;
 };
 
-Window::Window(const QString &title, const QColor &bgColor, int axis)
+Window::Window(const QString &title, const QColor &bgColor, int axis, bool noVSync)
     : m_bgColor(bgColor),
-      m_rotationAxis(axis)
+      m_rotationAxis(axis),
+      m_noVSync(noVSync)
 {
     switch (graphicsApi) {
     case OpenGL:
@@ -332,6 +335,12 @@ Window::Window(const QString &title, const QColor &bgColor, int axis)
         break;
     default:
         break;
+    }
+
+    if (graphicsApi == OpenGL) {
+        QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
+        fmt.setSwapInterval(noVSync ? 0 : 1);
+        setFormat(fmt);
     }
 
     resize(800, 600);
@@ -396,6 +405,9 @@ void Window::init()
     m_releasePool << m_ds;
     m_sc->setWindow(this);
     m_sc->setDepthStencil(m_ds);
+    if (m_noVSync)
+        m_sc->setFlags(QRhiSwapChain::NoVSync);
+
     m_rp = m_sc->newCompatibleRenderPassDescriptor();
     m_releasePool << m_rp;
     m_sc->setRenderPassDescriptor(m_rp);
@@ -504,11 +516,11 @@ void Window::render()
     requestUpdate();
 }
 
-void createWindow()
+void createWindow(bool noVSync)
 {
     static QColor colors[] = { Qt::red, Qt::green, Qt::blue, Qt::yellow, Qt::cyan, Qt::gray };
     const int n = d.windows.count();
-    d.windows.append(new Window(QString::asprintf("Window #%d", n), colors[n % 6], n % 3));
+    d.windows.append(new Window(QString::asprintf("Window #%d%s", n, noVSync ? " (no vsync)" : ""), colors[n % 6], n % 3, noVSync));
     d.windows.last()->show();
 }
 
@@ -587,18 +599,25 @@ int main(int argc, char **argv)
 
     QPlainTextEdit *info = new QPlainTextEdit(
                 QLatin1String("This application tests rendering with the same QRhi instance (and so the same Vulkan/Metal/D3D device or OpenGL context) "
-                              "to multiple windows via multiple QRhiSwapChain objects, from the same one thread. Some resources are shared across all windows."
-                              "\n\nNote that the behavior may differ depending on the underlying graphics API implementation and the number of windows.\n"
+                              "to multiple windows via multiple QRhiSwapChain objects, from the same one thread. Some resources are shared across all windows.\n"
+                              "\nNote that the behavior may differ depending on the underlying graphics API implementation and the number of windows. "
+                              "One challenge here is the vsync throttling: with the default vsync/fifo presentation mode the behavior may differ between "
+                              "platforms, drivers, and APIs as we present different swapchains' images in a row on the same thread. As a potential solution, "
+                              "setting NoVSync on the second, third, and later window swapchains is offered as an option.\n"
                               "\n\nUsing API: ") + graphicsApiName());
     info->setReadOnly(true);
     layout->addWidget(info);
     QLabel *label = new QLabel(QLatin1String("Window count: 0"));
     layout->addWidget(label);
+    QCheckBox *vsCb = new QCheckBox(QLatin1String("Set NoVSync on all swapchains except the first"));
+    vsCb->setChecked(false);
+    layout->addWidget(vsCb);
     QPushButton *btn = new QPushButton(QLatin1String("New window"));
-    QObject::connect(btn, &QPushButton::clicked, btn, [label, &winCount] {
+    QObject::connect(btn, &QPushButton::clicked, btn, [label, vsCb, &winCount] {
         winCount += 1;
         label->setText(QString::asprintf("Window count: %d", winCount));
-        createWindow();
+        const bool noVSync = vsCb->isChecked() && winCount > 1;
+        createWindow(noVSync);
     });
     layout->addWidget(btn);
     btn = new QPushButton(QLatin1String("Close window"));

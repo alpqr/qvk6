@@ -52,11 +52,12 @@ QT_BEGIN_NAMESPACE
   buffers feature no special logic, it's all just glTexSubImage2D and
   glBufferSubData (with "dynamic" buffers set to GL_DYNAMIC_DRAW). The
   swapchain and the associated renderbuffer for depth-stencil will be dummies
-  since we have no control over the underlying buffers here. It is up to the
-  application to create the context and window with the appropriate
-  QSurfaceFormat when it comes to depth/stencil and MSAA. While we try to keep
-  this backend clean GLES 2.0, some GL(ES) 3.0 features like multisample
-  renderbuffers and blits are used when available.
+  since we have no control over the underlying buffers here. While we try to
+  keep this backend clean GLES 2.0, some GL(ES) 3.0 features like multisample
+  renderbuffers and blits are used when available. However, other GLES 3.0+
+  features, such as uniform buffers, are highly undesirable and are unlikely to
+  be supported ever, due to their instability on mobile/embedded GLES
+  implementations.
 */
 
 /*!

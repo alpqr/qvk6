@@ -2883,6 +2883,13 @@ QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhiImplementation *rhi)
     refresh is enabled. Thus the rendering thread calling beginFrame() and
     endFrame() will get throttled to vsync. On some backends this can be
     disabled by passing QRhiSwapChain:NoVSync in flags().
+
+    Multisampling (MSAA) is handled transparently to the applications when
+    requested via setSampleCount(). Where applicable, QRhiSwapChain will take
+    care of creating additional color buffers and issuing a multisample resolve
+    command at the end of a frame. For OpenGL, it is necessary to request the
+    appropriate sample count also via QSurfaceFormat, by calling
+    QSurfaceFormat::setDefaultFormat() before initializing the QRhi.
  */
 
 /*!
@@ -2903,7 +2910,8 @@ QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhiImplementation *rhi)
     \value NoVSync Requests disabling waiting for vertical sync, also avoiding
     throttling the rendering thread. The behavior is backend specific and
     applicable only where it is possible to control this. Some may ignore the
-    request altogether. For OpenGL, use QSurfaceFormat::setSwapInterval() instead.
+    request altogether. For OpenGL, try instead setting the swap interval to 0
+    on the QWindow via QSurfaceFormat::setSwapInterval().
  */
 
 /*!

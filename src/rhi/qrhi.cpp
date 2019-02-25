@@ -400,6 +400,9 @@ QT_BEGIN_NAMESPACE
     that are not 4 byte aligned are supported. When not supported, attempting
     to issue a \l{QRhiCommandBuffer::drawIndexed()}{drawIndexed()} with a
     non-aligned effective offset may lead to unspecified behavior.
+
+    \value NPOTTextureRepeat Indicates that the \l{QRhiSampler::Repeat}{Repeat}
+    mode is supported for textures with a non-power-of-two size.
  */
 
 /*!

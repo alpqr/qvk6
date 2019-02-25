@@ -399,6 +399,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         return false; // because UpdateSubresource cannot deal with this
     case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
         return true;
+    case QRhi::NPOTTextureRepeat:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

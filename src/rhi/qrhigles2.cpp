@@ -289,6 +289,9 @@ bool QRhiGles2::create(QRhi::Flags flags)
     caps.msaaRenderBuffer = f->hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample)
             && f->hasOpenGLExtension(QOpenGLExtensions::FramebufferBlit);
 
+    caps.npotTexture = f->hasOpenGLFeature(QOpenGLFunctions::NPOTTextures);
+    caps.npotTextureRepeat = f->hasOpenGLFeature(QOpenGLFunctions::NPOTTextureRepeat);
+
     f->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps.maxTextureSize);
 
     nativeHandlesStruct.context = ctx;
@@ -517,6 +520,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
         return true;
+    case QRhi::NPOTTextureRepeat:
+        return caps.npotTextureRepeat;
     default:
         Q_UNREACHABLE();
         return false;
@@ -2078,11 +2083,8 @@ bool QGles2Texture::prepareBuild(QSize *adjustedSize)
         return false;
 
     QSize size = m_pixelSize.isEmpty() ? QSize(1, 1) : m_pixelSize;
-    if (!rhiD->f->hasOpenGLFeature(QOpenGLFunctions::NPOTTextures)
-            && (!isPowerOfTwo(size.width()) || !isPowerOfTwo(size.height())))
-    {
+    if (!rhiD->caps.npotTexture && (!isPowerOfTwo(size.width()) || !isPowerOfTwo(size.height())))
         size = QSize(qNextPowerOfTwo(size.width()), qNextPowerOfTwo(size.height()));
-    }
 
     const bool isCube = m_flags.testFlag(CubeMap);
     const bool hasMipMaps = m_flags.testFlag(MipMapped);

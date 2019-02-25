@@ -561,6 +561,8 @@ public:
         // Multisample fb and blit are supported (GLES 3.0 or OpenGL 3.x). Not
         // the same as multisample textures!
         bool msaaRenderBuffer = false;
+        bool npotTexture = true;
+        bool npotTextureRepeat = true;
         int maxTextureSize = 2048;
     } caps;
     bool inFrame = false;

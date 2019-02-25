@@ -515,6 +515,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
         return false;
+    case QRhi::NPOTTextureRepeat:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

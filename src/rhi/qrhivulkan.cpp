@@ -3039,6 +3039,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
         return true;
+    case QRhi::NPOTTextureRepeat:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;

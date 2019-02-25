@@ -161,6 +161,11 @@ void Window::customInit()
     qDebug("isFeatureSupported(Instancing): %d", m_r->isFeatureSupported(QRhi::Instancing));
     qDebug("isFeatureSupported(CustomInstanceStepRate): %d", m_r->isFeatureSupported(QRhi::CustomInstanceStepRate));
     qDebug("isFeatureSupported(PrimitiveRestart): %d", m_r->isFeatureSupported(QRhi::PrimitiveRestart));
+    qDebug("isFeatureSupported(GeometryShaders): %d", m_r->isFeatureSupported(QRhi::GeometryShaders));
+    qDebug("isFeatureSupported(TessellationShaders): %d", m_r->isFeatureSupported(QRhi::TessellationShaders));
+    qDebug("isFeatureSupported(NonDynamicUniformBuffers): %d", m_r->isFeatureSupported(QRhi::NonDynamicUniformBuffers));
+    qDebug("isFeatureSupported(NonFourAlignedEffectiveIndexBufferOffset): %d", m_r->isFeatureSupported(QRhi::NonFourAlignedEffectiveIndexBufferOffset));
+    qDebug("isFeatureSupported(NPOTTextureRepeat): %d", m_r->isFeatureSupported(QRhi::NPOTTextureRepeat));
     qDebug("Min 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMin));
     qDebug("Max 2D texture width/height: %d", m_r->resourceSizeLimit(QRhi::TextureSizeMax));
 }

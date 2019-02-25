@@ -1247,7 +1247,8 @@ public:
         GeometryShaders,
         TessellationShaders,
         NonDynamicUniformBuffers,
-        NonFourAlignedEffectiveIndexBufferOffset
+        NonFourAlignedEffectiveIndexBufferOffset,
+        NPOTTextureRepeat
     };
 
     enum BeginFrameFlag {

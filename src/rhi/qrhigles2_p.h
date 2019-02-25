@@ -563,6 +563,7 @@ public:
         bool msaaRenderBuffer = false;
         bool npotTexture = true;
         bool npotTextureRepeat = true;
+        bool fixedIndexPrimitiveRestart = false;
         int maxTextureSize = 2048;
     } caps;
     bool inFrame = false;

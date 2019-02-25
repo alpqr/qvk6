@@ -157,6 +157,10 @@ QT_BEGIN_NAMESPACE
     \brief Holds the OpenGL texture object that is backing a QRhiTexture instance.
  */
 
+#ifndef GL_PRIMITIVE_RESTART_FIXED_INDEX
+#define GL_PRIMITIVE_RESTART_FIXED_INDEX  0x8D69
+#endif
+
 static QSurfaceFormat qrhigles2_effectiveFormat()
 {
     QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
@@ -291,6 +295,15 @@ bool QRhiGles2::create(QRhi::Flags flags)
 
     caps.npotTexture = f->hasOpenGLFeature(QOpenGLFunctions::NPOTTextures);
     caps.npotTextureRepeat = f->hasOpenGLFeature(QOpenGLFunctions::NPOTTextureRepeat);
+
+    const QSurfaceFormat actualFormat = ctx->format();
+    if (ctx->isOpenGLES())
+        caps.fixedIndexPrimitiveRestart = actualFormat.version() >= qMakePair(3, 0);
+    else
+        caps.fixedIndexPrimitiveRestart = actualFormat.version() >= qMakePair(4, 3);
+
+    if (caps.fixedIndexPrimitiveRestart)
+        f->glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
 
     f->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps.maxTextureSize);
 
@@ -511,7 +524,7 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::CustomInstanceStepRate:
         return false;
     case QRhi::PrimitiveRestart:
-        return false; // say no to madness
+        return caps.fixedIndexPrimitiveRestart;
     case QRhi::GeometryShaders:
         return false;
     case QRhi::TessellationShaders:

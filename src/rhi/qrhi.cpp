@@ -372,10 +372,11 @@ QT_BEGIN_NAMESPACE
     \value PrimitiveRestart Indicates that restarting the assembly of
     primitives when encountering an index value of 0xFFFF
     (\l{QRhiCommandBuffer::IndexUInt16}{IndexUInt16}) or 0xFFFFFFFF
-    (\l{QRhiCommandBuffer::IndexUInt32}{IndexUInt32}) is always enabled, for
-    certain primitive topologies at least. Due to the wildly varying primitive
-    restart behavior and support in the underlying graphics APIs, primitive
-    restart cannot be controlled with QRhi. Instead, applications must assume
+    (\l{QRhiCommandBuffer::IndexUInt32}{IndexUInt32}) is enabled, for certain
+    primitive topologies at least. QRhi will try to enable this with all
+    backends, but in some cases it will not be supported. Dynamically
+    controlling primitive restart is not possible since with some APIs
+    primitive restart with a fixed index is always on. Applications must assume
     that whenever this feature is reported as supported, the above mentioned
     index values \c may be treated specially, depending on the topology. The
     only two topologies where primitive restart is guaranteed to behave

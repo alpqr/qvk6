@@ -3014,6 +3014,13 @@ QRhiSwapChain::QRhiSwapChain(QRhiImplementation *rhi)
  */
 
 /*!
+    \typedef QRhiCommandBuffer::DynamicOffset
+
+    Synonym for QPair<int, quint32>. The first entry is the binding, the second
+    is the offset in the buffer.
+*/
+
+/*!
     \typedef QRhiCommandBuffer::VertexInput
 
     Synonym for QPair<QRhiBuffer *, quint32>. The second entry is an offset in

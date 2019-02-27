@@ -3614,7 +3614,8 @@ void QRhiResourceUpdateBatch::merge(QRhiResourceUpdateBatch *other)
  */
 void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
 {
-    d->dynamicBufferUpdates.append({ buf, offset, size, data });
+    if (size > 0)
+        d->dynamicBufferUpdates.append({ buf, offset, size, data });
 }
 
 /*!
@@ -3628,7 +3629,8 @@ void QRhiResourceUpdateBatch::updateDynamicBuffer(QRhiBuffer *buf, int offset, i
  */
 void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, int offset, int size, const void *data)
 {
-    d->staticBufferUploads.append({ buf, offset, size, data });
+    if (size > 0)
+        d->staticBufferUploads.append({ buf, offset, size, data });
 }
 
 /*!
@@ -3637,7 +3639,8 @@ void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, int offset, in
  */
 void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *data)
 {
-    d->staticBufferUploads.append({ buf, 0, 0, data });
+    if (buf->size() > 0)
+        d->staticBufferUploads.append({ buf, 0, 0, data });
 }
 
 /*!

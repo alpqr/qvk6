@@ -505,6 +505,23 @@ bool QRhiGles2::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
     if (isCompressedFormat(format))
         return supportedCompressedFormats.contains(toGlCompressedTextureFormat(format, flags));
 
+    switch (format) {
+    case QRhiTexture::D16:
+        Q_FALLTHROUGH();
+    case QRhiTexture::D32:
+        return false;
+
+    case QRhiTexture::BGRA8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::R8:
+        Q_FALLTHROUGH();
+    case QRhiTexture::R16:
+        return false; // ###
+
+    default:
+        break;
+    }
+
     return true;
 }
 
@@ -2103,10 +2120,12 @@ bool QGles2Texture::prepareBuild(QSize *adjustedSize)
     const bool hasMipMaps = m_flags.testFlag(MipMapped);
     const bool isCompressed = rhiD->isCompressedFormat(m_format);
 
-    // ### more formats
     target = isCube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
+
+    // ### more formats
     glintformat = GL_RGBA;
     glformat = GL_RGBA;
+
     gltype = GL_UNSIGNED_BYTE;
     mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
 

@@ -504,9 +504,9 @@ void QRhiD3D11::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
             if (bufD->m_type == QRhiBuffer::Dynamic)
                 executeBufferHostWritesForCurrentFrame(bufD);
 
-            if (bufD->generation != bd.ubuf.generation || bufD->id != bd.ubuf.id) {
+            if (bufD->generation != bd.ubuf.generation || bufD->m_id != bd.ubuf.id) {
                 srbUpdate = true;
-                bd.ubuf.id = bufD->id;
+                bd.ubuf.id = bufD->m_id;
                 bd.ubuf.generation = bufD->generation;
             }
 
@@ -519,14 +519,14 @@ void QRhiD3D11::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
             QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b->u.stex.tex);
             QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b->u.stex.sampler);
             if (texD->generation != bd.stex.texGeneration
-                    || texD->id != bd.stex.texId
+                    || texD->m_id != bd.stex.texId
                     || samplerD->generation != bd.stex.samplerGeneration
-                    || samplerD->id != bd.stex.samplerId)
+                    || samplerD->m_id != bd.stex.samplerId)
             {
                 srbUpdate = true;
-                bd.stex.texId = texD->id;
+                bd.stex.texId = texD->m_id;
                 bd.stex.texGeneration = texD->generation;
-                bd.stex.samplerId = samplerD->id;
+                bd.stex.samplerId = samplerD->m_id;
                 bd.stex.samplerGeneration = samplerD->generation;
             }
         }
@@ -1461,7 +1461,7 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
         {
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b->u.ubuf.buf);
             Q_ASSERT(aligned(b->u.ubuf.offset, 256) == b->u.ubuf.offset);
-            bd.ubuf.id = bufD->id;
+            bd.ubuf.id = bufD->m_id;
             bd.ubuf.generation = bufD->generation;
             // dynamic ubuf offsets are not considered here, those are baked in
             // at a later stage, which is good as vsubufoffsets and friends are
@@ -1489,9 +1489,9 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
             // with registers sN and tN by SPIRV-Cross.
             QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b->u.stex.tex);
             QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b->u.stex.sampler);
-            bd.stex.texId = texD->id;
+            bd.stex.texId = texD->m_id;
             bd.stex.texGeneration = texD->generation;
-            bd.stex.samplerId = samplerD->id;
+            bd.stex.samplerId = samplerD->m_id;
             bd.stex.samplerGeneration = samplerD->generation;
             if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
                 srbD->vssamplers.feed(b->binding, samplerD->samplerState);
@@ -2393,7 +2393,7 @@ void QD3D11TextureRenderTarget::release()
 
 QRhiRenderPassDescriptor *QD3D11TextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
-    return new QD3D11RenderPassDescriptor(rhi);
+    return new QD3D11RenderPassDescriptor(m_rhi);
 }
 
 bool QD3D11TextureRenderTarget::build()
@@ -3061,7 +3061,7 @@ QSize QD3D11SwapChain::surfacePixelSize()
 
 QRhiRenderPassDescriptor *QD3D11SwapChain::newCompatibleRenderPassDescriptor()
 {
-    return new QD3D11RenderPassDescriptor(rhi);
+    return new QD3D11RenderPassDescriptor(m_rhi);
 }
 
 bool QD3D11SwapChain::newColorBuffer(const QSize &size, DXGI_FORMAT format, DXGI_SAMPLE_DESC sampleDesc,

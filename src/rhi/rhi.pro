@@ -58,6 +58,12 @@ mac {
 
 include($$PWD/../3rdparty/VulkanMemoryAllocator.pri)
 
+clang {
+    # this cannot be fixed, other compilers require that capture...
+    QMAKE_CFLAGS_WARN_ON += -Wno-unused-lambda-capture
+    QMAKE_CXXFLAGS_WARN_ON = $$QMAKE_CFLAGS_WARN_ON
+}
+
 include($$PWD/doc/doc.pri)
 
 load(qt_module)

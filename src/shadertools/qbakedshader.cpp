@@ -225,20 +225,15 @@ QBakedShader::QBakedShader()
  */
 void QBakedShader::detach()
 {
-    if (d->ref.load() != 1) {
-        QBakedShaderPrivate *newd = new QBakedShaderPrivate(d);
-        if (!d->ref.deref())
-            delete d;
-        d = newd;
-    }
+    qAtomicDetach(d);
 }
 
 /*!
     \internal
  */
 QBakedShader::QBakedShader(const QBakedShader &other)
+    : d(other.d)
 {
-    d = other.d;
     d->ref.ref();
 }
 
@@ -247,12 +242,7 @@ QBakedShader::QBakedShader(const QBakedShader &other)
  */
 QBakedShader &QBakedShader::operator=(const QBakedShader &other)
 {
-    if (d != other.d) {
-        other.d->ref.ref();
-        if (!d->ref.deref())
-            delete d;
-        d = other.d;
-    }
+    qAtomicAssign(d, other.d);
     return *this;
 }
 

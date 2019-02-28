@@ -2309,20 +2309,15 @@ QRhiShaderResourceBinding::QRhiShaderResourceBinding()
  */
 void QRhiShaderResourceBinding::detach()
 {
-    if (d->ref.load() != 1) {
-        QRhiShaderResourceBindingPrivate *newd = new QRhiShaderResourceBindingPrivate(d);
-        if (!d->ref.deref())
-            delete d;
-        d = newd;
-    }
+    qAtomicDetach(d);
 }
 
 /*!
     \internal
  */
 QRhiShaderResourceBinding::QRhiShaderResourceBinding(const QRhiShaderResourceBinding &other)
+    : d(other.d)
 {
-    d = other.d;
     d->ref.ref();
 }
 
@@ -2331,12 +2326,7 @@ QRhiShaderResourceBinding::QRhiShaderResourceBinding(const QRhiShaderResourceBin
  */
 QRhiShaderResourceBinding &QRhiShaderResourceBinding::operator=(const QRhiShaderResourceBinding &other)
 {
-    if (d != other.d) {
-        other.d->ref.ref();
-        if (!d->ref.deref())
-            delete d;
-        d = other.d;
-    }
+    qAtomicAssign(d, other.d);
     return *this;
 }
 

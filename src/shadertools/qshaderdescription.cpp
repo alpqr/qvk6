@@ -245,20 +245,15 @@ QShaderDescription::QShaderDescription()
  */
 void QShaderDescription::detach()
 {
-    if (d->ref.load() != 1) {
-        QShaderDescriptionPrivate *newd = new QShaderDescriptionPrivate(d);
-        if (!d->ref.deref())
-            delete d;
-        d = newd;
-    }
+    qAtomicDetach(d);
 }
 
 /*!
     \internal
  */
 QShaderDescription::QShaderDescription(const QShaderDescription &other)
+    : d(other.d)
 {
-    d = other.d;
     d->ref.ref();
 }
 
@@ -267,12 +262,7 @@ QShaderDescription::QShaderDescription(const QShaderDescription &other)
  */
 QShaderDescription &QShaderDescription::operator=(const QShaderDescription &other)
 {
-    if (d != other.d) {
-        other.d->ref.ref();
-        if (!d->ref.deref())
-            delete d;
-        d = other.d;
-    }
+    qAtomicAssign(d, other.d);
     return *this;
 }
 

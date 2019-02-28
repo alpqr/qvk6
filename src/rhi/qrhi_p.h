@@ -46,12 +46,13 @@
 #include "qrhiprofiler_p.h"
 #include <QBitArray>
 #include <QAtomicInt>
+#include <QAtomicInteger>
 
 QT_BEGIN_NAMESPACE
 
 #define QRHI_RES(t, x) static_cast<t *>(x)
-#define QRHI_RES_RHI(t) t *rhiD = static_cast<t *>(rhi)
-#define QRHI_PROF QRhiProfilerPrivate *rhiP = rhi->profilerPrivateOrNull()
+#define QRHI_RES_RHI(t) t *rhiD = static_cast<t *>(m_rhi)
+#define QRHI_PROF QRhiProfilerPrivate *rhiP = m_rhi->profilerPrivateOrNull()
 #define QRHI_PROF_F(f) for (bool qrhip_enabled = rhiP != nullptr; qrhip_enabled; qrhip_enabled = false) rhiP->f
 
 class QRhiReferenceRenderTarget : public QRhiRenderTarget
@@ -162,7 +163,7 @@ public:
     // only really care about resources that own native graphics resources underneath
     void registerResource(QRhiResource *res)
     {
-        res->orphanedWithRsh = nullptr;
+        res->m_orphanedWithRsh = nullptr;
         resources.insert(res);
     }
 
@@ -178,9 +179,9 @@ public:
 
     static bool orphanCheck(QRhiResource *res)
     {
-        if (res->orphanedWithRsh) {
+        if (res->m_orphanedWithRsh) {
             qWarning("Attempted to perform something on an orphaned QRhiResource %p (%s). This is invalid.",
-                     res, res->objectName.constData());
+                     res, res->m_objectName.constData());
             return false;
         }
         return true;
@@ -385,6 +386,20 @@ struct QRhiBatchedBindings
 private:
     Batch curBatch;
     int curBinding = -1;
+};
+
+class QRhiGlobalObjectIdGenerator
+{
+public:
+#ifdef Q_ATOMIC_INT64_IS_SUPPORTED
+    using Type = quint64;
+#else
+    using Type = quint32;
+#endif
+    static Type newId();
+
+private:
+    QAtomicInteger<Type> counter;
 };
 
 QT_END_NAMESPACE

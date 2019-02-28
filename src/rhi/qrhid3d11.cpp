@@ -504,8 +504,9 @@ void QRhiD3D11::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
             if (bufD->m_type == QRhiBuffer::Dynamic)
                 executeBufferHostWritesForCurrentFrame(bufD);
 
-            if (bufD->generation != bd.ubuf.generation) {
+            if (bufD->generation != bd.ubuf.generation || bufD->id != bd.ubuf.id) {
                 srbUpdate = true;
+                bd.ubuf.id = bufD->id;
                 bd.ubuf.generation = bufD->generation;
             }
 
@@ -518,10 +519,14 @@ void QRhiD3D11::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
             QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b->u.stex.tex);
             QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b->u.stex.sampler);
             if (texD->generation != bd.stex.texGeneration
-                    || samplerD->generation != bd.stex.samplerGeneration)
+                    || texD->id != bd.stex.texId
+                    || samplerD->generation != bd.stex.samplerGeneration
+                    || samplerD->id != bd.stex.samplerId)
             {
                 srbUpdate = true;
+                bd.stex.texId = texD->id;
                 bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerId = samplerD->id;
                 bd.stex.samplerGeneration = samplerD->generation;
             }
         }
@@ -1456,6 +1461,7 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
         {
             QD3D11Buffer *bufD = QRHI_RES(QD3D11Buffer, b->u.ubuf.buf);
             Q_ASSERT(aligned(b->u.ubuf.offset, 256) == b->u.ubuf.offset);
+            bd.ubuf.id = bufD->id;
             bd.ubuf.generation = bufD->generation;
             // dynamic ubuf offsets are not considered here, those are baked in
             // at a later stage, which is good as vsubufoffsets and friends are
@@ -1483,7 +1489,9 @@ void QRhiD3D11::updateShaderResourceBindings(QD3D11ShaderResourceBindings *srbD)
             // with registers sN and tN by SPIRV-Cross.
             QD3D11Texture *texD = QRHI_RES(QD3D11Texture, b->u.stex.tex);
             QD3D11Sampler *samplerD = QRHI_RES(QD3D11Sampler, b->u.stex.sampler);
+            bd.stex.texId = texD->id;
             bd.stex.texGeneration = texD->generation;
+            bd.stex.samplerId = samplerD->id;
             bd.stex.samplerGeneration = samplerD->generation;
             if (b->stage.testFlag(QRhiShaderResourceBinding::VertexStage)) {
                 srbD->vssamplers.feed(b->binding, samplerD->samplerState);
@@ -1810,7 +1818,7 @@ void QD3D11Buffer::release()
     buffer->Release();
     buffer = nullptr;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiD3D11);
         QRHI_PROF;
         QRHI_PROF_F(releaseBuffer(this));
@@ -1860,8 +1868,8 @@ bool QD3D11Buffer::build()
         hasPendingDynamicUpdates = false;
     }
 
-    if (!objectName.isEmpty())
-        buffer->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
+    if (!m_objectName.isEmpty())
+        buffer->SetPrivateData(WKPDID_D3DDebugObjectName, m_objectName.size(), m_objectName.constData());
 
     QRHI_PROF;
     QRHI_PROF_F(newBuffer(this, roundedSize, 1, m_type == Dynamic ? 1 : 0));
@@ -1900,7 +1908,7 @@ void QD3D11RenderBuffer::release()
     tex->Release();
     tex = nullptr;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiD3D11);
         QRHI_PROF;
         QRHI_PROF_F(releaseRenderBuffer(this));
@@ -1972,8 +1980,8 @@ bool QD3D11RenderBuffer::build()
         return false;
     }
 
-    if (!objectName.isEmpty())
-        tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
+    if (!m_objectName.isEmpty())
+        tex->SetPrivateData(WKPDID_D3DDebugObjectName, m_objectName.size(), m_objectName.constData());
 
     QRHI_PROF;
     QRHI_PROF_F(newRenderBuffer(this, false, false, sampleDesc.Count));
@@ -2013,7 +2021,7 @@ void QD3D11Texture::release()
 
     tex = nullptr;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiD3D11);
         QRHI_PROF;
         QRHI_PROF_F(releaseTexture(this));
@@ -2166,8 +2174,8 @@ bool QD3D11Texture::build()
     if (!finishBuild())
         return false;
 
-    if (!objectName.isEmpty())
-        tex->SetPrivateData(WKPDID_D3DDebugObjectName, objectName.size(), objectName.constData());
+    if (!m_objectName.isEmpty())
+        tex->SetPrivateData(WKPDID_D3DDebugObjectName, m_objectName.size(), m_objectName.constData());
 
     QRHI_PROF;
     QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, sampleDesc.Count));
@@ -2224,7 +2232,7 @@ void QD3D11Sampler::release()
     samplerState->Release();
     samplerState = nullptr;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiD3D11);
         rhiD->unregisterResource(this);
     }

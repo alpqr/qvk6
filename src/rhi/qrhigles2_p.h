@@ -62,15 +62,15 @@ struct QGles2Buffer : public QRhiBuffer
     GLuint buffer = 0;
     GLenum target;
     QByteArray ubuf;
-    struct ChangeRange {
-        ChangeRange(int b = -1, int e = -1)
-            : changeBegin(b), changeEnd(e)
-        { }
-        bool isNull() const { return changeBegin == -1 && changeEnd == -1; }
-        int changeBegin;
-        int changeEnd;
-    };
-    ChangeRange ubufChangeRange;
+//    struct ChangeRange {
+//        ChangeRange(int b = -1, int e = -1)
+//            : changeBegin(b), changeEnd(e)
+//        { }
+//        bool isNull() const { return changeBegin == -1 && changeEnd == -1; }
+//        int changeBegin;
+//        int changeEnd;
+//    };
+//    ChangeRange ubufChangeRange;
     friend class QRhiGles2;
 };
 
@@ -183,7 +183,9 @@ struct QGles2ShaderResourceBindings : public QRhiShaderResourceBindings
     bool build() override;
 
     struct BoundSampledTextureData {
+        quint64 texId;
         uint texGeneration;
+        quint64 samplerId;
         uint samplerGeneration;
     };
     struct BoundResourceData {
@@ -548,8 +550,7 @@ public:
     void executeCommandBuffer(QRhiCommandBuffer *cb);
     void executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps);
     void setChangedUniforms(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb,
-                            const uint *dynOfsPairs, int dynOfsCount,
-                            bool changedOnly);
+                            const uint *dynOfsPairs, int dynOfsCount);
 
     QOpenGLContext *ctx = nullptr;
     bool importedContext = false;

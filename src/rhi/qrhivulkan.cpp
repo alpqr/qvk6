@@ -2106,6 +2106,7 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
                                                                       : VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
                 QRhiBuffer *buf = b->u.ubuf.buf;
                 QVkBuffer *bufD = QRHI_RES(QVkBuffer, buf);
+                bd.ubuf.id = bufD->m_id;
                 bd.ubuf.generation = bufD->generation;
                 VkDescriptorBufferInfo bufInfo;
                 bufInfo.buffer = bufD->m_type == QRhiBuffer::Dynamic ? bufD->buffers[frameSlot] : bufD->buffers[0];
@@ -2122,7 +2123,9 @@ void QRhiVulkan::updateShaderResourceBindings(QRhiShaderResourceBindings *srb, i
                 QVkTexture *texD = QRHI_RES(QVkTexture, b->u.stex.tex);
                 QVkSampler *samplerD = QRHI_RES(QVkSampler, b->u.stex.sampler);
                 writeInfo.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                bd.stex.texId = texD->m_id;
                 bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerId = samplerD->m_id;
                 bd.stex.samplerGeneration = samplerD->generation;
                 VkDescriptorImageInfo imageInfo;
                 imageInfo.sampler = samplerD->sampler;
@@ -3176,8 +3179,13 @@ void QRhiVulkan::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBin
             if (bufD->m_type == QRhiBuffer::Dynamic)
                 executeBufferHostWritesForCurrentFrame(bufD);
 
-            if (bufD->generation != bd.ubuf.generation) {
+            // Check both the "local" id (the generation counter) and the
+            // global id. The latter is relevant when a newly allocated
+            // QRhiResource ends up with the same pointer as a previous one.
+            // (and that previous one could have been in an srb...)
+            if (bufD->generation != bd.ubuf.generation || bufD->m_id != bd.ubuf.id) {
                 rewriteDescSet = true;
+                bd.ubuf.id = bufD->m_id;
                 bd.ubuf.generation = bufD->generation;
             }
         }
@@ -3190,10 +3198,14 @@ void QRhiVulkan::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBin
             samplerD->lastActiveFrameSlot = currentFrameSlot;
 
             if (texD->generation != bd.stex.texGeneration
-                    || samplerD->generation != bd.stex.samplerGeneration)
+                    || texD->m_id != bd.stex.texId
+                    || samplerD->generation != bd.stex.samplerGeneration
+                    || samplerD->m_id != bd.stex.samplerId)
             {
                 rewriteDescSet = true;
+                bd.stex.texId = texD->m_id;
                 bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerId = samplerD->m_id;
                 bd.stex.samplerGeneration = samplerD->generation;
             }
         }
@@ -3800,7 +3812,7 @@ void QVkBuffer::release()
         pendingDynamicUpdates[i].clear();
     }
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         // the rhi is still around, good
         QRHI_RES_RHI(QRhiVulkan);
         rhiD->releaseQueue.append(e);
@@ -3811,7 +3823,7 @@ void QVkBuffer::release()
         rhiD->unregisterResource(this);
     } else {
         // associated rhi is already gone, queue the deferred release to the rsh instead
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -3856,7 +3868,7 @@ bool QVkBuffer::build()
             if (m_type == Dynamic)
                 pendingDynamicUpdates[i].reserve(16);
 
-            rhiD->setObjectName(reinterpret_cast<uint64_t>(buffers[i]), VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT, objectName,
+            rhiD->setObjectName(reinterpret_cast<uint64_t>(buffers[i]), VK_DEBUG_REPORT_OBJECT_TYPE_BUFFER_EXT, m_objectName,
                                 m_type == Dynamic ? i : -1);
         }
     }
@@ -3913,7 +3925,7 @@ void QVkRenderBuffer::release()
         backingTexture->release();
     }
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiVulkan);
         rhiD->releaseQueue.append(e);
 
@@ -3922,7 +3934,7 @@ void QVkRenderBuffer::release()
 
         rhiD->unregisterResource(this);
     } else {
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -3953,7 +3965,7 @@ bool QVkRenderBuffer::build()
             backingTexture->setPixelSize(m_pixelSize);
             backingTexture->setSampleCount(m_sampleCount);
         }
-        backingTexture->setName(objectName);
+        backingTexture->setName(m_objectName);
         if (!backingTexture->build())
             return false;
         vkformat = backingTexture->vkformat;
@@ -3974,7 +3986,7 @@ bool QVkRenderBuffer::build()
         {
             return false;
         }
-        rhiD->setObjectName(reinterpret_cast<uint64_t>(image), VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, objectName);
+        rhiD->setObjectName(reinterpret_cast<uint64_t>(image), VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, m_objectName);
         QRHI_PROF_F(newRenderBuffer(this, true, false, samples));
         break;
     default:
@@ -4034,7 +4046,7 @@ void QVkTexture::release()
     imageAlloc = nullptr;
     nativeHandlesStruct.image = VK_NULL_HANDLE;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         // the rhi is still around, good
         QRHI_RES_RHI(QRhiVulkan);
         rhiD->releaseQueue.append(e);
@@ -4045,7 +4057,7 @@ void QVkTexture::release()
         rhiD->unregisterResource(this);
     } else {
         // associated rhi is already gone, queue the deferred release to the rsh instead
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -4178,7 +4190,7 @@ bool QVkTexture::build()
     if (!finishBuild())
         return false;
 
-    rhiD->setObjectName(reinterpret_cast<uint64_t>(image), VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, objectName);
+    rhiD->setObjectName(reinterpret_cast<uint64_t>(image), VK_DEBUG_REPORT_OBJECT_TYPE_IMAGE_EXT, m_objectName);
 
     QRHI_PROF;
     QRHI_PROF_F(newTexture(this, true, mipLevelCount, isCube ? 6 : 1, samples));
@@ -4242,12 +4254,12 @@ void QVkSampler::release()
     e.sampler.sampler = sampler;
     sampler = VK_NULL_HANDLE;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiVulkan);
         rhiD->releaseQueue.append(e);
         rhiD->unregisterResource(this);
     } else {
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -4379,7 +4391,7 @@ QRhiRenderPassDescriptor *QVkTextureRenderTarget::newCompatibleRenderPassDescrip
     // not yet built so cannot rely on data computed in build()
 
     QRHI_RES_RHI(QRhiVulkan);
-    QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
+    QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(m_rhi);
     if (!rhiD->createOffscreenRenderPass(&rp->rp,
                                          m_desc.colorAttachments(),
                                          m_flags.testFlag(QRhiTextureRenderTarget::PreserveColorContents),
@@ -4932,7 +4944,7 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
     if (m_target) {
         QVulkanWindow *vkw = qobject_cast<QVulkanWindow *>(m_target);
         if (vkw) {
-            QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
+            QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(m_rhi);
             rp->rp = vkw->defaultRenderPass();
             rp->ownsRp = false;
             return rp;
@@ -4944,7 +4956,7 @@ QRhiRenderPassDescriptor *QVkSwapChain::newCompatibleRenderPassDescriptor()
         return nullptr;
 
     QRHI_RES_RHI(QRhiVulkan);
-    QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(rhi);
+    QVkRenderPassDescriptor *rp = new QVkRenderPassDescriptor(m_rhi);
     if (!rhiD->createDefaultRenderPass(&rp->rp,
                                        m_depthStencil != nullptr,
                                        samples,

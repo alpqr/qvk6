@@ -572,13 +572,16 @@ public:
 
     virtual bool isShareable() const;
 
+    quint64 globalResourceId() const;
+
 protected:
-    QRhiResource(QRhiImplementation *rhi_);
+    QRhiResource(QRhiImplementation *rhi);
     Q_DISABLE_COPY(QRhiResource)
     friend class QRhiImplementation;
-    QRhiImplementation *rhi = nullptr;
-    QByteArray objectName;
-    QRhiResourceSharingHostPrivate *orphanedWithRsh = nullptr;
+    QRhiImplementation *m_rhi = nullptr;
+    quint64 m_id;
+    QByteArray m_objectName;
+    QRhiResourceSharingHostPrivate *m_orphanedWithRsh = nullptr;
     Q_DECL_UNUSED_MEMBER quint64 m_reserved;
 };
 

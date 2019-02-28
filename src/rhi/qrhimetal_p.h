@@ -65,6 +65,7 @@ struct QMetalBuffer : public QRhiBuffer
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;
+    friend struct QMetalShaderResourceBindings;
 };
 
 struct QMetalRenderBufferData;
@@ -108,6 +109,7 @@ struct QMetalTexture : public QRhiTexture
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;
+    friend struct QMetalShaderResourceBindings;
 };
 
 struct QMetalSamplerData;
@@ -125,6 +127,7 @@ struct QMetalSampler : public QRhiSampler
     uint generation = 0;
     int lastActiveFrameSlot = -1;
     friend class QRhiMetal;
+    friend struct QMetalShaderResourceBindings;
 };
 
 struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
@@ -184,10 +187,13 @@ struct QMetalShaderResourceBindings : public QRhiShaderResourceBindings
     int maxBinding = -1;
 
     struct BoundUniformBufferData {
+        quint64 id;
         uint generation;
     };
     struct BoundSampledTextureData {
+        quint64 texId;
         uint texGeneration;
+        quint64 samplerId;
         uint samplerGeneration;
     };
     struct BoundResourceData {

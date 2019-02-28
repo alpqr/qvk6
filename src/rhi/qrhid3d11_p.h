@@ -189,10 +189,13 @@ struct QD3D11ShaderResourceBindings : public QRhiShaderResourceBindings
     // Keep track of the generation number of each referenced QRhi* to be able
     // to detect that the batched bindings are out of date.
     struct BoundUniformBufferData {
+        quint64 id;
         uint generation;
     };
     struct BoundSampledTextureData {
+        quint64 texId;
         uint texGeneration;
+        quint64 samplerId;
         uint samplerGeneration;
     };
     struct BoundResourceData {

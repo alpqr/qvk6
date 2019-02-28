@@ -748,8 +748,9 @@ void QRhiMetal::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
                 hasSlottedResourceInSrb = true;
             if (b->u.ubuf.hasDynamicOffset)
                 hasDynamicOffsetInSrb = true;
-            if (bufD->generation != bd.ubuf.generation) {
+            if (bufD->generation != bd.ubuf.generation || bufD->m_id != bd.ubuf.id) {
                 resNeedsRebind = true;
+                bd.ubuf.id = bufD->m_id;
                 bd.ubuf.generation = bufD->generation;
             }
             bufD->lastActiveFrameSlot = currentFrameSlot;
@@ -760,10 +761,14 @@ void QRhiMetal::setShaderResources(QRhiCommandBuffer *cb, QRhiShaderResourceBind
             QMetalTexture *texD = QRHI_RES(QMetalTexture, b->u.stex.tex);
             QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b->u.stex.sampler);
             if (texD->generation != bd.stex.texGeneration
-                    || samplerD->generation != bd.stex.samplerGeneration)
+                    || texD->m_id != bd.stex.texId
+                    || samplerD->generation != bd.stex.samplerGeneration
+                    || samplerD->m_id != bd.stex.samplerId)
             {
                 resNeedsRebind = true;
+                bd.stex.texId = texD->m_id;
                 bd.stex.texGeneration = texD->generation;
+                bd.stex.samplerId = samplerD->m_id;
                 bd.stex.samplerGeneration = samplerD->generation;
             }
             texD->lastActiveFrameSlot = currentFrameSlot;
@@ -1718,7 +1723,7 @@ void QMetalBuffer::release()
         d->pendingUpdates[i].clear();
     }
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiMetal);
         rhiD->d->releaseQueue.append(e);
         QRHI_PROF;
@@ -1726,7 +1731,7 @@ void QMetalBuffer::release()
         rhiD->unregisterResource(this);
     } else {
         // associated rhi is already gone, queue the deferred release to the rsh instead
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -1757,11 +1762,11 @@ bool QMetalBuffer::build()
         if (i == 0 || m_type != Immutable) {
             d->buf[i] = [rhiD->d->dev newBufferWithLength: roundedSize options: opts];
             d->pendingUpdates[i].reserve(16);
-            if (!objectName.isEmpty()) {
+            if (!m_objectName.isEmpty()) {
                 if (m_type == Immutable) {
-                    d->buf[i].label = [NSString stringWithUTF8String: objectName.constData()];
+                    d->buf[i].label = [NSString stringWithUTF8String: m_objectName.constData()];
                 } else {
-                    const QByteArray name = objectName + '/' + QByteArray::number(i);
+                    const QByteArray name = m_objectName + '/' + QByteArray::number(i);
                     d->buf[i].label = [NSString stringWithUTF8String: name.constData()];
                 }
             }
@@ -1806,14 +1811,14 @@ void QMetalRenderBuffer::release()
     e.renderbuffer.texture = d->tex;
     d->tex = nil;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiMetal);
         rhiD->d->releaseQueue.append(e);
         QRHI_PROF;
         QRHI_PROF_F(releaseRenderBuffer(this));
         rhiD->unregisterResource(this);
     } else {
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -1866,8 +1871,8 @@ bool QMetalRenderBuffer::build()
     d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
     [desc release];
 
-    if (!objectName.isEmpty())
-        d->tex.label = [NSString stringWithUTF8String: objectName.constData()];
+    if (!m_objectName.isEmpty())
+        d->tex.label = [NSString stringWithUTF8String: m_objectName.constData()];
 
     QRHI_PROF;
     QRHI_PROF_F(newRenderBuffer(this, transientBacking, false, samples));
@@ -1920,14 +1925,14 @@ void QMetalTexture::release()
         d->stagingBuf[i] = nil;
     }
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiMetal);
         rhiD->d->releaseQueue.append(e);
         QRHI_PROF;
         QRHI_PROF_F(releaseTexture(this));
         rhiD->unregisterResource(this);
     } else {
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -2110,8 +2115,8 @@ bool QMetalTexture::build()
     d->tex = [rhiD->d->dev newTextureWithDescriptor: desc];
     [desc release];
 
-    if (!objectName.isEmpty())
-        d->tex.label = [NSString stringWithUTF8String: objectName.constData()];
+    if (!m_objectName.isEmpty())
+        d->tex.label = [NSString stringWithUTF8String: m_objectName.constData()];
 
     d->owns = true;
     nativeHandlesStruct.texture = d->tex;
@@ -2183,12 +2188,12 @@ void QMetalSampler::release()
     e.sampler.samplerState = d->samplerState;
     d->samplerState = nil;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiMetal);
         rhiD->d->releaseQueue.append(e);
         rhiD->unregisterResource(this);
     } else {
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -2329,7 +2334,7 @@ void QMetalTextureRenderTarget::release()
 QRhiRenderPassDescriptor *QMetalTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
     const QVector<QRhiColorAttachment> colorAttachments = m_desc.colorAttachments();
-    QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
+    QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(m_rhi);
     rpD->colorAttachmentCount = colorAttachments.count();
     rpD->hasDepthStencil = m_desc.depthStencilBuffer() || m_desc.depthTexture();
 
@@ -2450,11 +2455,21 @@ bool QMetalShaderResourceBindings::build()
         QMetalShaderResourceBindings::BoundResourceData &bd(boundResourceData[i]);
         switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
-            bd.ubuf.generation = QRHI_RES(QMetalBuffer, b->u.ubuf.buf)->generation;
+        {
+            QMetalBuffer *bufD = QRHI_RES(QMetalBuffer, b->u.ubuf.buf);
+            bd.ubuf.id = bufD->m_id;
+            bd.ubuf.generation = bufD->generation;
+        }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
-            bd.stex.texGeneration = QRHI_RES(QMetalTexture, b->u.stex.tex)->generation;
-            bd.stex.samplerGeneration = QRHI_RES(QMetalSampler, b->u.stex.sampler)->generation;
+        {
+            QMetalTexture *texD = QRHI_RES(QMetalTexture, b->u.stex.tex);
+            QMetalSampler *samplerD = QRHI_RES(QMetalSampler, b->u.stex.sampler);
+            bd.stex.texId = texD->m_id;
+            bd.stex.texGeneration = texD->generation;
+            bd.stex.samplerId = samplerD->m_id;
+            bd.stex.samplerGeneration = samplerD->generation;
+        }
             break;
         default:
             Q_UNREACHABLE();
@@ -3030,7 +3045,7 @@ QRhiRenderPassDescriptor *QMetalSwapChain::newCompatibleRenderPassDescriptor()
     chooseFormats(); // ensure colorFormat and similar are filled out
 
     QRHI_RES_RHI(QRhiMetal);
-    QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(rhi);
+    QMetalRenderPassDescriptor *rpD = new QMetalRenderPassDescriptor(m_rhi);
     rpD->colorAttachmentCount = 1;
     rpD->hasDepthStencil = m_depthStencil != nullptr;
 

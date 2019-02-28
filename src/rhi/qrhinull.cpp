@@ -485,7 +485,7 @@ void QNullTextureRenderTarget::release()
 
 QRhiRenderPassDescriptor *QNullTextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
-    return new QNullRenderPassDescriptor(rhi);
+    return new QNullRenderPassDescriptor(m_rhi);
 }
 
 bool QNullTextureRenderTarget::build()
@@ -587,7 +587,7 @@ QSize QNullSwapChain::surfacePixelSize()
 
 QRhiRenderPassDescriptor *QNullSwapChain::newCompatibleRenderPassDescriptor()
 {
-    return new QNullRenderPassDescriptor(rhi);
+    return new QNullRenderPassDescriptor(m_rhi);
 }
 
 bool QNullSwapChain::buildOrResize()

@@ -214,10 +214,13 @@ struct QVkShaderResourceBindings : public QRhiShaderResourceBindings
     // to detect that the underlying descriptor set became out of date and they
     // need to be written again with the up-to-date VkBuffer etc. objects.
     struct BoundUniformBufferData {
+        quint64 id;
         uint generation;
     };
     struct BoundSampledTextureData {
+        quint64 texId;
         uint texGeneration;
+        quint64 samplerId;
         uint samplerGeneration;
     };
     struct BoundResourceData {

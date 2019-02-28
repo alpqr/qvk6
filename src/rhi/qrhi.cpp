@@ -1570,9 +1570,10 @@ QRhiReadbackDescription::QRhiReadbackDescription(QRhiTexture *texture)
 /*!
     \internal
  */
-QRhiResource::QRhiResource(QRhiImplementation *rhi_)
-    : rhi(rhi_)
+QRhiResource::QRhiResource(QRhiImplementation *rhi)
+    : m_rhi(rhi)
 {
+    m_id = QRhiGlobalObjectIdGenerator::newId();
 }
 
 /*!
@@ -1607,7 +1608,7 @@ void QRhiResource::releaseAndDestroy()
  */
 QByteArray QRhiResource::name() const
 {
-    return objectName;
+    return m_objectName;
 }
 
 /*!
@@ -1633,8 +1634,8 @@ QByteArray QRhiResource::name() const
  */
 void QRhiResource::setName(const QByteArray &name)
 {
-    objectName = name;
-    objectName.replace(',', '_'); // cannot contain comma for QRhiProfiler
+    m_objectName = name;
+    m_objectName.replace(',', '_'); // cannot contain comma for QRhiProfiler
 }
 
 /*!
@@ -1659,6 +1660,17 @@ void QRhiResource::setName(const QByteArray &name)
 bool QRhiResource::isShareable() const
 {
     return false;
+}
+
+/*!
+    \return the global, unique identifier of this QRhiResource.
+
+    User code rarely needs to deal with the value directly. It is used
+    internally for tracking and bookkeeping purposes.
+ */
+quint64 QRhiResource::globalResourceId() const
+{
+    return m_id;
 }
 
 /*!
@@ -3036,12 +3048,12 @@ QRhiImplementation::~QRhiImplementation()
     if (rsh) {
         for (QRhiResource *res : qAsConst(resources)) {
             if (res->isShareable()) {
-                res->orphanedWithRsh = rsh;
+                res->m_orphanedWithRsh = rsh;
             } else {
                 qWarning("QRhi %p going down orphaning an unreleased, non-shareable resource %p (%s). This is bad.",
-                         q, res, res->objectName.constData());
+                         q, res, res->m_objectName.constData());
             }
-            res->rhi = nullptr;
+            res->m_rhi = nullptr;
         }
     } else {
         // Be nice and show something about leaked stuff. Though we may not get
@@ -3052,8 +3064,8 @@ QRhiImplementation::~QRhiImplementation()
             qWarning("QRhi %p going down with %d unreleased resources and no QRhiResourceSharingHost. This is bad.",
                      q, resources.count());
             for (QRhiResource *res : qAsConst(resources)) {
-                qWarning("  Resource %p (%s)", res, res->objectName.constData());
-                res->rhi = nullptr;
+                qWarning("  Resource %p (%s)", res, res->m_objectName.constData());
+                res->m_rhi = nullptr;
             }
         }
 #endif
@@ -3800,7 +3812,7 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
  */
 void QRhiCommandBuffer::resourceUpdate(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    rhi->resourceUpdate(this, resourceUpdates);
+    m_rhi->resourceUpdate(this, resourceUpdates);
 }
 
 /*!
@@ -3838,7 +3850,7 @@ void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
                                   const QRhiDepthStencilClearValue &depthStencilClearValue,
                                   QRhiResourceUpdateBatch *resourceUpdates)
 {
-    rhi->beginPass(this, rt, colorClearValue, depthStencilClearValue, resourceUpdates);
+    m_rhi->beginPass(this, rt, colorClearValue, depthStencilClearValue, resourceUpdates);
 }
 
 /*!
@@ -3849,7 +3861,7 @@ void QRhiCommandBuffer::beginPass(QRhiRenderTarget *rt,
  */
 void QRhiCommandBuffer::endPass(QRhiResourceUpdateBatch *resourceUpdates)
 {
-    rhi->endPass(this, resourceUpdates);
+    m_rhi->endPass(this, resourceUpdates);
 }
 
 /*!
@@ -3867,7 +3879,7 @@ void QRhiCommandBuffer::endPass(QRhiResourceUpdateBatch *resourceUpdates)
  */
 void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps)
 {
-    rhi->setGraphicsPipeline(this, ps);
+    m_rhi->setGraphicsPipeline(this, ps);
 }
 
 /*!
@@ -3914,7 +3926,7 @@ void QRhiCommandBuffer::setGraphicsPipeline(QRhiGraphicsPipeline *ps)
 void QRhiCommandBuffer::setShaderResources(QRhiShaderResourceBindings *srb,
                                            const QVector<DynamicOffset> &dynamicOffsets)
 {
-    rhi->setShaderResources(this, srb, dynamicOffsets);
+    m_rhi->setShaderResources(this, srb, dynamicOffsets);
 }
 
 /*!
@@ -3973,7 +3985,7 @@ void QRhiCommandBuffer::setVertexInput(int startBinding, const QVector<VertexInp
                                        QRhiBuffer *indexBuf, quint32 indexOffset,
                                        IndexFormat indexFormat)
 {
-    rhi->setVertexInput(this, startBinding, bindings, indexBuf, indexOffset, indexFormat);
+    m_rhi->setVertexInput(this, startBinding, bindings, indexBuf, indexOffset, indexFormat);
 }
 
 /*!
@@ -3992,7 +4004,7 @@ void QRhiCommandBuffer::setVertexInput(int startBinding, const QVector<VertexInp
  */
 void QRhiCommandBuffer::setViewport(const QRhiViewport &viewport)
 {
-    rhi->setViewport(this, viewport);
+    m_rhi->setViewport(this, viewport);
 }
 
 /*!
@@ -4011,7 +4023,7 @@ void QRhiCommandBuffer::setViewport(const QRhiViewport &viewport)
  */
 void QRhiCommandBuffer::setScissor(const QRhiScissor &scissor)
 {
-    rhi->setScissor(this, scissor);
+    m_rhi->setScissor(this, scissor);
 }
 
 /*!
@@ -4025,7 +4037,7 @@ void QRhiCommandBuffer::setScissor(const QRhiScissor &scissor)
  */
 void QRhiCommandBuffer::setBlendConstants(const QVector4D &c)
 {
-    rhi->setBlendConstants(this, c);
+    m_rhi->setBlendConstants(this, c);
 }
 
 /*!
@@ -4039,7 +4051,7 @@ void QRhiCommandBuffer::setBlendConstants(const QVector4D &c)
  */
 void QRhiCommandBuffer::setStencilRef(quint32 refValue)
 {
-    rhi->setStencilRef(this, refValue);
+    m_rhi->setStencilRef(this, refValue);
 }
 
 /*!
@@ -4056,7 +4068,7 @@ void QRhiCommandBuffer::setStencilRef(quint32 refValue)
 void QRhiCommandBuffer::draw(quint32 vertexCount,
                              quint32 instanceCount, quint32 firstVertex, quint32 firstInstance)
 {
-    rhi->draw(this, vertexCount, instanceCount, firstVertex, firstInstance);
+    m_rhi->draw(this, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
 /*!
@@ -4084,7 +4096,7 @@ void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
                                     quint32 instanceCount, quint32 firstIndex,
                                     qint32 vertexOffset, quint32 firstInstance)
 {
-    rhi->drawIndexed(this, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    m_rhi->drawIndexed(this, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
 /*!
@@ -4100,7 +4112,7 @@ void QRhiCommandBuffer::drawIndexed(quint32 indexCount,
  */
 void QRhiCommandBuffer::debugMarkBegin(const QByteArray &name)
 {
-    rhi->debugMarkBegin(this, name);
+    m_rhi->debugMarkBegin(this, name);
 }
 
 /*!
@@ -4113,7 +4125,7 @@ void QRhiCommandBuffer::debugMarkBegin(const QByteArray &name)
  */
 void QRhiCommandBuffer::debugMarkEnd()
 {
-    rhi->debugMarkEnd(this);
+    m_rhi->debugMarkEnd(this);
 }
 
 /*!
@@ -4128,7 +4140,7 @@ void QRhiCommandBuffer::debugMarkEnd()
  */
 void QRhiCommandBuffer::debugMarkMsg(const QByteArray &msg)
 {
-    rhi->debugMarkMsg(this, msg);
+    m_rhi->debugMarkMsg(this, msg);
 }
 
 /*!
@@ -4513,6 +4525,12 @@ QVector<int> QRhi::supportedSampleCounts() const
 int QRhi::ubufAlignment() const
 {
     return d->ubufAlignment();
+}
+
+QRhiGlobalObjectIdGenerator::Type QRhiGlobalObjectIdGenerator::newId()
+{
+    static QRhiGlobalObjectIdGenerator inst;
+    return ++inst.counter;
 }
 
 QT_END_NAMESPACE

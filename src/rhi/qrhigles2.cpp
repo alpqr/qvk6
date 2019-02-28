@@ -940,11 +940,11 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(bufD->m_type == QRhiBuffer::Dynamic);
         if (bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
-            QGles2Buffer::ChangeRange &r(bufD->ubufChangeRange);
-            if (r.changeBegin == -1 || u.offset < r.changeBegin)
-                r.changeBegin = u.offset;
-            if (r.changeEnd == -1 || u.offset + u.data.size() > r.changeEnd)
-                r.changeEnd = u.offset + u.data.size();
+//            QGles2Buffer::ChangeRange &r(bufD->ubufChangeRange);
+//            if (r.changeBegin == -1 || u.offset < r.changeBegin)
+//                r.changeBegin = u.offset;
+//            if (r.changeEnd == -1 || u.offset + u.data.size() > r.changeEnd)
+//                r.changeEnd = u.offset + u.data.size();
         } else {
             QGles2CommandBuffer::Command cmd;
             cmd.cmd = QGles2CommandBuffer::Command::BufferSubData;
@@ -963,7 +963,7 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(u.offset + u.data.size() <= bufD->m_size);
         if (bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
-            bufD->ubufChangeRange = { 0, u.data.size() };
+//            bufD->ubufChangeRange = { 0, u.data.size() };
         } else {
             QGles2CommandBuffer::Command cmd;
             cmd.cmd = QGles2CommandBuffer::Command::BufferSubData;
@@ -1459,8 +1459,7 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             setChangedUniforms(cmd.args.bindShaderResources.ps,
                                cmd.args.bindShaderResources.srb,
                                cmd.args.bindShaderResources.dynamicOffsetPairs,
-                               cmd.args.bindShaderResources.dynamicOffsetCount,
-                               false);
+                               cmd.args.bindShaderResources.dynamicOffsetCount);
             break;
         case QGles2CommandBuffer::Command::BindFramebuffer:
             if (cmd.args.bindFramebuffer.fbo)
@@ -1650,12 +1649,8 @@ void QRhiGles2::executeBindGraphicsPipeline(QRhiGraphicsPipeline *ps)
 }
 
 void QRhiGles2::setChangedUniforms(QRhiGraphicsPipeline *ps, QRhiShaderResourceBindings *srb,
-                                   const uint *dynOfsPairs, int dynOfsCount,
-                                   bool changedOnly)
+                                   const uint *dynOfsPairs, int dynOfsCount)
 {
-    if (dynOfsCount)
-        changedOnly = false;
-
     QGles2GraphicsPipeline *psD = QRHI_RES(QGles2GraphicsPipeline, ps);
     QGles2ShaderResourceBindings *srbD = QRHI_RES(QGles2ShaderResourceBindings, srb);
 
@@ -1666,10 +1661,6 @@ void QRhiGles2::setChangedUniforms(QRhiGraphicsPipeline *ps, QRhiShaderResourceB
         switch (b->type) {
         case QRhiShaderResourceBinding::UniformBuffer:
         {
-            QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b->u.ubuf.buf);
-            if (changedOnly && bufD->ubufChangeRange.isNull()) // do not set again when nothing changed
-                break;
-
             int viewOffset = b->u.ubuf.offset;
             if (dynOfsCount) {
                 for (int j = 0; j < dynOfsCount; ++j) {
@@ -1679,14 +1670,11 @@ void QRhiGles2::setChangedUniforms(QRhiGraphicsPipeline *ps, QRhiShaderResourceB
                     }
                 }
             }
+            QGles2Buffer *bufD = QRHI_RES(QGles2Buffer, b->u.ubuf.buf);
             const QByteArray bufView = QByteArray::fromRawData(bufD->ubuf.constData() + viewOffset,
                                                                b->u.ubuf.maybeSize ? b->u.ubuf.maybeSize : bufD->m_size);
             for (QGles2GraphicsPipeline::Uniform &uniform : psD->uniforms) {
-                if (uniform.binding == b->binding
-                        && (!changedOnly ||
-                            (uniform.offset >= uint(bufD->ubufChangeRange.changeBegin)
-                             && uniform.offset < uint(bufD->ubufChangeRange.changeEnd))))
-                {
+                if (uniform.binding == b->binding) {
                     memcpy(uniform.data.data(), bufView.constData() + uniform.offset, uniform.data.size());
 
                     switch (uniform.type) {
@@ -1730,20 +1718,23 @@ void QRhiGles2::setChangedUniforms(QRhiGraphicsPipeline *ps, QRhiShaderResourceB
                 }
             }
 
-            bufD->ubufChangeRange = QGles2Buffer::ChangeRange();
+//            bufD->ubufChangeRange = QGles2Buffer::ChangeRange();
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:
         {
             QGles2Texture *texD = QRHI_RES(QGles2Texture, b->u.stex.tex);
             QGles2Sampler *samplerD = QRHI_RES(QGles2Sampler, b->u.stex.sampler);
-
-            const bool textureChanged = QRHI_RES(QGles2Texture, b->u.stex.tex)->generation != bd.stex.texGeneration;
-            if (textureChanged)
-                bd.stex.texGeneration = QRHI_RES(QGles2Texture, b->u.stex.tex)->generation;
-            const bool samplerChanged = QRHI_RES(QGles2Sampler, b->u.stex.sampler)->generation != bd.stex.samplerGeneration;
-            if (samplerChanged)
-                bd.stex.samplerGeneration = QRHI_RES(QGles2Sampler, b->u.stex.sampler)->generation;
+            const bool textureChanged = texD->generation != bd.stex.texGeneration || texD->m_id != bd.stex.texId;
+            const bool samplerChanged = samplerD->generation != bd.stex.samplerGeneration || samplerD->m_id != bd.stex.samplerId;
+            if (textureChanged) {
+                bd.stex.texId = texD->m_id;
+                bd.stex.texGeneration = texD->generation;
+            }
+            if (samplerChanged) {
+                bd.stex.samplerId = samplerD->m_id;
+                bd.stex.samplerGeneration = samplerD->generation;
+            }
 
             int texUnit = 0;
             for (QGles2GraphicsPipeline::Sampler &sampler : psD->samplers) {
@@ -1911,7 +1902,7 @@ void QGles2Buffer::release()
 
     buffer = 0;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiGles2);
         rhiD->releaseQueue.append(e);
         QRHI_PROF;
@@ -1919,7 +1910,7 @@ void QGles2Buffer::release()
         rhiD->unregisterResource(this);
     } else {
         // associated rhi is already gone, queue the deferred release to the rsh instead
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -1981,7 +1972,7 @@ void QGles2RenderBuffer::release()
 
     renderbuffer = 0;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiGles2);
         rhiD->releaseQueue.append(e);
         QRHI_PROF;
@@ -1989,7 +1980,7 @@ void QGles2RenderBuffer::release()
         rhiD->unregisterResource(this);
     } else {
         // associated rhi is already gone, queue the deferred release to the rsh instead
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -2081,7 +2072,7 @@ void QGles2Texture::release()
     specified = false;
     nativeHandlesStruct.texture = 0;
 
-    if (!orphanedWithRsh) {
+    if (!m_orphanedWithRsh) {
         QRHI_RES_RHI(QRhiGles2);
         if (owns)
             rhiD->releaseQueue.append(e);
@@ -2090,7 +2081,7 @@ void QGles2Texture::release()
         rhiD->unregisterResource(this);
     } else {
         // associated rhi is already gone, queue the deferred release to the rsh instead
-        addToRshReleaseQueue(orphanedWithRsh, e);
+        addToRshReleaseQueue(m_orphanedWithRsh, e);
     }
 }
 
@@ -2313,7 +2304,7 @@ void QGles2TextureRenderTarget::release()
 
 QRhiRenderPassDescriptor *QGles2TextureRenderTarget::newCompatibleRenderPassDescriptor()
 {
-    return new QGles2RenderPassDescriptor(rhi);
+    return new QGles2RenderPassDescriptor(m_rhi);
 }
 
 bool QGles2TextureRenderTarget::build()
@@ -2414,8 +2405,10 @@ bool QGles2ShaderResourceBindings::build()
             break;
         case QRhiShaderResourceBinding::SampledTexture:
             // Start with values that will fail the first comparison for sure.
-            bd.stex.texGeneration = UINT_MAX; // QRHI_RES(QGles2Texture, b.stex.tex)->generation;
-            bd.stex.samplerGeneration = UINT_MAX; // QRHI_RES(QGles2Sampler, b.stex.sampler)->generation;
+            bd.stex.texId = UINT_MAX;
+            bd.stex.texGeneration = UINT_MAX;
+            bd.stex.samplerId = UINT_MAX;
+            bd.stex.samplerGeneration = UINT_MAX;
             break;
         default:
             Q_UNREACHABLE();
@@ -2619,7 +2612,7 @@ QSize QGles2SwapChain::surfacePixelSize()
 
 QRhiRenderPassDescriptor *QGles2SwapChain::newCompatibleRenderPassDescriptor()
 {
-    return new QGles2RenderPassDescriptor(rhi);
+    return new QGles2RenderPassDescriptor(m_rhi);
 }
 
 bool QGles2SwapChain::buildOrResize()

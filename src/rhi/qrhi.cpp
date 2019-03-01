@@ -404,6 +404,12 @@ QT_BEGIN_NAMESPACE
 
     \value NPOTTextureRepeat Indicates that the \l{QRhiSampler::Repeat}{Repeat}
     mode is supported for textures with a non-power-of-two size.
+
+    \value RedOrAlpha8IsRed Indicates that the
+    \l{QRhiTexture::RED_OR_ALPHA8}{RED_OR_ALPHA8} format maps to a one
+    component 8-bit \c red format. This is the case for all backends except
+    OpenGL, where \c{GL_ALPHA}, a one component 8-bit \c alpha format, is used
+    instead. This is relevant for shader code that samples from the texture.
  */
 
 /*!
@@ -1862,12 +1868,22 @@ QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QS
     note that flags() can modify the format when QRhiTexture::sRGB is set.
 
     \value UnknownFormat Not a valid format. This cannot be passed to setFormat().
-    \value RGBA8
-    \value BGRA8
-    \value R8
-    \value R16
-    \value D16
-    \value D32
+
+    \value RGBA8 Four component, unsigned normalized 8 bit per component. Always supported.
+
+    \value BGRA8 Four component, unsigned normalized 8 bit per component.
+
+    \value R8 One component, unsigned normalized 8 bit.
+
+    \value R16 One component, unsigned normalized 16 bit.
+
+    \value RED_OR_ALPHA8 Either same as R8, or is a similar format with the component swizzled to alpha,
+    depending on \l{QRhi::RedOrAlpha8IsRed}{RedOrAlpha8IsRed}.
+
+    \value D16 16-bit depth (normalized unsigned integer)
+
+    \value D32 32-bit depth (32-bit float)
+
     \value BC1
     \value BC2
     \value BC3
@@ -1875,9 +1891,11 @@ QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QS
     \value BC5
     \value BC6H
     \value BC7
+
     \value ETC2_RGB8
     \value ETC2_RGB8A1
     \value ETC2_RGBA8
+
     \value ASTC_4x4
     \value ASTC_5x4
     \value ASTC_5x5

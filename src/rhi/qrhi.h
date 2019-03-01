@@ -643,6 +643,7 @@ public:
         BGRA8,
         R8,
         R16,
+        RED_OR_ALPHA8,
 
         D16,
         D32,
@@ -1251,7 +1252,8 @@ public:
         TessellationShaders,
         NonDynamicUniformBuffers,
         NonFourAlignedEffectiveIndexBufferOffset,
-        NPOTTextureRepeat
+        NPOTTextureRepeat,
+        RedOrAlpha8IsRed
     };
 
     enum BeginFrameFlag {

@@ -181,7 +181,7 @@ public:
     {
         if (res->m_orphanedWithRsh) {
             qWarning("Attempted to perform something on an orphaned QRhiResource %p (%s). This is invalid.",
-                     res, res->m_objectName.constData());
+                     (void *) res, res->m_objectName.constData());
             return false;
         }
         return true;

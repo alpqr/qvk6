@@ -157,6 +157,22 @@ QT_BEGIN_NAMESPACE
     \brief Holds the OpenGL texture object that is backing a QRhiTexture instance.
  */
 
+#ifndef GL_BGRA
+#define GL_BGRA                           0x80E1
+#endif
+
+#ifndef GL_R8
+#define GL_R8                             0x8229
+#endif
+
+#ifndef GL_R16
+#define GL_R16                            0x822A
+#endif
+
+#ifndef GL_RED
+#define GL_RED                            0x1903
+#endif
+
 #ifndef GL_PRIMITIVE_RESTART_FIXED_INDEX
 #define GL_PRIMITIVE_RESTART_FIXED_INDEX  0x8D69
 #endif
@@ -290,6 +306,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
     if (n > 0)
         f->glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, supportedCompressedFormats.data());
 
+    f->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps.maxTextureSize);
+
     caps.msaaRenderBuffer = f->hasOpenGLExtension(QOpenGLExtensions::FramebufferMultisample)
             && f->hasOpenGLExtension(QOpenGLExtensions::FramebufferBlit);
 
@@ -297,7 +315,7 @@ bool QRhiGles2::create(QRhi::Flags flags)
     caps.npotTextureRepeat = f->hasOpenGLFeature(QOpenGLFunctions::NPOTTextureRepeat);
 
     const QSurfaceFormat actualFormat = ctx->format();
-    if (ctx->isOpenGLES())
+    if (actualFormat.renderableType() == QSurfaceFormat::OpenGLES)
         caps.fixedIndexPrimitiveRestart = actualFormat.version() >= qMakePair(3, 0);
     else
         caps.fixedIndexPrimitiveRestart = actualFormat.version() >= qMakePair(4, 3);
@@ -305,7 +323,11 @@ bool QRhiGles2::create(QRhi::Flags flags)
     if (caps.fixedIndexPrimitiveRestart)
         f->glEnable(GL_PRIMITIVE_RESTART_FIXED_INDEX);
 
-    f->glGetIntegerv(GL_MAX_TEXTURE_SIZE, &caps.maxTextureSize);
+    caps.bgraExternalFormat = f->hasOpenGLExtension(QOpenGLExtensions::BGRATextureFormat);
+    caps.bgraInternalFormat = caps.bgraExternalFormat && actualFormat.renderableType() == QSurfaceFormat::OpenGLES;
+
+    caps.sized8Formats = f->hasOpenGLExtension(QOpenGLExtensions::Sized8Formats);
+    caps.sized16Formats = f->hasOpenGLExtension(QOpenGLExtensions::Sized16Formats);
 
     nativeHandlesStruct.context = ctx;
 
@@ -512,11 +534,13 @@ bool QRhiGles2::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
         return false;
 
     case QRhiTexture::BGRA8:
-        Q_FALLTHROUGH();
+        return caps.bgraExternalFormat;
+
     case QRhiTexture::R8:
-        Q_FALLTHROUGH();
+        return caps.sized8Formats;
+
     case QRhiTexture::R16:
-        return false; // ###
+        return caps.sized16Formats;
 
     default:
         break;
@@ -552,6 +576,8 @@ bool QRhiGles2::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::NPOTTextureRepeat:
         return caps.npotTextureRepeat;
+    case QRhi::RedOrAlpha8IsRed:
+        return false;
     default:
         Q_UNREACHABLE();
         return false;
@@ -1504,7 +1530,6 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
             break;
         case QGles2CommandBuffer::Command::ReadPixels:
         {
-            // ### more formats
             QRhiReadbackResult *result = cmd.args.readPixels.result;
             GLuint tex = cmd.args.readPixels.texture;
             GLuint fbo = 0;
@@ -2113,11 +2138,38 @@ bool QGles2Texture::prepareBuild(QSize *adjustedSize)
 
     target = isCube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
 
-    // ### more formats
-    glintformat = GL_RGBA;
-    glformat = GL_RGBA;
-
     gltype = GL_UNSIGNED_BYTE;
+
+    switch (m_format) {
+    case QRhiTexture::RGBA8:
+        glintformat = GL_RGBA;
+        glformat = GL_RGBA;
+        break;
+    case QRhiTexture::BGRA8:
+        glintformat = rhiD->caps.bgraInternalFormat ? GL_BGRA : GL_RGBA;
+        glformat = GL_BGRA;
+        break;
+    case QRhiTexture::R16:
+        glintformat = GL_R16;
+        glformat = GL_RED;
+        gltype = GL_UNSIGNED_SHORT;
+        break;
+    case QRhiTexture::R8:
+        glintformat = GL_R8;
+        glformat = GL_RED;
+        break;
+    case QRhiTexture::RED_OR_ALPHA8:
+        // always alpha because we do not support core profile
+        glintformat = GL_ALPHA;
+        glformat = GL_ALPHA;
+        break;
+    default:
+        Q_UNREACHABLE();
+        glintformat = GL_RGBA;
+        glformat = GL_RGBA;
+        break;
+    }
+
     mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
 
     if (isCompressed) {

@@ -401,6 +401,8 @@ bool QRhiD3D11::isFeatureSupported(QRhi::Feature feature) const
         return true;
     case QRhi::NPOTTextureRepeat:
         return true;
+    case QRhi::RedOrAlpha8IsRed:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -914,6 +916,8 @@ static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format, QRhiTex
         return DXGI_FORMAT_R8_UNORM;
     case QRhiTexture::R16:
         return DXGI_FORMAT_R16_UNORM;
+    case QRhiTexture::RED_OR_ALPHA8:
+        return DXGI_FORMAT_R8_UNORM;
 
     case QRhiTexture::D16:
         return DXGI_FORMAT_R16_TYPELESS;

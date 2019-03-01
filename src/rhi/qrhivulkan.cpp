@@ -704,6 +704,8 @@ static inline VkFormat toVkTextureFormat(QRhiTexture::Format format, QRhiTexture
         return srgb ? VK_FORMAT_R8_SRGB : VK_FORMAT_R8_UNORM;
     case QRhiTexture::R16:
         return VK_FORMAT_R16_UNORM;
+    case QRhiTexture::RED_OR_ALPHA8:
+        return VK_FORMAT_R8_UNORM;
 
     case QRhiTexture::D16:
         return VK_FORMAT_D16_UNORM;
@@ -3043,6 +3045,8 @@ bool QRhiVulkan::isFeatureSupported(QRhi::Feature feature) const
     case QRhi::NonFourAlignedEffectiveIndexBufferOffset:
         return true;
     case QRhi::NPOTTextureRepeat:
+        return true;
+    case QRhi::RedOrAlpha8IsRed:
         return true;
     default:
         Q_UNREACHABLE();

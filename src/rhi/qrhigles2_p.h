@@ -558,14 +558,29 @@ public:
     QSurface *fallbackSurface = nullptr;
     mutable bool needsMakeCurrent = false;
     QOpenGLExtensions *f = nullptr;
-    struct {
+    struct Caps {
+        Caps()
+            : maxTextureSize(2048),
+              msaaRenderBuffer(false),
+              npotTexture(true),
+              npotTextureRepeat(true),
+              fixedIndexPrimitiveRestart(false),
+              bgraExternalFormat(false),
+              bgraInternalFormat(false),
+              sized8Formats(false),
+              sized16Formats(false)
+        { }
+        int maxTextureSize;
         // Multisample fb and blit are supported (GLES 3.0 or OpenGL 3.x). Not
         // the same as multisample textures!
-        bool msaaRenderBuffer = false;
-        bool npotTexture = true;
-        bool npotTextureRepeat = true;
-        bool fixedIndexPrimitiveRestart = false;
-        int maxTextureSize = 2048;
+        uint msaaRenderBuffer : 1;
+        uint npotTexture : 1;
+        uint npotTextureRepeat : 1;
+        uint fixedIndexPrimitiveRestart : 1;
+        uint bgraExternalFormat : 1;
+        uint bgraInternalFormat : 1;
+        uint sized8Formats : 1;
+        uint sized16Formats : 1;
     } caps;
     bool inFrame = false;
     bool inPass = false;

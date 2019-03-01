@@ -517,6 +517,8 @@ bool QRhiMetal::isFeatureSupported(QRhi::Feature feature) const
         return false;
     case QRhi::NPOTTextureRepeat:
         return true;
+    case QRhi::RedOrAlpha8IsRed:
+        return true;
     default:
         Q_UNREACHABLE();
         return false;
@@ -1952,6 +1954,8 @@ static inline MTLPixelFormat toMetalTextureFormat(QRhiTexture::Format format, QR
 #endif
     case QRhiTexture::R16:
         return MTLPixelFormatR16Unorm;
+    case QRhiTexture::RED_OR_ALPHA8:
+        return MTLPixelFormatR8Unorm;
 
     case QRhiTexture::D16:
         return MTLPixelFormatDepth16Unorm;

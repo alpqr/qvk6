@@ -326,8 +326,8 @@ bool QRhiGles2::create(QRhi::Flags flags)
     caps.bgraExternalFormat = f->hasOpenGLExtension(QOpenGLExtensions::BGRATextureFormat);
     caps.bgraInternalFormat = caps.bgraExternalFormat && actualFormat.renderableType() == QSurfaceFormat::OpenGLES;
 
-    caps.sized8Formats = f->hasOpenGLExtension(QOpenGLExtensions::Sized8Formats);
-    caps.sized16Formats = f->hasOpenGLExtension(QOpenGLExtensions::Sized16Formats);
+    caps.r8Format = f->hasOpenGLFeature(QOpenGLFunctions::TextureRGFormats);
+    caps.r16Format = f->hasOpenGLExtension(QOpenGLExtensions::Sized16Formats);
 
     nativeHandlesStruct.context = ctx;
 
@@ -537,10 +537,10 @@ bool QRhiGles2::isTextureFormatSupported(QRhiTexture::Format format, QRhiTexture
         return caps.bgraExternalFormat;
 
     case QRhiTexture::R8:
-        return caps.sized8Formats;
+        return caps.r8Format;
 
     case QRhiTexture::R16:
-        return caps.sized16Formats;
+        return caps.r16Format;
 
     default:
         break;

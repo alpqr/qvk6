@@ -567,8 +567,8 @@ public:
               fixedIndexPrimitiveRestart(false),
               bgraExternalFormat(false),
               bgraInternalFormat(false),
-              sized8Formats(false),
-              sized16Formats(false)
+              r8Format(false),
+              r16Format(false)
         { }
         int maxTextureSize;
         // Multisample fb and blit are supported (GLES 3.0 or OpenGL 3.x). Not
@@ -579,8 +579,8 @@ public:
         uint fixedIndexPrimitiveRestart : 1;
         uint bgraExternalFormat : 1;
         uint bgraInternalFormat : 1;
-        uint sized8Formats : 1;
-        uint sized16Formats : 1;
+        uint r8Format : 1;
+        uint r16Format : 1;
     } caps;
     bool inFrame = false;
     bool inPass = false;

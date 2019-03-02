@@ -3515,11 +3515,21 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags, QRh
             profD->rhiDWhenEnabled = r->d;
         }
         r->d->debugMarkers = flags.testFlag(EnableDebugMarkers);
-        if (r->d->create(flags))
+        if (r->d->create(flags)) {
+            r->dtype = impl;
             return r.take();
+        }
     }
 
     return nullptr;
+}
+
+/*!
+    \return the backend type for this QRhi.
+ */
+QRhi::Implementation QRhi::backend() const
+{
+    return dtype;
 }
 
 /*!

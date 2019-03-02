@@ -1277,6 +1277,8 @@ public:
                         Flags flags = Flags(),
                         QRhiNativeHandles *importDevice = nullptr);
 
+    Implementation backend() const;
+
     QRhiGraphicsPipeline *newGraphicsPipeline();
     QRhiShaderResourceBindings *newShaderResourceBindings();
 
@@ -1339,6 +1341,7 @@ protected:
 private:
     Q_DISABLE_COPY(QRhi)
     QRhiImplementation *d = nullptr;
+    QRhi::Implementation dtype;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::Flags)

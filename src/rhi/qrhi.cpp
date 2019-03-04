@@ -130,7 +130,10 @@ QT_BEGIN_NAMESPACE
     \l{QRhiCommandBuffer::beginFrame()}{beginFrame()} -
     \l{QRhiCommandBuffer::endFrame()}{endFrame()} section). As a general rule,
     all referenced QRhiResource objects must stay unchanged until the frame is
-    submitted by calling \l{QRhiCommandBuffer::endFrame()}{endFrame()}.
+    submitted by calling \l{QRhiCommandBuffer::endFrame()}{endFrame()}. To ease
+    this, QRhiResource::releaseAndDestroyLater() is provided as a convenience.
+    This allows applications to safely issue a (defered) releaseAndDestroy()
+    while recording a frame.
 
     \endlist
 
@@ -157,9 +160,16 @@ QT_BEGIN_NAMESPACE
     frame. Reusing a QRhiResource instance within a frame (by rebuilding it and
     then referencing it again in the same \c{beginFrame - endFrame} section)
     should be avoided as it may lead to unexpected results, depending on the
-    backend. As a general rule, all referenced QRhiResource objects must stay
-    unchanged until the frame is submitted by calling
-    \l{QRhiCommandBuffer::endFrame()}{endFrame()}.
+    backend.
+
+    As a general rule, all referenced QRhiResource objects must stay valid and
+    unmodified until the frame is submitted by calling
+    \l{QRhiCommandBuffer::endFrame()}{endFrame()}. On the other hand,
+    \l{QRhiResource::release()}{release()} or
+    \l{QRhiResource::releaseAndDestroy()}{releaseAndDestroy()} are always safe
+    to call once the frame is submitted, regardless of the status of the
+    underlying native resources (which may still be in use by the GPU - but
+    that is taken care of internally).
 
     Unlike APIs like OpenGL, upload and copy type of commands cannot be mixed
     with draw commands. The typical renderer will involve a sequence similar to
@@ -187,15 +197,15 @@ QT_BEGIN_NAMESPACE
 
     The importance of reusing the same object lies in the fact that some
     objects reference other objects: for example, a QRhiShaderResourceBindings
-    can reference QRhiBuffer, QRhiTexture, and QRhiSampler instances. If now
-    one of these buffers need to be resized or a sampler parameter needs
-    changing, destroying and creating a whole new QRhiBuffer or QRhiSampler
-    would invalidate all references to the old instance. By just changing the
-    appropriate parameters via QRhiBuffer::setSize() or similar and then
-    calling QRhiBuffer::build(), everything works as expected and there is no
-    need to touch the QRhiShaderResourceBindings at all, even though there is a
-    good chance that under the hood the QRhiBuffer is now backed by a whole new
-    native buffer.
+    can reference QRhiBuffer, QRhiTexture, and QRhiSampler instances. If in a
+    later frame one of these buffers need to be resized or a sampler parameter
+    needs changing, destroying and creating a whole new QRhiBuffer or
+    QRhiSampler would invalidate all references to the old instance. By just
+    changing the appropriate parameters via QRhiBuffer::setSize() or similar
+    and then calling QRhiBuffer::build(), everything works as expected and
+    there is no need to touch the QRhiShaderResourceBindings at all, even
+    though there is a good chance that under the hood the QRhiBuffer is now
+    backed by a whole new native buffer.
 
     \badcode
         ubuf = rhi->newBuffer(QRhiBuffer::Dynamic, QRhiBuffer::UniformBuffer, 256);
@@ -1592,21 +1602,48 @@ QRhiResource::~QRhiResource()
 /*!
     \fn void QRhiResource::release()
 
-    Releases the underlying native graphics resources. Safe to call multiple
-    times, subsequent invocations will be a no-op then.
+    Releases (or requests defered releasing of) the underlying native graphics
+    resources. Safe to call multiple times, subsequent invocations will be a
+    no-op then.
 
     Once release() is called, the QRhiResource instance can be reused, by
     calling the appropriate \c build() function again, or destroyed.
+
+    \note Resources referenced by commands for the current frame should not be
+    released until the frame is submitted by QRhi::endFrame().
+
+    \sa releaseAndDestroy(), releaseAndDestroyLater()
  */
 
 /*!
-    Releases native graphics resources, if there is any, and destroys the
-    QRhiResource. Equivalent to \c{r->release(); delete r; }.
+    Releases (or requests defered releasing of) the native graphics resources,
+    if there are any, and destroys the QRhiResource. Equivalent to
+    \c{r->release(); delete r; }.
+
+    \note Resources referenced by commands for the current frame should not be
+    released until the frame is submitted by QRhi::endFrame().
+
+    \sa release(), releaseAndDestroyLater()
  */
 void QRhiResource::releaseAndDestroy()
 {
     release();
     delete this;
+}
+
+/*!
+    When called without a frame being recorded, this function is equivalent to
+    releaseAndDestroy(). Between a QRhi::beginFrame() and QRhi::endFrame()
+    however the behavior is different: the QRhiResource will not be destroyed
+    until the frame is submitted via QRhi::endFrame(), thus satisfying the QRhi
+    requirement of not altering QRhiResource objects that are referenced by the
+    frame being recorded.
+
+    \sa release(), releaseAndDestroy()
+ */
+void QRhiResource::releaseAndDestroyLater()
+{
+    m_rhi->addReleaseAndDestroyLater(this);
 }
 
 /*!
@@ -4436,6 +4473,8 @@ QRhiSwapChain *QRhi::newSwapChain()
  */
 QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain, BeginFrameFlags flags)
 {
+    Q_ASSERT(!d->inFrame);
+    d->inFrame = true;
     return d->beginFrame(swapChain, flags);
 }
 
@@ -4454,7 +4493,17 @@ QRhi::FrameOpResult QRhi::beginFrame(QRhiSwapChain *swapChain, BeginFrameFlags f
  */
 QRhi::FrameOpResult QRhi::endFrame(QRhiSwapChain *swapChain, EndFrameFlags flags)
 {
-    return d->endFrame(swapChain, flags);
+    Q_ASSERT(d->inFrame);
+    QRhi::FrameOpResult r = d->endFrame(swapChain, flags);
+
+    // releaseAndDestroyLater is a high level QRhi concept the backends know
+    // nothing about - handle it here.
+    d->inFrame = false;
+    for (QRhiResource *res : qAsConst(d->pendingReleaseAndDestroyResources))
+        res->releaseAndDestroy();
+    d->pendingReleaseAndDestroyResources.clear();
+
+    return r;
 }
 
 /*!

@@ -372,17 +372,6 @@ void QRhiGles2::destroy()
     f = nullptr;
 }
 
-// Deferred releases may seem unncessary. But consider:
-//
-// - it is kind of nice that no release() ever requires a current context and
-// so GL calls are isolated to specific places (build, beginFrame, endFrame) as
-// much as possible.
-//
-// - while not strictly required, it ensures that the native object survives
-// the current frame, so if the application releases a QRhiResource, like
-// texture or buffer, within a frame where the resource is used, it won't blow
-// up in in endFrame().
-
 void QRhiGles2::executeDeferredReleases()
 {
     for (int i = releaseQueue.count() - 1; i >= 0; --i) {

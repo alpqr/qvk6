@@ -566,6 +566,7 @@ public:
 
     virtual void release() = 0;
     void releaseAndDestroy();
+    void releaseAndDestroyLater();
 
     QByteArray name() const;
     void setName(const QByteArray &name);

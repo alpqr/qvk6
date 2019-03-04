@@ -187,15 +187,27 @@ public:
         return true;
     }
 
+    void addReleaseAndDestroyLater(QRhiResource *res)
+    {
+        if (inFrame)
+            pendingReleaseAndDestroyResources.insert(res);
+        else
+            res->releaseAndDestroy();
+    }
+
     QRhi *q;
 
 protected:
     QRhiResourceSharingHostPrivate *rsh = nullptr;
+    bool debugMarkers = false;
+
+private:
+    QRhiProfiler profiler;
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;
-    QRhiProfiler profiler;
-    bool debugMarkers = false;
     QSet<QRhiResource *> resources;
+    QSet<QRhiResource *> pendingReleaseAndDestroyResources;
+    bool inFrame = false;
 
     friend class QRhi;
     friend class QRhiResourceUpdateBatchPrivate;

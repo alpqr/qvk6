@@ -2555,6 +2555,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
 
         finishTransferSrc(cb, srcD);
         finishTransferDest(cb, dstD);
+
+        srcD->lastActiveFrameSlot = dstD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
@@ -2573,6 +2575,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
             aRb.pixelSize = u.rb.level() > 0 ? q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize)
                                              : texD->m_pixelSize;
             aRb.format = texD->m_format;
+            texD->lastActiveFrameSlot = currentFrameSlot;
         } else {
             Q_ASSERT(currentSwapChain);
             swapChainD = QRHI_RES(QVkSwapChain, currentSwapChain);
@@ -2718,6 +2721,8 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         }
 
         finishTransferDest(cb, utexD);
+
+        utexD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     ud->free();

@@ -1374,6 +1374,8 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
                                   destinationSlice: u.desc.destinationLayer()
                                   destinationLevel: u.desc.destinationLevel()
                                   destinationOrigin: MTLOriginMake(dp.x(), dp.y(), 0)];
+
+        srcD->lastActiveFrameSlot = dstD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
@@ -1396,6 +1398,7 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
             aRb.format = texD->m_format;
             src = texD->d->tex;
             srcSize = texD->m_pixelSize;
+            texD->lastActiveFrameSlot = currentFrameSlot;
         } else {
             Q_ASSERT(currentSwapChain);
             swapChainD = QRHI_RES(QMetalSwapChain, currentSwapChain);
@@ -1432,8 +1435,10 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
     }
 
     for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
+        QMetalTexture *utexD = QRHI_RES(QMetalTexture, u.tex);
         ensureBlit();
-        [blitEnc generateMipmapsForTexture: QRHI_RES(QMetalTexture, u.tex)->d->tex];
+        [blitEnc generateMipmapsForTexture: utexD->d->tex];
+        utexD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     if (blitEnc) {

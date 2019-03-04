@@ -2137,46 +2137,45 @@ bool QGles2Texture::prepareBuild(QSize *adjustedSize)
     const bool isCompressed = rhiD->isCompressedFormat(m_format);
 
     target = isCube ? GL_TEXTURE_CUBE_MAP : GL_TEXTURE_2D;
-
-    gltype = GL_UNSIGNED_BYTE;
-
-    switch (m_format) {
-    case QRhiTexture::RGBA8:
-        glintformat = GL_RGBA;
-        glformat = GL_RGBA;
-        break;
-    case QRhiTexture::BGRA8:
-        glintformat = rhiD->caps.bgraInternalFormat ? GL_BGRA : GL_RGBA;
-        glformat = GL_BGRA;
-        break;
-    case QRhiTexture::R16:
-        glintformat = GL_R16;
-        glformat = GL_RED;
-        gltype = GL_UNSIGNED_SHORT;
-        break;
-    case QRhiTexture::R8:
-        glintformat = GL_R8;
-        glformat = GL_RED;
-        break;
-    case QRhiTexture::RED_OR_ALPHA8:
-        // always alpha because we do not support core profile
-        glintformat = GL_ALPHA;
-        glformat = GL_ALPHA;
-        break;
-    default:
-        Q_UNREACHABLE();
-        glintformat = GL_RGBA;
-        glformat = GL_RGBA;
-        break;
-    }
-
     mipLevelCount = hasMipMaps ? rhiD->q->mipLevelsForSize(size) : 1;
+    gltype = GL_UNSIGNED_BYTE;
 
     if (isCompressed) {
         glintformat = toGlCompressedTextureFormat(m_format, m_flags);
         if (!glintformat) {
             qWarning("Compressed format %d not mappable to GL compressed format", m_format);
             return false;
+        }
+        glformat = GL_RGBA;
+    } else {
+        switch (m_format) {
+        case QRhiTexture::RGBA8:
+            glintformat = GL_RGBA;
+            glformat = GL_RGBA;
+            break;
+        case QRhiTexture::BGRA8:
+            glintformat = rhiD->caps.bgraInternalFormat ? GL_BGRA : GL_RGBA;
+            glformat = GL_BGRA;
+            break;
+        case QRhiTexture::R16:
+            glintformat = GL_R16;
+            glformat = GL_RED;
+            gltype = GL_UNSIGNED_SHORT;
+            break;
+        case QRhiTexture::R8:
+            glintformat = GL_R8;
+            glformat = GL_RED;
+            break;
+        case QRhiTexture::RED_OR_ALPHA8:
+            // always alpha because we do not support core profile
+            glintformat = GL_ALPHA;
+            glformat = GL_ALPHA;
+            break;
+        default:
+            Q_UNREACHABLE();
+            glintformat = GL_RGBA;
+            glformat = GL_RGBA;
+            break;
         }
     }
 

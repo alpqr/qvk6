@@ -3553,7 +3553,8 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags, QRh
         }
         r->d->debugMarkers = flags.testFlag(EnableDebugMarkers);
         if (r->d->create(flags)) {
-            r->dtype = impl;
+            r->d->implType = impl;
+            r->d->implThread = QThread::currentThread();
             return r.take();
         }
     }
@@ -3566,7 +3567,15 @@ QRhi *QRhi::create(Implementation impl, QRhiInitParams *params, Flags flags, QRh
  */
 QRhi::Implementation QRhi::backend() const
 {
-    return dtype;
+    return d->implType;
+}
+
+/*!
+    \return the thread on which the QRhi was \l{QRhi::create()}{initialized}.
+ */
+QThread *QRhi::thread() const
+{
+    return d->implThread;
 }
 
 /*!

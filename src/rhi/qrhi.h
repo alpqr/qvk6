@@ -43,6 +43,7 @@
 #include <QSize>
 #include <QMatrix4x4>
 #include <QVector>
+#include <QThread>
 #include <QImage>
 #include <QtShaderTools/QBakedShader>
 #include <functional>
@@ -1279,6 +1280,7 @@ public:
                         QRhiNativeHandles *importDevice = nullptr);
 
     Implementation backend() const;
+    QThread *thread() const;
 
     QRhiGraphicsPipeline *newGraphicsPipeline();
     QRhiShaderResourceBindings *newShaderResourceBindings();
@@ -1342,7 +1344,6 @@ protected:
 private:
     Q_DISABLE_COPY(QRhi)
     QRhiImplementation *d = nullptr;
-    QRhi::Implementation dtype;
 };
 
 Q_DECLARE_OPERATORS_FOR_FLAGS(QRhi::Flags)

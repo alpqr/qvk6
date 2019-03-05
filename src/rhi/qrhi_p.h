@@ -202,6 +202,8 @@ protected:
     bool debugMarkers = false;
 
 private:
+    QRhi::Implementation implType;
+    QThread *implThread;
     QRhiProfiler profiler;
     QVector<QRhiResourceUpdateBatch *> resUpdPool;
     QBitArray resUpdPoolMap;

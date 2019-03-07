@@ -137,6 +137,7 @@ struct QGles2RenderTargetData
     QSize pixelSize;
     float dpr = 1;
     int attCount = 0;
+    bool srgbUpdateAndBlend = false;
 };
 
 struct QGles2ReferenceRenderTarget : public QRhiRenderTarget
@@ -313,6 +314,7 @@ struct QGles2CommandBuffer : public QRhiCommandBuffer
             } clear;
             struct {
                 GLuint fbo;
+                bool srgb;
             } bindFramebuffer;
             struct {
                 GLenum target;
@@ -559,7 +561,8 @@ public:
               bgraExternalFormat(false),
               bgraInternalFormat(false),
               r8Format(false),
-              r16Format(false)
+              r16Format(false),
+              srgbCapableDefaultFramebuffer(false)
         { }
         int maxTextureSize;
         // Multisample fb and blit are supported (GLES 3.0 or OpenGL 3.x). Not
@@ -572,6 +575,7 @@ public:
         uint bgraInternalFormat : 1;
         uint r8Format : 1;
         uint r16Format : 1;
+        uint srgbCapableDefaultFramebuffer : 1;
     } caps;
     bool inFrame = false;
     bool inPass = false;

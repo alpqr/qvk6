@@ -1887,7 +1887,7 @@ QRhiRenderBuffer::QRhiRenderBuffer(QRhiImplementation *rhi, Type type_, const QS
      QRhiResourceUpdateBatch::generateMips(). Multisample textures cannot have
      mipmaps.
 
-    \value sRGB Use an sRGB format
+    \value sRGB Use an sRGB format.
 
     \value UsedAsTransferSource The texture is used as the source of a texture
     copy or readback, meaning the texture is given as the source in
@@ -2955,7 +2955,12 @@ QRhiGraphicsPipeline::QRhiGraphicsPipeline(QRhiImplementation *rhi)
     \value SurfaceHasNonPreMulAlpha Indicates the target surface has
     transparencyt with non-premultiplied alpha.
 
-    \value sRGB Requests to pick an sRGB format.
+    \value sRGB Requests to pick an sRGB format for the swapchain and/or its
+    render target views, where applicable. Note that this implies that sRGB
+    framebuffer update and blending will get enabled for all content targeting
+    this swapchain, and opting out is not possible. For OpenGL, set
+    \l{QSurfaceFormat::sRGBColorSpace}{sRGBColorSpace} on the QSurfaceFormat of
+    the QWindow in addition.
 
     \value UsedAsTransferSource Indicates the the swapchain will be used as the
     source of a readback in QRhiResourceUpdateBatch::readBackTexture().

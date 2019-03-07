@@ -177,6 +177,14 @@ QT_BEGIN_NAMESPACE
 #define GL_PRIMITIVE_RESTART_FIXED_INDEX  0x8D69
 #endif
 
+#ifndef GL_FRAMEBUFFER_SRGB
+#define GL_FRAMEBUFFER_SRGB 0x8DB9
+#endif
+
+#ifndef GL_FRAMEBUFFER_SRGB_CAPABLE
+#define GL_FRAMEBUFFER_SRGB_CAPABLE 0x8DBA
+#endif
+
 static QSurfaceFormat qrhigles2_effectiveFormat()
 {
     QSurfaceFormat fmt = QSurfaceFormat::defaultFormat();
@@ -328,6 +336,14 @@ bool QRhiGles2::create(QRhi::Flags flags)
 
     caps.r8Format = f->hasOpenGLFeature(QOpenGLFunctions::TextureRGFormats);
     caps.r16Format = f->hasOpenGLExtension(QOpenGLExtensions::Sized16Formats);
+
+    caps.srgbCapableDefaultFramebuffer = false;
+    if (ctx->hasExtension(QByteArrayLiteral("GL_ARB_framebuffer_sRGB"))) {
+        GLint srgbCapable = 0;
+        f->glGetIntegerv(GL_FRAMEBUFFER_SRGB_CAPABLE, &srgbCapable);
+        if (srgbCapable)
+            caps.srgbCapableDefaultFramebuffer = true;
+    }
 
     nativeHandlesStruct.context = ctx;
 
@@ -1474,6 +1490,12 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
                 f->glBindFramebuffer(GL_FRAMEBUFFER, cmd.args.bindFramebuffer.fbo);
             else
                 f->glBindFramebuffer(GL_FRAMEBUFFER, ctx->defaultFramebufferObject());
+            if (caps.srgbCapableDefaultFramebuffer) {
+                if (cmd.args.bindFramebuffer.srgb)
+                    f->glEnable(GL_FRAMEBUFFER_SRGB);
+                else
+                    f->glDisable(GL_FRAMEBUFFER_SRGB);
+            }
             break;
         case QGles2CommandBuffer::Command::Clear:
             f->glDisable(GL_SCISSOR_TEST);
@@ -1812,6 +1834,7 @@ void QRhiGles2::beginPass(QRhiCommandBuffer *cb,
         Q_UNREACHABLE();
         break;
     }
+    fbCmd.args.bindFramebuffer.srgb = rtD->srgbUpdateAndBlend;
     cbD->commands.append(fbCmd);
 
     cbD->currentTarget = rt;
@@ -2656,6 +2679,7 @@ bool QGles2SwapChain::buildOrResize()
     rt.d.pixelSize = pixelSize;
     rt.d.dpr = m_window->devicePixelRatio();
     rt.d.attCount = m_depthStencil ? 2 : 1;
+    rt.d.srgbUpdateAndBlend = m_flags.testFlag(QRhiSwapChain::sRGB);
 
     frameCount = 0;
 

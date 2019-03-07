@@ -483,6 +483,8 @@ int main(int argc, char **argv)
         fmt.setSamples(sampleCount);
     if (scFlags.testFlag(QRhiSwapChain::NoVSync))
         fmt.setSwapInterval(0);
+    if (scFlags.testFlag(QRhiSwapChain::sRGB))
+        fmt.setColorSpace(QSurfaceFormat::sRGBColorSpace);
     QSurfaceFormat::setDefaultFormat(fmt);
 
     // Vulkan setup.

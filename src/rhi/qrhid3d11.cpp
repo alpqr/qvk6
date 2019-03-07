@@ -1081,197 +1081,193 @@ void QRhiD3D11::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         cbD->commands.append(cmd);
     }
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.tex);
-        const QVector<QRhiTextureLayer> layers = u.desc.layers();
-        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureLayer &layerDesc(layers[layer]);
-            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
-            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
-                UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
-                const QPoint dp = mipDesc.destinationTopLeft();
-                D3D11_BOX box;
-                box.front = 0;
-                // back, right, bottom are exclusive
-                box.back = 1;
-                QD3D11CommandBuffer::Command cmd;
-                cmd.cmd = QD3D11CommandBuffer::Command::UpdateSubRes;
-                cmd.args.updateSubRes.dst = texD->tex;
-                cmd.args.updateSubRes.dstSubRes = subres;
+    for (const QRhiResourceUpdateBatchPrivate::TextureOp &u : ud->textureOps) {
+        if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexUpload) {
+            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.upload.tex);
+            const QVector<QRhiTextureLayer> layers = u.upload.desc.layers();
+            for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+                const QRhiTextureLayer &layerDesc(layers[layer]);
+                const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+                for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                    const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                    UINT subres = D3D11CalcSubresource(level, layer, texD->mipLevelCount);
+                    const QPoint dp = mipDesc.destinationTopLeft();
+                    D3D11_BOX box;
+                    box.front = 0;
+                    // back, right, bottom are exclusive
+                    box.back = 1;
+                    QD3D11CommandBuffer::Command cmd;
+                    cmd.cmd = QD3D11CommandBuffer::Command::UpdateSubRes;
+                    cmd.args.updateSubRes.dst = texD->tex;
+                    cmd.args.updateSubRes.dstSubRes = subres;
 
-                if (!mipDesc.image().isNull()) {
-                    QImage img = mipDesc.image();
-                    QSize size = img.size();
-                    int bpl = img.bytesPerLine();
-                    if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
-                        const QPoint sp = mipDesc.sourceTopLeft();
-                        if (!mipDesc.sourceSize().isEmpty())
-                            size = mipDesc.sourceSize();
-                        if (img.depth() == 32) {
-                            const int offset = sp.y() * img.bytesPerLine() + sp.x() * 4;
-                            cmd.args.updateSubRes.src = cbD->retainImage(img) + offset;
+                    if (!mipDesc.image().isNull()) {
+                        QImage img = mipDesc.image();
+                        QSize size = img.size();
+                        int bpl = img.bytesPerLine();
+                        if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                            const QPoint sp = mipDesc.sourceTopLeft();
+                            if (!mipDesc.sourceSize().isEmpty())
+                                size = mipDesc.sourceSize();
+                            if (img.depth() == 32) {
+                                const int offset = sp.y() * img.bytesPerLine() + sp.x() * 4;
+                                cmd.args.updateSubRes.src = cbD->retainImage(img) + offset;
+                            } else {
+                                img = img.copy(sp.x(), sp.y(), size.width(), size.height());
+                                bpl = img.bytesPerLine();
+                                cmd.args.updateSubRes.src = cbD->retainImage(img);
+                            }
                         } else {
-                            img = img.copy(sp.x(), sp.y(), size.width(), size.height());
-                            bpl = img.bytesPerLine();
                             cmd.args.updateSubRes.src = cbD->retainImage(img);
                         }
-                    } else {
-                        cmd.args.updateSubRes.src = cbD->retainImage(img);
+                        box.left = dp.x();
+                        box.top = dp.y();
+                        box.right = dp.x() + size.width();
+                        box.bottom = dp.y() + size.height();
+                        cmd.args.updateSubRes.hasDstBox = true;
+                        cmd.args.updateSubRes.dstBox = box;
+                        cmd.args.updateSubRes.srcRowPitch = bpl;
+                    } else if (!mipDesc.compressedData().isEmpty() && isCompressedFormat(texD->m_format)) {
+                        const QSize size = mipDesc.sourceSize().isEmpty() ? q->sizeForMipLevel(level, texD->m_pixelSize)
+                                                                          : mipDesc.sourceSize();
+                        quint32 bpl = 0;
+                        QSize blockDim;
+                        compressedFormatInfo(texD->m_format, size, &bpl, nullptr, &blockDim);
+                        // Everything must be a multiple of the block width and
+                        // height, so e.g. a mip level of size 2x2 will be 4x4 when it
+                        // comes to the actual data.
+                        box.left = aligned(dp.x(), blockDim.width());
+                        box.top = aligned(dp.y(), blockDim.height());
+                        box.right = aligned(dp.x() + size.width(), blockDim.width());
+                        box.bottom = aligned(dp.y() + size.height(), blockDim.height());
+                        cmd.args.updateSubRes.hasDstBox = true;
+                        cmd.args.updateSubRes.dstBox = box;
+                        cmd.args.updateSubRes.src = cbD->retainData(mipDesc.compressedData());
+                        cmd.args.updateSubRes.srcRowPitch = bpl;
                     }
-                    box.left = dp.x();
-                    box.top = dp.y();
-                    box.right = dp.x() + size.width();
-                    box.bottom = dp.y() + size.height();
-                    cmd.args.updateSubRes.hasDstBox = true;
-                    cmd.args.updateSubRes.dstBox = box;
-                    cmd.args.updateSubRes.srcRowPitch = bpl;
-                } else if (!mipDesc.compressedData().isEmpty() && isCompressedFormat(texD->m_format)) {
-                    const QSize size = mipDesc.sourceSize().isEmpty() ? q->sizeForMipLevel(level, texD->m_pixelSize)
-                                                                      : mipDesc.sourceSize();
-                    quint32 bpl = 0;
-                    QSize blockDim;
-                    compressedFormatInfo(texD->m_format, size, &bpl, nullptr, &blockDim);
-                    // Everything must be a multiple of the block width and
-                    // height, so e.g. a mip level of size 2x2 will be 4x4 when it
-                    // comes to the actual data.
-                    box.left = aligned(dp.x(), blockDim.width());
-                    box.top = aligned(dp.y(), blockDim.height());
-                    box.right = aligned(dp.x() + size.width(), blockDim.width());
-                    box.bottom = aligned(dp.y() + size.height(), blockDim.height());
-                    cmd.args.updateSubRes.hasDstBox = true;
-                    cmd.args.updateSubRes.dstBox = box;
-                    cmd.args.updateSubRes.src = cbD->retainData(mipDesc.compressedData());
-                    cmd.args.updateSubRes.srcRowPitch = bpl;
+                    cbD->commands.append(cmd);
                 }
-                cbD->commands.append(cmd);
             }
-        }
-    }
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexCopy) {
+            Q_ASSERT(u.copy.src && u.copy.dst);
+            QD3D11Texture *srcD = QRHI_RES(QD3D11Texture, u.copy.src);
+            QD3D11Texture *dstD = QRHI_RES(QD3D11Texture, u.copy.dst);
+            UINT srcSubRes = D3D11CalcSubresource(u.copy.desc.sourceLevel(), u.copy.desc.sourceLayer(), srcD->mipLevelCount);
+            UINT dstSubRes = D3D11CalcSubresource(u.copy.desc.destinationLevel(), u.copy.desc.destinationLayer(), dstD->mipLevelCount);
+            const QPoint dp = u.copy.desc.destinationTopLeft();
+            const QSize size = u.copy.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.copy.desc.pixelSize();
+            const QPoint sp = u.copy.desc.sourceTopLeft();
+            D3D11_BOX srcBox;
+            srcBox.left = sp.x();
+            srcBox.top = sp.y();
+            srcBox.front = 0;
+            // back, right, bottom are exclusive
+            srcBox.right = srcBox.left + size.width();
+            srcBox.bottom = srcBox.top + size.height();
+            srcBox.back = 1;
+            QD3D11CommandBuffer::Command cmd;
+            cmd.cmd = QD3D11CommandBuffer::Command::CopySubRes;
+            cmd.args.copySubRes.dst = dstD->tex;
+            cmd.args.copySubRes.dstSubRes = dstSubRes;
+            cmd.args.copySubRes.dstX = dp.x();
+            cmd.args.copySubRes.dstY = dp.y();
+            cmd.args.copySubRes.src = srcD->tex;
+            cmd.args.copySubRes.srcSubRes = srcSubRes;
+            cmd.args.copySubRes.hasSrcBox = true;
+            cmd.args.copySubRes.srcBox = srcBox;
+            cbD->commands.append(cmd);
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexRead) {
+            ActiveReadback aRb;
+            aRb.desc = u.read.rb;
+            aRb.result = u.read.result;
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
-        Q_ASSERT(u.src && u.dst);
-        QD3D11Texture *srcD = QRHI_RES(QD3D11Texture, u.src);
-        QD3D11Texture *dstD = QRHI_RES(QD3D11Texture, u.dst);
-        UINT srcSubRes = D3D11CalcSubresource(u.desc.sourceLevel(), u.desc.sourceLayer(), srcD->mipLevelCount);
-        UINT dstSubRes = D3D11CalcSubresource(u.desc.destinationLevel(), u.desc.destinationLayer(), dstD->mipLevelCount);
-        const QPoint dp = u.desc.destinationTopLeft();
-        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
-        const QPoint sp = u.desc.sourceTopLeft();
-        D3D11_BOX srcBox;
-        srcBox.left = sp.x();
-        srcBox.top = sp.y();
-        srcBox.front = 0;
-        // back, right, bottom are exclusive
-        srcBox.right = srcBox.left + size.width();
-        srcBox.bottom = srcBox.top + size.height();
-        srcBox.back = 1;
-        QD3D11CommandBuffer::Command cmd;
-        cmd.cmd = QD3D11CommandBuffer::Command::CopySubRes;
-        cmd.args.copySubRes.dst = dstD->tex;
-        cmd.args.copySubRes.dstSubRes = dstSubRes;
-        cmd.args.copySubRes.dstX = dp.x();
-        cmd.args.copySubRes.dstY = dp.y();
-        cmd.args.copySubRes.src = srcD->tex;
-        cmd.args.copySubRes.srcSubRes = srcSubRes;
-        cmd.args.copySubRes.hasSrcBox = true;
-        cmd.args.copySubRes.srcBox = srcBox;
-        cbD->commands.append(cmd);
-    }
+            ID3D11Resource *src;
+            DXGI_FORMAT dxgiFormat;
+            QSize pixelSize;
+            QRhiTexture::Format format;
+            UINT subres = 0;
+            QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.read.rb.texture());
+            QD3D11SwapChain *swapChainD = nullptr;
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
-        ActiveReadback aRb;
-        aRb.desc = u.rb;
-        aRb.result = u.result;
-
-        ID3D11Resource *src;
-        DXGI_FORMAT dxgiFormat;
-        QSize pixelSize;
-        QRhiTexture::Format format;
-        UINT subres = 0;
-        QD3D11Texture *texD = QRHI_RES(QD3D11Texture, u.rb.texture());
-        QD3D11SwapChain *swapChainD = nullptr;
-
-        if (texD) {
-            if (texD->sampleDesc.Count > 1) {
-                qWarning("Multisample texture cannot be read back");
-                continue;
+            if (texD) {
+                if (texD->sampleDesc.Count > 1) {
+                    qWarning("Multisample texture cannot be read back");
+                    continue;
+                }
+                src = texD->tex;
+                dxgiFormat = texD->dxgiFormat;
+                pixelSize = u.read.rb.level() > 0 ? q->sizeForMipLevel(u.read.rb.level(), texD->m_pixelSize) : texD->m_pixelSize;
+                format = texD->m_format;
+                subres = D3D11CalcSubresource(u.read.rb.level(), u.read.rb.layer(), texD->mipLevelCount);
+            } else {
+                Q_ASSERT(contextState.currentSwapChain);
+                swapChainD = QRHI_RES(QD3D11SwapChain, contextState.currentSwapChain);
+                if (swapChainD->sampleDesc.Count > 1) {
+                    // Unlike with textures, reading back a multisample swapchain image
+                    // has to be supported. Insert a resolve.
+                    QD3D11CommandBuffer::Command rcmd;
+                    rcmd.cmd = QD3D11CommandBuffer::Command::ResolveSubRes;
+                    rcmd.args.resolveSubRes.dst = swapChainD->tex[swapChainD->currentFrameSlot];
+                    rcmd.args.resolveSubRes.dstSubRes = 0;
+                    rcmd.args.resolveSubRes.src = swapChainD->msaaTex[swapChainD->currentFrameSlot];
+                    rcmd.args.resolveSubRes.srcSubRes = 0;
+                    rcmd.args.resolveSubRes.format = swapChainD->colorFormat;
+                    cbD->commands.append(rcmd);
+                }
+                src = swapChainD->tex[swapChainD->currentFrameSlot];
+                dxgiFormat = swapChainD->colorFormat;
+                pixelSize = swapChainD->pixelSize;
+                format = colorTextureFormatFromDxgiFormat(dxgiFormat, nullptr);
+                if (format == QRhiTexture::UnknownFormat)
+                    continue;
             }
-            src = texD->tex;
-            dxgiFormat = texD->dxgiFormat;
-            pixelSize = u.rb.level() > 0 ? q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize) : texD->m_pixelSize;
-            format = texD->m_format;
-            subres = D3D11CalcSubresource(u.rb.level(), u.rb.layer(), texD->mipLevelCount);
-        } else {
-            Q_ASSERT(contextState.currentSwapChain);
-            swapChainD = QRHI_RES(QD3D11SwapChain, contextState.currentSwapChain);
-            if (swapChainD->sampleDesc.Count > 1) {
-                // Unlike with textures, reading back a multisample swapchain image
-                // has to be supported. Insert a resolve.
-                QD3D11CommandBuffer::Command rcmd;
-                rcmd.cmd = QD3D11CommandBuffer::Command::ResolveSubRes;
-                rcmd.args.resolveSubRes.dst = swapChainD->tex[swapChainD->currentFrameSlot];
-                rcmd.args.resolveSubRes.dstSubRes = 0;
-                rcmd.args.resolveSubRes.src = swapChainD->msaaTex[swapChainD->currentFrameSlot];
-                rcmd.args.resolveSubRes.srcSubRes = 0;
-                rcmd.args.resolveSubRes.format = swapChainD->colorFormat;
-                cbD->commands.append(rcmd);
+            quint32 bufSize = 0;
+            textureFormatInfo(format, pixelSize, nullptr, &bufSize);
+
+            D3D11_TEXTURE2D_DESC desc;
+            memset(&desc, 0, sizeof(desc));
+            desc.Width = pixelSize.width();
+            desc.Height = pixelSize.height();
+            desc.MipLevels = 1;
+            desc.ArraySize = 1;
+            desc.Format = dxgiFormat;
+            desc.SampleDesc.Count = 1;
+            desc.Usage = D3D11_USAGE_STAGING;
+            desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+            ID3D11Texture2D *stagingTex;
+            HRESULT hr = dev->CreateTexture2D(&desc, nullptr, &stagingTex);
+            if (FAILED(hr)) {
+                qWarning("Failed to create readback staging texture: %s", qPrintable(comErrorMessage(hr)));
+                return;
             }
-            src = swapChainD->tex[swapChainD->currentFrameSlot];
-            dxgiFormat = swapChainD->colorFormat;
-            pixelSize = swapChainD->pixelSize;
-            format = colorTextureFormatFromDxgiFormat(dxgiFormat, nullptr);
-            if (format == QRhiTexture::UnknownFormat)
-                continue;
+            QRHI_PROF_F(newReadbackBuffer(quint64(quintptr(stagingTex)),
+                                          texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
+                                          bufSize));
+
+            QD3D11CommandBuffer::Command cmd;
+            cmd.cmd = QD3D11CommandBuffer::Command::CopySubRes;
+            cmd.args.copySubRes.dst = stagingTex;
+            cmd.args.copySubRes.dstSubRes = 0;
+            cmd.args.copySubRes.dstX = 0;
+            cmd.args.copySubRes.dstY = 0;
+            cmd.args.copySubRes.src = src;
+            cmd.args.copySubRes.srcSubRes = subres;
+            cmd.args.copySubRes.hasSrcBox = false;
+            cbD->commands.append(cmd);
+
+            aRb.stagingTex = stagingTex;
+            aRb.bufSize = bufSize;
+            aRb.pixelSize = pixelSize;
+            aRb.format = format;
+
+            activeReadbacks.append(aRb);
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexMipGen) {
+            Q_ASSERT(u.mipgen.tex->flags().testFlag(QRhiTexture::UsedWithGenerateMips));
+            QD3D11CommandBuffer::Command cmd;
+            cmd.cmd = QD3D11CommandBuffer::Command::GenMip;
+            cmd.args.genMip.srv = QRHI_RES(QD3D11Texture, u.mipgen.tex)->srv;
+            cbD->commands.append(cmd);
         }
-        quint32 bufSize = 0;
-        textureFormatInfo(format, pixelSize, nullptr, &bufSize);
-
-        D3D11_TEXTURE2D_DESC desc;
-        memset(&desc, 0, sizeof(desc));
-        desc.Width = pixelSize.width();
-        desc.Height = pixelSize.height();
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
-        desc.Format = dxgiFormat;
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_STAGING;
-        desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-        ID3D11Texture2D *stagingTex;
-        HRESULT hr = dev->CreateTexture2D(&desc, nullptr, &stagingTex);
-        if (FAILED(hr)) {
-            qWarning("Failed to create readback staging texture: %s", qPrintable(comErrorMessage(hr)));
-            return;
-        }
-        QRHI_PROF_F(newReadbackBuffer(quint64(quintptr(stagingTex)),
-                                      texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
-                                      bufSize));
-
-        QD3D11CommandBuffer::Command cmd;
-        cmd.cmd = QD3D11CommandBuffer::Command::CopySubRes;
-        cmd.args.copySubRes.dst = stagingTex;
-        cmd.args.copySubRes.dstSubRes = 0;
-        cmd.args.copySubRes.dstX = 0;
-        cmd.args.copySubRes.dstY = 0;
-        cmd.args.copySubRes.src = src;
-        cmd.args.copySubRes.srcSubRes = subres;
-        cmd.args.copySubRes.hasSrcBox = false;
-        cbD->commands.append(cmd);
-
-        aRb.stagingTex = stagingTex;
-        aRb.bufSize = bufSize;
-        aRb.pixelSize = pixelSize;
-        aRb.format = format;
-
-        activeReadbacks.append(aRb);
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
-        Q_ASSERT(u.tex->flags().testFlag(QRhiTexture::UsedWithGenerateMips));
-        QD3D11CommandBuffer::Command cmd;
-        cmd.cmd = QD3D11CommandBuffer::Command::GenMip;
-        cmd.args.genMip.srv = QRHI_RES(QD3D11Texture, u.tex)->srv;
-        cbD->commands.append(cmd);
     }
 
     ud->free();

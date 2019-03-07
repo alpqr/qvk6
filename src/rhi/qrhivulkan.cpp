@@ -2361,368 +2361,364 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
         }
     }
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        const QVector<QRhiTextureLayer> layers = u.desc.layers();
-        if (layers.isEmpty() || layers[0].mipImages().isEmpty())
-            continue;
+    for (const QRhiResourceUpdateBatchPrivate::TextureOp &u : ud->textureOps) {
+        if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexUpload) {
+            const QVector<QRhiTextureLayer> layers = u.upload.desc.layers();
+            if (layers.isEmpty() || layers[0].mipImages().isEmpty())
+                continue;
 
-        QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
-        VkDeviceSize stagingSize = 0;
+            QVkTexture *utexD = QRHI_RES(QVkTexture, u.upload.tex);
+            VkDeviceSize stagingSize = 0;
 
-        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureLayer &layerDesc(layers[layer]);
-            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
-            Q_ASSERT(mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
-            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image().isNull() ?
-                            mipDesc.compressedData().size() : mipDesc.image().sizeInBytes();
-                if (imageSizeBytes > 0)
-                    stagingSize += aligned(imageSizeBytes, texbufAlign);
+            for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+                const QRhiTextureLayer &layerDesc(layers[layer]);
+                const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+                Q_ASSERT(mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
+                for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                    const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                    const qsizetype imageSizeBytes = mipDesc.image().isNull() ?
+                                mipDesc.compressedData().size() : mipDesc.image().sizeInBytes();
+                    if (imageSizeBytes > 0)
+                        stagingSize += aligned(imageSizeBytes, texbufAlign);
+                }
             }
-        }
 
-        if (!utexD->stagingBuffers[currentFrameSlot]) {
-            VkBufferCreateInfo bufferInfo;
-            memset(&bufferInfo, 0, sizeof(bufferInfo));
-            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-            bufferInfo.size = stagingSize;
-            bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            if (!utexD->stagingBuffers[currentFrameSlot]) {
+                VkBufferCreateInfo bufferInfo;
+                memset(&bufferInfo, 0, sizeof(bufferInfo));
+                bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+                bufferInfo.size = stagingSize;
+                bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-            VmaAllocationCreateInfo allocInfo;
-            memset(&allocInfo, 0, sizeof(allocInfo));
-            allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+                VmaAllocationCreateInfo allocInfo;
+                memset(&allocInfo, 0, sizeof(allocInfo));
+                allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
 
-            VmaAllocation allocation;
-            VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo,
-                                           &utexD->stagingBuffers[currentFrameSlot], &allocation, nullptr);
+                VmaAllocation allocation;
+                VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo,
+                                               &utexD->stagingBuffers[currentFrameSlot], &allocation, nullptr);
+                if (err != VK_SUCCESS) {
+                    qWarning("Failed to create image staging buffer of size %d: %d", int(stagingSize), err);
+                    continue;
+                }
+                utexD->stagingAllocations[currentFrameSlot] = allocation;
+                QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, stagingSize));
+            }
+
+            QVarLengthArray<VkBufferImageCopy, 4> copyInfos;
+            size_t curOfs = 0;
+            void *mp = nullptr;
+            VmaAllocation a = toVmaAllocation(utexD->stagingAllocations[currentFrameSlot]);
+            VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &mp);
             if (err != VK_SUCCESS) {
-                qWarning("Failed to create image staging buffer of size %d: %d", int(stagingSize), err);
+                qWarning("Failed to map image data: %d", err);
                 continue;
             }
-            utexD->stagingAllocations[currentFrameSlot] = allocation;
-            QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, stagingSize));
-        }
+            QVector<QImage> tempImages; // yes, we rely heavily on implicit sharing in QImage
+            for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+                const QRhiTextureLayer &layerDesc(layers[layer]);
+                const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+                for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                    const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                    qsizetype imageSizeBytes = 0;
+                    const void *src = nullptr;
+                    VkBufferImageCopy copyInfo;
+                    memset(&copyInfo, 0, sizeof(copyInfo));
+                    copyInfo.bufferOffset = curOfs;
+                    copyInfo.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                    copyInfo.imageSubresource.mipLevel = level;
+                    copyInfo.imageSubresource.baseArrayLayer = layer;
+                    copyInfo.imageSubresource.layerCount = 1;
+                    copyInfo.imageExtent.depth = 1;
 
-        QVarLengthArray<VkBufferImageCopy, 4> copyInfos;
-        size_t curOfs = 0;
-        void *mp = nullptr;
-        VmaAllocation a = toVmaAllocation(utexD->stagingAllocations[currentFrameSlot]);
-        VkResult err = vmaMapMemory(toVmaAllocator(allocator), a, &mp);
-        if (err != VK_SUCCESS) {
-            qWarning("Failed to map image data: %d", err);
-            continue;
-        }
-        QVector<QImage> tempImages; // yes, we rely heavily on implicit sharing in QImage
-        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureLayer &layerDesc(layers[layer]);
-            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
-            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
-                qsizetype imageSizeBytes = 0;
-                const void *src = nullptr;
-                VkBufferImageCopy copyInfo;
-                memset(&copyInfo, 0, sizeof(copyInfo));
-                copyInfo.bufferOffset = curOfs;
-                copyInfo.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-                copyInfo.imageSubresource.mipLevel = level;
-                copyInfo.imageSubresource.baseArrayLayer = layer;
-                copyInfo.imageSubresource.layerCount = 1;
-                copyInfo.imageExtent.depth = 1;
-
-                const QPoint dp = mipDesc.destinationTopLeft();
-                const QImage image = mipDesc.image();
-                const QByteArray compressedData = mipDesc.compressedData();
-                if (!image.isNull()) {
-                    imageSizeBytes = image.sizeInBytes();
-                    if (imageSizeBytes > 0) {
-                        QImage img = image;
-                        QSize size = img.size();
-                        src = img.constBits();
-                        copyInfo.bufferRowLength = size.width(); // this is in pixels, not bytes
-                        if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
-                            const int sx = mipDesc.sourceTopLeft().x();
-                            const int sy = mipDesc.sourceTopLeft().y();
+                    const QPoint dp = mipDesc.destinationTopLeft();
+                    const QImage image = mipDesc.image();
+                    const QByteArray compressedData = mipDesc.compressedData();
+                    if (!image.isNull()) {
+                        imageSizeBytes = image.sizeInBytes();
+                        if (imageSizeBytes > 0) {
+                            QImage img = image;
+                            QSize size = img.size();
+                            src = img.constBits();
+                            copyInfo.bufferRowLength = size.width(); // this is in pixels, not bytes
+                            if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                                const int sx = mipDesc.sourceTopLeft().x();
+                                const int sy = mipDesc.sourceTopLeft().y();
+                                if (!mipDesc.sourceSize().isEmpty())
+                                    size = mipDesc.sourceSize();
+                                if (img.depth() == 32) {
+                                    src = img.constBits() + sy * img.bytesPerLine() + sx * 4;
+                                    // bufferRowLength remains set to the original image's width
+                                } else {
+                                    img = img.copy(sx, sy, size.width(), size.height());
+                                    src = img.constBits();
+                                    copyInfo.bufferRowLength = size.width();
+                                    tempImages.append(img); // keep the new, temporary image alive until the vkCmdCopy
+                                }
+                            }
+                            copyInfo.imageOffset.x = dp.x();
+                            copyInfo.imageOffset.y = dp.y();
+                            copyInfo.imageExtent.width = size.width();
+                            copyInfo.imageExtent.height = size.height();
+                            copyInfos.append(copyInfo);
+                        }
+                    } else {
+                        imageSizeBytes = compressedData.size();
+                        if (imageSizeBytes > 0) {
+                            src = compressedData.constData();
+                            QSize size = q->sizeForMipLevel(level, utexD->m_pixelSize);
+                            const int subresw = size.width();
+                            const int subresh = size.height();
                             if (!mipDesc.sourceSize().isEmpty())
                                 size = mipDesc.sourceSize();
-                            if (img.depth() == 32) {
-                                src = img.constBits() + sy * img.bytesPerLine() + sx * 4;
-                                // bufferRowLength remains set to the original image's width
-                            } else {
-                                img = img.copy(sx, sy, size.width(), size.height());
-                                src = img.constBits();
-                                copyInfo.bufferRowLength = size.width();
-                                tempImages.append(img); // keep the new, temporary image alive until the vkCmdCopy
-                            }
+                            const int w = size.width();
+                            const int h = size.height();
+                            QSize blockDim;
+                            compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
+                            // x and y must be multiples of the block width and height
+                            copyInfo.imageOffset.x = aligned(dp.x(), blockDim.width());
+                            copyInfo.imageOffset.y = aligned(dp.y(), blockDim.height());
+                            // width and height must be multiples of the block width and height
+                            // or x + width and y + height must equal the subresource width and height
+                            copyInfo.imageExtent.width = dp.x() + w == subresw ? w : aligned(w, blockDim.width());
+                            copyInfo.imageExtent.height = dp.y() + h == subresh ? h : aligned(h, blockDim.height());
+                            copyInfos.append(copyInfo);
                         }
-                        copyInfo.imageOffset.x = dp.x();
-                        copyInfo.imageOffset.y = dp.y();
-                        copyInfo.imageExtent.width = size.width();
-                        copyInfo.imageExtent.height = size.height();
-                        copyInfos.append(copyInfo);
                     }
-                } else {
-                    imageSizeBytes = compressedData.size();
+
                     if (imageSizeBytes > 0) {
-                        src = compressedData.constData();
-                        QSize size = q->sizeForMipLevel(level, utexD->m_pixelSize);
-                        const int subresw = size.width();
-                        const int subresh = size.height();
-                        if (!mipDesc.sourceSize().isEmpty())
-                            size = mipDesc.sourceSize();
-                        const int w = size.width();
-                        const int h = size.height();
-                        QSize blockDim;
-                        compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
-                        // x and y must be multiples of the block width and height
-                        copyInfo.imageOffset.x = aligned(dp.x(), blockDim.width());
-                        copyInfo.imageOffset.y = aligned(dp.y(), blockDim.height());
-                        // width and height must be multiples of the block width and height
-                        // or x + width and y + height must equal the subresource width and height
-                        copyInfo.imageExtent.width = dp.x() + w == subresw ? w : aligned(w, blockDim.width());
-                        copyInfo.imageExtent.height = dp.y() + h == subresh ? h : aligned(h, blockDim.height());
-                        copyInfos.append(copyInfo);
+                        memcpy(reinterpret_cast<char *>(mp) + curOfs, src, imageSizeBytes);
+                        curOfs += aligned(imageSizeBytes, texbufAlign);
                     }
                 }
-
-                if (imageSizeBytes > 0) {
-                    memcpy(reinterpret_cast<char *>(mp) + curOfs, src, imageSizeBytes);
-                    curOfs += aligned(imageSizeBytes, texbufAlign);
-                }
             }
-        }
-        vmaUnmapMemory(toVmaAllocator(allocator), a);
-        vmaFlushAllocation(toVmaAllocator(allocator), a, 0, stagingSize);
+            vmaUnmapMemory(toVmaAllocator(allocator), a);
+            vmaFlushAllocation(toVmaAllocator(allocator), a, 0, stagingSize);
 
-        prepareForTransferDest(cb, utexD);
+            prepareForTransferDest(cb, utexD);
 
-        df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffers[currentFrameSlot],
-                                   utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                   copyInfos.count(), copyInfos.constData());
-        utexD->lastActiveFrameSlot = currentFrameSlot;
+            df->vkCmdCopyBufferToImage(cbD->cb, utexD->stagingBuffers[currentFrameSlot],
+                                       utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                       copyInfos.count(), copyInfos.constData());
+            utexD->lastActiveFrameSlot = currentFrameSlot;
 
-        if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently)) {
-            QRhiVulkan::DeferredReleaseEntry e;
-            e.type = QRhiVulkan::DeferredReleaseEntry::StagingBuffer;
-            e.lastActiveFrameSlot = currentFrameSlot;
-            e.stagingBuffer.stagingBuffer = utexD->stagingBuffers[currentFrameSlot];
-            e.stagingBuffer.stagingAllocation = utexD->stagingAllocations[currentFrameSlot];
-            utexD->stagingBuffers[currentFrameSlot] = VK_NULL_HANDLE;
-            utexD->stagingAllocations[currentFrameSlot] = nullptr;
-            releaseQueue.append(e);
-            QRHI_PROF_F(releaseTextureStagingArea(utexD, currentFrameSlot));
-        }
-
-        finishTransferDest(cb, utexD);
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
-        Q_ASSERT(u.src && u.dst);
-        QVkTexture *srcD = QRHI_RES(QVkTexture, u.src);
-        QVkTexture *dstD = QRHI_RES(QVkTexture, u.dst);
-
-        VkImageCopy region;
-        memset(&region, 0, sizeof(region));
-
-        region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.srcSubresource.mipLevel = u.desc.sourceLevel();
-        region.srcSubresource.baseArrayLayer = u.desc.sourceLayer();
-        region.srcSubresource.layerCount = 1;
-
-        region.srcOffset.x = u.desc.sourceTopLeft().x();
-        region.srcOffset.y = u.desc.sourceTopLeft().y();
-
-        region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.dstSubresource.mipLevel = u.desc.destinationLevel();
-        region.dstSubresource.baseArrayLayer = u.desc.destinationLayer();
-        region.dstSubresource.layerCount = 1;
-
-        region.dstOffset.x = u.desc.destinationTopLeft().x();
-        region.dstOffset.y = u.desc.destinationTopLeft().y();
-
-        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
-        region.extent.width = size.width();
-        region.extent.height = size.height();
-        region.extent.depth = 1;
-
-        prepareForTransferSrc(cb, srcD);
-        prepareForTransferDest(cb, dstD);
-
-        df->vkCmdCopyImage(QRHI_RES(QVkCommandBuffer, cb)->cb,
-                           srcD->image, srcD->layout,
-                           dstD->image, dstD->layout,
-                           1, &region);
-
-        finishTransferSrc(cb, srcD);
-        finishTransferDest(cb, dstD);
-
-        srcD->lastActiveFrameSlot = dstD->lastActiveFrameSlot = currentFrameSlot;
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
-        ActiveReadback aRb;
-        aRb.activeFrameSlot = currentFrameSlot;
-        aRb.desc = u.rb;
-        aRb.result = u.result;
-
-        QVkTexture *texD = QRHI_RES(QVkTexture, u.rb.texture());
-        QVkSwapChain *swapChainD = nullptr;
-        if (texD) {
-            if (texD->samples > VK_SAMPLE_COUNT_1_BIT) {
-                qWarning("Multisample texture cannot be read back");
-                continue;
-            }
-            aRb.pixelSize = u.rb.level() > 0 ? q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize)
-                                             : texD->m_pixelSize;
-            aRb.format = texD->m_format;
-            texD->lastActiveFrameSlot = currentFrameSlot;
-        } else {
-            Q_ASSERT(currentSwapChain);
-            swapChainD = QRHI_RES(QVkSwapChain, currentSwapChain);
-            if (!swapChainD->supportsReadback) {
-                qWarning("Swapchain does not support readback");
-                continue;
-            }
-            aRb.pixelSize = swapChainD->pixelSize;
-            aRb.format = colorTextureFormatFromVkFormat(swapChainD->colorFormat, nullptr);
-            if (aRb.format == QRhiTexture::UnknownFormat)
-                continue;
-
-            // Multisample swapchains need nothing special since resolving
-            // happens when ending a renderpass.
-        }
-        textureFormatInfo(aRb.format, aRb.pixelSize, nullptr, &aRb.bufSize);
-
-        // Create a host visible buffer.
-        VkBufferCreateInfo bufferInfo;
-        memset(&bufferInfo, 0, sizeof(bufferInfo));
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = aRb.bufSize;
-        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-
-        VmaAllocationCreateInfo allocInfo;
-        memset(&allocInfo, 0, sizeof(allocInfo));
-        allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
-
-        VmaAllocation allocation;
-        VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &aRb.buf, &allocation, nullptr);
-        if (err == VK_SUCCESS) {
-            aRb.bufAlloc = allocation;
-            QRHI_PROF_F(newReadbackBuffer(reinterpret_cast<quint64>(aRb.buf),
-                                          texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
-                                          aRb.bufSize));
-        } else {
-            qWarning("Failed to create readback buffer of size %u: %d", aRb.bufSize, err);
-            continue;
-        }
-
-        // Copy from the (optimal and not host visible) image into the buffer.
-        VkBufferImageCopy copyDesc;
-        memset(&copyDesc, 0, sizeof(copyDesc));
-        copyDesc.bufferOffset = 0;
-        copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        copyDesc.imageSubresource.mipLevel = u.rb.level();
-        copyDesc.imageSubresource.baseArrayLayer = u.rb.layer();
-        copyDesc.imageSubresource.layerCount = 1;
-        copyDesc.imageExtent.width = aRb.pixelSize.width();
-        copyDesc.imageExtent.height = aRb.pixelSize.height();
-        copyDesc.imageExtent.depth = 1;
-
-        if (texD) {
-            prepareForTransferSrc(cb, texD);
-            df->vkCmdCopyImageToBuffer(cbD->cb, texD->image, texD->layout, aRb.buf, 1, &copyDesc);
-            finishTransferSrc(cb, texD);
-        } else {
-            // use the swapchain image
-            VkImage image = swapChainD->imageRes[swapChainD->currentImageIndex].image;
-            VkImageMemoryBarrier barrier;
-            memset(&barrier, 0, sizeof(barrier));
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-            barrier.image = image;
-            df->vkCmdPipelineBarrier(cbD->cb,
-                                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                     0, 0, nullptr, 0, nullptr,
-                                     1, &barrier);
-            swapChainD->imageRes[swapChainD->currentImageIndex].presentableLayout = false;
-
-            df->vkCmdCopyImageToBuffer(cbD->cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, aRb.buf, 1, &copyDesc);
-        }
-
-        activeReadbacks.append(aRb);
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
-        QVkTexture *utexD = QRHI_RES(QVkTexture, u.tex);
-        Q_ASSERT(utexD->m_flags.testFlag(QRhiTexture::UsedWithGenerateMips));
-        int w = utexD->m_pixelSize.width();
-        int h = utexD->m_pixelSize.height();
-
-        prepareForTransferSrc(cb, utexD);
-
-        const uint layerCount = utexD->m_flags.testFlag(QRhiTexture::CubeMap) ? 6 : 1;
-        for (uint level = 1; level < utexD->mipLevelCount; ++level) {
-            if (level > 1) {
-                imageSubResBarrier(cb, utexD,
-                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
-                                   VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                                   0, layerCount, level - 1, 1);
+            if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently)) {
+                QRhiVulkan::DeferredReleaseEntry e;
+                e.type = QRhiVulkan::DeferredReleaseEntry::StagingBuffer;
+                e.lastActiveFrameSlot = currentFrameSlot;
+                e.stagingBuffer.stagingBuffer = utexD->stagingBuffers[currentFrameSlot];
+                e.stagingBuffer.stagingAllocation = utexD->stagingAllocations[currentFrameSlot];
+                utexD->stagingBuffers[currentFrameSlot] = VK_NULL_HANDLE;
+                utexD->stagingAllocations[currentFrameSlot] = nullptr;
+                releaseQueue.append(e);
+                QRHI_PROF_F(releaseTextureStagingArea(utexD, currentFrameSlot));
             }
 
-            imageSubResBarrier(cb, utexD,
-                               VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
-                               VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                               0, layerCount, level, 1);
+            finishTransferDest(cb, utexD);
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexCopy) {
+            Q_ASSERT(u.copy.src && u.copy.dst);
+            QVkTexture *srcD = QRHI_RES(QVkTexture, u.copy.src);
+            QVkTexture *dstD = QRHI_RES(QVkTexture, u.copy.dst);
 
-            VkImageBlit region;
+            VkImageCopy region;
             memset(&region, 0, sizeof(region));
 
             region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.srcSubresource.mipLevel = level - 1;
-            region.srcSubresource.baseArrayLayer = 0;
-            region.srcSubresource.layerCount = layerCount;
+            region.srcSubresource.mipLevel = u.copy.desc.sourceLevel();
+            region.srcSubresource.baseArrayLayer = u.copy.desc.sourceLayer();
+            region.srcSubresource.layerCount = 1;
 
-            region.srcOffsets[1].x = w;
-            region.srcOffsets[1].y = h;
-            region.srcOffsets[1].z = 1;
+            region.srcOffset.x = u.copy.desc.sourceTopLeft().x();
+            region.srcOffset.y = u.copy.desc.sourceTopLeft().y();
 
             region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.dstSubresource.mipLevel = level;
-            region.dstSubresource.baseArrayLayer = 0;
-            region.dstSubresource.layerCount = layerCount;
+            region.dstSubresource.mipLevel = u.copy.desc.destinationLevel();
+            region.dstSubresource.baseArrayLayer = u.copy.desc.destinationLayer();
+            region.dstSubresource.layerCount = 1;
 
-            region.dstOffsets[1].x = w >> 1;
-            region.dstOffsets[1].y = h >> 1;
-            region.dstOffsets[1].z = 1;
+            region.dstOffset.x = u.copy.desc.destinationTopLeft().x();
+            region.dstOffset.y = u.copy.desc.destinationTopLeft().y();
 
-            df->vkCmdBlitImage(cbD->cb,
-                               utexD->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                               utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                               1, &region,
-                               VK_FILTER_LINEAR);
+            const QSize size = u.copy.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.copy.desc.pixelSize();
+            region.extent.width = size.width();
+            region.extent.height = size.height();
+            region.extent.depth = 1;
 
-            w >>= 1;
-            h >>= 1;
+            prepareForTransferSrc(cb, srcD);
+            prepareForTransferDest(cb, dstD);
 
-            if (level == utexD->mipLevelCount - 1) {
+            df->vkCmdCopyImage(QRHI_RES(QVkCommandBuffer, cb)->cb,
+                               srcD->image, srcD->layout,
+                               dstD->image, dstD->layout,
+                               1, &region);
+
+            finishTransferSrc(cb, srcD);
+            finishTransferDest(cb, dstD);
+
+            srcD->lastActiveFrameSlot = dstD->lastActiveFrameSlot = currentFrameSlot;
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexRead) {
+            ActiveReadback aRb;
+            aRb.activeFrameSlot = currentFrameSlot;
+            aRb.desc = u.read.rb;
+            aRb.result = u.read.result;
+
+            QVkTexture *texD = QRHI_RES(QVkTexture, u.read.rb.texture());
+            QVkSwapChain *swapChainD = nullptr;
+            if (texD) {
+                if (texD->samples > VK_SAMPLE_COUNT_1_BIT) {
+                    qWarning("Multisample texture cannot be read back");
+                    continue;
+                }
+                aRb.pixelSize = u.read.rb.level() > 0 ? q->sizeForMipLevel(u.read.rb.level(), texD->m_pixelSize)
+                                                 : texD->m_pixelSize;
+                aRb.format = texD->m_format;
+                texD->lastActiveFrameSlot = currentFrameSlot;
+            } else {
+                Q_ASSERT(currentSwapChain);
+                swapChainD = QRHI_RES(QVkSwapChain, currentSwapChain);
+                if (!swapChainD->supportsReadback) {
+                    qWarning("Swapchain does not support readback");
+                    continue;
+                }
+                aRb.pixelSize = swapChainD->pixelSize;
+                aRb.format = colorTextureFormatFromVkFormat(swapChainD->colorFormat, nullptr);
+                if (aRb.format == QRhiTexture::UnknownFormat)
+                    continue;
+
+                // Multisample swapchains need nothing special since resolving
+                // happens when ending a renderpass.
+            }
+            textureFormatInfo(aRb.format, aRb.pixelSize, nullptr, &aRb.bufSize);
+
+            // Create a host visible buffer.
+            VkBufferCreateInfo bufferInfo;
+            memset(&bufferInfo, 0, sizeof(bufferInfo));
+            bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+            bufferInfo.size = aRb.bufSize;
+            bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+            VmaAllocationCreateInfo allocInfo;
+            memset(&allocInfo, 0, sizeof(allocInfo));
+            allocInfo.usage = VMA_MEMORY_USAGE_GPU_TO_CPU;
+
+            VmaAllocation allocation;
+            VkResult err = vmaCreateBuffer(toVmaAllocator(allocator), &bufferInfo, &allocInfo, &aRb.buf, &allocation, nullptr);
+            if (err == VK_SUCCESS) {
+                aRb.bufAlloc = allocation;
+                QRHI_PROF_F(newReadbackBuffer(reinterpret_cast<quint64>(aRb.buf),
+                                              texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
+                                              aRb.bufSize));
+            } else {
+                qWarning("Failed to create readback buffer of size %u: %d", aRb.bufSize, err);
+                continue;
+            }
+
+            // Copy from the (optimal and not host visible) image into the buffer.
+            VkBufferImageCopy copyDesc;
+            memset(&copyDesc, 0, sizeof(copyDesc));
+            copyDesc.bufferOffset = 0;
+            copyDesc.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            copyDesc.imageSubresource.mipLevel = u.read.rb.level();
+            copyDesc.imageSubresource.baseArrayLayer = u.read.rb.layer();
+            copyDesc.imageSubresource.layerCount = 1;
+            copyDesc.imageExtent.width = aRb.pixelSize.width();
+            copyDesc.imageExtent.height = aRb.pixelSize.height();
+            copyDesc.imageExtent.depth = 1;
+
+            if (texD) {
+                prepareForTransferSrc(cb, texD);
+                df->vkCmdCopyImageToBuffer(cbD->cb, texD->image, texD->layout, aRb.buf, 1, &copyDesc);
+                finishTransferSrc(cb, texD);
+            } else {
+                // use the swapchain image
+                VkImage image = swapChainD->imageRes[swapChainD->currentImageIndex].image;
+                VkImageMemoryBarrier barrier;
+                memset(&barrier, 0, sizeof(barrier));
+                barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+                barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                barrier.subresourceRange.levelCount = barrier.subresourceRange.layerCount = 1;
+                barrier.oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+                barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                barrier.image = image;
+                df->vkCmdPipelineBarrier(cbD->cb,
+                                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                         0, 0, nullptr, 0, nullptr,
+                                         1, &barrier);
+                swapChainD->imageRes[swapChainD->currentImageIndex].presentableLayout = false;
+
+                df->vkCmdCopyImageToBuffer(cbD->cb, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, aRb.buf, 1, &copyDesc);
+            }
+
+            activeReadbacks.append(aRb);
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexMipGen) {
+            QVkTexture *utexD = QRHI_RES(QVkTexture, u.mipgen.tex);
+            Q_ASSERT(utexD->m_flags.testFlag(QRhiTexture::UsedWithGenerateMips));
+            int w = utexD->m_pixelSize.width();
+            int h = utexD->m_pixelSize.height();
+
+            prepareForTransferSrc(cb, utexD);
+
+            const uint layerCount = utexD->m_flags.testFlag(QRhiTexture::CubeMap) ? 6 : 1;
+            for (uint level = 1; level < utexD->mipLevelCount; ++level) {
+                if (level > 1) {
+                    imageSubResBarrier(cb, utexD,
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                       VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                                       VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                       0, layerCount, level - 1, 1);
+                }
+
                 imageSubResBarrier(cb, utexD,
-                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                                   VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                   VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT,
                                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                                    0, layerCount, level, 1);
+
+                VkImageBlit region;
+                memset(&region, 0, sizeof(region));
+
+                region.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                region.srcSubresource.mipLevel = level - 1;
+                region.srcSubresource.baseArrayLayer = 0;
+                region.srcSubresource.layerCount = layerCount;
+
+                region.srcOffsets[1].x = w;
+                region.srcOffsets[1].y = h;
+                region.srcOffsets[1].z = 1;
+
+                region.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                region.dstSubresource.mipLevel = level;
+                region.dstSubresource.baseArrayLayer = 0;
+                region.dstSubresource.layerCount = layerCount;
+
+                region.dstOffsets[1].x = w >> 1;
+                region.dstOffsets[1].y = h >> 1;
+                region.dstOffsets[1].z = 1;
+
+                df->vkCmdBlitImage(cbD->cb,
+                                   utexD->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                   utexD->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                   1, &region,
+                                   VK_FILTER_LINEAR);
+
+                w >>= 1;
+                h >>= 1;
+
+                if (level == utexD->mipLevelCount - 1) {
+                    imageSubResBarrier(cb, utexD,
+                                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                       VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_TRANSFER_READ_BIT,
+                                       VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                                       0, layerCount, level, 1);
+                }
             }
+
+            finishTransferDest(cb, utexD);
+
+            utexD->lastActiveFrameSlot = currentFrameSlot;
         }
-
-        finishTransferDest(cb, utexD);
-
-        utexD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     ud->free();

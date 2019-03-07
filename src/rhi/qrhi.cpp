@@ -3728,7 +3728,7 @@ void QRhiResourceUpdateBatch::uploadStaticBuffer(QRhiBuffer *buf, const void *da
  */
 void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QRhiTextureUploadDescription &desc)
 {
-    d->textureUploads.append({ tex, desc });
+    d->textureOps.append(QRhiResourceUpdateBatchPrivate::TextureOp::textureUpload(tex, desc));
 }
 
 /*!
@@ -3753,7 +3753,7 @@ void QRhiResourceUpdateBatch::uploadTexture(QRhiTexture *tex, const QImage &imag
  */
 void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc)
 {
-    d->textureCopies.append({ dst, src, desc });
+    d->textureOps.append(QRhiResourceUpdateBatchPrivate::TextureOp::textureCopy(dst, src, desc));
 }
 
 /*!
@@ -3796,7 +3796,7 @@ void QRhiResourceUpdateBatch::copyTexture(QRhiTexture *dst, QRhiTexture *src, co
  */
 void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
 {
-    d->textureReadbacks.append({ rb, result });
+    d->textureOps.append(QRhiResourceUpdateBatchPrivate::TextureOp::textureRead(rb, result));
 }
 
 /*!
@@ -3807,7 +3807,7 @@ void QRhiResourceUpdateBatch::readBackTexture(const QRhiReadbackDescription &rb,
  */
 void QRhiResourceUpdateBatch::generateMips(QRhiTexture *tex)
 {
-    d->textureMipGens.append(QRhiResourceUpdateBatchPrivate::TextureMipGen(tex));
+    d->textureOps.append(QRhiResourceUpdateBatchPrivate::TextureOp::textureMipGen(tex));
 }
 
 /*!
@@ -3858,10 +3858,7 @@ void QRhiResourceUpdateBatchPrivate::free()
 
     dynamicBufferUpdates.clear();
     staticBufferUploads.clear();
-    textureUploads.clear();
-    textureCopies.clear();
-    textureReadbacks.clear();
-    textureMipGens.clear();
+    textureOps.clear();
 
     rhi->resUpdPoolMap.clearBit(poolIndex);
     poolIndex = -1;
@@ -3871,10 +3868,7 @@ void QRhiResourceUpdateBatchPrivate::merge(QRhiResourceUpdateBatchPrivate *other
 {
     dynamicBufferUpdates += other->dynamicBufferUpdates;
     staticBufferUploads += other->staticBufferUploads;
-    textureUploads += other->textureUploads;
-    textureCopies += other->textureCopies;
-    textureReadbacks += other->textureReadbacks;
-    textureMipGens += other->textureMipGens;
+    textureOps += other->textureOps;
 }
 
 /*!

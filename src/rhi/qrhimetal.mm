@@ -1222,223 +1222,220 @@ void QRhiMetal::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         }
     };
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        const QVector<QRhiTextureLayer> layers = u.desc.layers();
-        if (layers.isEmpty() || layers[0].mipImages().isEmpty())
-            continue;
+    for (const QRhiResourceUpdateBatchPrivate::TextureOp &u : ud->textureOps) {
+        if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexUpload) {
+            const QVector<QRhiTextureLayer> layers = u.upload.desc.layers();
+            if (layers.isEmpty() || layers[0].mipImages().isEmpty())
+                continue;
 
-        QMetalTexture *utexD = QRHI_RES(QMetalTexture, u.tex);
-        qsizetype stagingSize = 0;
-        const int texbufAlign = 256; // probably not needed
+            QMetalTexture *utexD = QRHI_RES(QMetalTexture, u.upload.tex);
+            qsizetype stagingSize = 0;
+            const int texbufAlign = 256; // probably not needed
 
-        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureLayer &layerDesc(layers[layer]);
-            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
-            Q_ASSERT(mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
-            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
-                const qsizetype imageSizeBytes = mipDesc.image().isNull() ?
-                            mipDesc.compressedData().size() : mipDesc.image().sizeInBytes();
-                if (imageSizeBytes > 0)
-                    stagingSize += aligned(imageSizeBytes, texbufAlign);
+            for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+                const QRhiTextureLayer &layerDesc(layers[layer]);
+                const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+                Q_ASSERT(mipImages.count() == 1 || utexD->m_flags.testFlag(QRhiTexture::MipMapped));
+                for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                    const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                    const qsizetype imageSizeBytes = mipDesc.image().isNull() ?
+                                mipDesc.compressedData().size() : mipDesc.image().sizeInBytes();
+                    if (imageSizeBytes > 0)
+                        stagingSize += aligned(imageSizeBytes, texbufAlign);
+                }
             }
-        }
 
-        ensureBlit();
-        if (!utexD->d->stagingBuf[currentFrameSlot]) {
-            utexD->d->stagingBuf[currentFrameSlot] = [d->dev newBufferWithLength: stagingSize options: MTLResourceStorageModeShared];
-            QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, stagingSize));
-        }
+            ensureBlit();
+            if (!utexD->d->stagingBuf[currentFrameSlot]) {
+                utexD->d->stagingBuf[currentFrameSlot] = [d->dev newBufferWithLength: stagingSize
+                        options: MTLResourceStorageModeShared];
+                QRHI_PROF_F(newTextureStagingArea(utexD, currentFrameSlot, stagingSize));
+            }
 
-        void *mp = [utexD->d->stagingBuf[currentFrameSlot] contents];
-        qsizetype curOfs = 0;
-        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureLayer &layerDesc(layers[layer]);
-            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
-            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
-                const QPoint dp = mipDesc.destinationTopLeft();
-                const QByteArray compressedData = mipDesc.compressedData();
-                QImage img = mipDesc.image();
+            void *mp = [utexD->d->stagingBuf[currentFrameSlot] contents];
+            qsizetype curOfs = 0;
+            for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+                const QRhiTextureLayer &layerDesc(layers[layer]);
+                const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+                for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                    const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                    const QPoint dp = mipDesc.destinationTopLeft();
+                    const QByteArray compressedData = mipDesc.compressedData();
+                    QImage img = mipDesc.image();
 
-                if (!img.isNull()) {
-                    const qsizetype fullImageSizeBytes = img.sizeInBytes();
-                    int w = img.width();
-                    int h = img.height();
-                    int bpl = img.bytesPerLine();
-                    int srcOffset = 0;
+                    if (!img.isNull()) {
+                        const qsizetype fullImageSizeBytes = img.sizeInBytes();
+                        int w = img.width();
+                        int h = img.height();
+                        int bpl = img.bytesPerLine();
+                        int srcOffset = 0;
 
-                    if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
-                        const int sx = mipDesc.sourceTopLeft().x();
-                        const int sy = mipDesc.sourceTopLeft().y();
-                        if (!mipDesc.sourceSize().isEmpty()) {
+                        if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                            const int sx = mipDesc.sourceTopLeft().x();
+                            const int sy = mipDesc.sourceTopLeft().y();
+                            if (!mipDesc.sourceSize().isEmpty()) {
+                                w = mipDesc.sourceSize().width();
+                                h = mipDesc.sourceSize().height();
+                            }
+                            if (img.depth() == 32) {
+                                memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
+                                srcOffset = sy * bpl + sx * 4;
+                                // bpl remains set to the original image's row stride
+                            } else {
+                                img = img.copy(sx, sy, w, h);
+                                bpl = img.bytesPerLine();
+                                Q_ASSERT(img.sizeInBytes() <= fullImageSizeBytes);
+                                memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), img.sizeInBytes());
+                            }
+                        } else {
+                            memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
+                        }
+
+                        [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
+                                                 sourceOffset: curOfs + srcOffset
+                                                 sourceBytesPerRow: bpl
+                                                 sourceBytesPerImage: 0
+                                                 sourceSize: MTLSizeMake(w, h, 1)
+                          toTexture: utexD->d->tex
+                          destinationSlice: layer
+                          destinationLevel: level
+                          destinationOrigin: MTLOriginMake(dp.x(), dp.y(), 0)
+                          options: MTLBlitOptionNone];
+
+                        curOfs += aligned(fullImageSizeBytes, texbufAlign);
+                    } else if (!compressedData.isEmpty() && isCompressedFormat(utexD->m_format)) {
+                        const QSize subresSize = q->sizeForMipLevel(level, utexD->m_pixelSize);
+                        const int subresw = subresSize.width();
+                        const int subresh = subresSize.height();
+                        int w, h;
+                        if (mipDesc.sourceSize().isEmpty()) {
+                            w = subresw;
+                            h = subresh;
+                        } else {
                             w = mipDesc.sourceSize().width();
                             h = mipDesc.sourceSize().height();
                         }
-                        if (img.depth() == 32) {
-                            memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
-                            srcOffset = sy * bpl + sx * 4;
-                            // bpl remains set to the original image's row stride
-                        } else {
-                            img = img.copy(sx, sy, w, h);
-                            bpl = img.bytesPerLine();
-                            Q_ASSERT(img.sizeInBytes() <= fullImageSizeBytes);
-                            memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), img.sizeInBytes());
-                        }
-                    } else {
-                        memcpy(reinterpret_cast<char *>(mp) + curOfs, img.constBits(), fullImageSizeBytes);
+
+                        quint32 bpl = 0;
+                        QSize blockDim;
+                        compressedFormatInfo(utexD->m_format, QSize(w, h), &bpl, nullptr, &blockDim);
+
+                        const int dx = aligned(dp.x(), blockDim.width());
+                        const int dy = aligned(dp.y(), blockDim.height());
+                        if (dx + w != subresw)
+                            w = aligned(w, blockDim.width());
+                        if (dy + h != subresh)
+                            h = aligned(h, blockDim.height());
+
+                        memcpy(reinterpret_cast<char *>(mp) + curOfs, compressedData.constData(), compressedData.size());
+
+                        [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
+                                                 sourceOffset: curOfs
+                                                 sourceBytesPerRow: bpl
+                                                 sourceBytesPerImage: 0
+                                                 sourceSize: MTLSizeMake(w, h, 1)
+                          toTexture: utexD->d->tex
+                          destinationSlice: layer
+                          destinationLevel: level
+                          destinationOrigin: MTLOriginMake(dx, dy, 0)
+                          options: MTLBlitOptionNone];
+
+                        curOfs += aligned(compressedData.size(), texbufAlign);
                     }
-
-                    [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
-                                             sourceOffset: curOfs + srcOffset
-                                             sourceBytesPerRow: bpl
-                                             sourceBytesPerImage: 0
-                                             sourceSize: MTLSizeMake(w, h, 1)
-                      toTexture: utexD->d->tex
-                      destinationSlice: layer
-                      destinationLevel: level
-                      destinationOrigin: MTLOriginMake(dp.x(), dp.y(), 0)
-                      options: MTLBlitOptionNone];
-
-                    curOfs += aligned(fullImageSizeBytes, texbufAlign);
-                } else if (!compressedData.isEmpty() && isCompressedFormat(utexD->m_format)) {
-                    const QSize subresSize = q->sizeForMipLevel(level, utexD->m_pixelSize);
-                    const int subresw = subresSize.width();
-                    const int subresh = subresSize.height();
-                    int w, h;
-                    if (mipDesc.sourceSize().isEmpty()) {
-                        w = subresw;
-                        h = subresh;
-                    } else {
-                        w = mipDesc.sourceSize().width();
-                        h = mipDesc.sourceSize().height();
-                    }
-
-                    quint32 bpl = 0;
-                    QSize blockDim;
-                    compressedFormatInfo(utexD->m_format, QSize(w, h), &bpl, nullptr, &blockDim);
-
-                    const int dx = aligned(dp.x(), blockDim.width());
-                    const int dy = aligned(dp.y(), blockDim.height());
-                    if (dx + w != subresw)
-                        w = aligned(w, blockDim.width());
-                    if (dy + h != subresh)
-                        h = aligned(h, blockDim.height());
-
-                    memcpy(reinterpret_cast<char *>(mp) + curOfs, compressedData.constData(), compressedData.size());
-
-                    [blitEnc copyFromBuffer: utexD->d->stagingBuf[currentFrameSlot]
-                                             sourceOffset: curOfs
-                                             sourceBytesPerRow: bpl
-                                             sourceBytesPerImage: 0
-                                             sourceSize: MTLSizeMake(w, h, 1)
-                      toTexture: utexD->d->tex
-                      destinationSlice: layer
-                      destinationLevel: level
-                      destinationOrigin: MTLOriginMake(dx, dy, 0)
-                      options: MTLBlitOptionNone];
-
-                    curOfs += aligned(compressedData.size(), texbufAlign);
                 }
             }
-        }
 
-        utexD->lastActiveFrameSlot = currentFrameSlot;
+            utexD->lastActiveFrameSlot = currentFrameSlot;
 
-        if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently)) {
-            QRhiMetalData::DeferredReleaseEntry e;
-            e.type = QRhiMetalData::DeferredReleaseEntry::StagingBuffer;
-            e.lastActiveFrameSlot = currentFrameSlot;
-            e.stagingBuffer.buffer = utexD->d->stagingBuf[currentFrameSlot];
-            utexD->d->stagingBuf[currentFrameSlot] = nil;
-            d->releaseQueue.append(e);
-            QRHI_PROF_F(releaseTextureStagingArea(utexD, currentFrameSlot));
-        }
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
-        Q_ASSERT(u.src && u.dst);
-        QMetalTexture *srcD = QRHI_RES(QMetalTexture, u.src);
-        QMetalTexture *dstD = QRHI_RES(QMetalTexture, u.dst);
-        const QPoint dp = u.desc.destinationTopLeft();
-        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
-        const QPoint sp = u.desc.sourceTopLeft();
-
-        ensureBlit();
-        [blitEnc copyFromTexture: srcD->d->tex
-                                  sourceSlice: u.desc.sourceLayer()
-                                  sourceLevel: u.desc.sourceLevel()
-                                  sourceOrigin: MTLOriginMake(sp.x(), sp.y(), 0)
-                                  sourceSize: MTLSizeMake(size.width(), size.height(), 1)
-                                  toTexture: dstD->d->tex
-                                  destinationSlice: u.desc.destinationLayer()
-                                  destinationLevel: u.desc.destinationLevel()
-                                  destinationOrigin: MTLOriginMake(dp.x(), dp.y(), 0)];
-
-        srcD->lastActiveFrameSlot = dstD->lastActiveFrameSlot = currentFrameSlot;
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
-        QRhiMetalData::ActiveReadback aRb;
-        aRb.activeFrameSlot = currentFrameSlot;
-        aRb.desc = u.rb;
-        aRb.result = u.result;
-
-        QMetalTexture *texD = QRHI_RES(QMetalTexture, u.rb.texture());
-        QMetalSwapChain *swapChainD = nullptr;
-        id<MTLTexture> src;
-        QSize srcSize;
-        if (texD) {
-            if (texD->samples > 1) {
-                qWarning("Multisample texture cannot be read back");
-                continue;
+            if (!utexD->m_flags.testFlag(QRhiTexture::ChangesFrequently)) {
+                QRhiMetalData::DeferredReleaseEntry e;
+                e.type = QRhiMetalData::DeferredReleaseEntry::StagingBuffer;
+                e.lastActiveFrameSlot = currentFrameSlot;
+                e.stagingBuffer.buffer = utexD->d->stagingBuf[currentFrameSlot];
+                utexD->d->stagingBuf[currentFrameSlot] = nil;
+                d->releaseQueue.append(e);
+                QRHI_PROF_F(releaseTextureStagingArea(utexD, currentFrameSlot));
             }
-            aRb.pixelSize = u.rb.level() > 0 ? q->sizeForMipLevel(u.rb.level(), texD->m_pixelSize)
-                                             : texD->m_pixelSize;
-            aRb.format = texD->m_format;
-            src = texD->d->tex;
-            srcSize = texD->m_pixelSize;
-            texD->lastActiveFrameSlot = currentFrameSlot;
-        } else {
-            Q_ASSERT(currentSwapChain);
-            swapChainD = QRHI_RES(QMetalSwapChain, currentSwapChain);
-            aRb.pixelSize = swapChainD->pixelSize;
-            aRb.format = swapChainD->d->rhiColorFormat;
-            // Multisample swapchains need nothing special since resolving
-            // happens when ending a renderpass.
-            const QMetalRenderTargetData::ColorAtt &colorAtt(swapChainD->rtWrapper.d->fb.colorAtt[0]);
-            src = colorAtt.resolveTex ? colorAtt.resolveTex : colorAtt.tex;
-            srcSize = swapChainD->rtWrapper.d->pixelSize;
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexCopy) {
+            Q_ASSERT(u.copy.src && u.copy.dst);
+            QMetalTexture *srcD = QRHI_RES(QMetalTexture, u.copy.src);
+            QMetalTexture *dstD = QRHI_RES(QMetalTexture, u.copy.dst);
+            const QPoint dp = u.copy.desc.destinationTopLeft();
+            const QSize size = u.copy.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.copy.desc.pixelSize();
+            const QPoint sp = u.copy.desc.sourceTopLeft();
+
+            ensureBlit();
+            [blitEnc copyFromTexture: srcD->d->tex
+                                      sourceSlice: u.copy.desc.sourceLayer()
+                                      sourceLevel: u.copy.desc.sourceLevel()
+                                      sourceOrigin: MTLOriginMake(sp.x(), sp.y(), 0)
+                                      sourceSize: MTLSizeMake(size.width(), size.height(), 1)
+                                      toTexture: dstD->d->tex
+                                      destinationSlice: u.copy.desc.destinationLayer()
+                                      destinationLevel: u.copy.desc.destinationLevel()
+                                      destinationOrigin: MTLOriginMake(dp.x(), dp.y(), 0)];
+
+            srcD->lastActiveFrameSlot = dstD->lastActiveFrameSlot = currentFrameSlot;
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexRead) {
+            QRhiMetalData::ActiveReadback aRb;
+            aRb.activeFrameSlot = currentFrameSlot;
+            aRb.desc = u.read.rb;
+            aRb.result = u.read.result;
+
+            QMetalTexture *texD = QRHI_RES(QMetalTexture, u.read.rb.texture());
+            QMetalSwapChain *swapChainD = nullptr;
+            id<MTLTexture> src;
+            QSize srcSize;
+            if (texD) {
+                if (texD->samples > 1) {
+                    qWarning("Multisample texture cannot be read back");
+                    continue;
+                }
+                aRb.pixelSize = u.read.rb.level() > 0 ? q->sizeForMipLevel(u.read.rb.level(), texD->m_pixelSize)
+                                                      : texD->m_pixelSize;
+                aRb.format = texD->m_format;
+                src = texD->d->tex;
+                srcSize = texD->m_pixelSize;
+                texD->lastActiveFrameSlot = currentFrameSlot;
+            } else {
+                Q_ASSERT(currentSwapChain);
+                swapChainD = QRHI_RES(QMetalSwapChain, currentSwapChain);
+                aRb.pixelSize = swapChainD->pixelSize;
+                aRb.format = swapChainD->d->rhiColorFormat;
+                // Multisample swapchains need nothing special since resolving
+                // happens when ending a renderpass.
+                const QMetalRenderTargetData::ColorAtt &colorAtt(swapChainD->rtWrapper.d->fb.colorAtt[0]);
+                src = colorAtt.resolveTex ? colorAtt.resolveTex : colorAtt.tex;
+                srcSize = swapChainD->rtWrapper.d->pixelSize;
+            }
+
+            quint32 bpl = 0;
+            textureFormatInfo(aRb.format, aRb.pixelSize, &bpl, &aRb.bufSize);
+            aRb.buf = [d->dev newBufferWithLength: aRb.bufSize options: MTLResourceStorageModeShared];
+
+            QRHI_PROF_F(newReadbackBuffer(quint64(quintptr(aRb.buf)),
+                                          texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
+                                          aRb.bufSize));
+
+            ensureBlit();
+            [blitEnc copyFromTexture: src
+                                      sourceSlice: u.read.rb.layer()
+                                      sourceLevel: u.read.rb.level()
+                                      sourceOrigin: MTLOriginMake(0, 0, 0)
+                                      sourceSize: MTLSizeMake(srcSize.width(), srcSize.height(), 1)
+                                      toBuffer: aRb.buf
+                                      destinationOffset: 0
+                                      destinationBytesPerRow: bpl
+                                      destinationBytesPerImage: 0
+                                      options: MTLBlitOptionNone];
+
+            d->activeReadbacks.append(aRb);
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexMipGen) {
+            QMetalTexture *utexD = QRHI_RES(QMetalTexture, u.mipgen.tex);
+            ensureBlit();
+            [blitEnc generateMipmapsForTexture: utexD->d->tex];
+            utexD->lastActiveFrameSlot = currentFrameSlot;
         }
-
-        quint32 bpl = 0;
-        textureFormatInfo(aRb.format, aRb.pixelSize, &bpl, &aRb.bufSize);
-        aRb.buf = [d->dev newBufferWithLength: aRb.bufSize options: MTLResourceStorageModeShared];
-
-        QRHI_PROF_F(newReadbackBuffer(quint64(quintptr(aRb.buf)),
-                                      texD ? static_cast<QRhiResource *>(texD) : static_cast<QRhiResource *>(swapChainD),
-                                      aRb.bufSize));
-
-        ensureBlit();
-        [blitEnc copyFromTexture: src
-                                  sourceSlice: u.rb.layer()
-                                  sourceLevel: u.rb.level()
-                                  sourceOrigin: MTLOriginMake(0, 0, 0)
-                                  sourceSize: MTLSizeMake(srcSize.width(), srcSize.height(), 1)
-                                  toBuffer: aRb.buf
-                                  destinationOffset: 0
-                                  destinationBytesPerRow: bpl
-                                  destinationBytesPerImage: 0
-                                  options: MTLBlitOptionNone];
-
-        d->activeReadbacks.append(aRb);
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
-        QMetalTexture *utexD = QRHI_RES(QMetalTexture, u.tex);
-        ensureBlit();
-        [blitEnc generateMipmapsForTexture: utexD->d->tex];
-        utexD->lastActiveFrameSlot = currentFrameSlot;
     }
 
     if (blitEnc) {

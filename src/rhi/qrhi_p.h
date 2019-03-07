@@ -240,51 +240,71 @@ public:
         QByteArray data;
     };
 
-    struct TextureUpload {
-        TextureUpload() { }
-        TextureUpload(QRhiTexture *tex_, const QRhiTextureUploadDescription &desc_)
-            : tex(tex_), desc(desc_)
-        { }
+    struct TextureOp {
+        enum Type {
+            TexUpload,
+            TexCopy,
+            TexRead,
+            TexMipGen
+        };
+        Type type;
+        struct Upload {
+            QRhiTexture *tex = nullptr;
+            QRhiTextureUploadDescription desc;
+        } upload;
+        struct Copy {
+            QRhiTexture *dst = nullptr;
+            QRhiTexture *src = nullptr;
+            QRhiTextureCopyDescription desc;
+        } copy;
+        struct Read {
+            QRhiReadbackDescription rb;
+            QRhiReadbackResult *result;
+        } read;
+        struct MipGen {
+            QRhiTexture *tex = nullptr;
+        } mipgen;
 
-        QRhiTexture *tex = nullptr;
-        QRhiTextureUploadDescription desc;
-    };
+        static TextureOp textureUpload(QRhiTexture *tex, const QRhiTextureUploadDescription &desc)
+        {
+            TextureOp op;
+            op.type = TexUpload;
+            op.upload.tex = tex;
+            op.upload.desc = desc;
+            return op;
+        }
 
-    struct TextureCopy {
-        TextureCopy() { }
-        TextureCopy(QRhiTexture *dst_, QRhiTexture *src_, const QRhiTextureCopyDescription &desc_)
-            : dst(dst_), src(src_), desc(desc_)
-        { }
+        static TextureOp textureCopy(QRhiTexture *dst, QRhiTexture *src, const QRhiTextureCopyDescription &desc)
+        {
+            TextureOp op;
+            op.type = TexCopy;
+            op.copy.dst = dst;
+            op.copy.src = src;
+            op.copy.desc = desc;
+            return op;
+        }
 
-        QRhiTexture *dst = nullptr;
-        QRhiTexture *src = nullptr;
-        QRhiTextureCopyDescription desc;
-    };
+        static TextureOp textureRead(const QRhiReadbackDescription &rb, QRhiReadbackResult *result)
+        {
+            TextureOp op;
+            op.type = TexRead;
+            op.read.rb = rb;
+            op.read.result = result;
+            return op;
+        }
 
-    struct TextureRead {
-        TextureRead() { }
-        TextureRead(const QRhiReadbackDescription &rb_, QRhiReadbackResult *result_)
-            : rb(rb_), result(result_)
-        { }
-
-        QRhiReadbackDescription rb;
-        QRhiReadbackResult *result;
-    };
-
-    struct TextureMipGen {
-        TextureMipGen() { }
-        TextureMipGen(QRhiTexture *tex_) : tex(tex_)
-        { }
-
-        QRhiTexture *tex = nullptr;
+        static TextureOp textureMipGen(QRhiTexture *tex)
+        {
+            TextureOp op;
+            op.type = TexMipGen;
+            op.mipgen.tex = tex;
+            return op;
+        }
     };
 
     QVector<DynamicBufferUpdate> dynamicBufferUpdates;
     QVector<StaticBufferUpload> staticBufferUploads;
-    QVector<TextureUpload> textureUploads;
-    QVector<TextureCopy> textureCopies;
-    QVector<TextureRead> textureReadbacks;
-    QVector<TextureMipGen> textureMipGens;
+    QVector<TextureOp> textureOps;
 
     QRhiResourceUpdateBatch *q = nullptr;
     QRhiImplementation *rhi = nullptr;
@@ -298,10 +318,7 @@ public:
 
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::DynamicBufferUpdate, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::StaticBufferUpload, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureUpload, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureCopy, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureRead, Q_MOVABLE_TYPE);
-Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureMipGen, Q_MOVABLE_TYPE);
+Q_DECLARE_TYPEINFO(QRhiResourceUpdateBatchPrivate::TextureOp, Q_MOVABLE_TYPE);
 
 class Q_RHI_PRIVATE_EXPORT QRhiShaderResourceBindingPrivate
 {

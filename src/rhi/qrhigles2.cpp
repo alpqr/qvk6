@@ -955,11 +955,6 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(bufD->m_type == QRhiBuffer::Dynamic);
         if (bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
-//            QGles2Buffer::ChangeRange &r(bufD->ubufChangeRange);
-//            if (r.changeBegin == -1 || u.offset < r.changeBegin)
-//                r.changeBegin = u.offset;
-//            if (r.changeEnd == -1 || u.offset + u.data.size() > r.changeEnd)
-//                r.changeEnd = u.offset + u.data.size();
         } else {
             QGles2CommandBuffer::Command cmd;
             cmd.cmd = QGles2CommandBuffer::Command::BufferSubData;
@@ -978,7 +973,6 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         Q_ASSERT(u.offset + u.data.size() <= bufD->m_size);
         if (bufD->m_usage.testFlag(QRhiBuffer::UniformBuffer)) {
             memcpy(bufD->ubuf.data() + u.offset, u.data.constData(), u.data.size());
-//            bufD->ubufChangeRange = { 0, u.data.size() };
         } else {
             QGles2CommandBuffer::Command cmd;
             cmd.cmd = QGles2CommandBuffer::Command::BufferSubData;
@@ -991,142 +985,141 @@ void QRhiGles2::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdate
         }
     }
 
-    for (const QRhiResourceUpdateBatchPrivate::TextureUpload &u : ud->textureUploads) {
-        QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
-        const bool isCompressed = isCompressedFormat(texD->m_format);
-        const bool isCubeMap = texD->m_flags.testFlag(QRhiTexture::CubeMap);
-        const GLenum faceTargetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
-        const QVector<QRhiTextureLayer> layers = u.desc.layers();
-        for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
-            const QRhiTextureLayer &layerDesc(layers[layer]);
-            const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
-            for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
-                const QRhiTextureMipLevel &mipDesc(mipImages[level]);
-                const QPoint dp = mipDesc.destinationTopLeft();
-                const QByteArray compressedData = mipDesc.compressedData();
-                if (isCompressed && !compressedData.isEmpty()) {
-                    const QSize size = mipDesc.sourceSize().isEmpty() ? q->sizeForMipLevel(level, texD->m_pixelSize)
-                                                                      : mipDesc.sourceSize();
-                    if (texD->specified) {
-                        QGles2CommandBuffer::Command cmd;
-                        cmd.cmd = QGles2CommandBuffer::Command::CompressedSubImage;
-                        cmd.args.compressedSubImage.target = texD->target;
-                        cmd.args.compressedSubImage.texture = texD->texture;
-                        cmd.args.compressedSubImage.faceTarget = faceTargetBase + layer;
-                        cmd.args.compressedSubImage.level = level;
-                        cmd.args.compressedSubImage.dx = dp.x();
-                        cmd.args.compressedSubImage.dy = dp.y();
-                        cmd.args.compressedSubImage.w = size.width();
-                        cmd.args.compressedSubImage.h = size.height();
-                        cmd.args.compressedSubImage.glintformat = texD->glintformat;
-                        cmd.args.compressedSubImage.size = compressedData.size();
-                        cmd.args.compressedSubImage.data = cbD->retainData(compressedData);
-                        cbD->commands.append(cmd);
+    for (const QRhiResourceUpdateBatchPrivate::TextureOp &u : ud->textureOps) {
+        if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexUpload) {
+            QGles2Texture *texD = QRHI_RES(QGles2Texture, u.upload.tex);
+            const bool isCompressed = isCompressedFormat(texD->m_format);
+            const bool isCubeMap = texD->m_flags.testFlag(QRhiTexture::CubeMap);
+            const GLenum faceTargetBase = isCubeMap ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+            const QVector<QRhiTextureLayer> layers = u.upload.desc.layers();
+            for (int layer = 0, layerCount = layers.count(); layer != layerCount; ++layer) {
+                const QRhiTextureLayer &layerDesc(layers[layer]);
+                const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
+                for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
+                    const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                    const QPoint dp = mipDesc.destinationTopLeft();
+                    const QByteArray compressedData = mipDesc.compressedData();
+                    if (isCompressed && !compressedData.isEmpty()) {
+                        const QSize size = mipDesc.sourceSize().isEmpty() ? q->sizeForMipLevel(level, texD->m_pixelSize)
+                                                                          : mipDesc.sourceSize();
+                        if (texD->specified) {
+                            QGles2CommandBuffer::Command cmd;
+                            cmd.cmd = QGles2CommandBuffer::Command::CompressedSubImage;
+                            cmd.args.compressedSubImage.target = texD->target;
+                            cmd.args.compressedSubImage.texture = texD->texture;
+                            cmd.args.compressedSubImage.faceTarget = faceTargetBase + layer;
+                            cmd.args.compressedSubImage.level = level;
+                            cmd.args.compressedSubImage.dx = dp.x();
+                            cmd.args.compressedSubImage.dy = dp.y();
+                            cmd.args.compressedSubImage.w = size.width();
+                            cmd.args.compressedSubImage.h = size.height();
+                            cmd.args.compressedSubImage.glintformat = texD->glintformat;
+                            cmd.args.compressedSubImage.size = compressedData.size();
+                            cmd.args.compressedSubImage.data = cbD->retainData(compressedData);
+                            cbD->commands.append(cmd);
+                        } else {
+                            QGles2CommandBuffer::Command cmd;
+                            cmd.cmd = QGles2CommandBuffer::Command::CompressedImage;
+                            cmd.args.compressedImage.target = texD->target;
+                            cmd.args.compressedImage.texture = texD->texture;
+                            cmd.args.compressedImage.faceTarget = faceTargetBase + layer;
+                            cmd.args.compressedImage.level = level;
+                            cmd.args.compressedImage.glintformat = texD->glintformat;
+                            cmd.args.compressedImage.w = size.width();
+                            cmd.args.compressedImage.h = size.height();
+                            cmd.args.compressedImage.size = compressedData.size();
+                            cmd.args.compressedImage.data = cbD->retainData(compressedData);
+                            cbD->commands.append(cmd);
+                        }
                     } else {
+                        QImage img = mipDesc.image();
+                        QSize size = img.size();
                         QGles2CommandBuffer::Command cmd;
-                        cmd.cmd = QGles2CommandBuffer::Command::CompressedImage;
-                        cmd.args.compressedImage.target = texD->target;
-                        cmd.args.compressedImage.texture = texD->texture;
-                        cmd.args.compressedImage.faceTarget = faceTargetBase + layer;
-                        cmd.args.compressedImage.level = level;
-                        cmd.args.compressedImage.glintformat = texD->glintformat;
-                        cmd.args.compressedImage.w = size.width();
-                        cmd.args.compressedImage.h = size.height();
-                        cmd.args.compressedImage.size = compressedData.size();
-                        cmd.args.compressedImage.data = cbD->retainData(compressedData);
+                        cmd.cmd = QGles2CommandBuffer::Command::SubImage;
+                        if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                            const QPoint sp = mipDesc.sourceTopLeft();
+                            if (!mipDesc.sourceSize().isEmpty())
+                                size = mipDesc.sourceSize();
+                            img = img.copy(sp.x(), sp.y(), size.width(), size.height());
+                        }
+                        cmd.args.subImage.target = texD->target;
+                        cmd.args.subImage.texture = texD->texture;
+                        cmd.args.subImage.faceTarget = faceTargetBase + layer;
+                        cmd.args.subImage.level = level;
+                        cmd.args.subImage.dx = dp.x();
+                        cmd.args.subImage.dy = dp.y();
+                        cmd.args.subImage.w = size.width();
+                        cmd.args.subImage.h = size.height();
+                        cmd.args.subImage.glformat = texD->glformat;
+                        cmd.args.subImage.gltype = texD->gltype;
+                        cmd.args.subImage.data = cbD->retainImage(img);
                         cbD->commands.append(cmd);
                     }
-                } else {
-                    QImage img = mipDesc.image();
-                    QSize size = img.size();
-                    QGles2CommandBuffer::Command cmd;
-                    cmd.cmd = QGles2CommandBuffer::Command::SubImage;
-                    if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
-                        const QPoint sp = mipDesc.sourceTopLeft();
-                        if (!mipDesc.sourceSize().isEmpty())
-                            size = mipDesc.sourceSize();
-                        img = img.copy(sp.x(), sp.y(), size.width(), size.height());
-                    }
-                    cmd.args.subImage.target = texD->target;
-                    cmd.args.subImage.texture = texD->texture;
-                    cmd.args.subImage.faceTarget = faceTargetBase + layer;
-                    cmd.args.subImage.level = level;
-                    cmd.args.subImage.dx = dp.x();
-                    cmd.args.subImage.dy = dp.y();
-                    cmd.args.subImage.w = size.width();
-                    cmd.args.subImage.h = size.height();
-                    cmd.args.subImage.glformat = texD->glformat;
-                    cmd.args.subImage.gltype = texD->gltype;
-                    cmd.args.subImage.data = cbD->retainImage(img);
-                    cbD->commands.append(cmd);
                 }
             }
+            texD->specified = true;
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexCopy) {
+            Q_ASSERT(u.copy.src && u.copy.dst);
+            QGles2Texture *srcD = QRHI_RES(QGles2Texture, u.copy.src);
+            QGles2Texture *dstD = QRHI_RES(QGles2Texture, u.copy.dst);
+
+            const QSize size = u.copy.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.copy.desc.pixelSize();
+            // source offset is bottom-left
+            const float sx = u.copy.desc.sourceTopLeft().x();
+            const float sy = srcD->m_pixelSize.height() - (u.copy.desc.sourceTopLeft().y() + size.height() - 1);
+            // destination offset is top-left
+            const float dx = u.copy.desc.destinationTopLeft().x();
+            const float dy = u.copy.desc.destinationTopLeft().y();
+
+            const GLenum srcFaceTargetBase = srcD->m_flags.testFlag(QRhiTexture::CubeMap)
+                    ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : srcD->target;
+            const GLenum dstFaceTargetBase = dstD->m_flags.testFlag(QRhiTexture::CubeMap)
+                    ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : dstD->target;
+
+            QGles2CommandBuffer::Command cmd;
+            cmd.cmd = QGles2CommandBuffer::Command::CopyTex;
+
+            cmd.args.copyTex.srcFaceTarget = srcFaceTargetBase + u.copy.desc.sourceLayer();
+            cmd.args.copyTex.srcTexture = srcD->texture;
+            cmd.args.copyTex.srcLevel = u.copy.desc.sourceLevel();
+            cmd.args.copyTex.srcX = sx;
+            cmd.args.copyTex.srcY = sy;
+
+            cmd.args.copyTex.dstTarget = dstD->target;
+            cmd.args.copyTex.dstTexture = dstD->texture;
+            cmd.args.copyTex.dstFaceTarget = dstFaceTargetBase + u.copy.desc.destinationLayer();
+            cmd.args.copyTex.dstLevel = u.copy.desc.destinationLevel();
+            cmd.args.copyTex.dstX = dx;
+            cmd.args.copyTex.dstY = dy;
+
+            cmd.args.copyTex.w = size.width();
+            cmd.args.copyTex.h = size.height();
+
+            cbD->commands.append(cmd);
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexRead) {
+            QGles2CommandBuffer::Command cmd;
+            cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
+            cmd.args.readPixels.result = u.read.result;
+            QGles2Texture *texD = QRHI_RES(QGles2Texture, u.read.rb.texture());
+            cmd.args.readPixels.texture = texD ? texD->texture : 0;
+            if (texD) {
+                cmd.args.readPixels.w = texD->m_pixelSize.width();
+                cmd.args.readPixels.h = texD->m_pixelSize.height();
+                cmd.args.readPixels.format = texD->m_format;
+                const GLenum faceTargetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap)
+                        ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
+                cmd.args.readPixels.readTarget = faceTargetBase + u.read.rb.layer();
+                cmd.args.readPixels.level = u.read.rb.level();
+            }
+            cbD->commands.append(cmd);
+        } else if (u.type == QRhiResourceUpdateBatchPrivate::TextureOp::TexMipGen) {
+            QGles2CommandBuffer::Command cmd;
+            cmd.cmd = QGles2CommandBuffer::Command::GenMip;
+            QGles2Texture *texD = QRHI_RES(QGles2Texture, u.mipgen.tex);
+            cmd.args.genMip.target = texD->target;
+            cmd.args.genMip.texture = texD->texture;
+            cbD->commands.append(cmd);
         }
-        texD->specified = true;
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureCopy &u : ud->textureCopies) {
-        Q_ASSERT(u.src && u.dst);
-        QGles2Texture *srcD = QRHI_RES(QGles2Texture, u.src);
-        QGles2Texture *dstD = QRHI_RES(QGles2Texture, u.dst);
-
-        const QSize size = u.desc.pixelSize().isEmpty() ? srcD->m_pixelSize : u.desc.pixelSize();
-        // source offset is bottom-left
-        const float sx = u.desc.sourceTopLeft().x();
-        const float sy = srcD->m_pixelSize.height() - (u.desc.sourceTopLeft().y() + size.height() - 1);
-        // destination offset is top-left
-        const float dx = u.desc.destinationTopLeft().x();
-        const float dy = u.desc.destinationTopLeft().y();
-
-        const GLenum srcFaceTargetBase = srcD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : srcD->target;
-        const GLenum dstFaceTargetBase = dstD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : dstD->target;
-
-        QGles2CommandBuffer::Command cmd;
-        cmd.cmd = QGles2CommandBuffer::Command::CopyTex;
-
-        cmd.args.copyTex.srcFaceTarget = srcFaceTargetBase + u.desc.sourceLayer();
-        cmd.args.copyTex.srcTexture = srcD->texture;
-        cmd.args.copyTex.srcLevel = u.desc.sourceLevel();
-        cmd.args.copyTex.srcX = sx;
-        cmd.args.copyTex.srcY = sy;
-
-        cmd.args.copyTex.dstTarget = dstD->target;
-        cmd.args.copyTex.dstTexture = dstD->texture;
-        cmd.args.copyTex.dstFaceTarget = dstFaceTargetBase + u.desc.destinationLayer();
-        cmd.args.copyTex.dstLevel = u.desc.destinationLevel();
-        cmd.args.copyTex.dstX = dx;
-        cmd.args.copyTex.dstY = dy;
-
-        cmd.args.copyTex.w = size.width();
-        cmd.args.copyTex.h = size.height();
-
-        cbD->commands.append(cmd);
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureRead &u : ud->textureReadbacks) {
-        QGles2CommandBuffer::Command cmd;
-        cmd.cmd = QGles2CommandBuffer::Command::ReadPixels;
-        cmd.args.readPixels.result = u.result;
-        QGles2Texture *texD = QRHI_RES(QGles2Texture, u.rb.texture());
-        cmd.args.readPixels.texture = texD ? texD->texture : 0;
-        if (texD) {
-            cmd.args.readPixels.w = texD->m_pixelSize.width();
-            cmd.args.readPixels.h = texD->m_pixelSize.height();
-            cmd.args.readPixels.format = texD->m_format;
-            const GLenum faceTargetBase = texD->m_flags.testFlag(QRhiTexture::CubeMap) ? GL_TEXTURE_CUBE_MAP_POSITIVE_X : texD->target;
-            cmd.args.readPixels.readTarget = faceTargetBase + u.rb.layer();
-            cmd.args.readPixels.level = u.rb.level();
-        }
-        cbD->commands.append(cmd);
-    }
-
-    for (const QRhiResourceUpdateBatchPrivate::TextureMipGen &u : ud->textureMipGens) {
-        QGles2CommandBuffer::Command cmd;
-        cmd.cmd = QGles2CommandBuffer::Command::GenMip;
-        QGles2Texture *texD = QRHI_RES(QGles2Texture, u.tex);
-        cmd.args.genMip.target = texD->target;
-        cmd.args.genMip.texture = texD->texture;
-        cbD->commands.append(cmd);
     }
 
     ud->free();
@@ -1731,8 +1724,6 @@ void QRhiGles2::setChangedUniforms(QRhiGraphicsPipeline *ps, QRhiShaderResourceB
                     }
                 }
             }
-
-//            bufD->ubufChangeRange = QGles2Buffer::ChangeRange();
         }
             break;
         case QRhiShaderResourceBinding::SampledTexture:

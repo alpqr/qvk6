@@ -62,15 +62,6 @@ struct QGles2Buffer : public QRhiBuffer
     GLuint buffer = 0;
     GLenum target;
     QByteArray ubuf;
-//    struct ChangeRange {
-//        ChangeRange(int b = -1, int e = -1)
-//            : changeBegin(b), changeEnd(e)
-//        { }
-//        bool isNull() const { return changeBegin == -1 && changeEnd == -1; }
-//        int changeBegin;
-//        int changeEnd;
-//    };
-//    ChangeRange ubufChangeRange;
     friend class QRhiGles2;
 };
 

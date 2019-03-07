@@ -139,7 +139,7 @@ struct QGles2RenderTargetData
     int attCount = 0;
 };
 
-struct QGles2ReferenceRenderTarget : public QRhiReferenceRenderTarget
+struct QGles2ReferenceRenderTarget : public QRhiRenderTarget
 {
     QGles2ReferenceRenderTarget(QRhiImplementation *rhi);
     void release() override;

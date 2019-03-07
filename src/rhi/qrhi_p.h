@@ -55,12 +55,6 @@ QT_BEGIN_NAMESPACE
 #define QRHI_PROF QRhiProfilerPrivate *rhiP = m_rhi->profilerPrivateOrNull()
 #define QRHI_PROF_F(f) for (bool qrhip_enabled = rhiP != nullptr; qrhip_enabled; qrhip_enabled = false) rhiP->f
 
-class QRhiReferenceRenderTarget : public QRhiRenderTarget
-{
-protected:
-    QRhiReferenceRenderTarget(QRhiImplementation *rhi);
-};
-
 class QRhiImplementation
 {
 public:

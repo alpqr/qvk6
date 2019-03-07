@@ -2110,14 +2110,6 @@ QRhiRenderTarget::QRhiRenderTarget(QRhiImplementation *rhi)
  */
 
 /*!
-    \internal
- */
-QRhiReferenceRenderTarget::QRhiReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiRenderTarget(rhi)
-{
-}
-
-/*!
     \class QRhiTextureRenderTarget
     \inmodule QtRhi
     \brief Texture render target resource.

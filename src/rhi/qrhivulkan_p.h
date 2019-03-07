@@ -167,7 +167,7 @@ struct QVkRenderTargetData
     static const int MAX_COLOR_ATTACHMENTS = 8;
 };
 
-struct QVkReferenceRenderTarget : public QRhiReferenceRenderTarget
+struct QVkReferenceRenderTarget : public QRhiRenderTarget
 {
     QVkReferenceRenderTarget(QRhiImplementation *rhi);
     void release() override;

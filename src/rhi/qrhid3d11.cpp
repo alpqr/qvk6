@@ -2330,7 +2330,7 @@ void QD3D11RenderPassDescriptor::release()
 }
 
 QD3D11ReferenceRenderTarget::QD3D11ReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiReferenceRenderTarget(rhi),
+    : QRhiRenderTarget(rhi),
       d(rhi)
 {
 }

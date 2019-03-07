@@ -2282,7 +2282,7 @@ void QGles2RenderPassDescriptor::release()
 }
 
 QGles2ReferenceRenderTarget::QGles2ReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiReferenceRenderTarget(rhi),
+    : QRhiRenderTarget(rhi),
       d(rhi)
 {
 }

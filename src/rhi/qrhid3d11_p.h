@@ -146,7 +146,7 @@ struct QD3D11RenderTargetData
     ID3D11DepthStencilView *dsv = nullptr;
 };
 
-struct QD3D11ReferenceRenderTarget : public QRhiReferenceRenderTarget
+struct QD3D11ReferenceRenderTarget : public QRhiRenderTarget
 {
     QD3D11ReferenceRenderTarget(QRhiImplementation *rhi);
     void release() override;

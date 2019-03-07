@@ -447,7 +447,7 @@ void QNullRenderPassDescriptor::release()
 }
 
 QNullReferenceRenderTarget::QNullReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiReferenceRenderTarget(rhi),
+    : QRhiRenderTarget(rhi),
       d(rhi)
 {
 }

@@ -97,7 +97,7 @@ struct QNullRenderTargetData
     float dpr = 1;
 };
 
-struct QNullReferenceRenderTarget : public QRhiReferenceRenderTarget
+struct QNullReferenceRenderTarget : public QRhiRenderTarget
 {
     QNullReferenceRenderTarget(QRhiImplementation *rhi);
     void release() override;

@@ -2289,7 +2289,7 @@ void QMetalRenderPassDescriptor::release()
 }
 
 QMetalReferenceRenderTarget::QMetalReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiReferenceRenderTarget(rhi),
+    : QRhiRenderTarget(rhi),
       d(new QMetalRenderTargetData)
 {
 }

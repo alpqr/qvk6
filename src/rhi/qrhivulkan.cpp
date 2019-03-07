@@ -4338,7 +4338,7 @@ void QVkRenderPassDescriptor::release()
 }
 
 QVkReferenceRenderTarget::QVkReferenceRenderTarget(QRhiImplementation *rhi)
-    : QRhiReferenceRenderTarget(rhi)
+    : QRhiRenderTarget(rhi)
 {
 }
 

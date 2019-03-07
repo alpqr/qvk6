@@ -147,7 +147,7 @@ struct QMetalRenderPassDescriptor : public QRhiRenderPassDescriptor
 
 struct QMetalRenderTargetData;
 
-struct QMetalReferenceRenderTarget : public QRhiReferenceRenderTarget
+struct QMetalReferenceRenderTarget : public QRhiRenderTarget
 {
     QMetalReferenceRenderTarget(QRhiImplementation *rhi);
     ~QMetalReferenceRenderTarget();

@@ -2420,6 +2420,7 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                 const QVector<QRhiTextureMipLevel> mipImages = layerDesc.mipImages();
                 for (int level = 0, levelCount = mipImages.count(); level != levelCount; ++level) {
                     const QRhiTextureMipLevel &mipDesc(mipImages[level]);
+                    qsizetype copySizeBytes = 0;
                     qsizetype imageSizeBytes = 0;
                     const void *src = nullptr;
                     VkBufferImageCopy copyInfo;
@@ -2435,61 +2436,67 @@ void QRhiVulkan::enqueueResourceUpdates(QRhiCommandBuffer *cb, QRhiResourceUpdat
                     const QImage image = mipDesc.image();
                     const QByteArray compressedData = mipDesc.compressedData();
                     if (!image.isNull()) {
-                        imageSizeBytes = image.sizeInBytes();
-                        if (imageSizeBytes > 0) {
-                            QImage img = image;
-                            QSize size = img.size();
-                            src = img.constBits();
-                            copyInfo.bufferRowLength = size.width(); // this is in pixels, not bytes
-                            if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
-                                const int sx = mipDesc.sourceTopLeft().x();
-                                const int sy = mipDesc.sourceTopLeft().y();
-                                if (!mipDesc.sourceSize().isEmpty())
-                                    size = mipDesc.sourceSize();
-                                if (img.depth() == 32) {
-                                    src = img.constBits() + sy * img.bytesPerLine() + sx * 4;
-                                    // bufferRowLength remains set to the original image's width
-                                } else {
-                                    img = img.copy(sx, sy, size.width(), size.height());
-                                    src = img.constBits();
-                                    copyInfo.bufferRowLength = size.width();
-                                    tempImages.append(img); // keep the new, temporary image alive until the vkCmdCopy
-                                }
-                            }
-                            copyInfo.imageOffset.x = dp.x();
-                            copyInfo.imageOffset.y = dp.y();
-                            copyInfo.imageExtent.width = size.width();
-                            copyInfo.imageExtent.height = size.height();
-                            copyInfos.append(copyInfo);
-                        }
-                    } else {
-                        imageSizeBytes = compressedData.size();
-                        if (imageSizeBytes > 0) {
-                            src = compressedData.constData();
-                            QSize size = q->sizeForMipLevel(level, utexD->m_pixelSize);
-                            const int subresw = size.width();
-                            const int subresh = size.height();
+                        copySizeBytes = imageSizeBytes = image.sizeInBytes();
+                        QImage img = image;
+                        QSize size = img.size();
+                        src = img.constBits();
+                        // Scanlines in QImage are 4 byte aligned so bpl must
+                        // be taken into account for bufferRowLength.
+                        int bpc = qMax(1, img.depth() / 8);
+                        // this is in pixels, not bytes, to make it more complicated...
+                        copyInfo.bufferRowLength = img.bytesPerLine() / bpc;
+                        if (!mipDesc.sourceSize().isEmpty() || !mipDesc.sourceTopLeft().isNull()) {
+                            const int sx = mipDesc.sourceTopLeft().x();
+                            const int sy = mipDesc.sourceTopLeft().y();
                             if (!mipDesc.sourceSize().isEmpty())
                                 size = mipDesc.sourceSize();
-                            const int w = size.width();
-                            const int h = size.height();
-                            QSize blockDim;
-                            compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
-                            // x and y must be multiples of the block width and height
-                            copyInfo.imageOffset.x = aligned(dp.x(), blockDim.width());
-                            copyInfo.imageOffset.y = aligned(dp.y(), blockDim.height());
-                            // width and height must be multiples of the block width and height
-                            // or x + width and y + height must equal the subresource width and height
-                            copyInfo.imageExtent.width = dp.x() + w == subresw ? w : aligned(w, blockDim.width());
-                            copyInfo.imageExtent.height = dp.y() + h == subresh ? h : aligned(h, blockDim.height());
-                            copyInfos.append(copyInfo);
+                            if (img.depth() == 32) {
+                                // The staging buffer will get the full image
+                                // regardless, just adjust the vk
+                                // buffer-to-image copy start offset.
+                                copyInfo.bufferOffset += sy * img.bytesPerLine() + sx * 4;
+                                // bufferRowLength remains set to the original image's width
+                            } else {
+                                img = img.copy(sx, sy, size.width(), size.height());
+                                src = img.constBits();
+                                // The staging buffer gets the slice (img)
+                                // only. The rest of the space reserved for
+                                // this mip will be unused.
+                                copySizeBytes = img.sizeInBytes();
+                                bpc = qMax(1, img.depth() / 8);
+                                copyInfo.bufferRowLength = img.bytesPerLine() / bpc;
+                                tempImages.append(img); // keep the new, temporary image alive until the vkCmdCopy
+                            }
                         }
+                        copyInfo.imageOffset.x = dp.x();
+                        copyInfo.imageOffset.y = dp.y();
+                        copyInfo.imageExtent.width = size.width();
+                        copyInfo.imageExtent.height = size.height();
+                        copyInfos.append(copyInfo);
+                    } else if (!compressedData.isEmpty()) {
+                        copySizeBytes = imageSizeBytes = compressedData.size();
+                        src = compressedData.constData();
+                        QSize size = q->sizeForMipLevel(level, utexD->m_pixelSize);
+                        const int subresw = size.width();
+                        const int subresh = size.height();
+                        if (!mipDesc.sourceSize().isEmpty())
+                            size = mipDesc.sourceSize();
+                        const int w = size.width();
+                        const int h = size.height();
+                        QSize blockDim;
+                        compressedFormatInfo(utexD->m_format, QSize(w, h), nullptr, nullptr, &blockDim);
+                        // x and y must be multiples of the block width and height
+                        copyInfo.imageOffset.x = aligned(dp.x(), blockDim.width());
+                        copyInfo.imageOffset.y = aligned(dp.y(), blockDim.height());
+                        // width and height must be multiples of the block width and height
+                        // or x + width and y + height must equal the subresource width and height
+                        copyInfo.imageExtent.width = dp.x() + w == subresw ? w : aligned(w, blockDim.width());
+                        copyInfo.imageExtent.height = dp.y() + h == subresh ? h : aligned(h, blockDim.height());
+                        copyInfos.append(copyInfo);
                     }
 
-                    if (imageSizeBytes > 0) {
-                        memcpy(reinterpret_cast<char *>(mp) + curOfs, src, imageSizeBytes);
-                        curOfs += aligned(imageSizeBytes, texbufAlign);
-                    }
+                    memcpy(reinterpret_cast<char *>(mp) + curOfs, src, copySizeBytes);
+                    curOfs += aligned(imageSizeBytes, texbufAlign);
                 }
             }
             vmaUnmapMemory(toVmaAllocator(allocator), a);

@@ -937,7 +937,7 @@ QRhi::FrameOpResult QRhiGles2::endOffscreenFrame()
 
     executeCommandBuffer(&ofr.cbWrapper);
 
-    return QRhi::FrameOpSuccess;;
+    return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiGles2::finish()

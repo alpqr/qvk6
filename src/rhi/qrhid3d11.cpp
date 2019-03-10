@@ -901,7 +901,7 @@ QRhi::FrameOpResult QRhiD3D11::endOffscreenFrame()
     lock.unlock();
     finishActiveReadbacks();
 
-    return QRhi::FrameOpSuccess;;
+    return QRhi::FrameOpSuccess;
 }
 
 static inline DXGI_FORMAT toD3DTextureFormat(QRhiTexture::Format format, QRhiTexture::Flags flags)
@@ -1830,7 +1830,7 @@ static inline uint toD3DBufferUsage(QRhiBuffer::UsageFlags usage)
 {
     int u = 0;
     if (usage.testFlag(QRhiBuffer::VertexBuffer))
-        u |= D3D11_BIND_VERTEX_BUFFER;;
+        u |= D3D11_BIND_VERTEX_BUFFER;
     if (usage.testFlag(QRhiBuffer::IndexBuffer))
         u |= D3D11_BIND_INDEX_BUFFER;
     if (usage.testFlag(QRhiBuffer::UniformBuffer))
@@ -2157,7 +2157,7 @@ bool QD3D11Texture::build()
     desc.Width = size.width();
     desc.Height = size.height();
     desc.MipLevels = mipLevelCount;
-    desc.ArraySize = isCube ? 6 : 1;;
+    desc.ArraySize = isCube ? 6 : 1;
     desc.Format = dxgiFormat;
     desc.SampleDesc = sampleDesc;
     desc.Usage = D3D11_USAGE_DEFAULT;

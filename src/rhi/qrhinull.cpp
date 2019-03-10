@@ -300,7 +300,7 @@ QRhi::FrameOpResult QRhiNull::beginOffscreenFrame(QRhiCommandBuffer **cb)
 
 QRhi::FrameOpResult QRhiNull::endOffscreenFrame()
 {
-    return QRhi::FrameOpSuccess;;
+    return QRhi::FrameOpSuccess;
 }
 
 QRhi::FrameOpResult QRhiNull::finish()

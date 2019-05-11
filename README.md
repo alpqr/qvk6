@@ -1,4 +1,4 @@
-![](https://github.com/alpqr/qvk6/blob/master/rhi2.png)
+Note: As outlined in https://lists.qt-project.org/pipermail/development/2019-April/035551.html this repo is superceded by the upcoming integration into Qt. https://codereview.qt-project.org/#/c/256713/, once merged, will introduce QRhi into qtbase as a private API. The shader conditioning bits live in a qt-labs repo (https://codereview.qt-project.org/gitweb?p=qt-labs%2Fqtshadertools.git;a=summary) for the time being.
 
 Experiments for a Rendering Hardware Interface abstraction for future Qt (QtRhi)
 ========================================================================
@@ -23,6 +23,10 @@ into conveniently (de)serializable QBakedShader instances. Complemented by a
 command-line tool (qsb) to allow doing the expensive work offline. This
 optionally allows invoking fxc or metal/metallib to include compiled bytecode
 for HLSL and MSL as well.
+
+Picture
+=======
+![](https://github.com/alpqr/qvk6/blob/master/rhi2.png)
 
 Documentation
 =============
